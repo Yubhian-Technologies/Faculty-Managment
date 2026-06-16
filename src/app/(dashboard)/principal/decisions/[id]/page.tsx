@@ -215,6 +215,12 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   <div>
                     <CardTitle className="text-base">{candidate.name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{candidate.email} · {candidate.phone}</p>
+                    {hr?.salaryExpectation && (
+                      <p className="text-sm font-medium text-primary mt-1">
+                        Salary negotiated: ₹{hr.salaryExpectation.toLocaleString("en-IN")}/month
+                        {hr.noticePeriod ? ` · Notice: ${hr.noticePeriod}` : ""}
+                      </p>
+                    )}
                   </div>
                   {decision ? (
                     <Badge
@@ -295,18 +301,16 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                             <ScoreDots value={hr.ratings[key]} />
                           </div>
                         ))}
-                        <div className="pt-1 border-t">
+                        <div className="pt-1 border-t flex items-center gap-3">
                           <span className={`text-xs font-medium ${
                             hr.recommendation === "ACCEPT" ? "text-green-600"
                             : hr.recommendation === "REJECT" ? "text-red-600"
                             : "text-amber-600"
                           }`}>
-                            HR Recommendation: {hr.recommendation}
+                            HR: {hr.recommendation}
                           </span>
-                          {hr.salaryExpectation && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Salary expectation: ₹{hr.salaryExpectation.toLocaleString("en-IN")}/month
-                            </p>
+                          {hr.noticePeriod && (
+                            <span className="text-xs text-muted-foreground">Notice: {hr.noticePeriod}</span>
                           )}
                         </div>
                       </div>

@@ -110,13 +110,14 @@ export async function POST(request: Request) {
         createdAt: now,
       });
 
-    // Advance candidate to DECISION stage (ready for offer letter)
+    // Candidate is already at DECISION stage (doc verification → DECISION).
+    // Confirm stage in case it was skipped or needs resetting.
     await db
       .collection("colleges")
       .doc(session.collegeId)
       .collection("candidates")
       .doc(candidateId)
-      .update({ currentStage: "DECISION", updatedAt: now });
+      .update({ currentStage: "DECISION", status: "IN_PROGRESS", updatedAt: now });
 
     await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
       collegeId: session.collegeId,

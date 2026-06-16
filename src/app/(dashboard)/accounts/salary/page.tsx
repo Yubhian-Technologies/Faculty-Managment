@@ -80,7 +80,7 @@ export default function AccountsSalaryPage() {
   async function loadCandidatesForBatch(batchId: string) {
     setLoadingCandidates(true);
     try {
-      const data = await fetch(`/api/college/candidates?batchId=${batchId}&stage=SALARY_NEGOTIATION`)
+      const data = await fetch(`/api/college/candidates?batchId=${batchId}&stage=DECISION`)
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>);
       // exclude candidates who already have a salary agreement
       const existingIds = new Set(records.map((r) => r.candidateId as string));
