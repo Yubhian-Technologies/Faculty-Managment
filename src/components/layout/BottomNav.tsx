@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
-import { useHiringActivity } from "@/hooks/useHiringActivity";
 import { BOTTOM_NAV_ITEMS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -18,30 +17,21 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
-const HOD_HIRING_BOTTOM_ITEMS: NavItem[] = [
-  { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
-  { label: "Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
-];
-
 export function BottomNav() {
   const user = useAuthStore((s) => s.user);
   const pathname = usePathname();
   const { unreadCount } = useNotifications();
   const { setNotificationDrawerOpen } = useUIStore();
   const { hasInterviews } = useAssignedInterviews();
-  const { hasActivity: hasHiringActivity } = useHiringActivity();
 
   if (!user || user.role === "STUDENT") return null;
 
   const baseItems = BOTTOM_NAV_ITEMS[user.role] ?? [];
   // Faculty: inject Interviews after Home when assigned, keep total ≤ 5 slots
-  // HOD: inject Candidates + Batches after Vacancy when active vacancies exist
   const items: NavItem[] =
     user.role === "PANEL_MEMBER" && hasInterviews
       ? [baseItems[0], INTERVIEW_NAV_ITEM, ...baseItems.slice(1, 4)]
-      : user.role === "HOD" && hasHiringActivity
-        ? [baseItems[0], baseItems[1], ...HOD_HIRING_BOTTOM_ITEMS, baseItems[2]]
-        : baseItems;
+      : baseItems;
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background border-t safe-area-pb">

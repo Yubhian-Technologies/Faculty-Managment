@@ -9,7 +9,6 @@ import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
-import { useHiringActivity } from "@/hooks/useHiringActivity";
 import { getNavItemsForRole, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { ROLE_LABELS } from "@/types";
@@ -21,19 +20,12 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
-const HOD_HIRING_NAV_ITEMS: NavItem[] = [
-  { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
-  { label: "Hiring Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
-  { label: "Interview Setup", href: "/hod/setup", iconName: "Settings2", roles: ["HOD"] },
-];
-
 export function MobileDrawer() {
   const user = useAuthStore((s) => s.user);
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const { logout } = useAuth();
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
-  const { hasActivity: hasHiringActivity } = useHiringActivity();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -45,9 +37,7 @@ export function MobileDrawer() {
   const navItems =
     user.role === "PANEL_MEMBER" && hasInterviews
       ? [baseNavItems[0], INTERVIEW_NAV_ITEM, ...baseNavItems.slice(1)]
-      : user.role === "HOD" && hasHiringActivity
-        ? [baseNavItems[0], baseNavItems[1], ...HOD_HIRING_NAV_ITEMS, baseNavItems[2]]
-        : baseNavItems;
+      : baseNavItems;
 
   return (
     <>

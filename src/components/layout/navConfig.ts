@@ -25,9 +25,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Interview Plans", href: "/principal/interviews", iconName: "CalendarCheck", roles: ["PRINCIPAL"] },
   { label: "Hiring Decisions", href: "/principal/decisions", iconName: "UserCheck", roles: ["PRINCIPAL"] },
 
-  // HOD — Candidates, Hiring Batches, Interview Setup injected dynamically when active vacancies exist
+  // HOD
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Vacancy Request", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"] },
+  { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
+  { label: "Hiring Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
+  { label: "Interview Setup", href: "/hod/setup", iconName: "Settings2", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"] },
 
   // College Office
@@ -73,9 +76,10 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   HOD: [
     { label: "Home", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
-    { label: "Vacancy", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"] },
+    { label: "Hiring", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"] },
+    { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
+    { label: "Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
     { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"] },
-    // Candidates & Batches injected dynamically when active vacancies exist — see BottomNav.tsx
   ],
   COLLEGE_OFFICE: [
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },

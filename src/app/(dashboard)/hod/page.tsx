@@ -25,7 +25,14 @@ import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import type { VacancyRequest, HiringBatch } from "@/types";
 
-const STATIC_MODULES = [
+const MODULES = [
+  {
+    label: "Hiring",
+    description: "Vacancies, candidates & batches",
+    href: "/hod/vacancy",
+    icon: ClipboardPlus,
+    color: "bg-indigo-50 text-indigo-600",
+  },
   {
     label: "Faculty",
     description: "Department faculty list",
@@ -70,14 +77,6 @@ const STATIC_MODULES = [
   },
 ];
 
-const RECRUITMENT_MODULE = {
-  label: "Recruitment",
-  description: "Vacancies, candidates & batches",
-  href: "/hod/vacancy",
-  icon: ClipboardPlus,
-  color: "bg-indigo-50 text-indigo-600",
-};
-
 export default function HODDashboard() {
   const user = useAuthStore((s) => s.user);
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
@@ -102,12 +101,7 @@ export default function HODDashboard() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const hasRecruitmentActivity = vacancies.length > 0 || batches.length > 0;
   const activeBatches = batches.filter((b) => b.status !== "REJECTED" && b.status !== "COMPLETED");
-
-  const modules = hasRecruitmentActivity
-    ? [RECRUITMENT_MODULE, ...STATIC_MODULES]
-    : STATIC_MODULES;
 
   return (
     <div className="space-y-6">
@@ -124,9 +118,8 @@ export default function HODDashboard() {
         }
       />
 
-      {/* Quick Stats — only shown when recruitment is active */}
-      {(isLoading || hasRecruitmentActivity) && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+      {/* Hiring Quick Stats */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
           {[
             {
               label: "Vacancy Requests",
@@ -165,7 +158,6 @@ export default function HODDashboard() {
             </Link>
           ))}
         </div>
-      )}
 
       {/* Module Grid */}
       <div>
@@ -173,7 +165,7 @@ export default function HODDashboard() {
           My Modules
         </h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {modules.map((mod) => (
+          {MODULES.map((mod) => (
             <Link key={mod.href} href={mod.href}>
               <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                 <CardContent className="p-4 flex flex-col gap-3">
@@ -192,9 +184,8 @@ export default function HODDashboard() {
         </div>
       </div>
 
-      {/* Recent Vacancies — only when recruitment active */}
-      {(isLoading || hasRecruitmentActivity) && (
-        <Card>
+      {/* Recent Vacancies */}
+      <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">Recent Vacancy Requests</CardTitle>
             <Button variant="ghost" size="sm" asChild>
@@ -230,11 +221,9 @@ export default function HODDashboard() {
             )}
           </CardContent>
         </Card>
-      )}
 
-      {/* Active Batches — only when batches exist */}
-      {(isLoading || batches.length > 0) && (
-        <Card>
+      {/* Active Batches */}
+      <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">Active Hiring Batches</CardTitle>
             <Button variant="ghost" size="sm" asChild>
@@ -268,7 +257,6 @@ export default function HODDashboard() {
             )}
           </CardContent>
         </Card>
-      )}
     </div>
   );
 }

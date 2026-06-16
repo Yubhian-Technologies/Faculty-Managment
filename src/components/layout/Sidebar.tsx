@@ -9,7 +9,6 @@ import { useUIStore } from "@/store/uiStore";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
-import { useHiringActivity } from "@/hooks/useHiringActivity";
 import { getNavItemsForRole, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { ROLE_LABELS } from "@/types";
@@ -23,12 +22,6 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
-const HOD_HIRING_NAV_ITEMS: NavItem[] = [
-  { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
-  { label: "Hiring Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
-  { label: "Interview Setup", href: "/hod/setup", iconName: "Settings2", roles: ["HOD"] },
-];
-
 export function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const { logout } = useAuth();
@@ -36,19 +29,15 @@ export function Sidebar() {
   const { setNotificationDrawerOpen } = useUIStore();
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
-  const { hasActivity: hasHiringActivity } = useHiringActivity();
 
   if (!user) return null;
 
   const baseNavItems = getNavItemsForRole(user.role);
   // Inject "My Interviews" after Dashboard when faculty has assigned batches
-  // Inject hiring items after Vacancy Request when HOD has active vacancies
   const navItems =
     user.role === "PANEL_MEMBER" && hasInterviews
       ? [baseNavItems[0], INTERVIEW_NAV_ITEM, ...baseNavItems.slice(1)]
-      : user.role === "HOD" && hasHiringActivity
-        ? [baseNavItems[0], baseNavItems[1], ...HOD_HIRING_NAV_ITEMS, baseNavItems[2]]
-        : baseNavItems;
+      : baseNavItems;
 
   return (
     <aside className="hidden md:flex md:flex-col w-64 border-r bg-background min-h-screen fixed top-0 left-0 z-30">
