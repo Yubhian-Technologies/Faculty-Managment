@@ -71,7 +71,7 @@ export default function AccountsSalaryPage() {
       loadRecords(),
       fetch("/api/college/hiring-batches")
         .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
-        .then((d) => setBatches((d.batches ?? []).filter((b) => b.demoComplete))),
+        .then((d) => setBatches((d.batches ?? []).filter((b) => b.currentPhase === "COMPLETED" || b.currentPhase === "PRINCIPAL_FINAL_REVIEW"))),
     ])
       .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
       .finally(() => setIsLoading(false));
@@ -80,9 +80,11 @@ export default function AccountsSalaryPage() {
   async function loadCandidatesForBatch(batchId: string) {
     setLoadingCandidates(true);
     try {
-      const data = await fetch(`/api/college/candidates?batchId=${batchId}`)
+      const data = await fetch(`/api/college/candidates?batchId=${batchId}&stage=SALARY_NEGOTIATION`)
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>);
-      setCandidates(data.candidates ?? []);
+      // exclude candidates who already have a salary agreement
+      const existingIds = new Set(records.map((r) => r.candidateId as string));
+      setCandidates((data.candidates ?? []).filter((c) => !existingIds.has(c.id)));
     } catch {
       setCandidates([]);
     } finally {
@@ -130,7 +132,7 @@ export default function AccountsSalaryPage() {
         }),
       });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Salary agreement saved", description: "Candidate moved to document verification." });
+      toast({ variant: "success", title: "Salary agreement saved", description: "Candidate moved to offer letter stage." });
       setDialogOpen(false);
       setForm(emptyForm());
       await loadRecords();

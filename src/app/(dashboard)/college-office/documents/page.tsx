@@ -64,16 +64,16 @@ export default function CollegeOfficeDocumentsPage() {
     );
   }
 
-  async function advanceToDecision(candidate: CandidateWithBatch) {
+  async function advanceToSalaryNegotiation(candidate: CandidateWithBatch) {
     setIsSaving(true);
     try {
       const res = await fetch(`/api/college/candidates/${candidate.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: "DECISION", status: "IN_PROGRESS" }),
+        body: JSON.stringify({ stage: "SALARY_NEGOTIATION", status: "IN_PROGRESS" }),
       });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Documents verified", description: `${candidate.name} moved to final decision stage.` });
+      toast({ variant: "success", title: "Documents verified", description: `${candidate.name} moved to salary negotiation.` });
       setAdvanceDialog(null);
       void load();
     } catch {
@@ -214,7 +214,7 @@ export default function CollegeOfficeDocumentsPage() {
                         onClick={() => setAdvanceDialog(c)}
                       >
                         <FileCheck className="h-3.5 w-3.5 mr-1" />
-                        Mark Verified &amp; Proceed
+                        Mark Verified — Proceed to Salary
                       </Button>
                     </div>
                     {requiredDocs.length > 0 && !allChecked && (
@@ -232,9 +232,9 @@ export default function CollegeOfficeDocumentsPage() {
         open={!!advanceDialog}
         onOpenChange={(o) => { if (!o) setAdvanceDialog(null); }}
         title="Mark Documents Verified?"
-        description={`All documents for ${advanceDialog?.name ?? ""} have been verified. This will move them to the final decision stage.`}
+        description={`All documents for ${advanceDialog?.name ?? ""} have been verified. This will move them to Salary Negotiation.`}
         confirmLabel="Yes, Mark Verified"
-        onConfirm={() => { if (advanceDialog) void advanceToDecision(advanceDialog); }}
+        onConfirm={() => { if (advanceDialog) void advanceToSalaryNegotiation(advanceDialog); }}
         loading={isSaving}
       />
     </div>

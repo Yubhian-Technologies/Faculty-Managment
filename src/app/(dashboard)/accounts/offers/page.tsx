@@ -68,7 +68,7 @@ export default function AccountsOffersPage() {
     try {
       const [lettersRes, batchRes, salaryRes] = await Promise.all([
         fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferRow[] }>).then((d) => d.letters ?? []),
-        fetch("/api/college/hiring-batches").then((r) => r.json() as Promise<{ batches: HiringBatch[] }>).then((d) => (d.batches ?? []).filter((b) => b.status === "COMPLETED")),
+        fetch("/api/college/hiring-batches").then((r) => r.json() as Promise<{ batches: HiringBatch[] }>).then((d) => (d.batches ?? []).filter((b) => b.currentPhase === "COMPLETED" || b.currentPhase === "PRINCIPAL_FINAL_REVIEW")),
         fetch("/api/college/salary-records").then((r) => r.json() as Promise<{ records: HiringSalaryAgreement[] }>).then((d) => d.records ?? []),
       ]);
 
@@ -331,7 +331,7 @@ export default function AccountsOffersPage() {
               <Label>Finalized Batch *</Label>
               <Select value={form.batchId} onValueChange={handleBatchChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder={batches.length === 0 ? "No finalized batches" : "Select batch..."} />
+                  <SelectValue placeholder={batches.length === 0 ? "No eligible batches" : "Select batch..."} />
                 </SelectTrigger>
                 <SelectContent>
                   {batches.map((b) => (

@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("ACCOUNTS", "HOD", "PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       candidateId: string;
       batchId: string;
@@ -110,13 +110,13 @@ export async function POST(request: Request) {
         createdAt: now,
       });
 
-    // Advance candidate to DOCUMENT_VERIFICATION stage
+    // Advance candidate to DECISION stage (ready for offer letter)
     await db
       .collection("colleges")
       .doc(session.collegeId)
       .collection("candidates")
       .doc(candidateId)
-      .update({ currentStage: "DOCUMENT_VERIFICATION", updatedAt: now });
+      .update({ currentStage: "DECISION", updatedAt: now });
 
     await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
       collegeId: session.collegeId,
