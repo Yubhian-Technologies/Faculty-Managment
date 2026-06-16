@@ -1,0 +1,359 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ─────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && request.auth.token.role == role;
+    }
+
+    function hasAnyRole(roles) {
+      return isAuthenticated() && request.auth.token.role in roles;
+    }
+
+    function belongsToCollege(collegeId) {
+      return isAuthenticated() && request.auth.token.collegeId == collegeId;
+    }
+
+    function isSuperAdmin() {
+      return hasRole('SUPER_ADMIN');
+    }
+
+    function isCollegeMember(collegeId) {
+      return isSuperAdmin() || belongsToCollege(collegeId);
+    }
+
+    function isPrincipal(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['PRINCIPAL', 'SUPER_ADMIN']);
+    }
+
+    function isHOD(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['HOD', 'SUPER_ADMIN']);
+    }
+
+    function isCollegeOffice(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['COLLEGE_OFFICE', 'SUPER_ADMIN']);
+    }
+
+    function isPanelMember(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['PANEL_MEMBER', 'SUPER_ADMIN']);
+    }
+
+    function isAccounts(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['ACCOUNTS', 'SUPER_ADMIN']);
+    }
+
+    function isStaff(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole([
+        'PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'SUPER_ADMIN'
+      ]);
+    }
+
+    function isHODorAbove(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['HOD', 'PRINCIPAL', 'SUPER_ADMIN']);
+    }
+
+    function isPrincipalOrOffice(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['PRINCIPAL', 'COLLEGE_OFFICE', 'SUPER_ADMIN']);
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function hasCollegeId(collegeId) {
+      return request.resource.data.collegeId == collegeId;
+    }
+
+    // Faculty members can read their own records (by facultyId matching userUid field)
+    // NOTE: This is enforced in API routes; Firestore rules use role-based access
+    function isFacultyOwner(facultyId) {
+      // In practice ownership is checked in server-side API routes
+      return isAuthenticated();
+    }
+
+    // ─── Colleges ─────────────────────────────────────────────────────────────
+
+    match /colleges/{collegeId} {
+      allow read: if isStaff(collegeId);
+      allow create, update, delete: if isSuperAdmin();
+
+      // ─── [ CORE ] ───────────────────────────────────────────────────────────
+
+      match /users/{uid} {
+        allow read: if isStaff(collegeId);
+        allow create: if isSuperAdmin() && hasCollegeId(collegeId);
+        allow update: if isSuperAdmin() || isOwner(uid);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /departments/{deptId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isPrincipal(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /facultyNorms/{normId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isPrincipal(collegeId);
+      }
+
+      // ─── [ FACULTY MODULE ] ─────────────────────────────────────────────────
+
+      match /facultyMembers/{facultyId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /facultyDocuments/{docId} {
+        allow read: if isStaff(collegeId);
+        // Faculty can upload their own docs (checked in API by facultyId→userUid match)
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId);
+        allow delete: if isHODorAbove(collegeId);
+      }
+
+      // ─── [ RECRUITMENT MODULE ] ─────────────────────────────────────────────
+
+      match /vacancyRequests/{requestId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
+        allow update: if isPrincipal(collegeId) || isHOD(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /candidates/{candidateId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId);
+        allow delete: if isHOD(collegeId) || isSuperAdmin();
+      }
+
+      match /hiringBatches/{batchId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) || isPanelMember(collegeId);
+        allow delete: if isSuperAdmin();
+
+        // Feedback as subcollections under the batch
+        match /panelFeedback/{feedbackId} {
+          allow read: if isStaff(collegeId);
+          allow create: if isPanelMember(collegeId) && hasCollegeId(collegeId);
+          allow update: if isPanelMember(collegeId) && resource.data.panelUid == request.auth.uid;
+          allow delete: if isSuperAdmin();
+        }
+
+        // Student feedback: public write (no auth) for QR-based submissions
+        match /studentFeedback/{feedbackId} {
+          allow read: if isStaff(collegeId);
+          allow create: if true;         // public QR-based submission
+          allow update, delete: if isSuperAdmin();
+        }
+
+        match /hrFeedback/{feedbackId} {
+          allow read: if isStaff(collegeId);
+          allow create: if isCollegeOffice(collegeId) && hasCollegeId(collegeId);
+          allow update: if isCollegeOffice(collegeId) && resource.data.hrUid == request.auth.uid;
+          allow delete: if isSuperAdmin();
+        }
+      }
+
+      match /hiringSalaryAgreements/{agreementId} {
+        allow read: if isHODorAbove(collegeId) || isAccounts(collegeId);
+        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /hiringDocVerifications/{docId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isCollegeOffice(collegeId) || isHOD(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /offerLetters/{letterId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isPrincipalOrOffice(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /appointmentLetters/{letterId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isHODorAbove(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      // ─── [ LEAVE MODULE ] ───────────────────────────────────────────────────
+
+      match /leaveApplications/{appId} {
+        allow read: if isStaff(collegeId);
+        // Faculty (PANEL_MEMBER role) can apply for leave
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        // HOD approves; Principal approves earned/maternity leave
+        allow update: if isHODorAbove(collegeId) ||
+          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
+            && resource.data.status == 'PENDING');
+        allow delete: if isSuperAdmin();
+      }
+
+      match /leaveBalances/{balanceId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
+      }
+
+      match /permissionRequests/{reqId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHOD(collegeId) ||
+          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
+            && resource.data.status == 'PENDING');
+        allow delete: if isSuperAdmin();
+      }
+
+      match /onDutyRequests/{reqId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) ||
+          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
+            && resource.data.status == 'PENDING');
+        allow delete: if isSuperAdmin();
+      }
+
+      // ─── [ ATTENDANCE MODULE ] ──────────────────────────────────────────────
+
+      match /attendanceRecords/{recordId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /attendanceSummaries/{summaryId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
+      }
+
+      match /holidays/{holidayId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isPrincipalOrOffice(collegeId);
+      }
+
+      // ─── [ PAYROLL MODULE ] ─────────────────────────────────────────────────
+
+      match /salaryStructures/{structureId} {
+        allow read: if isAccounts(collegeId) || isPrincipal(collegeId);
+        allow write: if isAccounts(collegeId) || isPrincipal(collegeId);
+      }
+
+      match /salaryRecords/{recordId} {
+        // Faculty can read their own payslip (API enforces facultyId match)
+        allow read: if isStaff(collegeId);
+        allow create: if isAccounts(collegeId) && hasCollegeId(collegeId);
+        allow update: if isAccounts(collegeId) || isPrincipal(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /salaryAdvances/{advanceId} {
+        allow read: if isAccounts(collegeId) || isHODorAbove(collegeId);
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isAccounts(collegeId) || isPrincipal(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /payrollRuns/{runId} {
+        allow read: if isAccounts(collegeId) || isPrincipal(collegeId);
+        allow write: if isAccounts(collegeId);
+      }
+
+      // ─── [ TEACHING MODULE ] ────────────────────────────────────────────────
+
+      match /subjects/{subjectId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId);
+      }
+
+      match /teachingAssignments/{assignmentId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId);
+      }
+
+      match /timetableSlots/{slotId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId);
+      }
+
+      match /workloadSummaries/{summaryId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId);
+      }
+
+      // ─── [ APPRAISAL MODULE ] ───────────────────────────────────────────────
+
+      match /appraisalCycles/{cycleId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isPrincipal(collegeId);
+      }
+
+      match /appraisals/{appraisalId} {
+        allow read: if isHODorAbove(collegeId) ||
+          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid);
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        // Self appraisal: faculty updates their own; HOD/Principal for their review
+        allow update: if isHODorAbove(collegeId) ||
+          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid);
+        allow delete: if isSuperAdmin();
+      }
+
+      // ─── [ TRAINING MODULE ] ────────────────────────────────────────────────
+
+      match /trainingPrograms/{programId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId) || isCollegeOffice(collegeId);
+      }
+
+      match /trainingEnrollments/{enrollmentId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) ||
+          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid);
+        allow delete: if isHODorAbove(collegeId);
+      }
+
+      // ─── [ GRIEVANCE MODULE ] ───────────────────────────────────────────────
+
+      match /grievances/{grievanceId} {
+        // Anonymous grievances: requester can't be identified; HOD/Principal read all
+        allow read: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) ||
+          (!resource.data.isAnonymous && isPanelMember(collegeId) &&
+            resource.data.facultyId == request.auth.uid);
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      // ─── [ SHARED ] ─────────────────────────────────────────────────────────
+
+      match /notifications/{notificationId} {
+        allow read: if isAuthenticated() && isStaff(collegeId) &&
+          resource.data.toUid == request.auth.uid;
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isAuthenticated() && resource.data.toUid == request.auth.uid;
+        allow delete: if isSuperAdmin();
+      }
+
+      match /auditLogs/{logId} {
+        allow read: if isPrincipal(collegeId) || isSuperAdmin();
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update, delete: if isSuperAdmin();
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "indexes": [
+    { "collectionGroup": "notifications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "toUid", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "notifications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "toUid", "order": "ASCENDING" }, { "fieldPath": "read", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+
+    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "role", "order": "ASCENDING" }, { "fieldPath": "name", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "facultyMembers", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "name", "order": "ASCENDING" }] },
+    { "collectionGroup": "facultyMembers", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "designation", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "hiringBatches", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "hodUid", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "hiringBatches", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "hiringBatches", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "currentPhase", "order": "ASCENDING" }, { "fieldPath": "interviewDate", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "candidates", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "batchId", "order": "ASCENDING" }, { "fieldPath": "currentStage", "order": "ASCENDING" }] },
+    { "collectionGroup": "candidates", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "vacancyId", "order": "ASCENDING" }, { "fieldPath": "isShortlisted", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "panelFeedback", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "candidateId", "order": "ASCENDING" }, { "fieldPath": "submittedAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "panelFeedback", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "candidateId", "order": "ASCENDING" }, { "fieldPath": "panelUid", "order": "ASCENDING" }] },
+    { "collectionGroup": "studentFeedback", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "candidateId", "order": "ASCENDING" }, { "fieldPath": "submittedAt", "order": "DESCENDING" }] },
+
+    { "collectionGroup": "leaveApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "leaveApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "fromDate", "order": "ASCENDING" }] },
+    { "collectionGroup": "leaveApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+
+    { "collectionGroup": "permissionRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" }] },
+    { "collectionGroup": "permissionRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
+    { "collectionGroup": "onDutyRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "fromDate", "order": "DESCENDING" }] },
+    { "collectionGroup": "onDutyRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "attendanceRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" }] },
+    { "collectionGroup": "attendanceRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" }] },
+
+    { "collectionGroup": "salaryRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "year", "order": "DESCENDING" }, { "fieldPath": "month", "order": "DESCENDING" }] },
+    { "collectionGroup": "salaryRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "year", "order": "DESCENDING" }] },
+
+    { "collectionGroup": "appraisals", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "cycleId", "order": "ASCENDING" }, { "fieldPath": "department", "order": "ASCENDING" }] },
+    { "collectionGroup": "appraisals", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "cycleId", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "trainingEnrollments", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "trainingEnrollments", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "trainingId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "teachingAssignments", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "academicYear", "order": "DESCENDING" }] },
+    { "collectionGroup": "teachingAssignments", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "academicYear", "order": "ASCENDING" }, { "fieldPath": "semester", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "grievances", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "grievances", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+
+    { "collectionGroup": "auditLogs", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "action", "order": "ASCENDING" }, { "fieldPath": "timestamp", "order": "DESCENDING" }] },
+    { "collectionGroup": "auditLogs", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "performedBy", "order": "ASCENDING" }, { "fieldPath": "timestamp", "order": "DESCENDING" }] }
+  ],
+  "fieldOverrides": []
+}

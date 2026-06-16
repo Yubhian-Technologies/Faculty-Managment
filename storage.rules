@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function belongsToCollege(collegeId) {
+      return isAuthenticated() && request.auth.token.collegeId == collegeId;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'SUPER_ADMIN';
+    }
+
+    function isStaff(collegeId) {
+      return isSuperAdmin() || (belongsToCollege(collegeId) &&
+        request.auth.token.role in ['PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS']);
+    }
+
+    function isValidResume() {
+      return request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('application/(pdf|msword|vnd.openxmlformats-officedocument.wordprocessingml.document)');
+    }
+
+    function isValidImage() {
+      return request.resource.size < 2 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    // Candidate resumes — college-scoped, public upload for careers page
+    match /colleges/{collegeId}/resumes/{filename} {
+      allow read: if isStaff(collegeId);
+      allow create: if isValidResume();
+      allow delete: if isStaff(collegeId);
+    }
+
+    // College logos
+    match /colleges/{collegeId}/logo/{filename} {
+      allow read: if true;
+      allow write: if isSuperAdmin() && isValidImage();
+    }
+
+    // Generated documents (offer letters, appointment letters)
+    match /colleges/{collegeId}/documents/{filename} {
+      allow read: if isStaff(collegeId);
+      allow write: if isStaff(collegeId);
+    }
+
+    // Interview forms and other office uploads
+    match /colleges/{collegeId}/forms/{filename} {
+      allow read: if isStaff(collegeId);
+      allow write: if isStaff(collegeId);
+    }
+  }
+}
