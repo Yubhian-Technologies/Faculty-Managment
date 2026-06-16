@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const auth = await getAdminAuth();
+    const auth = getAdminAuth();
     const db = getAdminDb();
     const collegeId = session.collegeId;
 

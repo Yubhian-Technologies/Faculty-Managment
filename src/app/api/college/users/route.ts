@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
     const q = roleFilter
       ? coll.where("role", "==", roleFilter)
-      : coll.orderBy("name");
+      : coll;
 
     const snap = await q.get();
     let users = snap.docs
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     const collegeId = session.collegeId;
-    const auth = await getAdminAuth();
+    const auth = getAdminAuth();
     const db = getAdminDb();
 
     // For HOD: auto-assign their department if not provided

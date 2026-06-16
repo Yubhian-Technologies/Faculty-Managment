@@ -14,7 +14,7 @@ export async function PATCH(
     const body = (await request.json()) as { isActive: boolean };
 
     const db = getAdminDb();
-    const auth = await getAdminAuth();
+    const auth = getAdminAuth();
 
     // Fetch target user to verify scope
     const targetSnap = await db

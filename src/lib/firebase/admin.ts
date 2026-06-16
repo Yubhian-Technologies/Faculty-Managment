@@ -1,11 +1,7 @@
 import { getApps, initializeApp, cert, getApp, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage, type Storage } from "firebase-admin/storage";
-
-// firebase-admin/auth is loaded lazily via dynamic import below.
-// Static import would cause ERR_REQUIRE_ESM at module load time because
-// jwks-rsa (used by verifyIdToken) requires jose v6 (ESM-only).
-// createUser / setCustomUserClaims / updateUser do NOT touch jwks-rsa.
+import type { Auth } from "firebase-admin/auth";
 
 function getAdminApp(): App {
   if (getApps().length > 0) return getApp();
@@ -23,9 +19,16 @@ function getAdminApp(): App {
   });
 }
 
-export async function getAdminAuth() {
-  const { getAuth } = await import("firebase-admin/auth");
-  return getAuth(getAdminApp());
+let _authCache: Auth | null = null;
+export function getAdminAuth(): Auth {
+  if (_authCache) return _authCache;
+  // Use require() because firebase-admin is in serverExternalPackages —
+  // Next.js resolves it natively, and require() avoids ESM interop issues
+  // that dynamic import() can hit inside Vercel's Lambda bundler.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getAuth } = require("firebase-admin/auth") as { getAuth: (app: App) => Auth };
+  _authCache = getAuth(getAdminApp());
+  return _authCache;
 }
 
 export function getAdminDb(): Firestore {

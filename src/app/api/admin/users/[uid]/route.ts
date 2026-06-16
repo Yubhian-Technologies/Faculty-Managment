@@ -28,7 +28,7 @@ export async function PATCH(
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
     }
 
-    const auth = await getAdminAuth();
+    const auth = getAdminAuth();
     const db = getAdminDb();
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -128,7 +128,7 @@ export async function DELETE(
 
     const { uid } = await params;
     const db = getAdminDb();
-    const auth = await getAdminAuth();
+    const auth = getAdminAuth();
 
     let userEmail = "";
     let collegeId = "";
