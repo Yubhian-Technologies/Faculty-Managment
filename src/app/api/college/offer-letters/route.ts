@@ -15,14 +15,19 @@ export async function GET(request: Request) {
     let query = db
       .collection("colleges")
       .doc(session.collegeId)
-      .collection("offerLetters")
-      .orderBy("generatedAt", "desc") as FirebaseFirestore.Query;
+      .collection("offerLetters") as FirebaseFirestore.Query;
 
     if (batchId) query = query.where("batchId", "==", batchId);
     if (candidateId) query = query.where("candidateId", "==", candidateId);
 
     const snap = await query.get();
-    const letters = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const letters = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const ta = (a as { generatedAt?: { toMillis?: () => number } }).generatedAt?.toMillis?.() ?? 0;
+        const tb = (b as { generatedAt?: { toMillis?: () => number } }).generatedAt?.toMillis?.() ?? 0;
+        return tb - ta;
+      });
 
     return NextResponse.json({ letters });
   } catch (err) {

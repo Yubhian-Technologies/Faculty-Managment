@@ -32,15 +32,20 @@ export async function GET(request: Request) {
       .doc(session.collegeId)
       .collection("hiringBatches")
       .doc(batchId)
-      .collection("hrFeedback")
-      .orderBy("submittedAt", "desc") as FirebaseFirestore.Query;
+      .collection("hrFeedback") as FirebaseFirestore.Query;
 
     if (candidateId) {
       query = query.where("candidateId", "==", candidateId);
     }
 
     const snap = await query.get();
-    const feedback = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const feedback = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const ta = (a as { submittedAt?: { toMillis?: () => number } }).submittedAt?.toMillis?.() ?? 0;
+        const tb = (b as { submittedAt?: { toMillis?: () => number } }).submittedAt?.toMillis?.() ?? 0;
+        return tb - ta;
+      });
 
     return NextResponse.json({ feedback });
   } catch (err) {

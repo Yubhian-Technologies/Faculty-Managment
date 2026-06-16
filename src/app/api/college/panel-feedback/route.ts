@@ -28,13 +28,14 @@ export async function GET(request: Request) {
 
     const db = getAdminDb();
 
+    // Build query without orderBy to avoid composite-index requirements.
+    // Sorting is done in-memory; panelFeedback is a small subcollection.
     let query = db
       .collection("colleges")
       .doc(session.collegeId)
       .collection("hiringBatches")
       .doc(batchId)
-      .collection("panelFeedback")
-      .orderBy("submittedAt", "desc") as FirebaseFirestore.Query;
+      .collection("panelFeedback") as FirebaseFirestore.Query;
 
     if (candidateId) {
       query = query.where("candidateId", "==", candidateId);
@@ -46,7 +47,13 @@ export async function GET(request: Request) {
     }
 
     const snap = await query.get();
-    const feedback = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const feedback = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const ta = (a as { submittedAt?: { toMillis?: () => number } }).submittedAt?.toMillis?.() ?? 0;
+        const tb = (b as { submittedAt?: { toMillis?: () => number } }).submittedAt?.toMillis?.() ?? 0;
+        return tb - ta;
+      });
 
     return NextResponse.json({ feedback });
   } catch (err) {
