@@ -21,10 +21,11 @@ export async function GET(request: Request) {
       .collection("colleges")
       .doc(collegeId)
       .collection("users")
-      .orderBy("name")
       .get();
 
-    const users = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    const users = snap.docs
+      .map((d) => ({ uid: d.id, ...d.data() }))
+      .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
     return NextResponse.json({ users });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {

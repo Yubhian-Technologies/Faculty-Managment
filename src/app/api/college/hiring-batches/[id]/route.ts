@@ -263,7 +263,7 @@ export async function PATCH(
         read: false,
         createdAt: now,
       });
-      for (const panelUid of batchData.panelMemberUids) {
+      for (const panelUid of (batchData.panelMemberUids ?? [])) {
         const panelRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
         notifBatch.set(panelRef, {
           collegeId: session.collegeId,

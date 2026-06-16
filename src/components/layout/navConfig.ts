@@ -31,6 +31,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Training Approvals", href: "/principal/training", iconName: "GraduationCap", roles: ["PRINCIPAL"] },
   { label: "Grievance Desk", href: "/principal/grievance", iconName: "AlertCircle", roles: ["PRINCIPAL"] },
   { label: "Documents", href: "/principal/documents", iconName: "FolderOpen", roles: ["PRINCIPAL"] },
+  { label: "Reports", href: "/principal/reports", iconName: "BarChart2", roles: ["PRINCIPAL"] },
 
   // HOD
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
