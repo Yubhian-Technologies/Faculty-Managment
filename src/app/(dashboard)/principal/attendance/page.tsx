@@ -7,11 +7,15 @@ import { Card, CardContent } from "@/components/ui/card";
 export default function PrincipalAttendancePage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="My Attendance" description="View your attendance records" />
+      <PageHeader
+        title="Attendance Report"
+        description="College-wide attendance overview across all departments"
+      />
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <ClipboardCheck className="h-12 w-12 text-muted-foreground/40" />
-          <p className="text-muted-foreground">Attendance records coming soon</p>
+          <p className="text-muted-foreground">College attendance dashboard coming soon</p>
+          <p className="text-xs text-muted-foreground">Aggregates attendance from all departments for institution-level view</p>
         </CardContent>
       </Card>
     </div>

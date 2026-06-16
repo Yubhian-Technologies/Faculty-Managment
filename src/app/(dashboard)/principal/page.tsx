@@ -9,9 +9,7 @@ import {
   Clock,
   CalendarClock,
   ClipboardCheck,
-  BookOpen,
   Wallet,
-  TrendingUp,
   GraduationCap,
   AlertCircle,
   FolderOpen,
@@ -26,15 +24,13 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { formatDate } from "@/lib/utils";
 import type { VacancyRequest, HiringBatch } from "@/types";
 
-const PERSONAL_MODULES = [
-  { label: "My Leave", description: "Apply & track leave", href: "/principal/leave", icon: CalendarClock, color: "bg-sky-50 text-sky-600" },
-  { label: "My Attendance", description: "Attendance records", href: "/principal/attendance", icon: ClipboardCheck, color: "bg-violet-50 text-violet-600" },
-  { label: "Teaching Load", description: "Subjects & timetable", href: "/principal/teaching", icon: BookOpen, color: "bg-orange-50 text-orange-600" },
-  { label: "My Payslips", description: "Salary & payslips", href: "/principal/payslips", icon: Wallet, color: "bg-green-50 text-green-600" },
-  { label: "My Appraisal", description: "Performance review", href: "/principal/appraisal", icon: TrendingUp, color: "bg-pink-50 text-pink-600" },
-  { label: "Training", description: "FDPs & workshops", href: "/principal/training", icon: GraduationCap, color: "bg-cyan-50 text-cyan-600" },
-  { label: "Grievance", description: "Raise grievance", href: "/principal/grievance", icon: AlertCircle, color: "bg-red-50 text-red-600" },
-  { label: "My Documents", description: "Certificates & letters", href: "/principal/documents", icon: FolderOpen, color: "bg-amber-50 text-amber-600" },
+const ADMIN_MODULES = [
+  { label: "Leave Approvals", description: "Approve HOD leave requests", href: "/principal/leave", icon: CalendarClock, color: "bg-sky-50 text-sky-600" },
+  { label: "Attendance Report", description: "College-wide attendance", href: "/principal/attendance", icon: ClipboardCheck, color: "bg-violet-50 text-violet-600" },
+  { label: "Payroll", description: "All staff salary overview", href: "/principal/payslips", icon: Wallet, color: "bg-green-50 text-green-600" },
+  { label: "Training Approvals", description: "Sanction FDPs & workshops", href: "/principal/training", icon: GraduationCap, color: "bg-cyan-50 text-cyan-600" },
+  { label: "Grievance Desk", description: "Resolve escalated grievances", href: "/principal/grievance", icon: AlertCircle, color: "bg-red-50 text-red-600" },
+  { label: "Documents", description: "Official college documents", href: "/principal/documents", icon: FolderOpen, color: "bg-amber-50 text-amber-600" },
 ];
 
 export default function PrincipalDashboard() {
@@ -158,11 +154,11 @@ export default function PrincipalDashboard() {
         </Card>
       )}
 
-      {/* Personal Modules */}
+      {/* Administration Modules */}
       <div>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">My Work</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {PERSONAL_MODULES.map((mod) => (
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Administration</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {ADMIN_MODULES.map((mod) => (
             <Link key={mod.href} href={mod.href}>
               <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                 <CardContent className="p-4 flex flex-col gap-3">
