@@ -24,7 +24,6 @@ import {
   Clock,
   ArrowRight,
 } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
 import { DESIGNATION_LABELS } from "@/types";
 import type { HiringBatch, Candidate, FacultyMember } from "@/types";
@@ -116,9 +115,8 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [hrForm, setHRForm] = useState<HRFeedbackForm | null>(null);
   const [isSubmittingHR, setIsSubmittingHR] = useState(false);
 
-  // Stage advancement state
-  const [selectedForSalary, setSelectedForSalary] = useState<string[]>([]);
-  const [isAdvancing, setIsAdvancing] = useState(false);
+  // Principal review submission
+  const [isSubmittingForReview, setIsSubmittingForReview] = useState(false);
 
   async function load() {
     try {
@@ -240,26 +238,21 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  async function advanceToSalary() {
-    if (selectedForSalary.length === 0) return;
-    setIsAdvancing(true);
+  async function submitForPrincipalReview() {
+    setIsSubmittingForReview(true);
     try {
-      await Promise.all(
-        selectedForSalary.map((cid) =>
-          fetch(`/api/college/candidates/${cid}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stage: "SALARY_NEGOTIATION", status: "IN_PROGRESS" }),
-          })
-        )
-      );
-      toast({ variant: "success", title: "Candidates advanced", description: `${selectedForSalary.length} candidate(s) moved to Salary Negotiation.` });
-      setSelectedForSalary([]);
+      const res = await fetch(`/api/college/hiring-batches/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPhase: "PRINCIPAL_FINAL_REVIEW" }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Submitted for Principal review", description: "The Principal has been notified to make final hiring decisions." });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to advance candidates" });
+      toast({ variant: "destructive", title: "Failed to submit for review" });
     } finally {
-      setIsAdvancing(false);
+      setIsSubmittingForReview(false);
     }
   }
 
@@ -669,55 +662,48 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
               })}
             </CardContent>
           </Card>
-          {/* Stage Advancement — move selected candidates to Salary Negotiation */}
-          <Card>
+          {/* Submit for Principal Final Review */}
+          <Card className={batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED" ? "border-green-200 bg-green-50/40" : "border-primary/20"}>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <ArrowRight className="h-4 w-4 text-primary" />
-                Proceed to Salary Negotiation
+                Submit for Principal Final Approval
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Select candidates to advance to salary negotiation. Accounts will be notified to create salary agreements.
-              </p>
-              <div className="space-y-2">
-                {candidates
-                  .filter((c) => c.currentStage === "INTERVIEW" || c.currentStage === "DEMO")
-                  .map((c) => {
-                    const pf = panelFeedback.filter((f) => f.candidateId === c.id);
-                    const hr = hrFeedback.find((h) => h.candidateId === c.id);
-                    const pfAccepts = pf.filter((f) => f.recommendation === "ACCEPT").length;
-                    const checked = selectedForSalary.includes(c.id);
-                    return (
-                      <div key={c.id} className={`flex items-center gap-3 p-3 rounded-lg border ${checked ? "border-primary bg-primary/5" : ""}`}>
-                        <Checkbox
-                          id={`sal-${c.id}`}
-                          checked={checked}
-                          onCheckedChange={(v) =>
-                            setSelectedForSalary((prev) =>
-                              v ? [...prev, c.id] : prev.filter((x) => x !== c.id)
-                            )
-                          }
-                        />
-                        <label htmlFor={`sal-${c.id}`} className="flex-1 cursor-pointer">
-                          <p className="font-medium text-sm">{c.name}</p>
+              {batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED" ? (
+                <div className="flex items-center gap-2 text-green-700">
+                  <CheckCircle2 className="h-5 w-5" />
+                  <div>
+                    <p className="font-medium text-sm">Submitted for Principal review</p>
+                    <p className="text-xs text-muted-foreground">The Principal will review all evaluations and make final hiring decisions.</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2 text-sm">
+                    {candidates.map((c) => {
+                      const pf = panelFeedback.filter((f) => f.candidateId === c.id);
+                      const hr = hrFeedback.find((h) => h.candidateId === c.id);
+                      const accepts = pf.filter((f) => f.recommendation === "ACCEPT").length;
+                      return (
+                        <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/40">
+                          <p className="font-medium">{c.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            Panel: {pfAccepts}/{pf.length} accepted
+                            Panel: {accepts}/{pf.length} accept
                             {hr ? ` · HR: ${hr.recommendation}` : " · HR: pending"}
                           </p>
-                        </label>
-                      </div>
-                    );
-                  })}
-                {candidates.filter((c) => c.currentStage === "INTERVIEW" || c.currentStage === "DEMO").length === 0 && (
-                  <p className="text-sm text-muted-foreground">All candidates have already been advanced beyond interview stage.</p>
-                )}
-              </div>
-              {selectedForSalary.length > 0 && (
-                <Button onClick={advanceToSalary} loading={isAdvancing}>
-                  Move {selectedForSalary.length} Candidate{selectedForSalary.length !== 1 ? "s" : ""} to Salary Negotiation
-                </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Submitting will notify the Principal to make the final hiring decision for each candidate.
+                  </p>
+                  <Button onClick={submitForPrincipalReview} loading={isSubmittingForReview}>
+                    Submit All Evaluations to Principal
+                  </Button>
+                </>
               )}
             </CardContent>
           </Card>

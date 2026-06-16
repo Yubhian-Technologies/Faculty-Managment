@@ -59,6 +59,8 @@ export async function PATCH(
       // Principal actions
       status?: string;
       principalNotes?: string;
+      // Phase transition
+      currentPhase?: string;
       // College Office actions
       interviewVenue?: string;
       requiredDocuments?: string[];
@@ -101,6 +103,7 @@ export async function PATCH(
     // Principal: approve / reject / modify
     if (body.status !== undefined) updates.status = body.status;
     if (body.principalNotes !== undefined) updates.principalNotes = body.principalNotes;
+    if (body.currentPhase !== undefined) updates.currentPhase = body.currentPhase;
     // College Office: venue + docs
     if (body.interviewVenue !== undefined) updates.interviewVenue = body.interviewVenue;
     if (body.requiredDocuments !== undefined) updates.requiredDocuments = body.requiredDocuments;
@@ -222,6 +225,29 @@ export async function PATCH(
         read: false,
         createdAt: now,
       });
+    }
+
+    // If transitioning to PRINCIPAL_FINAL_REVIEW, notify all Principals
+    if (body.currentPhase === "PRINCIPAL_FINAL_REVIEW") {
+      const principalSnap = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("users")
+        .where("role", "==", "PRINCIPAL")
+        .get();
+      for (const d of principalSnap.docs) {
+        const ref = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
+        notifBatch.set(ref, {
+          collegeId: session.collegeId,
+          toUid: d.id,
+          type: "GENERAL",
+          title: "Evaluation Ready for Review",
+          message: `Interview evaluations for ${batchData.position} (${batchData.department}) are complete. Please review and make final hiring decisions.`,
+          link: `/principal/decisions/${id}`,
+          read: false,
+          createdAt: now,
+        });
+      }
     }
 
     // If demo marked complete, notify HOD and all panel members
