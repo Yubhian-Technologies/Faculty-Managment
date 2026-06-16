@@ -1,23 +1,33 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase/admin";
+import { getAdminAuth } from "@/lib/firebase/admin";
 
 export async function POST(request: Request) {
+  // Log env var presence (not values) to Vercel function logs
+  console.log("[session] env check:", {
+    hasProjectId: !!process.env.FIREBASE_ADMIN_PROJECT_ID,
+    hasClientEmail: !!process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+    hasPrivateKey: !!process.env.FIREBASE_ADMIN_PRIVATE_KEY,
+    privateKeyStart: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.slice(0, 30),
+  });
+
   try {
-    const { token } = (await request.json()) as { token: string };
+    const body = await request.json() as { token?: string };
+    const { token } = body;
 
     if (!token) {
       return NextResponse.json({ error: "Token required" }, { status: 400 });
     }
 
-    const decoded = await adminAuth.verifyIdToken(token);
+    const auth = getAdminAuth();
+    const decoded = await auth.verifyIdToken(token);
 
     const sessionData = {
       uid: decoded.uid,
       email: decoded.email,
-      role: decoded.role ?? "UNKNOWN",
-      collegeId: decoded.collegeId ?? "",
+      role: (decoded.role as string) ?? "UNKNOWN",
+      collegeId: (decoded.collegeId as string) ?? "",
       exp: decoded.exp,
     };
 
@@ -35,8 +45,9 @@ export async function POST(request: Request) {
 
     return response;
   } catch (err) {
-    console.error("[auth/session]", err);
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[auth/session] verifyIdToken failed:", message);
+    return NextResponse.json({ error: "Invalid token", detail: message }, { status: 401 });
   }
 }
 

@@ -57,11 +57,15 @@ function LoginForm() {
       const role = idTokenResult.claims.role as string | undefined;
 
       // Set session cookie for middleware
-      await fetch("/api/auth/session", {
+      const sessionRes = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
       });
+      if (!sessionRes.ok) {
+        const errBody = await sessionRes.json() as { error?: string; detail?: string };
+        throw new Error(`Session error: ${errBody.detail ?? errBody.error ?? sessionRes.status}`);
+      }
 
       if (collegeId) {
         const profile = await getUserById(collegeId, credential.user.uid);
