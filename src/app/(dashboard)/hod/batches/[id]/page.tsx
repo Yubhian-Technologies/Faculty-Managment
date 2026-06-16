@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { DESIGNATION_LABELS } from "@/types";
-import type { HiringBatch, Candidate, FacultyMember } from "@/types";
+import type { HiringBatch, Candidate, FacultyMember, FMSUser } from "@/types";
 
 type PanelFeedbackItem = {
   id: string;
@@ -104,6 +104,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
   const [studentFeedbackSummary, setStudentFeedbackSummary] = useState<StudentFeedbackSummary[]>([]);
   const [hrFeedback, setHRFeedback] = useState<{ candidateId: string; recommendation: string }[]>([]);
+  const [userMap, setUserMap] = useState<Record<string, FMSUser>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -120,16 +121,20 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
 
   async function load() {
     try {
-      const [batchRes, candidatesRes, facultyRes] = await Promise.all([
+      const [batchRes, candidatesRes, facultyRes, usersRes] = await Promise.all([
         fetch(`/api/college/hiring-batches/${id}`).then((r) => r.json() as Promise<{ batch: HiringBatch }>),
         fetch(`/api/college/candidates?batchId=${id}`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
         fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>),
+        fetch("/api/college/users?allDepts=true").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
       ]);
       const b = batchRes.batch;
       setBatch(b);
       const cands = candidatesRes.candidates ?? [];
       setCandidates(cands);
       setFacultyList(facultyRes.faculty ?? []);
+      const map: Record<string, FMSUser> = {};
+      for (const u of usersRes.users ?? []) map[u.uid] = u;
+      setUserMap(map);
       setDemoClassroom(b.demoClassroom ?? "");
       setCoordinatorFacultyId(b.coordinatorFacultyId ?? "");
 
@@ -419,10 +424,27 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       {/* Panel Members */}
       <Card>
         <CardHeader><CardTitle className="text-base">Panel Members ({batch.panelMemberUids.length})</CardTitle></CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            {batch.panelMemberUids.length} member{batch.panelMemberUids.length !== 1 ? "s" : ""} assigned.
-          </p>
+        <CardContent className="space-y-2">
+          {batch.panelMemberUids.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No panel members assigned.</p>
+          ) : (
+            batch.panelMemberUids.map((uid) => {
+              const user = userMap[uid];
+              return (
+                <div key={uid} className="flex items-center gap-3 p-3 rounded-lg border">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-semibold text-primary">
+                      {user?.name ? user.name.charAt(0).toUpperCase() : "?"}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{user?.name ?? uid}</p>
+                    {user?.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
 
