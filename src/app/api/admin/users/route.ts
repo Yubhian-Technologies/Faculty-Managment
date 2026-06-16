@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const auth = getAdminAuth();
+    const auth = await getAdminAuth();
     const db = getAdminDb();
 
     // Create Firebase Auth user

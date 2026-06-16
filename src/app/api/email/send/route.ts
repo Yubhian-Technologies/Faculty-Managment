@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { adminAuth } from "@/lib/firebase/admin";
+import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { interviewInvitationEmail, offerLetterEmail } from "@/lib/email/templates";
 
 const transporter = nodemailer.createTransport({
@@ -19,7 +19,7 @@ async function verifyToken(request: Request): Promise<string | null> {
   const auth = request.headers.get("Authorization");
   if (!auth?.startsWith("Bearer ")) return null;
   try {
-    const decoded = await adminAuth.verifyIdToken(auth.slice(7));
+    const decoded = await verifyFirebaseToken(auth.slice(7));
     return decoded.uid;
   } catch {
     return null;

@@ -3,6 +3,7 @@ import crypto from "crypto";
 interface FirebaseTokenPayload {
   uid: string;
   sub: string;
+  user_id?: string;
   email?: string;
   exp: number;
   iat: number;
@@ -20,10 +21,12 @@ async function getFirebasePublicKeys(): Promise<Record<string, string>> {
   }
 
   const res = await fetch(
-    "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
+    "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com",
+    { cache: "no-store" }
   );
 
-  // Respect Cache-Control max-age from Google
+  if (!res.ok) throw new Error(`Failed to fetch Firebase public keys: ${res.status}`);
+
   const cc = res.headers.get("cache-control") ?? "";
   const maxAgeMatch = cc.match(/max-age=(\d+)/);
   const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 3600;
@@ -33,47 +36,62 @@ async function getFirebasePublicKeys(): Promise<Record<string, string>> {
   return cachedKeys;
 }
 
-function base64urlDecode(str: string): string {
-  return Buffer.from(str.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+function b64urlDecode(str: string): Buffer {
+  // Pad to multiple of 4
+  const padded = str + "=".repeat((4 - (str.length % 4)) % 4);
+  return Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 }
 
 export async function verifyFirebaseToken(token: string): Promise<FirebaseTokenPayload> {
-  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  if (!projectId) throw new Error("Missing Firebase project ID");
+  const projectId =
+    process.env.FIREBASE_ADMIN_PROJECT_ID ??
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
+    "";
+
+  if (!projectId) throw new Error("Missing Firebase project ID env var");
 
   const parts = token.split(".");
-  if (parts.length !== 3) throw new Error("Invalid token format");
+  if (parts.length !== 3) throw new Error("Malformed JWT: expected 3 parts");
 
-  const [headerB64, payloadB64, signatureB64] = parts;
+  const [headerB64, payloadB64, sigB64] = parts;
 
-  const header = JSON.parse(base64urlDecode(headerB64)) as { kid?: string; alg?: string };
-  if (header.alg !== "RS256") throw new Error("Unsupported algorithm");
-  if (!header.kid) throw new Error("Missing key ID");
+  // Decode header
+  const header = JSON.parse(b64urlDecode(headerB64).toString("utf8")) as {
+    kid?: string;
+    alg?: string;
+  };
 
+  if (header.alg !== "RS256") throw new Error(`Unsupported algorithm: ${header.alg}`);
+  if (!header.kid) throw new Error("JWT header missing kid");
+
+  // Fetch Google's public keys (PEM-encoded X.509 certs)
   const keys = await getFirebasePublicKeys();
-  const publicKey = keys[header.kid];
-  if (!publicKey) throw new Error("Unknown key ID — token may be from a different project");
-
-  // Verify RS256 signature using Node's native crypto
-  const verifier = crypto.createVerify("RSA-SHA256");
-  verifier.update(`${headerB64}.${payloadB64}`);
-  const signatureBuffer = Buffer.from(
-    signatureB64.replace(/-/g, "+").replace(/_/g, "/"),
-    "base64"
-  );
-  const valid = verifier.verify(publicKey, signatureBuffer);
-  if (!valid) throw new Error("Invalid token signature");
-
-  const payload = JSON.parse(base64urlDecode(payloadB64)) as FirebaseTokenPayload;
-  const now = Math.floor(Date.now() / 1000);
-
-  if (payload.exp < now) throw new Error("Token has expired");
-  if (payload.iat > now + 300) throw new Error("Token issued in the future");
-  if (payload.aud !== projectId) throw new Error(`Invalid audience: ${payload.aud}`);
-  if (payload.iss !== `https://securetoken.google.com/${projectId}`) {
-    throw new Error(`Invalid issuer: ${payload.iss}`);
+  const publicKeyPem = keys[header.kid];
+  if (!publicKeyPem) {
+    throw new Error(`No public key for kid=${header.kid}. Keys available: ${Object.keys(keys).join(", ")}`);
   }
 
-  payload.uid = payload.sub;
+  // Verify RS256 signature
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const signatureBuffer = b64urlDecode(sigB64);
+
+  const verifier = crypto.createVerify("RSA-SHA256");
+  verifier.update(signingInput, "ascii");
+  const valid = verifier.verify(publicKeyPem, signatureBuffer);
+  if (!valid) throw new Error("JWT signature verification failed");
+
+  // Decode payload
+  const payload = JSON.parse(b64urlDecode(payloadB64).toString("utf8")) as FirebaseTokenPayload;
+
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp < now) throw new Error(`Token expired at ${new Date(payload.exp * 1000).toISOString()}`);
+  if (payload.iat > now + 300) throw new Error("Token iat is in the future");
+  if (payload.aud !== projectId) throw new Error(`Token aud "${payload.aud}" does not match project "${projectId}"`);
+  if (payload.iss !== `https://securetoken.google.com/${projectId}`) {
+    throw new Error(`Invalid token issuer: ${payload.iss}`);
+  }
+
+  // Normalise uid — Firebase uses both sub and user_id
+  payload.uid = payload.user_id ?? payload.sub;
   return payload;
 }
