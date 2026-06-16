@@ -131,6 +131,13 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+    // Expose Firebase Auth error codes so callers can show meaningful messages
+    if (err && typeof err === "object" && "code" in err) {
+      const code = (err as { code: string }).code;
+      const message = (err as { message?: string }).message ?? code;
+      console.error("[admin/users POST] Firebase error:", code, message);
+      return NextResponse.json({ error: message, code }, { status: 500 });
+    }
     console.error("[admin/users POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
