@@ -1,20 +1,12 @@
-import type { App } from "firebase-admin/app";
-import type { Auth } from "firebase-admin/auth";
-import type { Firestore } from "firebase-admin/firestore";
-import type { Storage } from "firebase-admin/storage";
+import { getApps, initializeApp, cert, getApp, type App } from "firebase-admin/app";
+import { getAuth, type Auth } from "firebase-admin/auth";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getStorage, type Storage } from "firebase-admin/storage";
 
-// In dev, HMR invalidates module-level vars but Firebase Admin
-// persists across reloads via getApps(). Always re-attach from
-// the existing app rather than caching in module scope.
 function getAdminApp(): App {
-  const { getApps, initializeApp, cert, getApp } = require("firebase-admin/app");
-
-  if (getApps().length > 0) {
-    return getApp() as App;
-  }
+  if (getApps().length > 0) return getApp();
 
   const rawKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? "";
-  // Strip surrounding quotes (if pasted with them into Vercel) then convert \n literals
   const privateKey = rawKey.replace(/^["']|["']$/g, "").replace(/\\n/g, "\n");
 
   return initializeApp({
@@ -24,26 +16,22 @@ function getAdminApp(): App {
       privateKey,
     }),
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  }) as App;
+  });
 }
 
 export function getAdminAuth(): Auth {
-  const { getAuth } = require("firebase-admin/auth");
-  return getAuth(getAdminApp()) as Auth;
+  return getAuth(getAdminApp());
 }
 
 export function getAdminDb(): Firestore {
-  const { getFirestore } = require("firebase-admin/firestore");
-  return getFirestore(getAdminApp()) as Firestore;
+  return getFirestore(getAdminApp());
 }
 
 export function getAdminStorage(): Storage {
-  const { getStorage } = require("firebase-admin/storage");
-  return getStorage(getAdminApp()) as Storage;
+  return getStorage(getAdminApp());
 }
 
-// Lazy proxy accessors — must bind methods to their instance so `this` is correct
-export const adminAuth = new Proxy({} as Auth, {
+export const adminAuth: Auth = new Proxy({} as Auth, {
   get(_target, prop) {
     const instance = getAdminAuth();
     const val = (instance as unknown as Record<string, unknown>)[prop as string];
@@ -51,7 +39,7 @@ export const adminAuth = new Proxy({} as Auth, {
   },
 });
 
-export const adminDb = new Proxy({} as Firestore, {
+export const adminDb: Firestore = new Proxy({} as Firestore, {
   get(_target, prop) {
     const instance = getAdminDb();
     const val = (instance as unknown as Record<string, unknown>)[prop as string];
@@ -59,7 +47,7 @@ export const adminDb = new Proxy({} as Firestore, {
   },
 });
 
-export const adminStorage = new Proxy({} as Storage, {
+export const adminStorage: Storage = new Proxy({} as Storage, {
   get(_target, prop) {
     const instance = getAdminStorage();
     const val = (instance as unknown as Record<string, unknown>)[prop as string];
