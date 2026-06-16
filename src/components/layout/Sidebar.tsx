@@ -59,20 +59,26 @@ export function Sidebar() {
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href + "/"));
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            <div key={item.href}>
+              {item.section && (
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pt-4 pb-1">
+                  {item.section}
+                </p>
               )}
-            >
-              <NavIcon name={item.iconName} className="h-4 w-4 shrink-0" />
-              {item.label}
-              {isActive && <ChevronRight className="h-4 w-4 ml-auto shrink-0" />}
-            </Link>
+              <Link
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <NavIcon name={item.iconName} className="h-4 w-4 shrink-0" />
+                {item.label}
+                {isActive && <ChevronRight className="h-4 w-4 ml-auto shrink-0" />}
+              </Link>
+            </div>
           );
         })}
       </nav>

@@ -6,6 +6,7 @@ export interface NavItem {
   iconName: string;
   roles: UserRole[];
   badge?: string;
+  section?: string; // optional section header rendered above this item
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -27,11 +28,20 @@ export const NAV_ITEMS: NavItem[] = [
 
   // HOD
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
-  { label: "Vacancy Request", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"] },
+  { label: "Vacancy Request", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"], section: "Hiring" },
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
   { label: "Hiring Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
   { label: "Interview Setup", href: "/hod/setup", iconName: "Settings2", roles: ["HOD"] },
-  { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"] },
+  { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
+  { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"] },
+  { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"], section: "My Work" },
+  { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
+  { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"] },
+  { label: "My Payslips", href: "/hod/payslips", iconName: "Wallet", roles: ["HOD"] },
+  { label: "My Appraisal", href: "/hod/appraisal", iconName: "TrendingUp", roles: ["HOD"] },
+  { label: "Training", href: "/hod/training", iconName: "GraduationCap", roles: ["HOD"] },
+  { label: "Grievance", href: "/hod/grievance", iconName: "AlertCircle", roles: ["HOD"] },
+  { label: "My Documents", href: "/hod/documents", iconName: "FolderOpen", roles: ["HOD"] },
 
   // College Office
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
@@ -77,9 +87,9 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   HOD: [
     { label: "Home", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
     { label: "Hiring", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"] },
-    { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
-    { label: "Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
     { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"] },
+    { label: "Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
+    { label: "Payslips", href: "/hod/payslips", iconName: "Wallet", roles: ["HOD"] },
   ],
   COLLEGE_OFFICE: [
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
