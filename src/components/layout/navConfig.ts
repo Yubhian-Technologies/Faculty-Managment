@@ -20,18 +20,22 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Principal
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-  { label: "Vacancy Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL"] },
+  { label: "Vacancy Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL"], section: "Institution" },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL"] },
   { label: "Interview Plans", href: "/principal/interviews", iconName: "CalendarCheck", roles: ["PRINCIPAL"] },
   { label: "Hiring Decisions", href: "/principal/decisions", iconName: "UserCheck", roles: ["PRINCIPAL"] },
+  { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL"], section: "My Work" },
+  { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL"] },
+  { label: "Teaching Load", href: "/principal/teaching", iconName: "BookOpen", roles: ["PRINCIPAL"] },
+  { label: "My Payslips", href: "/principal/payslips", iconName: "Wallet", roles: ["PRINCIPAL"] },
+  { label: "My Appraisal", href: "/principal/appraisal", iconName: "TrendingUp", roles: ["PRINCIPAL"] },
+  { label: "Training", href: "/principal/training", iconName: "GraduationCap", roles: ["PRINCIPAL"] },
+  { label: "Grievance", href: "/principal/grievance", iconName: "AlertCircle", roles: ["PRINCIPAL"] },
+  { label: "My Documents", href: "/principal/documents", iconName: "FolderOpen", roles: ["PRINCIPAL"] },
 
   // HOD
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
-  { label: "Vacancy Request", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"], section: "Hiring" },
-  { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
-  { label: "Hiring Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
-  { label: "Interview Setup", href: "/hod/setup", iconName: "Settings2", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"] },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"], section: "My Work" },
@@ -42,6 +46,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Training", href: "/hod/training", iconName: "GraduationCap", roles: ["HOD"] },
   { label: "Grievance", href: "/hod/grievance", iconName: "AlertCircle", roles: ["HOD"] },
   { label: "My Documents", href: "/hod/documents", iconName: "FolderOpen", roles: ["HOD"] },
+  { label: "Vacancy Request", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"], section: "Hiring" },
+  { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
+  { label: "Hiring Batches", href: "/hod/batches", iconName: "Layers", roles: ["HOD"] },
+  { label: "Interview Setup", href: "/hod/setup", iconName: "Settings2", roles: ["HOD"] },
 
   // College Office
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
@@ -80,16 +88,16 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   PRINCIPAL: [
     { label: "Home", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
     { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL"] },
-    { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL"] },
     { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL"] },
-    { label: "Interviews", href: "/principal/interviews", iconName: "CalendarCheck", roles: ["PRINCIPAL"] },
+    { label: "Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL"] },
+    { label: "Payslips", href: "/principal/payslips", iconName: "Wallet", roles: ["PRINCIPAL"] },
   ],
   HOD: [
     { label: "Home", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
-    { label: "Hiring", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"] },
     { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"] },
     { label: "Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
     { label: "Payslips", href: "/hod/payslips", iconName: "Wallet", roles: ["HOD"] },
+    { label: "Hiring", href: "/hod/vacancy", iconName: "ClipboardPlus", roles: ["HOD"] },
   ],
   COLLEGE_OFFICE: [
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },

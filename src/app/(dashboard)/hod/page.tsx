@@ -29,9 +29,9 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import type { VacancyRequest, HiringBatch } from "@/types";
 
 const HOD_MODULES = [
-  { label: "Hiring", description: "Vacancies, candidates & batches", href: "/hod/vacancy", icon: ClipboardPlus, color: "bg-indigo-50 text-indigo-600" },
   { label: "Faculty", description: "Department faculty list", href: "/hod/faculty", icon: UsersRound, color: "bg-blue-50 text-blue-600" },
   { label: "Leave Approvals", description: "Approve faculty leave", href: "/hod/leave-approvals", icon: CalendarClock, color: "bg-emerald-50 text-emerald-600" },
+  { label: "Hiring", description: "Vacancies, candidates & batches", href: "/hod/vacancy", icon: ClipboardPlus, color: "bg-indigo-50 text-indigo-600" },
 ];
 
 const PERSONAL_MODULES = [

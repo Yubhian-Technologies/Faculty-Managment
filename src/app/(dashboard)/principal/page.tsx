@@ -2,7 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, CalendarCheck, UserCheck, Clock } from "lucide-react";
+import {
+  ClipboardList,
+  CalendarCheck,
+  UserCheck,
+  Clock,
+  CalendarClock,
+  ClipboardCheck,
+  BookOpen,
+  Wallet,
+  TrendingUp,
+  GraduationCap,
+  AlertCircle,
+  FolderOpen,
+  ChevronRight,
+} from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +25,17 @@ import { useAuthStore } from "@/store/authStore";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { formatDate } from "@/lib/utils";
 import type { VacancyRequest, HiringBatch } from "@/types";
+
+const PERSONAL_MODULES = [
+  { label: "My Leave", description: "Apply & track leave", href: "/principal/leave", icon: CalendarClock, color: "bg-sky-50 text-sky-600" },
+  { label: "My Attendance", description: "Attendance records", href: "/principal/attendance", icon: ClipboardCheck, color: "bg-violet-50 text-violet-600" },
+  { label: "Teaching Load", description: "Subjects & timetable", href: "/principal/teaching", icon: BookOpen, color: "bg-orange-50 text-orange-600" },
+  { label: "My Payslips", description: "Salary & payslips", href: "/principal/payslips", icon: Wallet, color: "bg-green-50 text-green-600" },
+  { label: "My Appraisal", description: "Performance review", href: "/principal/appraisal", icon: TrendingUp, color: "bg-pink-50 text-pink-600" },
+  { label: "Training", description: "FDPs & workshops", href: "/principal/training", icon: GraduationCap, color: "bg-cyan-50 text-cyan-600" },
+  { label: "Grievance", description: "Raise grievance", href: "/principal/grievance", icon: AlertCircle, color: "bg-red-50 text-red-600" },
+  { label: "My Documents", description: "Certificates & letters", href: "/principal/documents", icon: FolderOpen, color: "bg-amber-50 text-amber-600" },
+];
 
 export default function PrincipalDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -132,6 +157,29 @@ export default function PrincipalDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Personal Modules */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">My Work</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {PERSONAL_MODULES.map((mod) => (
+            <Link key={mod.href} href={mod.href}>
+              <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+                <CardContent className="p-4 flex flex-col gap-3">
+                  <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${mod.color}`}>
+                    <mod.icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{mod.label}</p>
+                    <p className="text-xs text-muted-foreground">{mod.description}</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto mt-auto" />
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
