@@ -38,21 +38,27 @@ export function getAdminStorage(): Storage {
   return getStorage(getAdminApp()) as Storage;
 }
 
-// Lazy proxy accessors
+// Lazy proxy accessors — must bind methods to their instance so `this` is correct
 export const adminAuth = new Proxy({} as Auth, {
   get(_target, prop) {
-    return (getAdminAuth() as unknown as Record<string, unknown>)[prop as string];
+    const instance = getAdminAuth();
+    const val = (instance as unknown as Record<string, unknown>)[prop as string];
+    return typeof val === "function" ? (val as (...a: unknown[]) => unknown).bind(instance) : val;
   },
 });
 
 export const adminDb = new Proxy({} as Firestore, {
   get(_target, prop) {
-    return (getAdminDb() as unknown as Record<string, unknown>)[prop as string];
+    const instance = getAdminDb();
+    const val = (instance as unknown as Record<string, unknown>)[prop as string];
+    return typeof val === "function" ? (val as (...a: unknown[]) => unknown).bind(instance) : val;
   },
 });
 
 export const adminStorage = new Proxy({} as Storage, {
   get(_target, prop) {
-    return (getAdminStorage() as unknown as Record<string, unknown>)[prop as string];
+    const instance = getAdminStorage();
+    const val = (instance as unknown as Record<string, unknown>)[prop as string];
+    return typeof val === "function" ? (val as (...a: unknown[]) => unknown).bind(instance) : val;
   },
 });
