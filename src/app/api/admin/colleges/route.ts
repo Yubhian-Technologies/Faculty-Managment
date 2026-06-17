@@ -10,8 +10,10 @@ export async function GET() {
     await requireSuperAdmin();
 
     const db = getAdminDb();
-    const snap = await db.collection("colleges").orderBy("name").get();
-    const colleges = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const snap = await db.collection("colleges").get();
+    const colleges = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
 
     return NextResponse.json({ colleges });
   } catch (err) {

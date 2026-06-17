@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const auth = getAdminAuth();
+    const auth = await getAdminAuth();
     const db = getAdminDb();
 
     // Create Firebase Auth user
@@ -131,14 +131,11 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-    // Expose Firebase Auth error codes so callers can show meaningful messages
-    if (err && typeof err === "object" && "code" in err) {
-      const code = (err as { code: string }).code;
-      const message = (err as { message?: string }).message ?? code;
-      console.error("[admin/users POST] Firebase error:", code, message);
-      return NextResponse.json({ error: message, code }, { status: 500 });
-    }
-    console.error("[admin/users POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const errName = (err as { constructor?: { name?: string } })?.constructor?.name ?? typeof err;
+    const errMessage = err instanceof Error ? err.message : String(err);
+    const errCode = err && typeof err === "object" && "code" in err ? String((err as { code: unknown }).code) : undefined;
+    console.error("[admin/users POST] type:", errName, "code:", errCode, "message:", errMessage);
+    const displayMessage = errCode ? `${errCode}: ${errMessage}` : errMessage;
+    return NextResponse.json({ error: displayMessage || "Internal error" }, { status: 500 });
   }
 }

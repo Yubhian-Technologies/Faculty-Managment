@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     const collegeId = session.collegeId;
-    const auth = getAdminAuth();
+    const auth = await getAdminAuth();
     const db = getAdminDb();
 
     // For HOD: auto-assign their department if not provided
