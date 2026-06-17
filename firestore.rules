@@ -78,6 +78,12 @@ service cloud.firestore {
       return isAuthenticated();
     }
 
+    // ─── System Users (role mapping for non-custom-claim users) ───────────────
+    match /systemUsers/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false; // server-only via Admin SDK
+    }
+
     // ─── Colleges ─────────────────────────────────────────────────────────────
 
     match /colleges/{collegeId} {
