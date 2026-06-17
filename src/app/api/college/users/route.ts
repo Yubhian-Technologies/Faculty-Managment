@@ -2,7 +2,8 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb } from "@/lib/firebase/admin";
+import { createFirebaseUser } from "@/lib/firebase/authRest";
 import type { UserRole } from "@/types";
 
 const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE"];
@@ -92,7 +93,6 @@ export async function POST(request: Request) {
     }
 
     const collegeId = session.collegeId;
-    const auth = await getAdminAuth();
     const db = getAdminDb();
 
     // For HOD: auto-assign their department if not provided
@@ -107,15 +107,8 @@ export async function POST(request: Request) {
       resolvedDepartment = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
     }
 
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: name,
-      emailVerified: true,
-    });
-
-    const uid = userRecord.uid;
-    await auth.setCustomUserClaims(uid, { role, collegeId });
+    // Create Firebase Auth user via REST API (no firebase-admin/auth required)
+    const uid = await createFirebaseUser(email, password, name);
 
     const now = new Date();
     await db
@@ -134,6 +127,9 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       });
+
+    // Role mapping for Firestore-based session resolution
+    await db.collection("systemUsers").doc(uid).set({ uid, role, collegeId, email, name });
 
     // Audit log
     let creatorName = "Unknown";

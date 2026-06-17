@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
+import { getAdminDb } from "@/lib/firebase/admin";
 
 export async function POST(request: Request) {
   try {
@@ -14,11 +15,28 @@ export async function POST(request: Request) {
 
     const decoded = await verifyFirebaseToken(token);
 
+    // JWT custom claims are the fast path (set for older users / admins).
+    // Fall back to Firestore systemUsers collection for users created via REST API.
+    let role = (decoded.role as string) ?? "";
+    let collegeId = (decoded.collegeId as string) ?? "";
+
+    if (!role) {
+      try {
+        const db = getAdminDb();
+        const snap = await db.collection("systemUsers").doc(decoded.uid).get();
+        const data = snap.data() as { role?: string; collegeId?: string } | undefined;
+        role = data?.role ?? "UNKNOWN";
+        collegeId = data?.collegeId ?? "";
+      } catch {
+        role = "UNKNOWN";
+      }
+    }
+
     const sessionData = {
       uid: decoded.uid,
       email: decoded.email ?? "",
-      role: (decoded.role as string) ?? "UNKNOWN",
-      collegeId: (decoded.collegeId as string) ?? "",
+      role,
+      collegeId,
       exp: decoded.exp,
     };
 

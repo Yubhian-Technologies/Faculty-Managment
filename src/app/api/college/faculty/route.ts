@@ -2,7 +2,8 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb } from "@/lib/firebase/admin";
+import { createFirebaseUser } from "@/lib/firebase/authRest";
 import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
@@ -91,7 +92,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const auth = await getAdminAuth();
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
@@ -120,17 +120,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
     }
 
-    // Create Firebase Auth user
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: name,
-      emailVerified: true,
-    });
-    const uid = userRecord.uid;
-
-    // Set custom claims: PANEL_MEMBER role with this college
-    await auth.setCustomUserClaims(uid, { role: "PANEL_MEMBER", collegeId });
+    // Create Firebase Auth user via REST API (no firebase-admin/auth required)
+    const uid = await createFirebaseUser(email, password, name);
 
     const now = new Date();
 
@@ -177,6 +168,9 @@ export async function POST(request: Request) {
       createdAt: now,
       updatedAt: now,
     });
+
+    // Role mapping for Firestore-based session resolution
+    await db.collection("systemUsers").doc(uid).set({ uid, role: "PANEL_MEMBER", collegeId, email, name });
 
     return NextResponse.json({ id: docRef.id, uid }, { status: 201 });
   } catch (err) {

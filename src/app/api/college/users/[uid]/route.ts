@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb } from "@/lib/firebase/admin";
 
 export async function PATCH(
   request: Request,
@@ -14,7 +14,6 @@ export async function PATCH(
     const body = (await request.json()) as { isActive: boolean };
 
     const db = getAdminDb();
-    const auth = await getAdminAuth();
 
     // Fetch target user to verify scope
     const targetSnap = await db
@@ -39,7 +38,6 @@ export async function PATCH(
       if (target.role !== "PANEL_MEMBER") {
         return NextResponse.json({ error: "HOD can only manage Panel Members" }, { status: 403 });
       }
-      // Verify same department
       const hodSnap = await db
         .collection("colleges")
         .doc(session.collegeId)
@@ -53,7 +51,6 @@ export async function PATCH(
     }
 
     const now = new Date();
-    await auth.updateUser(uid, { disabled: !body.isActive });
     await db
       .collection("colleges")
       .doc(session.collegeId)

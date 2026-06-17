@@ -2,7 +2,8 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb } from "@/lib/firebase/admin";
+import { createFirebaseUser } from "@/lib/firebase/authRest";
 import type { UserRole } from "@/types";
 
 export async function GET(request: Request) {
@@ -64,78 +65,52 @@ export async function POST(request: Request) {
       );
     }
 
-    const auth = await getAdminAuth();
-    const db = getAdminDb();
+    // Create Firebase Auth user via REST API (no firebase-admin/auth needed)
+    const uid = await createFirebaseUser(email, password, name);
 
-    // Create Firebase Auth user
-    const userRecord = await auth.createUser({
+    const db = getAdminDb();
+    const now = new Date();
+
+    // Write user profile to college subcollection
+    await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
+      uid,
+      collegeId,
+      name,
       email,
-      password,
-      displayName: name,
-      emailVerified: true,
+      role,
+      department: department ?? "",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
     });
 
-    const uid = userRecord.uid;
-
-    // Set custom claims for RBAC
-    await auth.setCustomUserClaims(uid, { role, collegeId });
-
-    // Write user profile to Firestore
-    const now = new Date();
-    await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("users")
-      .doc(uid)
-      .set({
-        uid,
-        collegeId,
-        name,
-        email,
-        role,
-        department: department ?? "",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
+    // Write role mapping so session creation can resolve role without custom claims
+    await db.collection("systemUsers").doc(uid).set({ uid, role, collegeId, email, name });
 
     // Write audit log
-    await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("auditLogs")
-      .add({
-        collegeId,
-        action: "USER_CREATED",
-        performedBy: "SUPER_ADMIN",
-        performedByName: "Super Admin",
-        targetId: uid,
-        details: { email, role, name },
-        timestamp: now,
-      });
+    await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
+      collegeId,
+      action: "USER_CREATED",
+      performedBy: "SUPER_ADMIN",
+      performedByName: "Super Admin",
+      targetId: uid,
+      details: { email, role, name },
+      timestamp: now,
+    });
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    // Firebase Auth already-exists error
     if (
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      err.code === "auth/email-already-exists"
+      err && typeof err === "object" && "code" in err &&
+      (err as { code: string }).code === "auth/email-already-exists"
     ) {
-      return NextResponse.json(
-        { error: "An account with this email already exists" },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
-    const errName = (err as { constructor?: { name?: string } })?.constructor?.name ?? typeof err;
-    const errMessage = err instanceof Error ? err.message : String(err);
-    const errCode = err && typeof err === "object" && "code" in err ? String((err as { code: unknown }).code) : undefined;
-    console.error("[admin/users POST] type:", errName, "code:", errCode, "message:", errMessage);
-    const displayMessage = errCode ? `${errCode}: ${errMessage}` : errMessage;
-    return NextResponse.json({ error: displayMessage || "Internal error" }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[admin/users POST]", msg);
+    return NextResponse.json({ error: msg || "Internal error" }, { status: 500 });
   }
 }
