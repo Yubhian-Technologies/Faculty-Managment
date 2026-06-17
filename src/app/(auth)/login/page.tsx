@@ -6,7 +6,6 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
-import Image from "next/image";
 import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
 import { loginSchema, type LoginFormData } from "@/lib/validations";
@@ -138,7 +137,7 @@ function LoginForm() {
         {/* Logo */}
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <Image src="/vishnulogo.png" alt="Vishnu Logo" width={80} height={80} className="object-contain" />
+            <img src="/vishnulogo.png" alt="Vishnu Logo" className="h-20 w-20 object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Faculty Management System</h1>
           <p className="text-sm text-muted-foreground mt-1">

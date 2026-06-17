@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Bell, LogOut, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,7 +43,7 @@ export function Sidebar() {
     <aside className="hidden md:flex md:flex-col w-64 border-r bg-background min-h-screen fixed top-0 left-0 z-30">
       {/* Logo */}
       <div className="h-16 flex items-center gap-3 px-4 border-b">
-        <Image src="/vishnulogo.png" alt="Vishnu Logo" width={36} height={36} className="rounded-md object-contain shrink-0" />
+        <img src="/vishnulogo.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold truncate">FMS Portal</p>
           <p className="text-xs text-muted-foreground truncate">{ROLE_LABELS[user.role]}</p>

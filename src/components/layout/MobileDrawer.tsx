@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { X, LogOut } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
@@ -56,7 +55,7 @@ export function MobileDrawer() {
       >
         <div className="flex items-center justify-between h-16 px-4 border-b">
           <div className="flex items-center gap-3">
-            <Image src="/vishnulogo.png" alt="Vishnu Logo" width={36} height={36} className="rounded-md object-contain shrink-0" />
+            <img src="/vishnulogo.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
             <div>
               <p className="text-sm font-bold">FMS Portal</p>
               <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role]}</p>
