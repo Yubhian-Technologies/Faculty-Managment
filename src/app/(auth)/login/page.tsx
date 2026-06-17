@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff, GraduationCap } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
 import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
 import { loginSchema, type LoginFormData } from "@/lib/validations";
@@ -136,8 +137,8 @@ function LoginForm() {
       <div className="w-full max-w-md space-y-6">
         {/* Logo */}
         <div className="text-center">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-lg mb-4">
-            <GraduationCap className="h-8 w-8 text-primary-foreground" />
+          <div className="flex justify-center mb-4">
+            <Image src="/vishnulogo.png" alt="Vishnu Logo" width={80} height={80} className="object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Faculty Management System</h1>
           <p className="text-sm text-muted-foreground mt-1">
