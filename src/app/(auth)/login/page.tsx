@@ -10,6 +10,7 @@ import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
 import { loginSchema, type LoginFormData } from "@/lib/validations";
 import { ROLE_DASHBOARD_PATHS } from "@/types";
+import type { FMSUser, UserRole } from "@/types";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,27 +65,54 @@ function LoginForm() {
         throw new Error(`Session error: ${errBody.detail ?? errBody.error ?? sessionRes.status}`);
       }
 
-      const sessionData = await sessionRes.json() as { ok: boolean; role?: string; collegeId?: string };
+      const sessionData = await sessionRes.json() as {
+        ok: boolean;
+        role?: string;
+        collegeId?: string;
+        name?: string;
+        email?: string;
+        profile?: FMSUser;
+      };
       const role = sessionData.role ?? "";
       const collegeId = sessionData.collegeId ?? "";
+
+      if (!role || role === "UNKNOWN") {
+        throw new Error("Account not configured. Contact your administrator.");
+      }
 
       if (role === "SUPER_ADMIN") {
         setUser({
           uid: credential.user.uid,
           collegeId: "",
-          name: credential.user.displayName ?? "Admin",
-          email: credential.user.email ?? "",
+          name: sessionData.name ?? credential.user.displayName ?? "Admin",
+          email: sessionData.email ?? credential.user.email ?? "",
           role: "SUPER_ADMIN",
           isActive: true,
           createdAt: {} as never,
         });
         router.push(redirect ?? "/super-admin");
-      } else if (collegeId && role) {
-        const profile = await getUserById(collegeId, credential.user.uid);
+      } else if (collegeId) {
+        // Server already fetched the profile via Admin SDK (bypasses Firestore rules).
+        // Fall back to client-side fetch for users with proper JWT custom claims.
+        let profile: FMSUser | null = sessionData.profile ?? null;
+        if (!profile) {
+          try {
+            profile = await getUserById(collegeId, credential.user.uid);
+          } catch { /* blocked by Firestore rules — use session data fallback */ }
+        }
+        if (!profile) {
+          profile = {
+            uid: credential.user.uid,
+            collegeId,
+            name: sessionData.name ?? credential.user.displayName ?? "User",
+            email: sessionData.email ?? credential.user.email ?? "",
+            role: role as UserRole,
+            isActive: true,
+            createdAt: {} as never,
+          };
+        }
         setUser(profile);
-
-        const dashboardPath =
-          ROLE_DASHBOARD_PATHS[profile?.role ?? "HOD"] ?? "/hod";
+        const dashboardPath = ROLE_DASHBOARD_PATHS[profile.role] ?? "/hod";
         router.push(redirect ?? dashboardPath);
       } else {
         throw new Error("Account not configured. Contact your administrator.");
