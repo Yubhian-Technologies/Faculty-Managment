@@ -1,7 +1,7 @@
 import { getApps, initializeApp, cert, getApp, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage, type Storage } from "firebase-admin/storage";
-import type { Auth } from "firebase-admin/auth";
+import { getAuth, type Auth } from "firebase-admin/auth";
 
 function getAdminApp(): App {
   if (getApps().length > 0) return getApp();
@@ -19,16 +19,8 @@ function getAdminApp(): App {
   });
 }
 
-let _authCache: Auth | null = null;
 export function getAdminAuth(): Auth {
-  if (_authCache) return _authCache;
-  // Use require() because firebase-admin is in serverExternalPackages —
-  // Next.js resolves it natively, and require() avoids ESM interop issues
-  // that dynamic import() can hit inside Vercel's Lambda bundler.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getAuth } = require("firebase-admin/auth") as { getAuth: (app: App) => Auth };
-  _authCache = getAuth(getAdminApp());
-  return _authCache;
+  return getAuth(getAdminApp());
 }
 
 export function getAdminDb(): Firestore {
