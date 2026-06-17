@@ -35,11 +35,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-muted/30">
       <Sidebar />
       <MobileDrawer />
-      <div className="md:ml-64">
+      <div className="md:ml-64 flex flex-col min-h-screen">
         <TopBar />
-        <main className="p-4 md:p-6 pb-24 md:pb-6 max-w-7xl mx-auto">
+        <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 max-w-7xl mx-auto w-full">
           {children}
         </main>
+        <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t bg-background text-xs text-muted-foreground">
+          <span>© 2026 Vishnu Educational Society. All rights reserved.</span>
+          <span>Developed by Yubhian Technologies LLP</span>
+        </footer>
       </div>
       <BottomNav />
     </div>
