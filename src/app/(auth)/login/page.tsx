@@ -137,7 +137,7 @@ function LoginForm() {
         {/* Logo */}
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <img src="/vishnulogo.png" alt="Vishnu Logo" className="h-20 w-20 object-contain" />
+            <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-20 w-20 object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Faculty Management System</h1>
           <p className="text-sm text-muted-foreground mt-1">
