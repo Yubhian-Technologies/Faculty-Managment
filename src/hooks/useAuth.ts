@@ -2,11 +2,10 @@
 
 import { useEffect } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase/client";
+import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
 import { useAuthStore } from "@/store/authStore";
-import type { UserRole } from "@/types";
+import type { FMSUser, UserRole } from "@/types";
 
 export function useAuth() {
   const { user, isLoading, setUser, setLoading, setFirebaseToken, logout } =
@@ -26,42 +25,58 @@ export function useAuth() {
         const idTokenResult = await firebaseUser.getIdTokenResult();
         let role = idTokenResult.claims.role as string | undefined;
         let collegeId = idTokenResult.claims.collegeId as string | undefined;
+        let serverProfile: FMSUser | null = null;
+        let serverName: string | undefined;
+        let serverEmail: string | undefined;
 
         // Users created via REST API have no JWT custom claims.
-        // Fall back to systemUsers Firestore collection.
+        // Call session API (uses Admin SDK, bypasses Firestore rules) to resolve role.
         if (!role) {
-          const sysSnap = await getDoc(doc(db, "systemUsers", firebaseUser.uid));
-          if (sysSnap.exists()) {
-            const sys = sysSnap.data() as { role?: string; collegeId?: string };
-            role = sys.role;
-            collegeId = sys.collegeId;
-          }
+          try {
+            const res = await fetch("/api/auth/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token }),
+            });
+            if (res.ok) {
+              const data = await res.json() as {
+                role?: string; collegeId?: string; name?: string;
+                email?: string; profile?: FMSUser;
+              };
+              role = data.role && data.role !== "UNKNOWN" ? data.role : undefined;
+              collegeId = data.collegeId;
+              serverName = data.name;
+              serverEmail = data.email;
+              serverProfile = data.profile ?? null;
+            }
+          } catch { /* non-fatal */ }
         }
 
         if (role === "SUPER_ADMIN") {
           setUser({
             uid: firebaseUser.uid,
             collegeId: "",
-            name: firebaseUser.displayName ?? "Super Admin",
-            email: firebaseUser.email ?? "",
+            name: serverName ?? firebaseUser.displayName ?? "Super Admin",
+            email: serverEmail ?? firebaseUser.email ?? "",
             role: "SUPER_ADMIN",
             isActive: true,
             createdAt: {} as never,
           });
         } else if (collegeId && role) {
-          // Try client-side Firestore fetch (works for users WITH custom claims).
-          // For users without custom claims the rules block it — use minimal profile.
-          let profile = null;
-          try {
-            profile = await getUserById(collegeId, firebaseUser.uid);
-          } catch { /* blocked by security rules — handled below */ }
-
+          // Server already fetched the profile for claim-less users.
+          // For users with JWT claims, try client-side Firestore fetch.
+          let profile: FMSUser | null = serverProfile;
+          if (!profile) {
+            try {
+              profile = await getUserById(collegeId, firebaseUser.uid);
+            } catch { /* blocked by security rules — use fallback below */ }
+          }
           setUser(
             profile ?? {
               uid: firebaseUser.uid,
               collegeId,
-              name: firebaseUser.displayName ?? "User",
-              email: firebaseUser.email ?? "",
+              name: serverName ?? firebaseUser.displayName ?? "User",
+              email: serverEmail ?? firebaseUser.email ?? "",
               role: role as UserRole,
               isActive: true,
               createdAt: {} as never,
