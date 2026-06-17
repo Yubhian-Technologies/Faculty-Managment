@@ -394,7 +394,7 @@ export default function AccountsSalaryPage() {
             </Card>
 
             {/* Summary */}
-            {n(form.basic) > 0 && (
+            {num(form.basic) > 0 && (
               <Card className="bg-primary/5 border-primary/20">
                 <CardContent className="p-4 space-y-1 text-sm">
                   <div className="flex justify-between">
