@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
@@ -17,8 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { Plus, IndianRupee } from "lucide-react";
-import type { HiringSalaryAgreement, HiringBatch, Candidate } from "@/types";
+import { Plus, IndianRupee, Sparkles } from "lucide-react";
+import type { HiringSalaryAgreement, HiringBatch, Candidate, HRFeedback } from "@/types";
 
 type RecordRow = Record<string, unknown> & HiringSalaryAgreement;
 
@@ -47,7 +48,29 @@ const emptyForm = (): SalaryForm => ({
   pf: "", professionalTax: "", tds: "",
 });
 
-function n(v: string) { return parseFloat(v) || 0; }
+function num(v: string) { return parseFloat(v) || 0; }
+
+// Distribute a gross monthly salary into standard components
+function autoFillFromGross(gross: number): Partial<SalaryForm> {
+  const basic = Math.round(gross * 0.40);
+  const hra = Math.round(basic * 0.40);
+  const da = Math.round(basic * 0.10);
+  const ta = Math.round(basic * 0.10);
+  const medical = Math.round(gross * 0.02);
+  const other = gross - basic - hra - da - ta - medical;
+  const pf = Math.round(basic * 0.12);
+  return {
+    basic: String(basic),
+    hra: String(hra),
+    da: String(da),
+    ta: String(ta),
+    medicalAllowance: String(medical),
+    otherAllowances: String(Math.max(0, other)),
+    pf: String(pf),
+    professionalTax: "200",
+    tds: "0",
+  };
+}
 
 export default function AccountsSalaryPage() {
   const [records, setRecords] = useState<RecordRow[]>([]);
@@ -58,6 +81,8 @@ export default function AccountsSalaryPage() {
   const [form, setForm] = useState<SalaryForm>(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [hrFeedback, setHrFeedback] = useState<HRFeedback | null>(null);
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
 
   function loadRecords() {
     return fetch("/api/college/salary-records")
@@ -79,10 +104,10 @@ export default function AccountsSalaryPage() {
 
   async function loadCandidatesForBatch(batchId: string) {
     setLoadingCandidates(true);
+    setHrFeedback(null);
     try {
       const data = await fetch(`/api/college/candidates?batchId=${batchId}&stage=DECISION`)
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>);
-      // exclude candidates who already have a salary agreement
       const existingIds = new Set(records.map((r) => r.candidateId as string));
       setCandidates((data.candidates ?? []).filter((c) => !existingIds.has(c.id)));
     } catch {
@@ -92,14 +117,44 @@ export default function AccountsSalaryPage() {
     }
   }
 
+  async function handleCandidateChange(candidateId: string) {
+    setForm((f) => ({ ...f, candidateId }));
+    setHrFeedback(null);
+    if (!form.batchId || !candidateId) return;
+
+    setLoadingFeedback(true);
+    try {
+      const data = await fetch(
+        `/api/college/hr-feedback?batchId=${form.batchId}&candidateId=${candidateId}`
+      ).then((r) => r.json() as Promise<{ feedback: HRFeedback[] }>);
+      const fb = data.feedback?.[0] ?? null;
+      setHrFeedback(fb);
+
+      // Auto-fill salary breakdown from candidate's stated salary expectation
+      if (fb?.salaryExpectation && fb.salaryExpectation > 0) {
+        setForm((f) => ({ ...f, candidateId, ...autoFillFromGross(fb.salaryExpectation!) }));
+      }
+    } catch {
+      // no feedback — that's fine
+    } finally {
+      setLoadingFeedback(false);
+    }
+  }
+
   function handleBatchChange(batchId: string) {
     setForm((f) => ({ ...f, batchId, candidateId: "" }));
+    setHrFeedback(null);
     void loadCandidatesForBatch(batchId);
   }
 
+  function applyAutoFill() {
+    if (!hrFeedback?.salaryExpectation) return;
+    setForm((f) => ({ ...f, ...autoFillFromGross(hrFeedback!.salaryExpectation!) }));
+  }
+
   // Computed
-  const gross = n(form.basic) + n(form.hra) + n(form.da) + n(form.ta) + n(form.medicalAllowance) + n(form.otherAllowances);
-  const deductions = n(form.pf) + n(form.professionalTax) + n(form.tds);
+  const gross = num(form.basic) + num(form.hra) + num(form.da) + num(form.ta) + num(form.medicalAllowance) + num(form.otherAllowances);
+  const deductions = num(form.pf) + num(form.professionalTax) + num(form.tds);
   const monthly = gross - deductions;
   const annual = monthly * 12;
 
@@ -108,7 +163,7 @@ export default function AccountsSalaryPage() {
       toast({ variant: "destructive", title: "Select a batch and candidate" });
       return;
     }
-    if (!n(form.basic)) {
+    if (!num(form.basic)) {
       toast({ variant: "destructive", title: "Basic salary is required" });
       return;
     }
@@ -125,9 +180,9 @@ export default function AccountsSalaryPage() {
           agreedMonthly: monthly,
           agreedAnnual: annual,
           breakdown: {
-            basic: n(form.basic), hra: n(form.hra), da: n(form.da), ta: n(form.ta),
-            medicalAllowance: n(form.medicalAllowance), otherAllowances: n(form.otherAllowances),
-            pf: n(form.pf), professionalTax: n(form.professionalTax), tds: n(form.tds),
+            basic: num(form.basic), hra: num(form.hra), da: num(form.da), ta: num(form.ta),
+            medicalAllowance: num(form.medicalAllowance), otherAllowances: num(form.otherAllowances),
+            pf: num(form.pf), professionalTax: num(form.professionalTax), tds: num(form.tds),
           },
         }),
       });
@@ -135,6 +190,7 @@ export default function AccountsSalaryPage() {
       toast({ variant: "success", title: "Salary agreement saved", description: "Candidate moved to offer letter stage." });
       setDialogOpen(false);
       setForm(emptyForm());
+      setHrFeedback(null);
       await loadRecords();
     } catch {
       toast({ variant: "destructive", title: "Failed to save" });
@@ -246,7 +302,7 @@ export default function AccountsSalaryPage() {
             {form.batchId && (
               <div className="space-y-2">
                 <Label>Candidate *</Label>
-                <Select value={form.candidateId} onValueChange={(v) => setForm((f) => ({ ...f, candidateId: v }))} disabled={loadingCandidates}>
+                <Select value={form.candidateId} onValueChange={(v) => void handleCandidateChange(v)} disabled={loadingCandidates}>
                   <SelectTrigger>
                     <SelectValue placeholder={loadingCandidates ? "Loading..." : "Select candidate..."} />
                   </SelectTrigger>
@@ -257,6 +313,36 @@ export default function AccountsSalaryPage() {
                   </SelectContent>
                 </Select>
               </div>
+            )}
+
+            {/* Negotiated salary from HR interview */}
+            {form.candidateId && (
+              loadingFeedback ? (
+                <div className="text-xs text-muted-foreground animate-pulse">Fetching interview salary data…</div>
+              ) : hrFeedback?.salaryExpectation ? (
+                <Card className="bg-amber-50 border-amber-200">
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-amber-800">Negotiated salary at interview</p>
+                        <p className="text-lg font-bold text-amber-900">{rupees(hrFeedback.salaryExpectation)} / month</p>
+                        {hrFeedback.noticePeriod && (
+                          <p className="text-xs text-amber-700 mt-0.5">Notice period: {hrFeedback.noticePeriod}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1 items-end">
+                        <Badge variant="outline" className="text-amber-700 border-amber-300 text-xs">HR Interview</Badge>
+                        <Button size="sm" variant="outline" className="text-xs h-7 border-amber-300 text-amber-800 hover:bg-amber-100" onClick={applyAutoFill}>
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Auto-fill
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <p className="text-xs text-muted-foreground">No salary expectation recorded in HR interview for this candidate.</p>
+              )
             )}
 
             {/* Salary Breakdown */}
