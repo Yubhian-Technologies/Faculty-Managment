@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const sessionPayload = Buffer.from(JSON.stringify(sessionData)).toString("base64");
     const sessionCookie = `header.${sessionPayload}.signature`;
 
-    const response = NextResponse.json({ ok: true });
+    const response = NextResponse.json({ ok: true, role, collegeId });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

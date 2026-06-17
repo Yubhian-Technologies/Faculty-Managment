@@ -52,11 +52,8 @@ function LoginForm() {
       const token = await credential.user.getIdToken();
       setFirebaseToken(token);
 
-      const idTokenResult = await credential.user.getIdTokenResult();
-      const collegeId = idTokenResult.claims.collegeId as string | undefined;
-      const role = idTokenResult.claims.role as string | undefined;
-
-      // Set session cookie for middleware
+      // Set session cookie — the server resolves role/collegeId from JWT claims
+      // or from the Firestore systemUsers collection (for users created without claims)
       const sessionRes = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,14 +64,11 @@ function LoginForm() {
         throw new Error(`Session error: ${errBody.detail ?? errBody.error ?? sessionRes.status}`);
       }
 
-      if (collegeId) {
-        const profile = await getUserById(collegeId, credential.user.uid);
-        setUser(profile);
+      const sessionData = await sessionRes.json() as { ok: boolean; role?: string; collegeId?: string };
+      const role = sessionData.role ?? "";
+      const collegeId = sessionData.collegeId ?? "";
 
-        const dashboardPath =
-          ROLE_DASHBOARD_PATHS[profile?.role ?? "HOD"] ?? "/hod";
-        router.push(redirect ?? dashboardPath);
-      } else if (role === "SUPER_ADMIN") {
+      if (role === "SUPER_ADMIN") {
         setUser({
           uid: credential.user.uid,
           collegeId: "",
@@ -85,6 +79,13 @@ function LoginForm() {
           createdAt: {} as never,
         });
         router.push(redirect ?? "/super-admin");
+      } else if (collegeId && role) {
+        const profile = await getUserById(collegeId, credential.user.uid);
+        setUser(profile);
+
+        const dashboardPath =
+          ROLE_DASHBOARD_PATHS[profile?.role ?? "HOD"] ?? "/hod";
+        router.push(redirect ?? dashboardPath);
       } else {
         throw new Error("Account not configured. Contact your administrator.");
       }
