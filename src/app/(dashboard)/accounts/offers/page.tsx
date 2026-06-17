@@ -19,7 +19,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { Plus, FileText, Send, CheckCircle2, XCircle, Clock, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, FileText, Send, CheckCircle2, XCircle, Clock, Trash2, ChevronDown, ChevronUp, UserPlus } from "lucide-react";
 import type { OfferLetter, HiringBatch, Candidate, HiringSalaryAgreement } from "@/types";
 
 type OfferRow = OfferLetter & { id: string };
@@ -62,6 +62,7 @@ export default function AccountsOffersPage() {
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [actionTarget, setActionTarget] = useState<{ id: string; action: "SENT" | "ACCEPTED" | "REJECTED" | "DELETE" } | null>(null);
   const [isActing, setIsActing] = useState(false);
+  const [provisioning, setProvisioning] = useState<string | null>(null);
 
   async function load() {
     setIsLoading(true);
@@ -150,6 +151,25 @@ export default function AccountsOffersPage() {
       toast({ variant: "destructive", title: "Failed to create" });
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function provisionFaculty(letterId: string) {
+    setProvisioning(letterId);
+    try {
+      const res = await fetch(`/api/college/offer-letters/${letterId}/provision`, { method: "POST" });
+      const data = await res.json() as { ok?: boolean; alreadyExists?: boolean; employeeId?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      if (data.alreadyExists) {
+        toast({ title: "Faculty account already exists" });
+      } else {
+        toast({ variant: "success", title: "Faculty account created", description: `Employee ID: ${data.employeeId ?? ""}` });
+      }
+      void load();
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to create faculty account", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setProvisioning(null);
     }
   }
 
@@ -296,6 +316,16 @@ export default function AccountsOffersPage() {
                       )}
                       {letter.status === "SENT" && (
                         <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                            loading={provisioning === letter.id}
+                            onClick={() => void provisionFaculty(letter.id)}
+                          >
+                            <UserPlus className="h-3.5 w-3.5 mr-1" />
+                            Create Faculty Account
+                          </Button>
                           <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setActionTarget({ id: letter.id, action: "ACCEPTED" })}>
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                             Mark Accepted

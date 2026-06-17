@@ -182,11 +182,13 @@ export async function PATCH(
       .doc(id)
       .update(updates);
 
-    if (body.status === "ACCEPTED") {
-      // Auto-create faculty account with default password
+    // Auto-create faculty account as soon as the offer letter is sent
+    if (body.status === "SENT") {
       await createFacultyFromOffer(db, session.collegeId, id);
+    }
 
-      // Mark candidate as APPROVED
+    // When candidate formally accepts, mark them APPROVED
+    if (body.status === "ACCEPTED") {
       const letterSnap = await db
         .collection("colleges")
         .doc(session.collegeId)
