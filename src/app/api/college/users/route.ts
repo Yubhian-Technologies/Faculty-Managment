@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import type { UserRole } from "@/types";
 
-const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE"];
+const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL"];
 const HOD_ROLES: UserRole[] = ["PANEL_MEMBER"];
 
 export async function GET(request: Request) {

@@ -19,7 +19,6 @@ import {
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { VacancyRequest } from "@/types";
 
@@ -93,14 +92,7 @@ export default function PrincipalVacanciesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Vacancy Requests"
-        description="Review and approve HOD vacancy requests"
-        actions={
-          <Button asChild>
-            <Link href="/principal/vacancies/general-admin">
-              + General Admin Vacancy
-            </Link>
-          </Button>
-        }
+        description="Review and approve HOD and Vice Principal vacancy requests"
       />
 
       {isMobile ? (

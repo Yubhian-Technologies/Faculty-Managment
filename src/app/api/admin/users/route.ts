@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   }
 }
 
-const COLLEGE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS"];
+const COLLEGE_ROLES: UserRole[] = ["PRINCIPAL", "VICE_PRINCIPAL", "ACCOUNTS"];
 const LOCATION_ROLES: UserRole[] = ["ADMINISTRATION"];
 
 export async function POST(request: Request) {

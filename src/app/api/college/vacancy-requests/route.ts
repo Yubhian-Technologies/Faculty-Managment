@@ -17,7 +17,7 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const department = searchParams.get("department");
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
     let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    if (session.role === "HOD") {
+    if (session.role === "HOD" || session.role === "VICE_PRINCIPAL") {
       requests = requests.filter((r) => (r as { hodUid?: string }).hodUid === session.uid);
     }
     if (status) {
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       position: string;
       department: string;
@@ -70,9 +70,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "position, department, requiredCount required" }, { status: 400 });
     }
 
-    // HOD cannot submit General Admin vacancies
-    if (session.role === "HOD" && positionCategory === "GENERAL_ADMIN") {
-      return NextResponse.json({ error: "HOD cannot submit General Admin vacancy requests" }, { status: 403 });
+    // Only Vice Principal can submit General Admin vacancies; HOD cannot
+    if (positionCategory === "GENERAL_ADMIN" && session.role !== "VICE_PRINCIPAL" && session.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Only Vice Principal can submit General Admin vacancy requests" }, { status: 403 });
     }
 
     const db = getAdminDb();

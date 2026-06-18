@@ -12,6 +12,7 @@ export type UserRole =
   | "LOCATION_DEPT_HEAD"
   // College-scoped
   | "PRINCIPAL"
+  | "VICE_PRINCIPAL"
   | "HOD"
   | "COLLEGE_OFFICE"
   | "PANEL_MEMBER"
@@ -25,6 +26,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN_OFFICE: "Admin Office",
   LOCATION_DEPT_HEAD: "Dept Head",
   PRINCIPAL: "Principal",
+  VICE_PRINCIPAL: "Vice Principal",
   HOD: "Head of Department",
   COLLEGE_OFFICE: "College Office",
   PANEL_MEMBER: "Faculty",
@@ -39,6 +41,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   ADMIN_OFFICE: "/admin-office",
   LOCATION_DEPT_HEAD: "/location-dept-head",
   PRINCIPAL: "/principal",
+  VICE_PRINCIPAL: "/vice-principal",
   HOD: "/hod",
   COLLEGE_OFFICE: "/college-office",
   PANEL_MEMBER: "/panel",
