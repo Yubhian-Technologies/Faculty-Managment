@@ -1,10 +1,11 @@
 import { cookies } from "next/headers";
 
-interface SessionPayload {
+export interface SessionPayload {
   uid: string;
   email: string;
   role: string;
   collegeId: string;
+  locationId: string;   // set for location-scoped roles; may also be set for college roles
   exp: number;
 }
 
@@ -41,10 +42,32 @@ export async function requireRole(...roles: string[]): Promise<SessionPayload> {
   return session;
 }
 
-export async function requireCollegeMember(...roles: string[]): Promise<SessionPayload & { collegeId: string }> {
+// For college-scoped roles (existing behavior — unchanged)
+export async function requireCollegeMember(
+  ...roles: string[]
+): Promise<SessionPayload & { collegeId: string }> {
   const session = await requireRole(...roles);
   if (!session.collegeId) {
     throw new Error("NO_COLLEGE_CONTEXT");
   }
   return session as SessionPayload & { collegeId: string };
+}
+
+// For location-scoped roles (Administration, HR Admin, Admin Office, Dept Head)
+export async function requireLocationMember(
+  ...roles: string[]
+): Promise<SessionPayload & { locationId: string }> {
+  const session = await requireRole(...roles);
+  if (!session.locationId) {
+    throw new Error("NO_LOCATION_CONTEXT");
+  }
+  return session as SessionPayload & { locationId: string };
+}
+
+// Super Admin or location member (for shared APIs)
+export async function requireLocationOrAdmin(
+  ...roles: string[]
+): Promise<SessionPayload> {
+  const allRoles = ["SUPER_ADMIN", ...roles];
+  return requireRole(...allRoles);
 }

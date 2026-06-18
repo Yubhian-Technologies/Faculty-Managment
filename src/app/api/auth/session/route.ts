@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     // Fall back to Firestore for users created via REST API (no custom claims).
     let role = (decoded.role as string) ?? "";
     let collegeId = (decoded.collegeId as string) ?? "";
+    let locationId = (decoded.locationId as string) ?? "";
     let name = (decoded.name as string) ?? "";
     let email = decoded.email ?? "";
 
@@ -27,10 +28,12 @@ export async function POST(request: Request) {
         const db = getAdminDb();
         const snap = await db.collection("systemUsers").doc(decoded.uid).get();
         const data = snap.data() as {
-          role?: string; collegeId?: string; name?: string; email?: string;
+          role?: string; collegeId?: string; locationId?: string;
+          name?: string; email?: string;
         } | undefined;
         role = data?.role ?? "UNKNOWN";
         collegeId = data?.collegeId ?? "";
+        locationId = data?.locationId ?? "";
         name = data?.name ?? name;
         email = data?.email ?? email;
       } catch {
@@ -38,12 +41,28 @@ export async function POST(request: Request) {
       }
     }
 
-    // Also fetch the full Firestore user profile server-side (bypasses security rules)
-    // so the login page can populate the auth store without needing JWT custom claims.
+    // Fetch full Firestore user profile server-side (bypasses security rules).
+    // College roles → colleges/{id}/users/{uid}
+    // Location roles → locations/{id}/locationUsers/{uid}
     let profile: Record<string, unknown> | null = null;
-    if (role !== "UNKNOWN" && collegeId) {
+    const db = getAdminDb();
+
+    const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD"];
+
+    if (role !== "UNKNOWN" && LOCATION_ROLES.includes(role) && locationId) {
       try {
-        const db = getAdminDb();
+        const userSnap = await db
+          .collection("locations")
+          .doc(locationId)
+          .collection("locationUsers")
+          .doc(decoded.uid)
+          .get();
+        if (userSnap.exists) {
+          profile = { uid: userSnap.id, ...userSnap.data() };
+        }
+      } catch { /* non-fatal */ }
+    } else if (role !== "UNKNOWN" && collegeId) {
+      try {
         const userSnap = await db
           .collection("colleges")
           .doc(collegeId)
@@ -61,13 +80,14 @@ export async function POST(request: Request) {
       email,
       role,
       collegeId,
+      locationId,
       exp: decoded.exp,
     };
 
     const sessionPayload = Buffer.from(JSON.stringify(sessionData)).toString("base64");
     const sessionCookie = `header.${sessionPayload}.signature`;
 
-    const response = NextResponse.json({ ok: true, role, collegeId, name, email, profile });
+    const response = NextResponse.json({ ok: true, role, collegeId, locationId, name, email, profile });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

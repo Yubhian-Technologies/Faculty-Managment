@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { FMSUser } from "@/types";
+import type { FMSUser, LOCATION_SCOPED_ROLES } from "@/types";
+
+const LOCATION_ROLES: string[] = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD"];
 
 interface AuthState {
   user: FMSUser | null;
@@ -29,3 +31,7 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+export function isLocationRole(role: string | undefined): boolean {
+  return LOCATION_ROLES.includes(role ?? "");
+}

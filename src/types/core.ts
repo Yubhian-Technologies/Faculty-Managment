@@ -3,7 +3,14 @@ import type { Timestamp } from "firebase/firestore";
 // ─── Roles ────────────────────────────────────────────────────────────────────
 
 export type UserRole =
+  // System
   | "SUPER_ADMIN"
+  // Location-scoped
+  | "ADMINISTRATION"
+  | "HR_ADMIN"
+  | "ADMIN_OFFICE"
+  | "LOCATION_DEPT_HEAD"
+  // College-scoped
   | "PRINCIPAL"
   | "HOD"
   | "COLLEGE_OFFICE"
@@ -13,6 +20,10 @@ export type UserRole =
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
+  ADMINISTRATION: "Administration",
+  HR_ADMIN: "HR Admin",
+  ADMIN_OFFICE: "Admin Office",
+  LOCATION_DEPT_HEAD: "Dept Head",
   PRINCIPAL: "Principal",
   HOD: "Head of Department",
   COLLEGE_OFFICE: "College Office",
@@ -23,6 +34,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin",
+  ADMINISTRATION: "/administration",
+  HR_ADMIN: "/hr-admin",
+  ADMIN_OFFICE: "/admin-office",
+  LOCATION_DEPT_HEAD: "/location-dept-head",
   PRINCIPAL: "/principal",
   HOD: "/hod",
   COLLEGE_OFFICE: "/college-office",
@@ -30,6 +45,14 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   ACCOUNTS: "/accounts",
   STUDENT: "/feedback",
 };
+
+// Roles that are scoped to a Location (not a specific college)
+export const LOCATION_SCOPED_ROLES: UserRole[] = [
+  "ADMINISTRATION",
+  "HR_ADMIN",
+  "ADMIN_OFFICE",
+  "LOCATION_DEPT_HEAD",
+];
 
 // ─── Workflow Status ──────────────────────────────────────────────────────────
 
@@ -57,10 +80,38 @@ export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
 export interface FMSUser {
   uid: string;
   collegeId: string;
+  locationId?: string;      // set for location-scoped roles; also present on college roles
   name: string;
   email: string;
   role: UserRole;
-  department?: string;
+  department?: string;      // for HOD / LOCATION_DEPT_HEAD
+  locationDeptId?: string;  // for LOCATION_DEPT_HEAD
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// ─── Location ────────────────────────────────────────────────────────────────
+
+export interface Location {
+  id: string;
+  name: string;
+  city: string;
+  state?: string;
+  address?: string;
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// ─── Location Department ─────────────────────────────────────────────────────
+
+export interface LocationDepartment {
+  id: string;
+  locationId: string;
+  name: string;          // Electrical, Civil, Accounts, etc.
+  deptHeadUid?: string;
+  deptHeadName?: string;
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -70,6 +121,7 @@ export interface FMSUser {
 
 export interface College {
   id: string;
+  locationId?: string;   // which location this college belongs to
   name: string;
   logoUrl?: string;
   address?: string;

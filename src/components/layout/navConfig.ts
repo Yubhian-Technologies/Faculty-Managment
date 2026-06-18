@@ -1,5 +1,7 @@
 import type { UserRole } from "@/types";
 
+// ─── Location-level nav ────────────────────────────────────────────────────
+
 export interface NavItem {
   label: string;
   href: string;
@@ -12,11 +14,31 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   // Super Admin
   { label: "Dashboard", href: "/super-admin", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN"] },
+  { label: "Locations", href: "/super-admin/locations", iconName: "MapPin", roles: ["SUPER_ADMIN"] },
   { label: "Colleges", href: "/super-admin/colleges", iconName: "Building2", roles: ["SUPER_ADMIN"] },
   { label: "All Users", href: "/super-admin/users", iconName: "Users", roles: ["SUPER_ADMIN"] },
   { label: "Audit Logs", href: "/super-admin/audit-logs", iconName: "ScrollText", roles: ["SUPER_ADMIN"] },
   { label: "Gen Admin Vacancies", href: "/super-admin/vacancies", iconName: "ClipboardList", roles: ["SUPER_ADMIN"] },
   { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
+
+  // Administration
+  { label: "Dashboard", href: "/administration", iconName: "LayoutDashboard", roles: ["ADMINISTRATION"] },
+  { label: "Location Staff", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"], section: "Management" },
+  { label: "Departments", href: "/administration/departments", iconName: "Settings2", roles: ["ADMINISTRATION"] },
+  { label: "Colleges", href: "/administration/colleges", iconName: "Building2", roles: ["ADMINISTRATION"] },
+  { label: "Vacancy Requests", href: "/administration/vacancies", iconName: "ClipboardList", roles: ["ADMINISTRATION"] },
+
+  // HR Admin
+  { label: "Dashboard", href: "/hr-admin", iconName: "LayoutDashboard", roles: ["HR_ADMIN"] },
+  { label: "Vacancy Requests", href: "/hr-admin/vacancies", iconName: "ClipboardPlus", roles: ["HR_ADMIN"], section: "Hiring" },
+  { label: "Candidates", href: "/hr-admin/candidates", iconName: "Users", roles: ["HR_ADMIN"] },
+
+  // Admin Office
+  { label: "Dashboard", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
+
+  // Location Dept Head
+  { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
+  { label: "My Candidates", href: "/location-dept-head/candidates", iconName: "Users", roles: ["LOCATION_DEPT_HEAD"] },
 
   // Principal
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
@@ -80,9 +102,27 @@ export function getNavItemsForRole(role: UserRole): NavItem[] {
 export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   SUPER_ADMIN: [
     { label: "Dashboard", href: "/super-admin", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN"] },
+    { label: "Locations", href: "/super-admin/locations", iconName: "MapPin", roles: ["SUPER_ADMIN"] },
     { label: "Colleges", href: "/super-admin/colleges", iconName: "Building2", roles: ["SUPER_ADMIN"] },
-    { label: "Vacancies", href: "/super-admin/vacancies", iconName: "ClipboardList", roles: ["SUPER_ADMIN"] },
     { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
+  ],
+  ADMINISTRATION: [
+    { label: "Home", href: "/administration", iconName: "LayoutDashboard", roles: ["ADMINISTRATION"] },
+    { label: "Staff", href: "/administration/users", iconName: "Users", roles: ["ADMINISTRATION"] },
+    { label: "Depts", href: "/administration/departments", iconName: "Settings2", roles: ["ADMINISTRATION"] },
+    { label: "Vacancies", href: "/administration/vacancies", iconName: "ClipboardList", roles: ["ADMINISTRATION"] },
+  ],
+  HR_ADMIN: [
+    { label: "Home", href: "/hr-admin", iconName: "LayoutDashboard", roles: ["HR_ADMIN"] },
+    { label: "Vacancies", href: "/hr-admin/vacancies", iconName: "ClipboardPlus", roles: ["HR_ADMIN"] },
+    { label: "Candidates", href: "/hr-admin/candidates", iconName: "Users", roles: ["HR_ADMIN"] },
+  ],
+  ADMIN_OFFICE: [
+    { label: "Home", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
+  ],
+  LOCATION_DEPT_HEAD: [
+    { label: "Home", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
+    { label: "Candidates", href: "/location-dept-head/candidates", iconName: "Users", roles: ["LOCATION_DEPT_HEAD"] },
   ],
   PRINCIPAL: [
     { label: "Home", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },

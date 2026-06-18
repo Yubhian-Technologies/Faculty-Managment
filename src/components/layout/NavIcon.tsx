@@ -29,6 +29,7 @@ import {
   Wallet,
   UsersRound,
   ClipboardCheck,
+  MapPin,
   type LucideProps,
 } from "lucide-react";
 
@@ -63,6 +64,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   Wallet,
   UsersRound,
   ClipboardCheck,
+  MapPin,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

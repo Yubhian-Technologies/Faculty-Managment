@@ -5,12 +5,24 @@ import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { College } from "@/types";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    await requireSuperAdmin();
+    // Super Admin sees all; Administration sees only their location's colleges
+    const { verifySession } = await import("@/lib/auth/verifySession");
+    const session = await verifySession();
+    if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE"].includes(session.role)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const filterLocationId = searchParams.get("locationId") ?? (session.role !== "SUPER_ADMIN" ? session.locationId : "");
 
     const db = getAdminDb();
-    const snap = await db.collection("colleges").get();
+    let query: FirebaseFirestore.Query = db.collection("colleges");
+    if (filterLocationId) {
+      query = query.where("locationId", "==", filterLocationId);
+    }
+    const snap = await query.get();
     const colleges = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
@@ -29,8 +41,8 @@ export async function POST(request: Request) {
   try {
     await requireSuperAdmin();
 
-    const body = (await request.json()) as Partial<College>;
-    const { name, address, contactEmail, contactPhone } = body;
+    const body = (await request.json()) as Partial<College> & { locationId?: string };
+    const { name, address, contactEmail, contactPhone, locationId } = body;
 
     if (!name || String(name).trim().length < 2) {
       return NextResponse.json({ error: "College name is required" }, { status: 400 });
@@ -42,6 +54,7 @@ export async function POST(request: Request) {
 
     await db.collection("colleges").doc(collegeId).set({
       name: String(name).trim(),
+      locationId: locationId ?? "",
       address: address ?? "",
       contactEmail: contactEmail ?? "",
       contactPhone: contactPhone ?? "",

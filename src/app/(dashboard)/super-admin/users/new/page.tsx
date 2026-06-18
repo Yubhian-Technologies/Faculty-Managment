@@ -2,146 +2,136 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createUserSchema, type CreateUserFormData } from "@/lib/validations";
 import { ROLE_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
-import type { College } from "@/types";
+import type { College, Location } from "@/types";
 
-const ASSIGNABLE_ROLES = ["PRINCIPAL", "ACCOUNTS"] as const;
+const COLLEGE_ROLES = ["PRINCIPAL", "ACCOUNTS"] as const;
+const LOCATION_ROLES = ["ADMINISTRATION"] as const;
+const ALL_ROLES = [...COLLEGE_ROLES, ...LOCATION_ROLES] as const;
 
 export default function NewUserPage() {
   const router = useRouter();
   const [colleges, setColleges] = useState<College[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("12345678");
+  const [role, setRole] = useState<typeof ALL_ROLES[number]>("PRINCIPAL");
+  const [collegeId, setCollegeId] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/colleges")
       .then((r) => r.json() as Promise<{ colleges: College[] }>)
-      .then((data) => setColleges((data.colleges ?? []).filter((c) => c.isActive)))
+      .then((d) => setColleges((d.colleges ?? []).filter((c) => c.isActive)))
+      .catch(() => {});
+
+    fetch("/api/admin/locations")
+      .then((r) => r.json() as Promise<{ locations: Location[] }>)
+      .then((d) => setLocations((d.locations ?? []).filter((l) => l.isActive)))
       .catch(() => {});
   }, []);
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<CreateUserFormData>({
-    resolver: zodResolver(createUserSchema),
-    defaultValues: { role: "PRINCIPAL" },
-  });
+  const isLocationRole = LOCATION_ROLES.includes(role as typeof LOCATION_ROLES[number]);
+  const isValid = !!name && !!email && !!password && !!role &&
+    (isLocationRole ? !!locationId : !!collegeId);
 
-  const role = watch("role");
-
-  const onSubmit = async (data: CreateUserFormData) => {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isValid) return;
+    setSaving(true);
     try {
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ name, email, password, role, collegeId, locationId }),
       });
       const json = await res.json() as { uid?: string; error?: string };
-
       if (res.status === 409) {
-        toast({ variant: "destructive", title: "Email already in use", description: json.error });
+        toast({ variant: "destructive", title: "Email already in use" });
         return;
       }
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create user", description: json.error });
+        toast({ variant: "destructive", title: "Failed", description: json.error });
         return;
       }
-
-      toast({ variant: "success", title: "User created", description: `UID: ${json.uid}` });
+      toast({ variant: "success", title: "User created" });
       router.push("/super-admin/users");
     } catch {
-      toast({ variant: "destructive", title: "Network error", description: "Please try again." });
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setSaving(false);
     }
-  };
+  }
 
   return (
     <div className="max-w-xl">
-      <PageHeader
-        title="Add User"
-        description="Create a staff account and assign role"
-      />
-
+      <PageHeader title="Add User" description="Create a staff account and assign role" />
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">User Details</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
-              <Input id="name" {...register("name")} placeholder="Dr. Ananya Sharma" />
-              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+              <Label>Full Name <span className="text-destructive">*</span></Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
-              <Input id="email" type="email" {...register("email")} placeholder="user@college.edu" />
-              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="password">Temporary Password *</Label>
-              <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
-              {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+              <Label>Temporary Password <span className="text-destructive">*</span></Label>
+              <Input value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Role *</Label>
-                <Select
-                  value={role}
-                  onValueChange={(v) => setValue("role", v as CreateUserFormData["role"])}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
+                <Label>Role <span className="text-destructive">*</span></Label>
+                <Select value={role} onValueChange={(v) => { setRole(v as typeof ALL_ROLES[number]); setCollegeId(""); setLocationId(""); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {ASSIGNABLE_ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {ROLE_LABELS[r]}
-                      </SelectItem>
+                    {ALL_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
               </div>
 
-              <div className="space-y-2">
-                <Label>College *</Label>
-                <Select onValueChange={(v) => setValue("collegeId", v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select college" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {colleges.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {isLocationRole ? (
+                <div className="space-y-2">
+                  <Label>Location <span className="text-destructive">*</span></Label>
+                  <Select value={locationId} onValueChange={setLocationId}>
+                    <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
+                    <SelectContent>
+                      {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>College <span className="text-destructive">*</span></Label>
+                  <Select value={collegeId} onValueChange={setCollegeId}>
+                    <SelectTrigger><SelectValue placeholder="Select college" /></SelectTrigger>
+                    <SelectContent>
+                      {colleges.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>
-                Cancel
-              </Button>
-              <Button type="submit" loading={isSubmitting}>
-                Create User
-              </Button>
+              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+              <Button type="submit" loading={saving} disabled={!isValid}>Create User</Button>
             </div>
           </form>
         </CardContent>

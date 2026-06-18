@@ -37,7 +37,8 @@ export async function GET(request: Request) {
   }
 }
 
-const SUPER_ADMIN_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS"];
+const COLLEGE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS"];
+const LOCATION_ROLES: UserRole[] = ["ADMINISTRATION"];
 
 export async function POST(request: Request) {
   try {
@@ -48,21 +49,31 @@ export async function POST(request: Request) {
       email: string;
       password: string;
       role: UserRole;
-      collegeId: string;
+      collegeId?: string;
+      locationId?: string;
       department?: string;
     };
 
-    const { name, email, password, role, collegeId, department } = body;
+    const { name, email, password, role, collegeId, locationId, department } = body;
 
-    if (!name || !email || !password || !role || !collegeId) {
+    if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    if (!SUPER_ADMIN_ROLES.includes(role)) {
+    const isCollegeRole = COLLEGE_ROLES.includes(role);
+    const isLocationRole = LOCATION_ROLES.includes(role);
+
+    if (!isCollegeRole && !isLocationRole) {
       return NextResponse.json(
-        { error: `Super Admin can only create: ${SUPER_ADMIN_ROLES.join(", ")}` },
+        { error: `Super Admin can create: ${[...COLLEGE_ROLES, ...LOCATION_ROLES].join(", ")}` },
         { status: 403 }
       );
+    }
+    if (isCollegeRole && !collegeId) {
+      return NextResponse.json({ error: "collegeId required for this role" }, { status: 400 });
+    }
+    if (isLocationRole && !locationId) {
+      return NextResponse.json({ error: "locationId required for Administration role" }, { status: 400 });
     }
 
     // Create Firebase Auth user via REST API (no firebase-admin/auth needed)
@@ -71,32 +82,28 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const now = new Date();
 
-    // Write user profile to college subcollection
-    await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
-      uid,
-      collegeId,
-      name,
-      email,
-      role,
-      department: department ?? "",
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    // Write role mapping so session creation can resolve role without custom claims
-    await db.collection("systemUsers").doc(uid).set({ uid, role, collegeId, email, name });
-
-    // Write audit log
-    await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-      collegeId,
-      action: "USER_CREATED",
-      performedBy: "SUPER_ADMIN",
-      performedByName: "Super Admin",
-      targetId: uid,
-      details: { email, role, name },
-      timestamp: now,
-    });
+    if (isLocationRole && locationId) {
+      // Write to location subcollection
+      await db.collection("locations").doc(locationId).collection("locationUsers").doc(uid).set({
+        uid, locationId, name, email, role,
+        isActive: true, createdAt: now, updatedAt: now,
+      });
+      await db.collection("systemUsers").doc(uid).set({ uid, role, locationId, collegeId: "", email, name });
+    } else if (isCollegeRole && collegeId) {
+      // Write user profile to college subcollection
+      await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
+        uid, collegeId, name, email, role,
+        department: department ?? "",
+        isActive: true, createdAt: now, updatedAt: now,
+      });
+      await db.collection("systemUsers").doc(uid).set({ uid, role, collegeId, email, name });
+      // Write audit log
+      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
+        collegeId, action: "USER_CREATED",
+        performedBy: "SUPER_ADMIN", performedByName: "Super Admin",
+        targetId: uid, details: { email, role, name }, timestamp: now,
+      });
+    }
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {

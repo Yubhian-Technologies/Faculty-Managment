@@ -69,16 +69,20 @@ function LoginForm() {
         ok: boolean;
         role?: string;
         collegeId?: string;
+        locationId?: string;
         name?: string;
         email?: string;
         profile?: FMSUser;
       };
       const role = sessionData.role ?? "";
       const collegeId = sessionData.collegeId ?? "";
+      const locationId = sessionData.locationId ?? "";
 
       if (!role || role === "UNKNOWN") {
         throw new Error("Account not configured. Contact your administrator.");
       }
+
+      const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD"];
 
       if (role === "SUPER_ADMIN") {
         setUser({
@@ -91,6 +95,21 @@ function LoginForm() {
           createdAt: {} as never,
         });
         router.push(redirect ?? "/super-admin");
+      } else if (LOCATION_ROLES.includes(role) && locationId) {
+        // Location-scoped role — profile comes from locations/{id}/locationUsers/{uid}
+        const profile: FMSUser = sessionData.profile ?? {
+          uid: credential.user.uid,
+          collegeId: "",
+          locationId,
+          name: sessionData.name ?? credential.user.displayName ?? "User",
+          email: sessionData.email ?? credential.user.email ?? "",
+          role: role as UserRole,
+          isActive: true,
+          createdAt: {} as never,
+        };
+        setUser(profile);
+        const dashboardPath = ROLE_DASHBOARD_PATHS[profile.role] ?? "/administration";
+        router.push(redirect ?? dashboardPath);
       } else if (collegeId) {
         // Server already fetched the profile via Admin SDK (bypasses Firestore rules).
         // Fall back to client-side fetch for users with proper JWT custom claims.
@@ -104,6 +123,7 @@ function LoginForm() {
           profile = {
             uid: credential.user.uid,
             collegeId,
+            locationId,
             name: sessionData.name ?? credential.user.displayName ?? "User",
             email: sessionData.email ?? credential.user.email ?? "",
             role: role as UserRole,
