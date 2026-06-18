@@ -19,6 +19,8 @@ import {
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import type { VacancyRequest } from "@/types";
 
 export default function PrincipalVacanciesPage() {
@@ -92,6 +94,13 @@ export default function PrincipalVacanciesPage() {
       <PageHeader
         title="Vacancy Requests"
         description="Review and approve HOD vacancy requests"
+        actions={
+          <Button asChild>
+            <Link href="/principal/vacancies/general-admin">
+              + General Admin Vacancy
+            </Link>
+          </Button>
+        }
       />
 
       {isMobile ? (
@@ -140,6 +149,15 @@ export default function PrincipalVacanciesPage() {
           csvFilename="principal-vacancies"
           columns={[
             { key: "position", header: "Position" },
+            {
+              key: "positionCategory",
+              header: "Category",
+              render: (row) => {
+                const cat = (row as unknown as VacancyRequest).positionCategory;
+                const label = cat === "TEACHING" ? "Teaching" : cat === "SUPPORTING_STAFF" ? "Support Staff" : cat ?? "—";
+                return <Badge variant="secondary" className="text-xs">{label}</Badge>;
+              },
+            },
             { key: "department", header: "Department" },
             { key: "hodName", header: "Requested By" },
             { key: "requiredCount", header: "Count", render: (row) => (row as unknown as VacancyRequest).requiredCount },

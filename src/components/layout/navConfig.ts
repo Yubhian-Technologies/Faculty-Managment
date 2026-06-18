@@ -15,7 +15,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Colleges", href: "/super-admin/colleges", iconName: "Building2", roles: ["SUPER_ADMIN"] },
   { label: "All Users", href: "/super-admin/users", iconName: "Users", roles: ["SUPER_ADMIN"] },
   { label: "Audit Logs", href: "/super-admin/audit-logs", iconName: "ScrollText", roles: ["SUPER_ADMIN"] },
-
+  { label: "Gen Admin Vacancies", href: "/super-admin/vacancies", iconName: "ClipboardList", roles: ["SUPER_ADMIN"] },
   { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
 
   // Principal
@@ -81,7 +81,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   SUPER_ADMIN: [
     { label: "Dashboard", href: "/super-admin", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN"] },
     { label: "Colleges", href: "/super-admin/colleges", iconName: "Building2", roles: ["SUPER_ADMIN"] },
-    { label: "Users", href: "/super-admin/users", iconName: "Users", roles: ["SUPER_ADMIN"] },
+    { label: "Vacancies", href: "/super-admin/vacancies", iconName: "ClipboardList", roles: ["SUPER_ADMIN"] },
     { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
   ],
   PRINCIPAL: [
