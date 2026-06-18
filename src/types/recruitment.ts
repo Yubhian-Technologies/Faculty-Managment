@@ -13,6 +13,7 @@ export interface VacancyRequest {
   hodName: string;
   position: string;
   positionCategory?: PositionCategory;
+  qualification?: string;
   requiredCount: number;
   availableCount: number;
   justification?: string;

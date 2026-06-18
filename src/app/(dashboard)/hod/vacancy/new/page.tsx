@@ -47,6 +47,7 @@ export default function NewVacancyPage() {
   const [customDesignation, setCustomDesignation] = useState("");
   const [requiredCount, setRequiredCount] = useState(1);
   const [availableCount, setAvailableCount] = useState(0);
+  const [qualification, setQualification] = useState("");
   const [justification, setJustification] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -79,6 +80,7 @@ export default function NewVacancyPage() {
     !!designation &&
     (designation !== "Others" || customDesignation.trim().length > 0) &&
     requiredCount >= 1 &&
+    qualification.trim().length > 0 &&
     justification.trim().length >= 10;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -99,6 +101,7 @@ export default function NewVacancyPage() {
           positionCategory: category,
           requiredCount,
           availableCount,
+          qualification: qualification.trim(),
           justification: justification.trim(),
         }),
       });
@@ -240,6 +243,16 @@ export default function NewVacancyPage() {
                   onChange={(e) => setAvailableCount(Number(e.target.value))}
                 />
               </div>
+            </div>
+
+            {/* Qualification */}
+            <div className="space-y-2">
+              <Label>Required Qualification <span className="text-destructive">*</span></Label>
+              <Input
+                value={qualification}
+                onChange={(e) => setQualification(e.target.value)}
+                placeholder="e.g. M.Tech / Ph.D in Computer Science..."
+              />
             </div>
 
             {/* Justification */}

@@ -61,10 +61,11 @@ export async function POST(request: Request) {
       positionCategory: string;
       requiredCount: number;
       availableCount?: number;
+      qualification?: string;
       justification?: string;
     };
 
-    const { position, department, positionCategory, requiredCount, availableCount, justification } = body;
+    const { position, department, positionCategory, requiredCount, availableCount, qualification, justification } = body;
     if (!position || !department || !requiredCount) {
       return NextResponse.json({ error: "position, department, requiredCount required" }, { status: 400 });
     }
@@ -91,6 +92,7 @@ export async function POST(request: Request) {
         positionCategory: positionCategory ?? "TEACHING",
         requiredCount: Number(requiredCount),
         availableCount: Number(availableCount ?? 0),
+        qualification: qualification?.trim() ?? "",
         justification: justification?.trim() ?? "",
         status: "PENDING",
         createdAt: now,
