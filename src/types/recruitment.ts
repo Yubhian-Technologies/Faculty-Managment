@@ -3,6 +3,8 @@ import type { WorkflowStatus } from "./core";
 
 // ─── Vacancy Request ──────────────────────────────────────────────────────────
 
+export type PositionCategory = "TEACHING" | "SUPPORTING_STAFF" | "GENERAL_ADMIN";
+
 export interface VacancyRequest {
   id: string;
   collegeId: string;
@@ -10,6 +12,7 @@ export interface VacancyRequest {
   hodUid: string;
   hodName: string;
   position: string;
+  positionCategory?: PositionCategory;
   requiredCount: number;
   availableCount: number;
   justification?: string;

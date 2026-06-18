@@ -54,18 +54,24 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       position: string;
       department: string;
+      positionCategory: string;
       requiredCount: number;
       availableCount?: number;
       justification?: string;
     };
 
-    const { position, department, requiredCount, availableCount, justification } = body;
+    const { position, department, positionCategory, requiredCount, availableCount, justification } = body;
     if (!position || !department || !requiredCount) {
       return NextResponse.json({ error: "position, department, requiredCount required" }, { status: 400 });
+    }
+
+    // HOD cannot submit General Admin vacancies
+    if (session.role === "HOD" && positionCategory === "GENERAL_ADMIN") {
+      return NextResponse.json({ error: "HOD cannot submit General Admin vacancy requests" }, { status: 403 });
     }
 
     const db = getAdminDb();
@@ -82,6 +88,7 @@ export async function POST(request: Request) {
         hodName,
         position: position.trim(),
         department: department.trim(),
+        positionCategory: positionCategory ?? "TEACHING",
         requiredCount: Number(requiredCount),
         availableCount: Number(availableCount ?? 0),
         justification: justification?.trim() ?? "",
