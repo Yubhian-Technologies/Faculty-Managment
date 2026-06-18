@@ -22,6 +22,8 @@ const TEACHING_ROLES = [
   "Professor",
   "Associate Professor",
   "Assistant Professor",
+  "Senior Lecturer",
+  "Lecturer",
   "Others",
 ] as const;
 
