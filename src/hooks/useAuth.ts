@@ -31,6 +31,7 @@ export function useAuth() {
 
         // Users created via REST API have no JWT custom claims.
         // Call session API (uses Admin SDK, bypasses Firestore rules) to resolve role.
+        let locationId: string | undefined;
         if (!role) {
           try {
             const res = await fetch("/api/auth/session", {
@@ -40,17 +41,20 @@ export function useAuth() {
             });
             if (res.ok) {
               const data = await res.json() as {
-                role?: string; collegeId?: string; name?: string;
-                email?: string; profile?: FMSUser;
+                role?: string; collegeId?: string; locationId?: string;
+                name?: string; email?: string; profile?: FMSUser;
               };
               role = data.role && data.role !== "UNKNOWN" ? data.role : undefined;
               collegeId = data.collegeId;
+              locationId = data.locationId;
               serverName = data.name;
               serverEmail = data.email;
               serverProfile = data.profile ?? null;
             }
           } catch { /* non-fatal */ }
         }
+
+        const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD"];
 
         if (role === "SUPER_ADMIN") {
           setUser({
@@ -62,6 +66,20 @@ export function useAuth() {
             isActive: true,
             createdAt: {} as never,
           });
+        } else if (role && LOCATION_ROLES.includes(role)) {
+          // Location-scoped users have collegeId: "" — do NOT gate on collegeId.
+          setUser(
+            serverProfile ?? {
+              uid: firebaseUser.uid,
+              collegeId: "",
+              locationId: locationId ?? "",
+              name: serverName ?? firebaseUser.displayName ?? "User",
+              email: serverEmail ?? firebaseUser.email ?? "",
+              role: role as UserRole,
+              isActive: true,
+              createdAt: {} as never,
+            }
+          );
         } else if (collegeId && role) {
           // Server already fetched the profile for claim-less users.
           // For users with JWT claims, try client-side Firestore fetch.
