@@ -22,6 +22,8 @@ import { toast } from "@/hooks/useToast";
 type CollegeRow = {
   id: string;
   name: string;
+  locationId?: string;
+  locationName?: string;
   address: string;
   contactEmail: string;
   contactPhone: string;
@@ -32,6 +34,7 @@ type CollegeRow = {
 export default function CollegesPage() {
   const router = useRouter();
   const [colleges, setColleges] = useState<CollegeRow[]>([]);
+  const [locationMap, setLocationMap] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -42,9 +45,17 @@ export default function CollegesPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/admin/colleges");
-      const data = await res.json() as { colleges: CollegeRow[] };
-      setColleges(data.colleges ?? []);
+      const [collegesRes, locationsRes] = await Promise.all([
+        fetch("/api/admin/colleges"),
+        fetch("/api/admin/locations"),
+      ]);
+      const collegesData = await collegesRes.json() as { colleges: CollegeRow[] };
+      const locationsData = await locationsRes.json() as { locations: { id: string; name: string }[] };
+
+      const map: Record<string, string> = {};
+      for (const l of locationsData.locations ?? []) map[l.id] = l.name;
+      setLocationMap(map);
+      setColleges(collegesData.colleges ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load colleges" });
     } finally {
@@ -116,6 +127,15 @@ export default function CollegesPage() {
           <p className="font-medium">{row.name}</p>
           <p className="text-xs text-muted-foreground">{row.id}</p>
         </div>
+      ),
+    },
+    {
+      key: "locationId",
+      header: "Location",
+      render: (row) => (
+        <Badge variant="outline" className="text-xs font-normal">
+          {row.locationId ? (locationMap[row.locationId] ?? row.locationId) : <span className="text-muted-foreground italic">Unassigned</span>}
+        </Badge>
       ),
     },
     {

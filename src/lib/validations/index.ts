@@ -44,6 +44,7 @@ export type DepartmentFormData = z.infer<typeof departmentSchema>;
 
 export const createCollegeSchema = z.object({
   name: z.string().min(2, "College name is required"),
+  locationId: z.string().min(1, "Location is required"),
   address: z.string().optional(),
   contactEmail: z.string().email("Enter a valid email").optional().or(z.literal("")),
   contactPhone: z.string().optional(),
