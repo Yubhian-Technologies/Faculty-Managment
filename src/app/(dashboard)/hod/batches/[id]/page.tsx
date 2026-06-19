@@ -23,9 +23,11 @@ import {
   Minus,
   Clock,
   ArrowRight,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
-import { DESIGNATION_LABELS } from "@/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type { HiringBatch, Candidate, FacultyMember, FMSUser } from "@/types";
 
 type PanelFeedbackItem = {
@@ -105,8 +107,15 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [studentFeedbackSummary, setStudentFeedbackSummary] = useState<StudentFeedbackSummary[]>([]);
   const [hrFeedback, setHRFeedback] = useState<{ candidateId: string; recommendation: string }[]>([]);
   const [userMap, setUserMap] = useState<Record<string, FMSUser>>({});
+  const [allUsers, setAllUsers] = useState<FMSUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Committee edit state
+  const [editingCommittee, setEditingCommittee] = useState(false);
+  const [editPanel, setEditPanel] = useState<string[]>([]);
+  const [editInterviewDate, setEditInterviewDate] = useState("");
+  const [isSavingCommittee, setIsSavingCommittee] = useState(false);
 
   const [demoClassroom, setDemoClassroom] = useState("");
   const [coordinatorFacultyId, setCoordinatorFacultyId] = useState("");
@@ -133,8 +142,10 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setCandidates(cands);
       setFacultyList(facultyRes.faculty ?? []);
       const map: Record<string, FMSUser> = {};
-      for (const u of usersRes.users ?? []) map[u.uid] = u;
+      const users = usersRes.users ?? [];
+      for (const u of users) map[u.uid] = u;
       setUserMap(map);
+      setAllUsers(users);
       setDemoClassroom(b.demoClassroom ?? "");
       setCoordinatorFacultyId(b.coordinatorFacultyId ?? "");
 
@@ -261,6 +272,47 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
+  function openCommitteeEdit() {
+    if (!batch) return;
+    setEditPanel([...batch.panelMemberUids]);
+    const d = batch.interviewDate as { seconds?: number } | string | Date | null;
+    if (d && typeof d === "object" && "seconds" in d && d.seconds) {
+      setEditInterviewDate(new Date(d.seconds * 1000).toISOString().split("T")[0]);
+    } else if (d instanceof Date) {
+      setEditInterviewDate(d.toISOString().split("T")[0]);
+    } else if (typeof d === "string") {
+      setEditInterviewDate(d.split("T")[0]);
+    }
+    setEditingCommittee(true);
+  }
+
+  async function saveCommitteeEdit() {
+    if (editPanel.length < 2) {
+      toast({ variant: "destructive", title: "Select at least 2 panel members" });
+      return;
+    }
+    if (!editInterviewDate) {
+      toast({ variant: "destructive", title: "Interview date is required" });
+      return;
+    }
+    setIsSavingCommittee(true);
+    try {
+      const res = await fetch(`/api/college/hiring-batches/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ panelMemberUids: editPanel, interviewDate: editInterviewDate }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Committee updated" });
+      setEditingCommittee(false);
+      void load();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update committee" });
+    } finally {
+      setIsSavingCommittee(false);
+    }
+  }
+
   async function markArrived(candidateId: string) {
     try {
       await fetch(`/api/college/candidates/${candidateId}`, {
@@ -284,6 +336,11 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   }
 
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Batch not found</div>;
+
+  const canEditCommittee =
+    batch.currentPhase !== "PRINCIPAL_FINAL_REVIEW" &&
+    batch.currentPhase !== "COMPLETED" &&
+    batch.status !== "COMPLETED";
 
   const selectedCoordinator = facultyList.find((f) => f.id === coordinatorFacultyId);
 
@@ -423,27 +480,105 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
 
       {/* Panel Members */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Panel Members ({batch.panelMemberUids.length})</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {batch.panelMemberUids.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No panel members assigned.</p>
-          ) : (
-            batch.panelMemberUids.map((uid) => {
-              const user = userMap[uid];
-              return (
-                <div key={uid} className="flex items-center gap-3 p-3 rounded-lg border">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-semibold text-primary">
-                      {user?.name ? user.name.charAt(0).toUpperCase() : "?"}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{user?.name ?? uid}</p>
-                    {user?.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
-                  </div>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Panel Members ({batch.panelMemberUids.length})</CardTitle>
+            {canEditCommittee && !editingCommittee && (
+              <Button size="sm" variant="outline" onClick={openCommitteeEdit}>
+                <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                Edit Committee
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {editingCommittee ? (
+            <div className="space-y-5">
+              {/* Interview date */}
+              <div className="space-y-2">
+                <Label htmlFor="edit-interview-date">Interview Date *</Label>
+                <Input
+                  id="edit-interview-date"
+                  type="date"
+                  value={editInterviewDate}
+                  min={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => setEditInterviewDate(e.target.value)}
+                  className="max-w-xs"
+                />
+              </div>
+
+              {/* Panel member checkboxes */}
+              <div className="space-y-2">
+                <Label>
+                  Panel Members *
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {editPanel.length} selected (min 2)
+                  </span>
+                </Label>
+                <div className="max-h-64 overflow-y-auto space-y-1 rounded-md border p-2">
+                  {allUsers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-2">No staff found</p>
+                  ) : (
+                    allUsers.map((u) => (
+                      <div key={u.uid} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/40">
+                        <Checkbox
+                          id={`ep-${u.uid}`}
+                          checked={editPanel.includes(u.uid)}
+                          onCheckedChange={(checked) =>
+                            setEditPanel((prev) =>
+                              checked ? [...prev, u.uid] : prev.filter((x) => x !== u.uid)
+                            )
+                          }
+                        />
+                        <label htmlFor={`ep-${u.uid}`} className="flex-1 cursor-pointer">
+                          <p className="text-sm font-medium">{u.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {ROLE_LABELS[u.role] ?? u.role}{u.department ? ` · ${u.department}` : ""}
+                          </p>
+                        </label>
+                      </div>
+                    ))
+                  )}
                 </div>
-              );
-            })
+              </div>
+
+              <div className="flex gap-2 justify-end pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingCommittee(false)}
+                  disabled={isSavingCommittee}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={saveCommitteeEdit} loading={isSavingCommittee}>
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {batch.panelMemberUids.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No panel members assigned.</p>
+              ) : (
+                batch.panelMemberUids.map((uid) => {
+                  const user = userMap[uid];
+                  return (
+                    <div key={uid} className="flex items-center gap-3 p-3 rounded-lg border">
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-semibold text-primary">
+                          {user?.name ? user.name.charAt(0).toUpperCase() : "?"}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{user?.name ?? uid}</p>
+                        {user?.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </>
           )}
         </CardContent>
       </Card>
