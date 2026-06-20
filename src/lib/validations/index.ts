@@ -17,6 +17,7 @@ export const createUserSchema = z.object({
   role: z.enum([
     "SUPER_ADMIN",
     "PRINCIPAL",
+    "VICE_PRINCIPAL",
     "HOD",
     "COLLEGE_OFFICE",
     "PANEL_MEMBER",

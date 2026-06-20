@@ -19,6 +19,7 @@ import { toast } from "@/hooks/useToast";
 import type { Department } from "@/types";
 
 const PRINCIPAL_ASSIGNABLE_ROLES = [
+  { value: "VICE_PRINCIPAL", label: ROLE_LABELS.VICE_PRINCIPAL },
   { value: "HOD", label: ROLE_LABELS.HOD },
   { value: "COLLEGE_OFFICE", label: ROLE_LABELS.COLLEGE_OFFICE },
 ] as const;
