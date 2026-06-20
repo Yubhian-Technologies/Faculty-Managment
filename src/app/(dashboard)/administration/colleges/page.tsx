@@ -1,18 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UserPlus, ChevronDown, ChevronUp } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { DataTable } from "@/components/shared/DataTable";
-import { MobileCard } from "@/components/shared/MobileCard";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { useMobile } from "@/hooks/useMobile";
 import type { College } from "@/types";
 
+type PrincipalRow = { uid: string; name: string; email: string; role: string; isActive: boolean };
+
 export default function AdministrationCollegesPage() {
-  const isMobile = useMobile();
   const [colleges, setColleges] = useState<College[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [principalMap, setPrincipalMap] = useState<Record<string, PrincipalRow[]>>({});
+  const [loadingPrincipals, setLoadingPrincipals] = useState<string | null>(null);
+
+  // Add principal dialog
+  const [dialogCollege, setDialogCollege] = useState<College | null>(null);
+  const [form, setForm] = useState({ name: "", email: "", password: "12345678", role: "PRINCIPAL" });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -22,44 +40,203 @@ export default function AdministrationCollegesPage() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  async function toggleExpand(college: College) {
+    if (expandedId === college.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(college.id);
+    if (!principalMap[college.id]) {
+      setLoadingPrincipals(college.id);
+      try {
+        const res = await fetch(`/api/administration/principals?collegeId=${college.id}`);
+        const data = await res.json() as { principals: PrincipalRow[] };
+        setPrincipalMap((prev) => ({ ...prev, [college.id]: data.principals ?? [] }));
+      } catch {
+        toast({ variant: "destructive", title: "Failed to load principals" });
+      } finally {
+        setLoadingPrincipals(null);
+      }
+    }
+  }
+
+  function openDialog(college: College) {
+    setDialogCollege(college);
+    setForm({ name: "", email: "", password: "12345678", role: "PRINCIPAL" });
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!dialogCollege || !form.name || !form.email || !form.password) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/administration/principals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, collegeId: dialogCollege.id }),
+      });
+      const json = await res.json() as { uid?: string; error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Failed to create", description: json.error });
+        return;
+      }
+      toast({ variant: "success", title: `${form.role === "PRINCIPAL" ? "Principal" : "Vice Principal"} account created`, description: `Default password: ${form.password}` });
+      // Refresh principals for this college
+      setPrincipalMap((prev) => ({ ...prev, [dialogCollege.id]: [] }));
+      const refreshed = await fetch(`/api/administration/principals?collegeId=${dialogCollege.id}`)
+        .then((r) => r.json() as Promise<{ principals: PrincipalRow[] }>)
+        .then((d) => d.principals ?? []);
+      setPrincipalMap((prev) => ({ ...prev, [dialogCollege.id]: refreshed }));
+      setDialogCollege(null);
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Colleges" description="Colleges under this location" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Colleges"
-        description="Colleges under this location. Contact Super Admin to add new colleges."
+        description="Manage colleges and their principals in this location"
       />
 
-      {isMobile ? (
-        <div className="space-y-3">
-          {colleges.map((c) => (
-            <MobileCard
-              key={c.id}
-              title={c.name}
-              subtitle={c.contactEmail ?? "—"}
-              badge={<Badge variant={c.isActive ? "default" : "secondary"}>{c.isActive ? "Active" : "Inactive"}</Badge>}
-              fields={[{ label: "Contact", value: c.contactPhone ?? "—" }]}
-            />
-          ))}
-        </div>
-      ) : (
-        <DataTable<Record<string, unknown>>
-          data={colleges as unknown as Record<string, unknown>[]}
-          keyExtractor={(r) => r.id as string}
-          isLoading={isLoading}
-          searchPlaceholder="Search colleges..."
-          searchKeys={["name"]}
-          csvFilename="colleges"
-          columns={[
-            { key: "name", header: "College Name" },
-            { key: "contactEmail", header: "Email", render: (r) => (r as unknown as College).contactEmail ?? "—" },
-            { key: "contactPhone", header: "Phone", render: (r) => (r as unknown as College).contactPhone ?? "—" },
-            {
-              key: "isActive", header: "Status",
-              render: (r) => <Badge variant={(r as unknown as College).isActive ? "default" : "secondary"}>{(r as unknown as College).isActive ? "Active" : "Inactive"}</Badge>,
-            },
-          ]}
-        />
-      )}
+      <div className="space-y-3">
+        {colleges.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-8">No colleges found in this location.</p>
+        )}
+        {colleges.map((college) => {
+          const isExpanded = expandedId === college.id;
+          const principals = principalMap[college.id] ?? [];
+
+          return (
+            <div key={college.id} className="rounded-lg border bg-card overflow-hidden">
+              {/* College row */}
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{college.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{college.contactEmail ?? college.address ?? "—"}</p>
+                  </div>
+                  <Badge variant={college.isActive ? "default" : "secondary"} className="shrink-0">
+                    {college.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openDialog(college)}
+                  >
+                    <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                    Add Principal
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void toggleExpand(college)}
+                  >
+                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Expanded principals list */}
+              {isExpanded && (
+                <div className="border-t px-4 pb-4 pt-3 bg-muted/30">
+                  <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Principals & Vice Principals</p>
+                  {loadingPrincipals === college.id ? (
+                    <div className="h-8 w-32 bg-muted animate-pulse rounded" />
+                  ) : principals.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No principals assigned yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {principals.map((p) => (
+                        <div key={p.uid} className="flex items-center justify-between rounded-lg border bg-card p-3">
+                          <div>
+                            <p className="text-sm font-medium">{p.name}</p>
+                            <p className="text-xs text-muted-foreground">{p.email}</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {p.role === "PRINCIPAL" ? "Principal" : "Vice Principal"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add Principal Dialog */}
+      <Dialog open={!!dialogCollege} onOpenChange={(open) => !open && setDialogCollege(null)}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Add Principal — {dialogCollege?.name}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4 py-1">
+            <div className="space-y-2">
+              <Label>Role <span className="text-destructive">*</span></Label>
+              <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PRINCIPAL">Principal</SelectItem>
+                  <SelectItem value="VICE_PRINCIPAL">Vice Principal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Full Name <span className="text-destructive">*</span></Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Dr. Full Name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="principal@vishnu.edu.in"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Default Password</Label>
+              <Input
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogCollege(null)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={saving} disabled={!form.name || !form.email || !form.password}>
+                Create Account
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
