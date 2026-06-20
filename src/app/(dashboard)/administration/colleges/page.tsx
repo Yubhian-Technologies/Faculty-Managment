@@ -208,11 +208,11 @@ export default function AdministrationCollegesPage() {
                   <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Principals & Vice Principals</p>
                   {loadingPrincipals === college.id ? (
                     <div className="h-8 w-32 bg-muted animate-pulse rounded" />
-                  ) : principals.length === 0 ? (
+                  ) : (principalList ?? []).length === 0 ? (
                     <p className="text-sm text-muted-foreground">No principals assigned yet.</p>
                   ) : (
                     <div className="space-y-2">
-                      {principals.map((p) => (
+                      {(principalList ?? []).map((p) => (
                         <div key={p.uid} className="flex items-center justify-between rounded-lg border bg-card p-3">
                           <div>
                             <p className="text-sm font-medium">{p.name}</p>
