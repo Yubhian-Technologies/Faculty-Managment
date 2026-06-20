@@ -97,7 +97,7 @@ export default function AdministrationCollegesPage() {
 
   function openDialog(college: College) {
     setDialogCollege(college);
-    setForm({ name: "", email: "", password: "12345678", role: "PRINCIPAL" });
+    setForm((f) => ({ ...f, name: "", email: "", password: "12345678" }));
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -160,7 +160,13 @@ export default function AdministrationCollegesPage() {
         )}
         {colleges.map((college) => {
           const isExpanded = expandedId === college.id;
-          const principals = principalMap[college.id] ?? [];
+          const principalList = principalMap[college.id]; // undefined = not loaded yet
+          const hasPrincipal = principalList?.some((p) => p.role === "PRINCIPAL") ?? false;
+          const hasVP = principalList?.some((p) => p.role === "VICE_PRINCIPAL") ?? false;
+          // After loading: hide button if both slots filled; before loading: always show
+          const showAddBtn = principalList === undefined || !hasPrincipal || !hasVP;
+          const addBtnLabel = hasPrincipal && !hasVP ? "Add Vice Principal" : "Add Principal";
+          const addBtnDefaultRole = hasPrincipal && !hasVP ? "VICE_PRINCIPAL" : "PRINCIPAL";
 
           return (
             <div key={college.id} className="rounded-lg border bg-card overflow-hidden">
@@ -176,14 +182,16 @@ export default function AdministrationCollegesPage() {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openDialog(college)}
-                  >
-                    <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                    Add Principal
-                  </Button>
+                  {showAddBtn && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { setForm((f) => ({ ...f, role: addBtnDefaultRole })); openDialog(college); }}
+                    >
+                      <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                      {addBtnLabel}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
