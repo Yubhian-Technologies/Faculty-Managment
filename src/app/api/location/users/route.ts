@@ -7,7 +7,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import type { UserRole } from "@/types";
 
 const LOCATION_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS"];
-const ADMIN_CREATABLE_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
+const ADMIN_CREATABLE_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "LOCATION_DEPT_HEAD"];
 
 // Administration can also create Principals for colleges in their location
 // but that goes through a separate endpoint
