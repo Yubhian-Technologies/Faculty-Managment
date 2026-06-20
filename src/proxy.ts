@@ -5,7 +5,12 @@ const PUBLIC_PATHS = ["/login", "/careers", "/feedback", "/api/auth"];
 
 const ROLE_PATH_MAP: Record<string, string[]> = {
   SUPER_ADMIN: ["/super-admin"],
+  ADMINISTRATION: ["/administration"],
+  HR_ADMIN: ["/hr-admin"],
+  ADMIN_OFFICE: ["/admin-office"],
+  LOCATION_DEPT_HEAD: ["/location-dept-head"],
   PRINCIPAL: ["/principal"],
+  VICE_PRINCIPAL: ["/vice-principal"],
   HOD: ["/hod"],
   COLLEGE_OFFICE: ["/college-office"],
   PANEL_MEMBER: ["/panel", "/coordinator"],
