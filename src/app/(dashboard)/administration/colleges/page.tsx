@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, ChevronDown, ChevronUp } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,11 @@ export default function AdministrationCollegesPage() {
   const [principalMap, setPrincipalMap] = useState<Record<string, PrincipalRow[]>>({});
   const [loadingPrincipals, setLoadingPrincipals] = useState<string | null>(null);
 
+  // New college dialog
+  const [newCollegeOpen, setNewCollegeOpen] = useState(false);
+  const [collegeForm, setCollegeForm] = useState({ name: "", address: "", contactEmail: "", contactPhone: "" });
+  const [savingCollege, setSavingCollege] = useState(false);
+
   // Add principal dialog
   const [dialogCollege, setDialogCollege] = useState<College | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "12345678", role: "PRINCIPAL" });
@@ -39,6 +44,36 @@ export default function AdministrationCollegesPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }))
       .finally(() => setIsLoading(false));
   }, []);
+
+  async function handleCreateCollege(e: React.FormEvent) {
+    e.preventDefault();
+    if (!collegeForm.name.trim()) return;
+    setSavingCollege(true);
+    try {
+      const res = await fetch("/api/admin/colleges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collegeForm),
+      });
+      const json = await res.json() as { collegeId?: string; error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Failed to create college", description: json.error });
+        return;
+      }
+      toast({ variant: "success", title: "College created" });
+      setNewCollegeOpen(false);
+      setCollegeForm({ name: "", address: "", contactEmail: "", contactPhone: "" });
+      // Refresh list
+      const updated = await fetch("/api/admin/colleges")
+        .then((r) => r.json() as Promise<{ colleges: College[] }>)
+        .then((d) => d.colleges ?? []);
+      setColleges(updated);
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setSavingCollege(false);
+    }
+  }
 
   async function toggleExpand(college: College) {
     if (expandedId === college.id) {
@@ -111,6 +146,12 @@ export default function AdministrationCollegesPage() {
       <PageHeader
         title="Colleges"
         description="Manage colleges and their principals in this location"
+        actions={
+          <Button onClick={() => setNewCollegeOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New College
+          </Button>
+        }
       />
 
       <div className="space-y-3">
@@ -182,6 +223,60 @@ export default function AdministrationCollegesPage() {
           );
         })}
       </div>
+
+      {/* New College Dialog */}
+      <Dialog open={newCollegeOpen} onOpenChange={setNewCollegeOpen}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Add New College</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateCollege} className="space-y-4 py-1">
+            <div className="space-y-2">
+              <Label>College Name <span className="text-destructive">*</span></Label>
+              <Input
+                value={collegeForm.name}
+                onChange={(e) => setCollegeForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Vishnu Institute of Technology"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <Input
+                value={collegeForm.address}
+                onChange={(e) => setCollegeForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="Street, City, State"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Contact Email</Label>
+                <Input
+                  type="email"
+                  value={collegeForm.contactEmail}
+                  onChange={(e) => setCollegeForm((f) => ({ ...f, contactEmail: e.target.value }))}
+                  placeholder="admin@college.edu"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Contact Phone</Label>
+                <Input
+                  value={collegeForm.contactPhone}
+                  onChange={(e) => setCollegeForm((f) => ({ ...f, contactPhone: e.target.value }))}
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setNewCollegeOpen(false)} disabled={savingCollege}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={savingCollege} disabled={!collegeForm.name.trim()}>
+                Create College
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Principal Dialog */}
       <Dialog open={!!dialogCollege} onOpenChange={(open) => !open && setDialogCollege(null)}>

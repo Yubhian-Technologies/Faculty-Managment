@@ -39,13 +39,27 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireSuperAdmin();
+    const { verifySession } = await import("@/lib/auth/verifySession");
+    const session = await verifySession();
+    if (!session || !["SUPER_ADMIN", "ADMINISTRATION"].includes(session.role)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const body = (await request.json()) as Partial<College> & { locationId?: string };
-    const { name, address, contactEmail, contactPhone, locationId } = body;
+    const { name, address, contactEmail, contactPhone } = body;
 
     if (!name || String(name).trim().length < 2) {
       return NextResponse.json({ error: "College name is required" }, { status: 400 });
+    }
+
+    // Administration uses their own locationId; Super Admin must supply one
+    const locationId =
+      session.role === "ADMINISTRATION"
+        ? (session.locationId ?? "")
+        : (body.locationId ?? "");
+
+    if (!locationId) {
+      return NextResponse.json({ error: "Location is required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -54,7 +68,7 @@ export async function POST(request: Request) {
 
     await db.collection("colleges").doc(collegeId).set({
       name: String(name).trim(),
-      locationId: locationId ?? "",
+      locationId,
       address: address ?? "",
       contactEmail: contactEmail ?? "",
       contactPhone: contactPhone ?? "",
