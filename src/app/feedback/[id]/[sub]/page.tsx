@@ -61,12 +61,9 @@ function StarRating({
   );
 }
 
-interface Props {
-  params: Promise<{ batchId: string; qr: string }>;
-}
-
-export default function FeedbackPage({ params }: Props) {
-  const { batchId, qr: candidateId } = use(params);
+// Route: /feedback/[batchId]/[candidateId]  (params renamed to [id]/[sub] to resolve Next.js slug conflict)
+export default function FeedbackPage({ params }: { params: Promise<{ id: string; sub: string }> }) {
+  const { id: batchId, sub: candidateId } = use(params);
   const [submitted, setSubmitted] = useState(false);
   const [ratings, setRatings] = useState({
     clarity: 0,

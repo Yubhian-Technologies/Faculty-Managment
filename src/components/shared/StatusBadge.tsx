@@ -7,6 +7,8 @@ type Status = WorkflowStatus | CandidateStatus | string;
 
 const variantMap: Record<string, string> = {
   PENDING: "pending",
+  PENDING_HR: "pending",
+  PENDING_ADMIN: "modified",
   APPROVED: "approved",
   REJECTED: "rejected",
   MODIFIED: "modified",

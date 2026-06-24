@@ -61,6 +61,8 @@ export const LOCATION_SCOPED_ROLES: UserRole[] = [
 
 export type WorkflowStatus =
   | "PENDING"
+  | "PENDING_HR"
+  | "PENDING_ADMIN"
   | "APPROVED"
   | "REJECTED"
   | "MODIFIED"
@@ -70,6 +72,8 @@ export type WorkflowStatus =
 
 export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
   PENDING: "Pending",
+  PENDING_HR: "Pending HR Review",
+  PENDING_ADMIN: "Forwarded to Admin",
   APPROVED: "Approved",
   REJECTED: "Rejected",
   MODIFIED: "Modified",

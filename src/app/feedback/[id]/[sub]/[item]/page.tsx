@@ -44,8 +44,9 @@ function StarRating({ value, onChange, disabled }: { value: number; onChange: (v
   );
 }
 
-export default function FeedbackPage({ params }: { params: Promise<{ collegeId: string; batchId: string; candidateId: string }> }) {
-  const { collegeId, batchId, candidateId } = use(params);
+// Route: /feedback/[collegeId]/[batchId]/[candidateId]  (params renamed to [id]/[sub]/[item] to resolve Next.js slug conflict)
+export default function FeedbackPage({ params }: { params: Promise<{ id: string; sub: string; item: string }> }) {
+  const { id: collegeId, sub: batchId, item: candidateId } = use(params);
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [comments, setComments] = useState("");

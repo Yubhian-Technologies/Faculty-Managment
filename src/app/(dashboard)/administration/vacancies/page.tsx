@@ -19,7 +19,8 @@ interface LocationVacancy {
   department: string;
   position: string;
   qualification?: string;
-  submittedByName: string;
+  deptHeadName: string;
+  forwardedByName?: string;
   requiredCount: number;
   justification?: string;
   status: string;
@@ -57,7 +58,11 @@ export default function AdministrationVacanciesPage() {
         body: JSON.stringify({ status, reason: rej_reason }),
       });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: status === "APPROVED" ? "Approved" : "Rejected", description: "HR Admin notified." });
+      toast({
+        variant: "success",
+        title: status === "APPROVED" ? "Vacancy Approved" : "Vacancy Rejected",
+        description: "HR Admin and Dept Head have been notified.",
+      });
       setApproveOpen(false);
       setRejectOpen(false);
       setSelected(null);
@@ -72,28 +77,34 @@ export default function AdministrationVacanciesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Location Vacancy Requests" description="Approve or reject HR Admin vacancy requests" />
+      <PageHeader
+        title="Faculty Vacancy Requests"
+        description="Approve or reject faculty vacancy requests forwarded by HR Admin"
+      />
 
       {isMobile ? (
         <div className="space-y-3">
           {vacancies.map((v) => (
             <MobileCard
               key={v.id}
-              title={v.position}
-              subtitle={`${v.department} · ${v.submittedByName}`}
+              title={`${v.position} — ${v.department}`}
+              subtitle={`Requested by ${v.deptHeadName}${v.forwardedByName ? ` · Forwarded by ${v.forwardedByName}` : ""}`}
               badge={<StatusBadge status={v.status} />}
               fields={[
-                { label: "Required", value: v.requiredCount },
+                { label: "Count", value: v.requiredCount },
                 { label: "Qualification", value: v.qualification ?? "—" },
               ]}
-              actions={v.status === "PENDING" ? (
+              actions={
                 <>
                   <Button size="sm" className="flex-1" onClick={() => { setSelected(v); setApproveOpen(true); }}>Approve</Button>
                   <Button size="sm" variant="destructive" className="flex-1" onClick={() => { setSelected(v); setRejectOpen(true); }}>Reject</Button>
                 </>
-              ) : undefined}
+              }
             />
           ))}
+          {!isLoading && vacancies.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-8">No pending vacancy requests.</p>
+          )}
         </div>
       ) : (
         <DataTable<Record<string, unknown>>
@@ -101,26 +112,28 @@ export default function AdministrationVacanciesPage() {
           keyExtractor={(r) => r.id as string}
           isLoading={isLoading}
           searchPlaceholder="Search vacancies..."
-          searchKeys={["position", "department", "submittedByName"]}
-          csvFilename="location-vacancies"
+          searchKeys={["department", "deptHeadName", "forwardedByName"]}
+          csvFilename="admin-vacancy-requests"
           columns={[
             { key: "position", header: "Position" },
             { key: "department", header: "Department" },
+            { key: "deptHeadName", header: "Requested By" },
+            { key: "forwardedByName", header: "Forwarded By", render: (r) => (r as unknown as LocationVacancy).forwardedByName ?? "—" },
             { key: "qualification", header: "Qualification", render: (r) => (r as unknown as LocationVacancy).qualification ?? "—" },
-            { key: "submittedByName", header: "Submitted By" },
             { key: "requiredCount", header: "Count", render: (r) => (r as unknown as LocationVacancy).requiredCount },
             { key: "status", header: "Status", render: (r) => <StatusBadge status={(r as unknown as LocationVacancy).status} /> },
             { key: "createdAt", header: "Date", render: (r) => formatDate((r as unknown as LocationVacancy).createdAt as Parameters<typeof formatDate>[0]) },
             {
-              key: "actions", header: "Actions",
+              key: "actions",
+              header: "Actions",
               render: (r) => {
                 const v = r as unknown as LocationVacancy;
-                return v.status === "PENDING" ? (
+                return (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => { setSelected(v); setApproveOpen(true); }}>Approve</Button>
                     <Button size="sm" variant="destructive" onClick={() => { setSelected(v); setRejectOpen(true); }}>Reject</Button>
                   </div>
-                ) : null;
+                );
               },
             },
           ]}
@@ -131,7 +144,7 @@ export default function AdministrationVacanciesPage() {
         open={approveOpen}
         onOpenChange={setApproveOpen}
         title="Approve Vacancy Request?"
-        description={`Approve ${selected?.position} in ${selected?.department}. HR Admin will be notified.`}
+        description={`Approve faculty vacancy for ${selected?.department} (${selected?.requiredCount} position(s)) requested by ${selected?.deptHeadName}. HR Admin will be notified.`}
         confirmLabel="Approve"
         onConfirm={() => void action("APPROVED")}
         loading={loading}
@@ -141,7 +154,9 @@ export default function AdministrationVacanciesPage() {
         <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>Reject Vacancy Request</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Rejecting <strong>{selected?.position}</strong> in {selected?.department}.</p>
+            <p className="text-sm text-muted-foreground">
+              Rejecting faculty vacancy for <strong>{selected?.department}</strong> ({selected?.requiredCount} position(s)) requested by {selected?.deptHeadName}.
+            </p>
             <div className="space-y-2">
               <Label>Reason (optional)</Label>
               <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
