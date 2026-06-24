@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ClipboardPlus, Users, BarChart2 } from "lucide-react";
+import { ClipboardList, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,18 @@ export default function HRAdminDashboard() {
   const user = useAuthStore((s) => s.user);
 
   const actions = [
-    { label: "Vacancy Requests", href: "/hr-admin/vacancies", icon: ClipboardPlus, desc: "Submit and track vacancy requests to Administration" },
-    { label: "Candidates", href: "/hr-admin/candidates", icon: Users, desc: "All candidates for location positions" },
+    {
+      label: "Vacancy Requests",
+      href: "/hr-admin/vacancies",
+      icon: ClipboardList,
+      desc: "Review faculty vacancy requests from Dept Heads and forward to Administration",
+    },
+    {
+      label: "Candidates",
+      href: "/hr-admin/candidates",
+      icon: Users,
+      desc: "Manage faculty candidates across all departments",
+    },
   ];
 
   return (
