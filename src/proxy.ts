@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/careers", "/feedback", "/api/auth"];
+const PUBLIC_PATHS = ["/login", "/careers", "/feedback", "/api/auth", "/location-interview"];
 
 const ROLE_PATH_MAP: Record<string, string[]> = {
   SUPER_ADMIN: ["/super-admin"],

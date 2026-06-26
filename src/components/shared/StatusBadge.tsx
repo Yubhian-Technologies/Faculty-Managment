@@ -16,6 +16,9 @@ const variantMap: Record<string, string> = {
   COMPLETED: "completed",
   WAITLISTED: "waitlisted",
   SHORTLISTED: "in_progress",
+  SELECTED: "approved",
+  OFFER_PENDING: "modified",
+  OFFER_SENT: "completed",
   ARRIVED: "approved",
 };
 

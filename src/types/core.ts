@@ -68,7 +68,11 @@ export type WorkflowStatus =
   | "MODIFIED"
   | "IN_PROGRESS"
   | "COMPLETED"
-  | "WAITLISTED";
+  | "WAITLISTED"
+  | "SHORTLISTED"
+  | "SELECTED"
+  | "OFFER_PENDING"
+  | "OFFER_SENT";
 
 export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
   PENDING: "Pending",
@@ -80,6 +84,10 @@ export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
   IN_PROGRESS: "In Progress",
   COMPLETED: "Completed",
   WAITLISTED: "Waitlisted",
+  SHORTLISTED: "Shortlisted",
+  SELECTED: "Selected",
+  OFFER_PENDING: "Offer Pending Approval",
+  OFFER_SENT: "Offer Sent",
 };
 
 // ─── System User (login account) ─────────────────────────────────────────────

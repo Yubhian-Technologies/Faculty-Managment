@@ -32,8 +32,9 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await verifySession();
-    if (!session || session.role !== "HR_ADMIN") {
-      return NextResponse.json({ error: "Only HR Admin can add candidates" }, { status: 403 });
+    const canAdd = session && (session.role === "HR_ADMIN" || session.role === "LOCATION_DEPT_HEAD");
+    if (!canAdd) {
+      return NextResponse.json({ error: "Only HR Admin or Dept Head can add candidates" }, { status: 403 });
     }
     if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
 
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
         vacancyId: vacancyId ?? "",
         notes: notes?.trim() ?? "",
         addedByUid: session.uid,
+        addedByRole: session.role,
         status: "PENDING",
         createdAt: now,
         updatedAt: now,
