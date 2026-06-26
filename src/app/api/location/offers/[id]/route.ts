@@ -106,7 +106,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const batch = db.batch();
     hrSnap.docs.forEach((d) => {
-      const notifRef = db.collection("notifications").doc();
+      const notifRef = db.collection("locations").doc(session.locationId).collection("locationNotifications").doc();
       batch.set(notifRef, {
         toUid: d.id,
         locationId: session.locationId,

@@ -39,6 +39,8 @@ export default function HRCandidatesPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [shortlistTarget, setShortlistTarget] = useState<LocationCandidate | null>(null);
   const [rejectTarget, setRejectTarget] = useState<LocationCandidate | null>(null);
+  const [selectTarget, setSelectTarget] = useState<LocationCandidate | null>(null);
+  const [postInterviewRejectTarget, setPostInterviewRejectTarget] = useState<LocationCandidate | null>(null);
   const [form, setForm] = useState({
     name: "", email: "", phone: "", department: "", qualification: "", notes: "",
   });
@@ -109,12 +111,46 @@ export default function HRCandidatesPage() {
     }
   }
 
+  async function handleStatusUpdate(candidateId: string, status: "SELECTED" | "REJECTED") {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/location/candidates/${candidateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error();
+      toast({
+        variant: "success",
+        title: status === "SELECTED" ? "Candidate marked as selected" : "Candidate rejected after interview",
+        description: status === "SELECTED" ? "You can now create an offer letter for this candidate." : undefined,
+      });
+      setSelectTarget(null);
+      setPostInterviewRejectTarget(null);
+      load();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update status" });
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   const renderActions = (c: LocationCandidate) => {
     if (c.status === "PENDING") {
       return (
         <div className="flex gap-2">
           <Button size="sm" onClick={() => setShortlistTarget(c)}>Shortlist</Button>
           <Button size="sm" variant="destructive" onClick={() => setRejectTarget(c)}>Reject</Button>
+        </div>
+      );
+    }
+    if (c.status === "SHORTLISTED") {
+      return (
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="text-green-700 border-green-300" onClick={() => setSelectTarget(c)}>
+            Mark Selected
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => setPostInterviewRejectTarget(c)}>Reject</Button>
         </div>
       );
     }
@@ -146,6 +182,11 @@ export default function HRCandidatesPage() {
                 <>
                   <Button size="sm" className="flex-1" onClick={() => setShortlistTarget(c)}>Shortlist</Button>
                   <Button size="sm" variant="destructive" className="flex-1" onClick={() => setRejectTarget(c)}>Reject</Button>
+                </>
+              ) : c.status === "SHORTLISTED" ? (
+                <>
+                  <Button size="sm" variant="outline" className="flex-1 text-green-700 border-green-300" onClick={() => setSelectTarget(c)}>Mark Selected</Button>
+                  <Button size="sm" variant="destructive" className="flex-1" onClick={() => setPostInterviewRejectTarget(c)}>Reject</Button>
                 </>
               ) : undefined}
             />
@@ -236,6 +277,26 @@ export default function HRCandidatesPage() {
         description={`Reject ${rejectTarget?.name} from the ${rejectTarget?.department} faculty vacancy process.`}
         confirmLabel="Reject"
         onConfirm={() => void handleAction(rejectTarget!.id, "REJECT_CANDIDATE")}
+        loading={actionLoading}
+      />
+
+      <ConfirmDialog
+        open={!!selectTarget}
+        onOpenChange={(o) => { if (!o) setSelectTarget(null); }}
+        title="Mark as Selected?"
+        description={`Mark ${selectTarget?.name} (${selectTarget?.department}) as selected based on interview feedback. You will then be able to create an offer letter.`}
+        confirmLabel="Mark Selected"
+        onConfirm={() => void handleStatusUpdate(selectTarget!.id, "SELECTED")}
+        loading={actionLoading}
+      />
+
+      <ConfirmDialog
+        open={!!postInterviewRejectTarget}
+        onOpenChange={(o) => { if (!o) setPostInterviewRejectTarget(null); }}
+        title="Reject After Interview?"
+        description={`Reject ${postInterviewRejectTarget?.name} (${postInterviewRejectTarget?.department}) based on interview feedback. This action cannot be undone.`}
+        confirmLabel="Reject"
+        onConfirm={() => void handleStatusUpdate(postInterviewRejectTarget!.id, "REJECTED")}
         loading={actionLoading}
       />
     </div>
