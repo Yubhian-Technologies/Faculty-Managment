@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         source: source ?? "REFERRAL",
         vacancyId: vacancyId ?? "",
         batchId: batchId ?? "",
-        stage: "DEMO",
+        currentStage: "DEMO",
         status: "PENDING",
         isShortlisted: false,
         hasArrived: false,
