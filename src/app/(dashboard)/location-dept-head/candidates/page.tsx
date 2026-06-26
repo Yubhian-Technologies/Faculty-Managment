@@ -8,13 +8,11 @@ import { MobileCard } from "@/components/shared/MobileCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
 import { useAuthStore } from "@/store/authStore";
-import type { LocationDepartment } from "@/types";
 
 interface LocationCandidate {
   id: string;
@@ -32,7 +30,6 @@ export default function LocationDeptHeadCandidatesPage() {
   const isMobile = useMobile();
   const user = useAuthStore((s) => s.user);
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
-  const [depts, setDepts] = useState<LocationDepartment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -57,10 +54,6 @@ export default function LocationDeptHeadCandidatesPage() {
 
   useEffect(() => {
     load();
-    fetch("/api/location/departments")
-      .then((r) => r.json() as Promise<{ departments: LocationDepartment[] }>)
-      .then((d) => setDepts(d.departments ?? []))
-      .catch(() => {});
   }, [user?.department]);
 
   function openAdd() {
@@ -163,16 +156,9 @@ export default function LocationDeptHeadCandidatesPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Department <span className="text-destructive">*</span></Label>
-              <Select
-                value={form.department}
-                onValueChange={(v) => setForm((f) => ({ ...f, department: v }))}
-              >
-                <SelectTrigger><SelectValue placeholder="Select department..." /></SelectTrigger>
-                <SelectContent>
-                  {depts.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Department</Label>
+              <Input value={form.department || "—"} disabled className="bg-muted text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Candidates are added for your own department only.</p>
             </div>
             <div className="space-y-2">
               <Label>Qualification</Label>

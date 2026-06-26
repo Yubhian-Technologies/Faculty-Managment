@@ -8,13 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import type { LocationDepartment } from "@/types";
+import { useAuthStore } from "@/store/authStore";
 
 export default function NewDeptVacancyPage() {
   const router = useRouter();
-  const [depts, setDepts] = useState<LocationDepartment[]>([]);
+  const user = useAuthStore((s) => s.user);
   const [department, setDepartment] = useState("");
   const [qualification, setQualification] = useState("");
   const [requiredCount, setRequiredCount] = useState(1);
@@ -23,11 +22,9 @@ export default function NewDeptVacancyPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/location/departments")
-      .then((r) => r.json() as Promise<{ departments: LocationDepartment[] }>)
-      .then((d) => setDepts(d.departments ?? []))
-      .catch(() => {});
-  }, []);
+    // Pre-fill from the user's own department stored in their profile
+    if (user?.department) setDepartment(user.department);
+  }, [user?.department]);
 
   const isValid = !!department && !!qualification && requiredCount >= 1 && justification.trim().length >= 10;
 
@@ -71,13 +68,9 @@ export default function NewDeptVacancyPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Department <span className="text-destructive">*</span></Label>
-              <Select value={department} onValueChange={setDepartment}>
-                <SelectTrigger><SelectValue placeholder="Select department..." /></SelectTrigger>
-                <SelectContent>
-                  {depts.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Department</Label>
+              <Input value={department || "—"} disabled className="bg-muted text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Vacancy requests are for your own department only.</p>
             </div>
 
             <div className="space-y-2">
