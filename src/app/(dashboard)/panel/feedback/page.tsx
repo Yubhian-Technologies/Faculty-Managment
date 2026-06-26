@@ -10,9 +10,9 @@ import type { PanelFeedback } from "@/types";
 type FeedbackRow = Record<string, unknown> & PanelFeedback;
 
 const RECOMMENDATION_LABELS: Record<string, string> = {
-  RECOMMENDED: "Recommended",
-  NOT_RECOMMENDED: "Not Recommended",
-  HOLD: "Hold",
+  ACCEPT: "Recommended",
+  REJECT: "Not Recommended",
+  MAYBE: "Hold / Needs Review",
 };
 
 export default function PanelFeedbackPage() {
@@ -39,7 +39,7 @@ export default function PanelFeedbackPage() {
       render: (row) => {
         const rec = row.recommendation as string;
         const color =
-          rec === "RECOMMENDED" ? "text-green-600" : rec === "NOT_RECOMMENDED" ? "text-red-600" : "text-orange-600";
+          rec === "ACCEPT" ? "text-green-600" : rec === "REJECT" ? "text-red-600" : "text-orange-600";
         return <span className={`text-sm font-medium ${color}`}>{RECOMMENDATION_LABELS[rec] ?? rec}</span>;
       },
     },
