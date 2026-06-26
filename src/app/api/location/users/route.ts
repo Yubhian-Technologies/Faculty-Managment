@@ -8,6 +8,8 @@ import type { UserRole } from "@/types";
 
 const LOCATION_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS"];
 const ADMIN_CREATABLE_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "LOCATION_DEPT_HEAD"];
+// These roles can only have one holder per location
+const SINGLETON_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
 
 // Administration can also create Principals for colleges in their location
 // but that goes through a separate endpoint
@@ -78,8 +80,27 @@ export async function POST(request: Request) {
       }
     }
 
-    const uid = await createFirebaseUser(email, password, name);
     const db = getAdminDb();
+
+    // Singleton role check — only one person may hold HR_ADMIN / ADMIN_OFFICE / ACCOUNTS per location
+    if (SINGLETON_ROLES.includes(role)) {
+      const existing = await db
+        .collection("locations")
+        .doc(locationId)
+        .collection("locationUsers")
+        .where("role", "==", role)
+        .limit(1)
+        .get();
+      if (!existing.empty) {
+        const holder = existing.docs[0].data() as { name?: string };
+        return NextResponse.json(
+          { error: `${role} is already assigned to ${holder.name ?? "another user"}. Only one person can hold this role.` },
+          { status: 409 }
+        );
+      }
+    }
+
+    const uid = await createFirebaseUser(email, password, name);
     const now = new Date();
 
     await db
