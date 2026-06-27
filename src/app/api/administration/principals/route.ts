@@ -33,7 +33,18 @@ export async function GET(request: Request) {
       .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
       .get();
 
-    const principals = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    // Deduplicate: a college has exactly one Principal slot
+    let principalSeen = false;
+    const principals = snap.docs
+      .map((d) => ({ uid: d.id, ...d.data() }))
+      .filter((u) => {
+        if ((u as unknown as { role: string }).role === "PRINCIPAL") {
+          if (principalSeen) return false;
+          principalSeen = true;
+        }
+        return true;
+      });
+
     return NextResponse.json({ principals });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_LOCATION_CONTEXT")) {
