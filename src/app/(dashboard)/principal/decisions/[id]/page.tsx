@@ -43,6 +43,12 @@ type HRFeedbackItem = {
   comments?: string;
 };
 
+type StudentFeedbackSummary = {
+  candidateId: string;
+  count: number;
+  averages: Record<string, number>;
+};
+
 type Decision = { action: "APPROVED" | "REJECTED"; remarks: string };
 
 function ScoreDots({ value, max = 5 }: { value: number; max?: number }) {
@@ -68,6 +74,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
   const [hrFeedback, setHRFeedback] = useState<HRFeedbackItem[]>([]);
+  const [studentFeedback, setStudentFeedback] = useState<StudentFeedbackSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Per-candidate decision state
@@ -87,16 +94,36 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
       const cands = candidatesRes.candidates ?? [];
       setCandidates(cands);
 
-      const [pfRes, hrRes] = await Promise.all([
+      const [pfRes, hrRes, sfRes] = await Promise.all([
         fetch(`/api/college/panel-feedback?batchId=${id}`)
           .then((r) => r.json() as Promise<{ feedback: PanelFeedbackItem[] }>)
           .then((d) => d.feedback ?? []),
         fetch(`/api/college/hr-feedback?batchId=${id}`)
           .then((r) => r.json() as Promise<{ feedback: HRFeedbackItem[] }>)
           .then((d) => d.feedback ?? []),
+        fetch(`/api/college/student-feedback?batchId=${id}`)
+          .then((r) => r.json() as Promise<{ feedback: { candidateId: string; ratings: Record<string, number> }[] }>)
+          .then((d) => d.feedback ?? []),
       ]);
       setPanelFeedback(pfRes);
       setHRFeedback(hrRes);
+
+      // Aggregate student feedback by candidate
+      const summaryMap: Record<string, { count: number; sums: Record<string, number> }> = {};
+      for (const sf of sfRes) {
+        if (!summaryMap[sf.candidateId]) summaryMap[sf.candidateId] = { count: 0, sums: {} };
+        summaryMap[sf.candidateId].count++;
+        for (const [k, v] of Object.entries(sf.ratings)) {
+          summaryMap[sf.candidateId].sums[k] = (summaryMap[sf.candidateId].sums[k] ?? 0) + v;
+        }
+      }
+      setStudentFeedback(
+        Object.entries(summaryMap).map(([candidateId, { count, sums }]) => ({
+          candidateId,
+          count,
+          averages: Object.fromEntries(Object.entries(sums).map(([k, v]) => [k, v / count])),
+        }))
+      );
 
       // Pre-populate already-made decisions from candidate status
       const pre: Record<string, Decision> = {};
@@ -188,6 +215,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
         {candidates.map((candidate) => {
           const pf = panelFeedback.filter((f) => f.candidateId === candidate.id);
           const hr = hrFeedback.find((f) => f.candidateId === candidate.id);
+          const sf = studentFeedback.find((f) => f.candidateId === candidate.id);
           const decision = decisions[candidate.id];
 
           const panelAccepts = pf.filter((f) => f.recommendation === "ACCEPT").length;
@@ -243,7 +271,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
 
               <CardContent className="space-y-4">
                 {/* Panel feedback summary */}
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                       <Users className="h-3 w-3" />Panel Evaluation ({pf.length} member{pf.length !== 1 ? "s" : ""})
@@ -275,6 +303,40 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                           <span className="flex items-center gap-1 text-green-600"><ThumbsUp className="h-3 w-3" />{panelAccepts} Accept</span>
                           <span className="flex items-center gap-1 text-amber-600"><Minus className="h-3 w-3" />{panelMaybe} Maybe</span>
                           <span className="flex items-center gap-1 text-red-600"><ThumbsDown className="h-3 w-3" />{panelRejects} Reject</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Student feedback summary */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <Star className="h-3 w-3" />Student Feedback{sf ? ` (${sf.count} response${sf.count !== 1 ? "s" : ""})` : ""}
+                    </p>
+                    {!sf ? (
+                      <p className="text-sm text-muted-foreground">No student feedback yet</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {(
+                          [
+                            ["clarity", "Clarity"],
+                            ["engagement", "Engagement"],
+                            ["knowledgeDepth", "Knowledge"],
+                            ["timeManagement", "Time Mgmt"],
+                            ["overallImpression", "Overall"],
+                          ] as [string, string][]
+                        ).map(([key, label]) => (
+                          <div key={key} className="flex justify-between items-center text-sm">
+                            <span className="text-muted-foreground">{label}</span>
+                            <ScoreDots value={sf.averages[key] ?? 0} />
+                          </div>
+                        ))}
+                        <div className="pt-1 border-t flex justify-between items-center text-sm font-medium">
+                          <span>Avg Overall</span>
+                          <div className="flex items-center gap-1">
+                            <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
+                            <span>{avg(Object.values(sf.averages)).toFixed(1)} / 5</span>
+                          </div>
                         </div>
                       </div>
                     )}
