@@ -11,7 +11,7 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
   PRINCIPAL: ["/principal"],
   VICE_PRINCIPAL: ["/vice-principal"],
-  HOD: ["/hod"],
+  HOD: ["/hod", "/coordinator"],
   COLLEGE_OFFICE: ["/college-office"],
   PANEL_MEMBER: ["/panel", "/coordinator"],
   ACCOUNTS: ["/accounts"],
