@@ -100,6 +100,16 @@ export async function POST(request: Request) {
       }
     }
 
+    // For LOCATION_DEPT_HEAD, resolve the department name from the dept document
+    let resolvedDepartment = department ?? "";
+    if (role === "LOCATION_DEPT_HEAD" && locationDeptId && !resolvedDepartment) {
+      const deptSnap = await db
+        .collection("locations").doc(locationId)
+        .collection("locationDepts").doc(locationDeptId)
+        .get();
+      resolvedDepartment = (deptSnap.data() as { name?: string } | undefined)?.name ?? "";
+    }
+
     const uid = await createFirebaseUser(email, password, name);
     const now = new Date();
 
@@ -114,7 +124,7 @@ export async function POST(request: Request) {
         name,
         email,
         role,
-        department: department ?? "",
+        department: resolvedDepartment,
         locationDeptId: locationDeptId ?? "",
         isActive: true,
         createdAt: now,
