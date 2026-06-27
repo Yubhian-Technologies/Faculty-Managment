@@ -10,12 +10,27 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import { Toaster } from "@/components/ui/toaster";
 
-const RATING_LABELS: Record<string, string> = {
-  clarity: "Clarity of Explanation",
-  engagement: "Student Engagement",
-  knowledgeDepth: "Depth of Knowledge",
-  timeManagement: "Time Management",
-  overallImpression: "Overall Impression",
+const CRITERIA: Record<string, { label: string; description: string }> = {
+  clarity: {
+    label: "Clarity of Explanation",
+    description: "Did the candidate explain concepts in a simple, clear, and easy-to-understand way?",
+  },
+  engagement: {
+    label: "Student Engagement",
+    description: "Did the candidate interact with students, ask questions, and keep the class attentive?",
+  },
+  knowledgeDepth: {
+    label: "Depth of Knowledge",
+    description: "Did the candidate demonstrate strong subject knowledge and answer questions confidently?",
+  },
+  timeManagement: {
+    label: "Time Management",
+    description: "Did the candidate cover the topic well within the allotted time without rushing or going off-track?",
+  },
+  overallImpression: {
+    label: "Overall Impression",
+    description: "Overall, how effective was this candidate as a teacher based on this demo class?",
+  },
 };
 
 function StarRating({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
@@ -112,17 +127,18 @@ export default function FeedbackPage({ params }: { params: Promise<{ id: string;
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {Object.entries(RATING_LABELS).map(([key, label]) => (
+          {Object.entries(CRITERIA).map(([key, { label, description }]) => (
             <Card key={key}>
-              <CardContent className="p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardContent className="p-4 space-y-3">
+                <div>
                   <Label className="text-base font-medium">{label}</Label>
-                  <StarRating
-                    value={ratings[key as keyof typeof ratings]}
-                    onChange={(v) => setRatings((r) => ({ ...r, [key]: v }))}
-                    disabled={isSubmitting}
-                  />
+                  <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
                 </div>
+                <StarRating
+                  value={ratings[key as keyof typeof ratings]}
+                  onChange={(v) => setRatings((r) => ({ ...r, [key]: v }))}
+                  disabled={isSubmitting}
+                />
               </CardContent>
             </Card>
           ))}
