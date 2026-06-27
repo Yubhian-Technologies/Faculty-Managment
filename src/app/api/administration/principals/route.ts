@@ -78,6 +78,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "College does not belong to your location" }, { status: 403 });
     }
 
+    // Enforce one Principal per college
+    if (role === "PRINCIPAL") {
+      const existingSnap = await db
+        .collection("colleges").doc(collegeId).collection("users")
+        .where("role", "==", "PRINCIPAL").limit(1).get();
+      if (!existingSnap.empty) {
+        return NextResponse.json({ error: "A Principal account already exists for this college" }, { status: 409 });
+      }
+    }
+
     const uid = await createFirebaseUser(email, password, name);
 
     const db2 = getAdminDb();

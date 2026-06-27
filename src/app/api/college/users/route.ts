@@ -38,6 +38,18 @@ export async function GET(request: Request) {
         return an.localeCompare(bn);
       });
 
+    // A college has exactly one Principal — deduplicate to avoid showing test duplicates
+    if (includeAll) {
+      let principalSeen = false;
+      users = users.filter((u) => {
+        if ((u as unknown as { role: string }).role === "PRINCIPAL") {
+          if (principalSeen) return false;
+          principalSeen = true;
+        }
+        return true;
+      });
+    }
+
     // HOD sees only their department's users unless allDepts=true
     if (session.role === "HOD" && !allDepts) {
       const hodSnap = await db
