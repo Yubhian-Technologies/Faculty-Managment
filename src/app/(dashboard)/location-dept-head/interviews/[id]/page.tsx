@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { CheckCircle2, Star } from "lucide-react";
@@ -19,7 +18,6 @@ interface InterviewFeedback {
   id: string;
   panelUid: string;
   panelName: string;
-  panelRole: string;
   candidateId: string;
   candidateName: string;
   technicalScore: number;
@@ -36,11 +34,9 @@ interface LocationInterview {
   notes: string;
   panelMembers: { uid: string; name: string; role: string }[];
   candidatesInfo: { id: string; name: string }[];
-  shortlistedCandidateIds: string[];
   status: string;
   callLetterSent: boolean;
   createdByName: string;
-  approvedByName?: string;
 }
 
 type Recommendation = "SELECTED" | "WAITLISTED" | "REJECTED";
@@ -73,29 +69,18 @@ function ScorePicker({ value, onChange }: { value: number; onChange: (v: number)
   );
 }
 
-const RECOMMENDATION_OPTIONS: { value: Recommendation; label: string; color: string }[] = [
-  { value: "SELECTED", label: "Select", color: "border-green-400 text-green-700 bg-green-50 hover:bg-green-100" },
-  { value: "WAITLISTED", label: "Waitlist", color: "border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100" },
-  { value: "REJECTED", label: "Reject", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100" },
+const RECOMMENDATION_OPTIONS: { value: Recommendation; label: string; color: string; ring: string }[] = [
+  { value: "SELECTED", label: "Select", color: "border-green-400 text-green-700 bg-green-50 hover:bg-green-100", ring: "ring-green-400" },
+  { value: "WAITLISTED", label: "Waitlist", color: "border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100", ring: "ring-amber-400" },
+  { value: "REJECTED", label: "Reject", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100", ring: "ring-red-400" },
 ];
 
-const ROLE_LABELS: Record<string, string> = {
-  ADMINISTRATION: "Administration",
-  HR_ADMIN: "HR Admin",
-  LOCATION_DEPT_HEAD: "Dept Head",
-};
-
-export default function HRInterviewDetailPage() {
+export default function DeptHeadInterviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [interview, setInterview] = useState<LocationInterview | null>(null);
   const [feedback, setFeedback] = useState<InterviewFeedback[]>([]);
   const myUid = useAuthStore((s) => s.user?.uid ?? "");
   const [isLoading, setIsLoading] = useState(true);
-  const [completing, setCompleting] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [confirmComplete, setConfirmComplete] = useState(false);
-
-  // Per-candidate score forms (keyed by candidateId)
   const [scoreForms, setScoreForms] = useState<Record<string, ScoreForm>>({});
   const [submittingFor, setSubmittingFor] = useState<string | null>(null);
 
@@ -108,7 +93,6 @@ export default function HRInterviewDetailPage() {
         const fb = d.feedback ?? [];
         setFeedback(fb);
 
-        // Pre-fill score forms with any feedback already submitted by this user
         const pre: Record<string, ScoreForm> = {};
         for (const f of fb.filter((f) => f.panelUid === myUid)) {
           pre[f.candidateId] = {
@@ -164,52 +148,10 @@ export default function HRInterviewDetailPage() {
     }
   }
 
-  async function sendCallLetters() {
-    setSending(true);
-    try {
-      const res = await fetch(`/api/location/interviews/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "SEND_CALL_LETTERS" }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Call letters sent" });
-      load();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to send" });
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function markComplete() {
-    setCompleting(true);
-    try {
-      const res = await fetch(`/api/location/interviews/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "MARK_COMPLETE" }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Interview marked as complete" });
-      setConfirmComplete(false);
-      load();
-    } catch {
-      toast({ variant: "destructive", title: "Failed" });
-    } finally {
-      setCompleting(false);
-    }
-  }
-
   if (isLoading) return <div className="text-sm text-muted-foreground p-6">Loading...</div>;
   if (!interview) return <div className="text-sm text-destructive p-6">Interview not found.</div>;
 
   const canScore = interview.status === "APPROVED" || interview.status === "COMPLETED";
-  const feedbackByCandidate = feedback.reduce<Record<string, InterviewFeedback[]>>((acc, f) => {
-    if (!acc[f.candidateId]) acc[f.candidateId] = [];
-    acc[f.candidateId].push(f);
-    return acc;
-  }, {});
   const myFeedbackByCandidate = feedback
     .filter((f) => f.panelUid === myUid)
     .reduce<Record<string, InterviewFeedback>>((acc, f) => { acc[f.candidateId] = f; return acc; }, {});
@@ -218,67 +160,24 @@ export default function HRInterviewDetailPage() {
     (interview.candidatesInfo ?? []).every((c) => myFeedbackByCandidate[c.id]);
 
   return (
-    <div className="max-w-3xl space-y-5">
-      <PageHeader
-        title={interview.title}
-        description={`Created by ${interview.createdByName}`}
-        actions={
-          <div className="flex gap-2">
-            {interview.status === "APPROVED" && !interview.callLetterSent && (
-              <Button onClick={() => void sendCallLetters()} loading={sending}>Send Call Letters</Button>
-            )}
-            {interview.status === "APPROVED" && interview.callLetterSent && (
-              <Button variant="outline" onClick={() => setConfirmComplete(true)}>Mark Complete</Button>
-            )}
-          </div>
-        }
-      />
+    <div className="max-w-2xl space-y-5">
+      <PageHeader title={interview.title} description={`Panel interview — score each candidate below`} />
 
-      {/* Interview info */}
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Interview Info</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 text-sm">
+        <CardContent className="grid grid-cols-2 gap-3 text-sm pt-5">
           <div><p className="text-muted-foreground">Status</p><StatusBadge status={interview.status} /></div>
           <div><p className="text-muted-foreground">Date</p><p>{formatDate(interview.interviewDate as Parameters<typeof formatDate>[0])}</p></div>
           <div><p className="text-muted-foreground">Venue</p><p>{interview.venue}</p></div>
-          <div><p className="text-muted-foreground">Call Letters</p><p>{interview.callLetterSent ? "Sent" : "Not yet sent"}</p></div>
-          {interview.approvedByName && <div><p className="text-muted-foreground">Approved By</p><p>{interview.approvedByName}</p></div>}
           {interview.notes && <div className="col-span-2"><p className="text-muted-foreground">Notes</p><p>{interview.notes}</p></div>}
         </CardContent>
       </Card>
 
-      {/* Candidates & panel */}
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Candidates ({interview.candidatesInfo?.length ?? 0})</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {(interview.candidatesInfo ?? []).map((c) => (
-              <div key={c.id} className="flex items-center justify-between text-sm py-1">
-                <span>{c.name}</span>
-                {myFeedbackByCandidate[c.id] ? (
-                  <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="h-3 w-3" />Scored</span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">{feedbackByCandidate[c.id]?.length ?? 0} score(s)</span>
-                )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      {!canScore && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Scoring is available once Administration approves the interview plan and HR Admin sends call letters.
+        </div>
+      )}
 
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Panel ({interview.panelMembers?.length ?? 0})</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {(interview.panelMembers ?? []).map((p) => (
-              <div key={p.uid} className="text-sm py-1">
-                <p className="font-medium">{p.name}</p>
-                <p className="text-xs text-muted-foreground">{ROLE_LABELS[p.role] ?? p.role}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Scoring section */}
       {canScore && (
         <Card>
           <CardHeader className="pb-3">
@@ -290,7 +189,9 @@ export default function HRInterviewDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">Rate each candidate on Technical (1–10) and Communication (1–10), then give your recommendation.</p>
+            <p className="text-xs text-muted-foreground">
+              Rate each candidate on Technical (1–10) and Communication (1–10), then give your recommendation.
+            </p>
           </CardHeader>
           <CardContent className="space-y-6">
             {(interview.candidatesInfo ?? []).map((c) => {
@@ -336,7 +237,7 @@ export default function HRInterviewDetailPage() {
                             onClick={() => updateForm(c.id, { recommendation: opt.value })}
                             className={`flex-1 py-1.5 rounded border text-xs font-medium transition-colors ${
                               form.recommendation === opt.value
-                                ? opt.color + " ring-2 ring-offset-1 " + (opt.value === "SELECTED" ? "ring-green-400" : opt.value === "WAITLISTED" ? "ring-amber-400" : "ring-red-400")
+                                ? opt.color + " ring-2 ring-offset-1 " + opt.ring
                                 : "border-muted text-muted-foreground hover:bg-muted"
                             }`}
                           >
@@ -372,64 +273,6 @@ export default function HRInterviewDetailPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* All panel feedback summary */}
-      {feedback.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">All Panel Scores Summary</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            {(interview.candidatesInfo ?? []).map((c) => {
-              const cFeedback = feedbackByCandidate[c.id] ?? [];
-              if (cFeedback.length === 0) return null;
-              const avgTech = (cFeedback.reduce((s, f) => s + f.technicalScore, 0) / cFeedback.length).toFixed(1);
-              const avgComm = (cFeedback.reduce((s, f) => s + f.communicationScore, 0) / cFeedback.length).toFixed(1);
-              const selected = cFeedback.filter((f) => f.recommendation === "SELECTED").length;
-              const waitlisted = cFeedback.filter((f) => f.recommendation === "WAITLISTED").length;
-              const rejected = cFeedback.filter((f) => f.recommendation === "REJECTED").length;
-
-              return (
-                <div key={c.id} className="border rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm">{c.name}</p>
-                    <div className="flex gap-1 text-xs">
-                      {selected > 0 && <span className="text-green-700 font-medium">✓ {selected}</span>}
-                      {waitlisted > 0 && <span className="text-amber-700 font-medium">~ {waitlisted}</span>}
-                      {rejected > 0 && <span className="text-red-700 font-medium">✗ {rejected}</span>}
-                    </div>
-                  </div>
-                  <div className="flex gap-4 text-xs text-muted-foreground">
-                    <span>Technical avg: <strong>{avgTech}/10</strong></span>
-                    <span>Communication avg: <strong>{avgComm}/10</strong></span>
-                    <span>{cFeedback.length} panel member(s) scored</span>
-                  </div>
-                  <div className="space-y-1">
-                    {cFeedback.map((f) => (
-                      <div key={f.id} className="text-xs bg-muted/50 rounded p-2 flex items-start justify-between gap-2">
-                        <div>
-                          <span className="font-medium">{f.panelName}</span>
-                          <span className="text-muted-foreground"> · T:{f.technicalScore} C:{f.communicationScore}</span>
-                          {f.remarks && <span className="text-muted-foreground"> — {f.remarks}</span>}
-                        </div>
-                        <StatusBadge status={f.recommendation} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
-
-      <ConfirmDialog
-        open={confirmComplete}
-        onOpenChange={setConfirmComplete}
-        title="Mark Interview as Complete?"
-        description="This will close the interview. Make sure all panel members have submitted their scores before completing."
-        confirmLabel="Yes, Mark Complete"
-        onConfirm={() => void markComplete()}
-        loading={completing}
-      />
     </div>
   );
 }
