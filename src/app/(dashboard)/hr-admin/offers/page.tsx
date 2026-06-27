@@ -58,10 +58,12 @@ export default function HROffersPage() {
 
   useEffect(() => {
     load();
-    // Load selected candidates (those who are selected after interview)
+    // Load candidates eligible for offer letters: SELECTED or SHORTLISTED (post-interview)
     fetch("/api/location/candidates")
       .then((r) => r.json() as Promise<{ candidates: LocationCandidate[] }>)
-      .then((d) => setSelectedCandidates((d.candidates ?? []).filter((c) => c.status === "SELECTED")))
+      .then((d) => setSelectedCandidates(
+        (d.candidates ?? []).filter((c) => c.status === "SELECTED" || c.status === "SHORTLISTED")
+      ))
       .catch(() => {});
   }, []);
 
@@ -128,9 +130,9 @@ export default function HROffersPage() {
         }
       />
 
-      {selectedCandidates.length === 0 && !isLoading && (
+      {selectedCandidates.length === 0 && offers.length === 0 && !isLoading && (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No selected candidates yet. Mark candidates as selected after reviewing interview feedback.
+          No candidates available yet. Complete an interview and use <strong>Finalize Decisions</strong> to mark candidates, then create an offer letter here.
         </div>
       )}
 
@@ -183,7 +185,10 @@ export default function HROffersPage() {
                 <SelectTrigger><SelectValue placeholder="Select selected candidate..." /></SelectTrigger>
                 <SelectContent>
                   {selectedCandidates.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name} — {c.department}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name} — {c.department}
+                      {c.status === "SELECTED" ? " ✓" : " (shortlisted)"}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
