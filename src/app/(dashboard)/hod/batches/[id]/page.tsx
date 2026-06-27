@@ -29,13 +29,17 @@ import Link from "next/link";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type { HiringBatch, Candidate, FacultyMember, FMSUser } from "@/types";
+import { useAuthStore } from "@/store/authStore";
 
 type PanelFeedbackItem = {
   id: string;
   candidateId: string;
+  panelUid: string;
   panelName: string;
   recommendation: "ACCEPT" | "REJECT" | "MAYBE";
   ratings: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
+  strengths?: string;
+  weaknesses?: string;
   comments?: string;
 };
 
@@ -53,6 +57,24 @@ type HRFeedbackForm = {
   recommendation: "ACCEPT" | "REJECT" | "MAYBE";
   comments: string;
 };
+
+type PanelFeedbackForm = {
+  candidateId: string;
+  ratings: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
+  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
+  strengths: string;
+  weaknesses: string;
+  comments: string;
+};
+
+const defaultPanelForm = (candidateId: string): PanelFeedbackForm => ({
+  candidateId,
+  ratings: { technicalKnowledge: 0, communicationSkills: 0, teachingMethodology: 0 },
+  recommendation: "MAYBE",
+  strengths: "",
+  weaknesses: "",
+  comments: "",
+});
 
 function RatingDots({ value, max = 5 }: { value: number; max?: number }) {
   return (
@@ -99,6 +121,7 @@ const defaultHRForm = (candidateId: string): HRFeedbackForm => ({
 
 export default function HODBatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const myUid = useAuthStore((s) => s.user?.uid ?? "");
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -124,6 +147,11 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [hrFormCandidate, setHRFormCandidate] = useState<Candidate | null>(null);
   const [hrForm, setHRForm] = useState<HRFeedbackForm | null>(null);
   const [isSubmittingHR, setIsSubmittingHR] = useState(false);
+
+  // Panel feedback form state (HOD's own submission)
+  const [panelFormCandidate, setPanelFormCandidate] = useState<Candidate | null>(null);
+  const [panelForm, setPanelForm] = useState<PanelFeedbackForm | null>(null);
+  const [isSubmittingPanel, setIsSubmittingPanel] = useState(false);
 
   // Principal review submission
   const [isSubmittingForReview, setIsSubmittingForReview] = useState(false);
@@ -251,6 +279,40 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "destructive", title: "Failed to save HR feedback" });
     } finally {
       setIsSubmittingHR(false);
+    }
+  }
+
+  async function submitPanelFeedback() {
+    if (!panelForm || !panelFormCandidate) return;
+    const allRated = Object.values(panelForm.ratings).every((v) => v > 0);
+    if (!allRated) {
+      toast({ variant: "destructive", title: "Please rate all 3 criteria" });
+      return;
+    }
+    setIsSubmittingPanel(true);
+    try {
+      const res = await fetch("/api/college/panel-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batchId: id,
+          candidateId: panelFormCandidate.id,
+          ratings: panelForm.ratings,
+          strengths: panelForm.strengths,
+          weaknesses: panelForm.weaknesses,
+          recommendation: panelForm.recommendation,
+          comments: panelForm.comments,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Panel feedback saved" });
+      setPanelFormCandidate(null);
+      setPanelForm(null);
+      void load();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save panel feedback" });
+    } finally {
+      setIsSubmittingPanel(false);
     }
   }
 
@@ -655,37 +717,144 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
             <CardHeader>
               <CardTitle className="text-base">Panel Interview Feedback</CardTitle>
             </CardHeader>
-            <CardContent>
-              {panelFeedback.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Panel members have not submitted feedback yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {candidates.map((c) => {
-                    const feedbacks = panelFeedback.filter((f) => f.candidateId === c.id);
-                    if (feedbacks.length === 0) return (
-                      <div key={c.id} className="p-3 rounded-lg bg-muted/40 flex items-center justify-between">
-                        <p className="text-sm font-medium">{c.name}</p>
-                        <span className="text-xs text-muted-foreground">Pending feedback</span>
+            <CardContent className="space-y-4">
+              {candidates.map((c) => {
+                const feedbacks = panelFeedback.filter((f) => f.candidateId === c.id);
+                const myFeedback = feedbacks.find((f) => f.panelUid === myUid);
+                const accepts = feedbacks.filter((f) => f.recommendation === "ACCEPT").length;
+                const rejects = feedbacks.filter((f) => f.recommendation === "REJECT").length;
+                const maybes = feedbacks.filter((f) => f.recommendation === "MAYBE").length;
+                const isSelected = panelFormCandidate?.id === c.id;
+
+                return (
+                  <div key={c.id}>
+                    <div className="flex items-center justify-between p-3 rounded-lg border">
+                      <div>
+                        <p className="font-medium text-sm">{c.name}</p>
+                        {feedbacks.length > 0 && (
+                          <div className="flex gap-3 text-xs mt-1">
+                            <span className="flex items-center gap-1 text-green-600"><ThumbsUp className="h-3 w-3" />{accepts} Accept</span>
+                            <span className="flex items-center gap-1 text-amber-600"><Minus className="h-3 w-3" />{maybes} Maybe</span>
+                            <span className="flex items-center gap-1 text-red-600"><ThumbsDown className="h-3 w-3" />{rejects} Reject</span>
+                          </div>
+                        )}
+                        {myFeedback && (
+                          <span className={`text-xs font-medium mt-0.5 block ${
+                            myFeedback.recommendation === "ACCEPT" ? "text-green-600"
+                            : myFeedback.recommendation === "REJECT" ? "text-red-600"
+                            : "text-amber-600"
+                          }`}>
+                            Your assessment: {myFeedback.recommendation === "ACCEPT" ? "✓ Accept" : myFeedback.recommendation === "REJECT" ? "✗ Reject" : "~ Maybe"}
+                          </span>
+                        )}
                       </div>
-                    );
-                    const accepts = feedbacks.filter((f) => f.recommendation === "ACCEPT").length;
-                    const rejects = feedbacks.filter((f) => f.recommendation === "REJECT").length;
-                    const maybes = feedbacks.filter((f) => f.recommendation === "MAYBE").length;
-                    return (
-                      <div key={c.id} className="p-3 rounded-lg border space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium text-sm">{c.name}</p>
-                          <span className="text-xs text-muted-foreground">{feedbacks.length} panel response{feedbacks.length !== 1 ? "s" : ""}</span>
+                      <Button
+                        size="sm"
+                        variant={myFeedback ? "outline" : "default"}
+                        onClick={() => {
+                          if (isSelected) {
+                            setPanelFormCandidate(null);
+                            setPanelForm(null);
+                          } else {
+                            setPanelFormCandidate(c);
+                            setPanelForm(myFeedback ? {
+                              candidateId: c.id,
+                              ratings: myFeedback.ratings,
+                              recommendation: myFeedback.recommendation,
+                              strengths: myFeedback.strengths ?? "",
+                              weaknesses: myFeedback.weaknesses ?? "",
+                              comments: myFeedback.comments ?? "",
+                            } : defaultPanelForm(c.id));
+                          }
+                        }}
+                      >
+                        {myFeedback ? <><Pencil className="h-3.5 w-3.5 mr-1" />Edit</> : "Add Assessment"}
+                      </Button>
+                    </div>
+
+                    {isSelected && panelForm && (
+                      <div className="mt-2 p-4 border rounded-lg bg-muted/30 space-y-4">
+                        <HRRatingSelector
+                          label="Technical Knowledge"
+                          value={panelForm.ratings.technicalKnowledge}
+                          onChange={(v) => setPanelForm((f) => f && { ...f, ratings: { ...f.ratings, technicalKnowledge: v } })}
+                        />
+                        <HRRatingSelector
+                          label="Communication Skills"
+                          value={panelForm.ratings.communicationSkills}
+                          onChange={(v) => setPanelForm((f) => f && { ...f, ratings: { ...f.ratings, communicationSkills: v } })}
+                        />
+                        <HRRatingSelector
+                          label="Teaching Methodology"
+                          value={panelForm.ratings.teachingMethodology}
+                          onChange={(v) => setPanelForm((f) => f && { ...f, ratings: { ...f.ratings, teachingMethodology: v } })}
+                        />
+                        <div className="space-y-1">
+                          <Label className="text-xs font-medium">Recommendation</Label>
+                          <div className="flex gap-2">
+                            {(["ACCEPT", "MAYBE", "REJECT"] as const).map((r) => (
+                              <button
+                                key={r}
+                                type="button"
+                                onClick={() => setPanelForm((f) => f && { ...f, recommendation: r })}
+                                className={`flex-1 py-1.5 rounded border text-xs font-medium transition-colors ${
+                                  panelForm.recommendation === r
+                                    ? r === "ACCEPT" ? "bg-green-50 border-green-400 text-green-700 ring-2 ring-green-400 ring-offset-1"
+                                      : r === "REJECT" ? "bg-red-50 border-red-400 text-red-700 ring-2 ring-red-400 ring-offset-1"
+                                      : "bg-amber-50 border-amber-400 text-amber-700 ring-2 ring-amber-400 ring-offset-1"
+                                    : "border-muted text-muted-foreground hover:bg-muted"
+                                }`}
+                              >
+                                {r === "ACCEPT" ? "Accept" : r === "REJECT" ? "Reject" : "Maybe"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex gap-3 text-xs">
-                          <span className="flex items-center gap-1 text-green-600"><ThumbsUp className="h-3 w-3" />{accepts} Accept</span>
-                          <span className="flex items-center gap-1 text-amber-600"><Minus className="h-3 w-3" />{maybes} Maybe</span>
-                          <span className="flex items-center gap-1 text-red-600"><ThumbsDown className="h-3 w-3" />{rejects} Reject</span>
+                        <div className="space-y-1">
+                          <Label className="text-xs font-medium">Strengths (optional)</Label>
+                          <Textarea
+                            value={panelForm.strengths}
+                            onChange={(e) => setPanelForm((f) => f && { ...f, strengths: e.target.value })}
+                            placeholder="Notable strengths..."
+                            rows={2}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs font-medium">Weaknesses (optional)</Label>
+                          <Textarea
+                            value={panelForm.weaknesses}
+                            onChange={(e) => setPanelForm((f) => f && { ...f, weaknesses: e.target.value })}
+                            placeholder="Areas of concern..."
+                            rows={2}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs font-medium">Comments (optional)</Label>
+                          <Textarea
+                            value={panelForm.comments}
+                            onChange={(e) => setPanelForm((f) => f && { ...f, comments: e.target.value })}
+                            placeholder="Additional notes..."
+                            rows={2}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => void submitPanelFeedback()} loading={isSubmittingPanel}>
+                            {myFeedback ? "Update Assessment" : "Save Assessment"}
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setPanelFormCandidate(null); setPanelForm(null); }}>
+                            Cancel
+                          </Button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    )}
+                  </div>
+                );
+              })}
+              {candidates.length === 0 && (
+                <p className="text-sm text-muted-foreground">No candidates in this batch.</p>
               )}
             </CardContent>
           </Card>
