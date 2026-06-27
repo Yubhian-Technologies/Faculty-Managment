@@ -13,23 +13,23 @@ import { Toaster } from "@/components/ui/toaster";
 const CRITERIA: Record<string, { label: string; description: string }> = {
   clarity: {
     label: "Clarity of Explanation",
-    description: "Did the candidate explain concepts in a simple, clear, and easy-to-understand way?",
+    description: "Were concepts explained in a simple, clear, and easy-to-understand way?",
   },
   engagement: {
     label: "Student Engagement",
-    description: "Did the candidate interact with students, ask questions, and keep the class attentive?",
+    description: "Was the class interactive? Were questions asked to keep students attentive?",
   },
   knowledgeDepth: {
     label: "Depth of Knowledge",
-    description: "Did the candidate demonstrate strong subject knowledge and answer questions confidently?",
+    description: "Was strong subject knowledge demonstrated and were questions answered confidently?",
   },
   timeManagement: {
     label: "Time Management",
-    description: "Did the candidate cover the topic well within the allotted time without rushing or going off-track?",
+    description: "Was the topic covered well within the allotted time without rushing or going off-track?",
   },
   overallImpression: {
     label: "Overall Impression",
-    description: "Overall, how effective was this candidate as a teacher based on this demo class?",
+    description: "Overall, how effective was this demo class?",
   },
 };
 
