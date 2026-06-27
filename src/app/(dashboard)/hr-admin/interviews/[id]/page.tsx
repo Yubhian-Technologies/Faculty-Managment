@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { CheckCircle2, Star } from "lucide-react";
+import { CheckCircle2, Star, ArrowRight } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 
 interface InterviewFeedback {
@@ -95,6 +95,10 @@ export default function HRInterviewDetailPage() {
   const [sending, setSending] = useState(false);
   const [confirmComplete, setConfirmComplete] = useState(false);
 
+  // Finalize decisions state
+  const [candidateStatuses, setCandidateStatuses] = useState<Record<string, string>>({});
+  const [finalizingFor, setFinalizingFor] = useState<string | null>(null);
+
   // Per-candidate score forms (keyed by candidateId)
   const [scoreForms, setScoreForms] = useState<Record<string, ScoreForm>>({});
   const [submittingFor, setSubmittingFor] = useState<string | null>(null);
@@ -103,12 +107,11 @@ export default function HRInterviewDetailPage() {
     setIsLoading(true);
     fetch(`/api/location/interviews/${id}`)
       .then((r) => r.json() as Promise<{ interview: LocationInterview; feedback: InterviewFeedback[] }>)
-      .then((d) => {
+      .then(async (d) => {
         setInterview(d.interview);
         const fb = d.feedback ?? [];
         setFeedback(fb);
 
-        // Pre-fill score forms with any feedback already submitted by this user
         const pre: Record<string, ScoreForm> = {};
         for (const f of fb.filter((f) => f.panelUid === myUid)) {
           pre[f.candidateId] = {
@@ -119,6 +122,20 @@ export default function HRInterviewDetailPage() {
           };
         }
         setScoreForms(pre);
+
+        // Fetch current statuses of all candidates in this interview
+        if (d.interview?.shortlistedCandidateIds?.length) {
+          const cRes = await fetch("/api/location/candidates")
+            .then((r) => r.json() as Promise<{ candidates: { id: string; status: string }[] }>)
+            .catch(() => ({ candidates: [] as { id: string; status: string }[] }));
+          const statusMap: Record<string, string> = {};
+          for (const c of cRes.candidates) {
+            if (d.interview.shortlistedCandidateIds.includes(c.id)) {
+              statusMap[c.id] = c.status;
+            }
+          }
+          setCandidateStatuses(statusMap);
+        }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
       .finally(() => setIsLoading(false));
@@ -198,6 +215,28 @@ export default function HRInterviewDetailPage() {
       toast({ variant: "destructive", title: "Failed" });
     } finally {
       setCompleting(false);
+    }
+  }
+
+  async function finalizeCandidate(candidateId: string, status: "SELECTED" | "REJECTED") {
+    setFinalizingFor(candidateId);
+    try {
+      const res = await fetch(`/api/location/candidates/${candidateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error();
+      setCandidateStatuses((prev) => ({ ...prev, [candidateId]: status }));
+      toast({
+        variant: "success",
+        title: status === "SELECTED" ? "Candidate selected" : "Candidate rejected",
+        description: status === "SELECTED" ? "You can now create an offer letter for this candidate." : undefined,
+      });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update candidate" });
+    } finally {
+      setFinalizingFor(null);
     }
   }
 
@@ -414,6 +453,90 @@ export default function HRInterviewDetailPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Finalize decisions — only visible after interview is completed */}
+      {interview.status === "COMPLETED" && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ArrowRight className="h-4 w-4 text-primary" />
+              Finalize Candidate Decisions
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Apply panel recommendations to candidate statuses. Selected candidates can then receive offer letters.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(interview.candidatesInfo ?? []).map((c) => {
+              const cFeedback = feedbackByCandidate[c.id] ?? [];
+              const selectedVotes = cFeedback.filter((f) => f.recommendation === "SELECTED").length;
+              const rejectedVotes = cFeedback.filter((f) => f.recommendation === "REJECTED").length;
+              const waitlistedVotes = cFeedback.filter((f) => f.recommendation === "WAITLISTED").length;
+              const dominantRec = selectedVotes >= rejectedVotes && selectedVotes >= waitlistedVotes
+                ? "SELECTED"
+                : rejectedVotes >= waitlistedVotes ? "REJECTED" : "WAITLISTED";
+              const currentStatus = candidateStatuses[c.id];
+              const isFinalized = currentStatus === "SELECTED" || currentStatus === "REJECTED";
+              const isFinalizing = finalizingFor === c.id;
+
+              return (
+                <div key={c.id} className={`rounded-lg border p-3 flex items-center justify-between gap-3 ${
+                  currentStatus === "SELECTED" ? "border-green-200 bg-green-50/40"
+                  : currentStatus === "REJECTED" ? "border-red-200 bg-red-50/40"
+                  : "bg-background"
+                }`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm">{c.name}</p>
+                    {cFeedback.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Panel: {selectedVotes > 0 && <span className="text-green-700">✓ {selectedVotes} select</span>}
+                        {waitlistedVotes > 0 && <span className="text-amber-700"> ~ {waitlistedVotes} waitlist</span>}
+                        {rejectedVotes > 0 && <span className="text-red-700"> ✗ {rejectedVotes} reject</span>}
+                        {cFeedback.length > 0 && <span className="ml-1">· Suggested: <strong>{dominantRec}</strong></span>}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No panel scores yet</p>
+                    )}
+                  </div>
+
+                  {isFinalized ? (
+                    <Badge variant="outline" className={`text-xs shrink-0 ${
+                      currentStatus === "SELECTED"
+                        ? "text-green-700 border-green-300 bg-green-50"
+                        : "text-red-700 border-red-300 bg-red-50"
+                    }`}>
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      {currentStatus === "SELECTED" ? "Selected" : "Rejected"}
+                    </Badge>
+                  ) : (
+                    <div className="flex gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => void finalizeCandidate(c.id, "SELECTED")}
+                        loading={isFinalizing}
+                        disabled={isFinalizing}
+                      >
+                        Select
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 text-xs"
+                        onClick={() => void finalizeCandidate(c.id, "REJECTED")}
+                        loading={isFinalizing}
+                        disabled={isFinalizing}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })}
