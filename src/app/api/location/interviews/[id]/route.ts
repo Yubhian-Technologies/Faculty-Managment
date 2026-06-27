@@ -55,11 +55,21 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = (await request.json()) as {
       action?: "APPROVE" | "REJECT" | "SUBMIT_FEEDBACK" | "MARK_COMPLETE" | "SEND_CALL_LETTERS";
       reason?: string;
-      // feedback fields
+      // feedback
       candidateId?: string;
       candidateName?: string;
-      technicalScore?: number;
-      communicationScore?: number;
+      // Panel evaluation (1-5 each)
+      subjectKnowledge?: number;
+      teachingMethodology?: number;
+      communicationSkills?: number;
+      researchProfile?: number;
+      professionalism?: number;
+      // Student feedback (1-5 each)
+      studentSubjectKnowledge?: number;
+      studentClarityOfTeaching?: number;
+      studentCommunication?: number;
+      studentClassroomResources?: number;
+      studentOverallEffectiveness?: number;
       remarks?: string;
       recommendation?: "SELECTED" | "REJECTED" | "WAITLISTED";
     };
@@ -182,11 +192,44 @@ export async function PATCH(request: Request, { params }: Params) {
       if (interview.status !== "APPROVED" && interview.status !== "COMPLETED") {
         return NextResponse.json({ error: "Interview must be approved to submit feedback" }, { status: 400 });
       }
-      if (!body.candidateId || body.technicalScore == null || body.communicationScore == null || !body.recommendation) {
-        return NextResponse.json({ error: "candidateId, technicalScore, communicationScore, recommendation are required" }, { status: 400 });
+
+      const panelFields = ["subjectKnowledge", "teachingMethodology", "communicationSkills", "researchProfile", "professionalism"] as const;
+      const studentFields = ["studentSubjectKnowledge", "studentClarityOfTeaching", "studentCommunication", "studentClassroomResources", "studentOverallEffectiveness"] as const;
+
+      const allPanelFilled = panelFields.every((k) => body[k] != null && body[k]! >= 1 && body[k]! <= 5);
+      const allStudentFilled = studentFields.every((k) => body[k] != null && body[k]! >= 1 && body[k]! <= 5);
+
+      if (!body.candidateId || !allPanelFilled || !allStudentFilled || !body.recommendation) {
+        return NextResponse.json({ error: "All panel and student criteria scores (1–5) and recommendation are required" }, { status: 400 });
       }
 
-      // Check for duplicate feedback
+      // Calculate scores per NBA/NAAC formula
+      const panelSum = panelFields.reduce((s, k) => s + (body[k] ?? 0), 0);
+      const studentSum = studentFields.reduce((s, k) => s + (body[k] ?? 0), 0);
+      const panelScore = (panelSum / 25) * 70;
+      const studentScore = (studentSum / 25) * 30;
+      const overallScore = panelScore + studentScore;
+
+      const feedbackData = {
+        subjectKnowledge: body.subjectKnowledge!,
+        teachingMethodology: body.teachingMethodology!,
+        communicationSkills: body.communicationSkills!,
+        researchProfile: body.researchProfile!,
+        professionalism: body.professionalism!,
+        studentSubjectKnowledge: body.studentSubjectKnowledge!,
+        studentClarityOfTeaching: body.studentClarityOfTeaching!,
+        studentCommunication: body.studentCommunication!,
+        studentClassroomResources: body.studentClassroomResources!,
+        studentOverallEffectiveness: body.studentOverallEffectiveness!,
+        panelScore,
+        studentScore,
+        overallScore,
+        remarks: body.remarks ?? "",
+        recommendation: body.recommendation,
+        submittedAt: now,
+      };
+
+      // Check for existing feedback (update) or create new
       const existingFeedback = await ref
         .collection("feedback")
         .where("panelUid", "==", session.uid)
@@ -195,19 +238,12 @@ export async function PATCH(request: Request, { params }: Params) {
         .get();
 
       if (!existingFeedback.empty) {
-        // Update existing feedback
-        await existingFeedback.docs[0].ref.update({
-          technicalScore: body.technicalScore,
-          communicationScore: body.communicationScore,
-          remarks: body.remarks ?? "",
-          recommendation: body.recommendation,
-          submittedAt: now,
-        });
+        await existingFeedback.docs[0].ref.update(feedbackData);
       } else {
         const panelSnap = await db.collection("locations").doc(session.locationId).collection("locationUsers").doc(session.uid).get();
-      const panelName = (panelSnap.data() as { name?: string })?.name ?? session.email;
+        const panelName = (panelSnap.data() as { name?: string })?.name ?? session.email;
 
-      await ref.collection("feedback").add({
+        await ref.collection("feedback").add({
           interviewId: id,
           locationId: session.locationId,
           panelUid: session.uid,
@@ -215,11 +251,7 @@ export async function PATCH(request: Request, { params }: Params) {
           panelRole: session.role,
           candidateId: body.candidateId,
           candidateName: body.candidateName ?? "",
-          technicalScore: body.technicalScore,
-          communicationScore: body.communicationScore,
-          remarks: body.remarks ?? "",
-          recommendation: body.recommendation,
-          submittedAt: now,
+          ...feedbackData,
         });
       }
 

@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { InterviewScoringFields, ScoreFormValues, EMPTY_SCORES, ScoringKey, calcPanelScore, calcStudentScore, isPanelFilled, isStudentFilled } from "@/components/shared/InterviewScoringFields";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { CheckCircle2, Star } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 
 interface InterviewFeedback {
@@ -20,8 +21,19 @@ interface InterviewFeedback {
   panelName: string;
   candidateId: string;
   candidateName: string;
-  technicalScore: number;
-  communicationScore: number;
+  subjectKnowledge: number;
+  teachingMethodology: number;
+  communicationSkills: number;
+  researchProfile: number;
+  professionalism: number;
+  studentSubjectKnowledge: number;
+  studentClarityOfTeaching: number;
+  studentCommunication: number;
+  studentClassroomResources: number;
+  studentOverallEffectiveness: number;
+  panelScore: number;
+  studentScore: number;
+  overallScore: number;
   remarks: string;
   recommendation: string;
 }
@@ -41,38 +53,17 @@ interface LocationInterview {
 
 type Recommendation = "SELECTED" | "WAITLISTED" | "REJECTED";
 
-interface ScoreForm {
-  technicalScore: number;
-  communicationScore: number;
-  remarks: string;
+interface ScoreForm extends ScoreFormValues {
   recommendation: Recommendation | "";
+  remarks: string;
 }
 
-function ScorePicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="flex gap-1">
-      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          className={`h-7 w-7 rounded text-xs font-semibold transition-colors ${
-            value === n
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-primary/10"
-          }`}
-        >
-          {n}
-        </button>
-      ))}
-    </div>
-  );
-}
+const EMPTY_FORM: ScoreForm = { ...EMPTY_SCORES, recommendation: "", remarks: "" };
 
 const RECOMMENDATION_OPTIONS: { value: Recommendation; label: string; color: string; ring: string }[] = [
-  { value: "SELECTED", label: "Select", color: "border-green-400 text-green-700 bg-green-50 hover:bg-green-100", ring: "ring-green-400" },
-  { value: "WAITLISTED", label: "Waitlist", color: "border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100", ring: "ring-amber-400" },
-  { value: "REJECTED", label: "Reject", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100", ring: "ring-red-400" },
+  { value: "SELECTED",   label: "Select",   color: "border-green-400 text-green-700 bg-green-50 hover:bg-green-100",  ring: "ring-green-400" },
+  { value: "WAITLISTED", label: "Waitlist", color: "border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100",  ring: "ring-amber-400" },
+  { value: "REJECTED",   label: "Reject",   color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100",          ring: "ring-red-400" },
 ];
 
 export default function DeptHeadInterviewDetailPage() {
@@ -96,8 +87,16 @@ export default function DeptHeadInterviewDetailPage() {
         const pre: Record<string, ScoreForm> = {};
         for (const f of fb.filter((f) => f.panelUid === myUid)) {
           pre[f.candidateId] = {
-            technicalScore: f.technicalScore,
-            communicationScore: f.communicationScore,
+            subjectKnowledge: f.subjectKnowledge ?? 0,
+            teachingMethodology: f.teachingMethodology ?? 0,
+            communicationSkills: f.communicationSkills ?? 0,
+            researchProfile: f.researchProfile ?? 0,
+            professionalism: f.professionalism ?? 0,
+            studentSubjectKnowledge: f.studentSubjectKnowledge ?? 0,
+            studentClarityOfTeaching: f.studentClarityOfTeaching ?? 0,
+            studentCommunication: f.studentCommunication ?? 0,
+            studentClassroomResources: f.studentClassroomResources ?? 0,
+            studentOverallEffectiveness: f.studentOverallEffectiveness ?? 0,
             remarks: f.remarks,
             recommendation: f.recommendation as Recommendation,
           };
@@ -111,16 +110,13 @@ export default function DeptHeadInterviewDetailPage() {
   useEffect(() => { load(); }, [id]);
 
   function updateForm(candidateId: string, patch: Partial<ScoreForm>) {
-    setScoreForms((prev) => ({
-      ...prev,
-      [candidateId]: { ...{ technicalScore: 0, communicationScore: 0, remarks: "", recommendation: "" }, ...prev[candidateId], ...patch },
-    }));
+    setScoreForms((prev) => ({ ...prev, [candidateId]: { ...EMPTY_FORM, ...prev[candidateId], ...patch } }));
   }
 
   async function submitScore(candidateId: string, candidateName: string) {
-    const form = scoreForms[candidateId];
-    if (!form?.technicalScore || !form?.communicationScore || !form?.recommendation) {
-      toast({ variant: "destructive", title: "Fill all scores and a recommendation" });
+    const form = scoreForms[candidateId] ?? EMPTY_FORM;
+    if (!isPanelFilled(form) || !isStudentFilled(form) || !form.recommendation) {
+      toast({ variant: "destructive", title: "Fill all criteria (1–5) and choose a recommendation" });
       return;
     }
     setSubmittingFor(candidateId);
@@ -132,8 +128,16 @@ export default function DeptHeadInterviewDetailPage() {
           action: "SUBMIT_FEEDBACK",
           candidateId,
           candidateName,
-          technicalScore: form.technicalScore,
-          communicationScore: form.communicationScore,
+          subjectKnowledge: form.subjectKnowledge,
+          teachingMethodology: form.teachingMethodology,
+          communicationSkills: form.communicationSkills,
+          researchProfile: form.researchProfile,
+          professionalism: form.professionalism,
+          studentSubjectKnowledge: form.studentSubjectKnowledge,
+          studentClarityOfTeaching: form.studentClarityOfTeaching,
+          studentCommunication: form.studentCommunication,
+          studentClassroomResources: form.studentClassroomResources,
+          studentOverallEffectiveness: form.studentOverallEffectiveness,
           remarks: form.remarks,
           recommendation: form.recommendation,
         }),
@@ -155,13 +159,12 @@ export default function DeptHeadInterviewDetailPage() {
   const myFeedbackByCandidate = feedback
     .filter((f) => f.panelUid === myUid)
     .reduce<Record<string, InterviewFeedback>>((acc, f) => { acc[f.candidateId] = f; return acc; }, {});
-
   const allScored = (interview.candidatesInfo ?? []).length > 0 &&
     (interview.candidatesInfo ?? []).every((c) => myFeedbackByCandidate[c.id]);
 
   return (
     <div className="max-w-2xl space-y-5">
-      <PageHeader title={interview.title} description={`Panel interview — score each candidate below`} />
+      <PageHeader title={interview.title} description="Panel interview — score each candidate below" />
 
       <Card>
         <CardContent className="grid grid-cols-2 gap-3 text-sm pt-5">
@@ -190,43 +193,36 @@ export default function DeptHeadInterviewDetailPage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Rate each candidate on Technical (1–10) and Communication (1–10), then give your recommendation.
+              Panel Evaluation (70%) + Student Feedback (30%) — rate each criterion 1–5
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
             {(interview.candidatesInfo ?? []).map((c) => {
-              const form = scoreForms[c.id] ?? { technicalScore: 0, communicationScore: 0, remarks: "", recommendation: "" };
+              const form = scoreForms[c.id] ?? EMPTY_FORM;
               const already = myFeedbackByCandidate[c.id];
               const isSubmitting = submittingFor === c.id;
+              const panelScore = calcPanelScore(form);
+              const studentScore = calcStudentScore(form);
+              const isFormValid = isPanelFilled(form) && isStudentFilled(form) && !!form.recommendation;
 
               return (
-                <div key={c.id} className={`rounded-lg border p-4 space-y-4 ${already ? "border-green-200 bg-green-50/30" : ""}`}>
+                <div key={c.id} className={`rounded-lg border p-4 space-y-5 ${already ? "border-green-200 bg-green-50/30" : ""}`}>
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-sm">{c.name}</p>
                     {already && (
                       <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 text-xs">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />Submitted — click to update
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Score: {(already.overallScore ?? 0).toFixed(1)}/100 — click to update
                       </Badge>
                     )}
                   </div>
 
+                  <InterviewScoringFields
+                    values={form}
+                    onChange={(key: ScoringKey, value: number) => updateForm(c.id, { [key]: value })}
+                  />
+
                   <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs flex items-center gap-1">
-                        <Star className="h-3 w-3" />Technical Score
-                        {form.technicalScore > 0 && <span className="text-primary font-semibold ml-1">{form.technicalScore}/10</span>}
-                      </Label>
-                      <ScorePicker value={form.technicalScore} onChange={(v) => updateForm(c.id, { technicalScore: v })} />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs flex items-center gap-1">
-                        <Star className="h-3 w-3" />Communication Score
-                        {form.communicationScore > 0 && <span className="text-primary font-semibold ml-1">{form.communicationScore}/10</span>}
-                      </Label>
-                      <ScorePicker value={form.communicationScore} onChange={(v) => updateForm(c.id, { communicationScore: v })} />
-                    </div>
-
                     <div className="space-y-1.5">
                       <Label className="text-xs">Recommendation</Label>
                       <div className="flex gap-2">
@@ -262,9 +258,9 @@ export default function DeptHeadInterviewDetailPage() {
                       size="sm"
                       onClick={() => void submitScore(c.id, c.name)}
                       loading={isSubmitting}
-                      disabled={!form.technicalScore || !form.communicationScore || !form.recommendation || isSubmitting}
+                      disabled={!isFormValid || isSubmitting}
                     >
-                      {already ? "Update Score" : "Submit Score"}
+                      {already ? `Update Score (${(panelScore + studentScore).toFixed(1)}/100)` : "Submit Score"}
                     </Button>
                   </div>
                 </div>
