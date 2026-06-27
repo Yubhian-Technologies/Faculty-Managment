@@ -26,10 +26,12 @@ export async function GET(request: Request) {
       ? coll.where("role", "==", roleFilter)
       : coll;
 
+    const includeAll = searchParams.get("includeAll") === "true";
+
     const snap = await q.get();
     let users = snap.docs
       .map((d) => ({ uid: d.id, ...d.data() }))
-      .filter((u) => (u as unknown as { role: string }).role !== "PRINCIPAL")
+      .filter((u) => includeAll || (u as unknown as { role: string }).role !== "PRINCIPAL")
       .sort((a, b) => {
         const an = (a as unknown as { name?: string }).name ?? "";
         const bn = (b as unknown as { name?: string }).name ?? "";

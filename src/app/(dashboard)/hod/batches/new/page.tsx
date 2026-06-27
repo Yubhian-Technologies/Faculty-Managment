@@ -36,15 +36,16 @@ export default function NewBatchPage() {
       fetch("/api/college/candidates?isShortlisted=true")
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
-      fetch("/api/college/users?allDepts=true")
+      fetch("/api/college/users?allDepts=true&includeAll=true")
         .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
         .then((d) => d.users ?? []),
     ])
       .then(([v, c, s]) => {
         setVacancies(v);
         setCandidates(c);
-        // Exclude current user and show all staff as potential panel members
-        setStaffList(s.filter((u) => u.uid !== user?.uid));
+        // Panel members: Principal, Vice Principal, HOD, Panel Member — exclude self
+        const PANEL_ELIGIBLE = ["PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER"];
+        setStaffList(s.filter((u) => u.uid !== user?.uid && PANEL_ELIGIBLE.includes(u.role)));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load data" }));
   }, [user?.uid]);
