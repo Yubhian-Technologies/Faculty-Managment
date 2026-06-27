@@ -27,6 +27,8 @@ type PanelFeedbackItem = {
   panelName: string;
   recommendation: "ACCEPT" | "REJECT" | "MAYBE";
   ratings: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
+  salaryNegotiated?: number;
+  noticePeriod?: string;
   strengths?: string;
   weaknesses?: string;
   comments?: string;
@@ -243,12 +245,18 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   <div>
                     <CardTitle className="text-base">{candidate.name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{candidate.email} · {candidate.phone}</p>
-                    {hr?.salaryExpectation && (
-                      <p className="text-sm font-medium text-primary mt-1">
-                        Salary negotiated: ₹{hr.salaryExpectation.toLocaleString("en-IN")}/month
-                        {hr.noticePeriod ? ` · Notice: ${hr.noticePeriod}` : ""}
-                      </p>
-                    )}
+                    {(() => {
+                      const pfSalary = pf.find((f) => f.salaryNegotiated != null);
+                      const salary = pfSalary?.salaryNegotiated ?? hr?.salaryExpectation;
+                      const notice = pfSalary?.noticePeriod || hr?.noticePeriod;
+                      if (!salary) return null;
+                      return (
+                        <p className="text-sm font-medium text-primary mt-1">
+                          Salary negotiated: ₹{salary.toLocaleString("en-IN")}/month
+                          {notice ? ` · Notice: ${notice}` : ""}
+                        </p>
+                      );
+                    })()}
                   </div>
                   {decision ? (
                     <Badge

@@ -77,6 +77,8 @@ export async function POST(request: Request) {
         teachingMethodology: number;
       };
       subjectsTested?: string[];
+      salaryNegotiated?: number;
+      noticePeriod?: string;
       strengths?: string;
       weaknesses?: string;
       recommendation: "ACCEPT" | "REJECT" | "MAYBE";
@@ -116,6 +118,8 @@ export async function POST(request: Request) {
       panelName,
       ratings,
       subjectsTested: body.subjectsTested ?? [],
+      ...(body.salaryNegotiated != null ? { salaryNegotiated: body.salaryNegotiated } : {}),
+      noticePeriod: body.noticePeriod ?? "",
       strengths: body.strengths ?? "",
       weaknesses: body.weaknesses ?? "",
       recommendation,

@@ -38,6 +38,8 @@ type PanelFeedbackItem = {
   panelName: string;
   recommendation: "ACCEPT" | "REJECT" | "MAYBE";
   ratings: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
+  salaryNegotiated?: number;
+  noticePeriod?: string;
   strengths?: string;
   weaknesses?: string;
   comments?: string;
@@ -62,6 +64,8 @@ type PanelFeedbackForm = {
   candidateId: string;
   ratings: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
   recommendation: "ACCEPT" | "REJECT" | "MAYBE";
+  salaryNegotiated: string;
+  noticePeriod: string;
   strengths: string;
   weaknesses: string;
   comments: string;
@@ -71,6 +75,8 @@ const defaultPanelForm = (candidateId: string): PanelFeedbackForm => ({
   candidateId,
   ratings: { technicalKnowledge: 0, communicationSkills: 0, teachingMethodology: 0 },
   recommendation: "MAYBE",
+  salaryNegotiated: "",
+  noticePeriod: "",
   strengths: "",
   weaknesses: "",
   comments: "",
@@ -298,6 +304,8 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
           batchId: id,
           candidateId: panelFormCandidate.id,
           ratings: panelForm.ratings,
+          salaryNegotiated: panelForm.salaryNegotiated ? parseFloat(panelForm.salaryNegotiated) : undefined,
+          noticePeriod: panelForm.noticePeriod,
           strengths: panelForm.strengths,
           weaknesses: panelForm.weaknesses,
           recommendation: panelForm.recommendation,
@@ -761,6 +769,8 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
                               candidateId: c.id,
                               ratings: myFeedback.ratings,
                               recommendation: myFeedback.recommendation,
+                              salaryNegotiated: myFeedback.salaryNegotiated != null ? String(myFeedback.salaryNegotiated) : "",
+                              noticePeriod: myFeedback.noticePeriod ?? "",
                               strengths: myFeedback.strengths ?? "",
                               weaknesses: myFeedback.weaknesses ?? "",
                               comments: myFeedback.comments ?? "",
@@ -808,6 +818,25 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
                                 {r === "ACCEPT" ? "Accept" : r === "REJECT" ? "Reject" : "Maybe"}
                               </button>
                             ))}
+                          </div>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium">Salary Negotiated (₹/month)</Label>
+                            <Input
+                              type="number"
+                              value={panelForm.salaryNegotiated}
+                              onChange={(e) => setPanelForm((f) => f && { ...f, salaryNegotiated: e.target.value })}
+                              placeholder="e.g. 45000"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium">Notice Period</Label>
+                            <Input
+                              value={panelForm.noticePeriod}
+                              onChange={(e) => setPanelForm((f) => f && { ...f, noticePeriod: e.target.value })}
+                              placeholder="e.g. Immediate / 30 days"
+                            />
                           </div>
                         </div>
                         <div className="space-y-1">
