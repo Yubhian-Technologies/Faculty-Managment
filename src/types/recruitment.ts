@@ -18,6 +18,17 @@ export interface VacancyRequest {
   availableCount: number;
   justification?: string;
   status: WorkflowStatus;
+  // Ratio-backed justification data (attached when HOD submits from the requirement panel)
+  studentStrength?: number;
+  totalFacultyRequired?: number;
+  cadreRatioData?: Array<{
+    key: string;
+    label: string;
+    required: number;
+    current: number;
+    gap: number;
+    surplus: number;
+  }>;
   hodAcknowledged?: boolean;      // HOD acknowledges after principal approval before collecting candidates
   principalResponse?: {
     action: WorkflowStatus;

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { FacultyRequirementPanel } from "@/components/shared/FacultyRequirementPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
-import type { FacultyNorms } from "@/types";
+import type { FacultyRequirementResult } from "@/app/api/college/faculty-requirement/route";
 
 // ─── Position catalogue ──────────────────────────────────────────────────────
 
@@ -37,12 +38,23 @@ const CATEGORY_LABELS: Record<Category, string> = {
   SUPPORTING_STAFF: "Supporting Staff",
 };
 
+// Map designation label → cadre key (for auto-fill)
+const DESIGNATION_TO_CADRE: Record<string, "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR"> = {
+  "Professor":          "PROFESSOR",
+  "Associate Professor": "ASSOCIATE_PROFESSOR",
+  "Assistant Professor": "ASSISTANT_PROFESSOR",
+  "Senior Lecturer":    "ASSISTANT_PROFESSOR",
+  "Lecturer":           "ASSISTANT_PROFESSOR",
+};
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function NewVacancyPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const [norms, setNorms] = useState<FacultyNorms | null>(null);
+
+  const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
+  const [reqLoading, setReqLoading] = useState(true);
 
   const [category, setCategory] = useState<Category | "">("");
   const [designation, setDesignation] = useState("");
@@ -53,18 +65,50 @@ export default function NewVacancyPage() {
   const [justification, setJustification] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Fetch faculty requirement data on mount
   useEffect(() => {
-    fetch("/api/admin/settings/faculty-norms")
-      .then((r) => r.json() as Promise<{ norms: FacultyNorms }>)
-      .then((d) => setNorms(d.norms))
-      .catch(() => {});
+    setReqLoading(true);
+    fetch("/api/college/faculty-requirement")
+      .then((r) => r.json() as Promise<FacultyRequirementResult>)
+      .then((d) => setRequirement(d))
+      .catch(() => {})
+      .finally(() => setReqLoading(false));
   }, []);
 
-  // Reset designation when category changes
+  // When designation changes, auto-fill counts from requirement data
+  function handleDesignationChange(val: string) {
+    setDesignation(val);
+    setCustomDesignation("");
+
+    if (!requirement) return;
+
+    const cadreKey = DESIGNATION_TO_CADRE[val];
+    if (!cadreKey) return;
+
+    const cadreRow = requirement.cadre.find((c) => c.key === cadreKey);
+    if (!cadreRow) return;
+
+    // Auto-fill vacancy count with the gap (but minimum 1)
+    if (cadreRow.gap > 0) setRequiredCount(cadreRow.gap);
+    // Auto-fill current staff with current count
+    setAvailableCount(cadreRow.current);
+
+    // Auto-generate justification
+    const justText =
+      `Based on department student strength of ${requirement.totalStudents} students, ` +
+      `the 1:${requirement.studentFacultyRatio} ratio requires ${requirement.totalRequired} faculty total. ` +
+      `Applying the 1:2:6 cadre ratio, ${cadreRow.required} ${cadreRow.label} position(s) are required. ` +
+      `Currently ${cadreRow.current} active. Shortage: ${cadreRow.gap} position(s).`;
+    setJustification(justText);
+  }
+
   function handleCategoryChange(val: Category) {
     setCategory(val);
     setDesignation("");
     setCustomDesignation("");
+    setRequiredCount(1);
+    setAvailableCount(0);
+    setJustification("");
   }
 
   const roleOptions =
@@ -76,6 +120,9 @@ export default function NewVacancyPage() {
 
   const finalPosition =
     designation === "Others" ? customDesignation.trim() : designation;
+
+  // Which cadre row is selected (for panel highlight)
+  const highlightedCadre = designation ? (DESIGNATION_TO_CADRE[designation] ?? null) : null;
 
   const isValid =
     !!category &&
@@ -105,6 +152,10 @@ export default function NewVacancyPage() {
           availableCount,
           qualification: qualification.trim(),
           justification: justification.trim(),
+          // Attach ratio data for Principal's review
+          studentStrength: requirement?.totalStudents ?? 0,
+          totalFacultyRequired: requirement?.totalRequired ?? 0,
+          cadreRatioData: requirement?.cadre ?? [],
         }),
       });
       const json = await res.json() as { id?: string; error?: string };
@@ -128,33 +179,15 @@ export default function NewVacancyPage() {
         description="Submit a faculty hiring request to the Principal"
       />
 
-      {/* Govt. Norms Reference */}
-      {norms && (
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-blue-800 flex items-center gap-2">
-              <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                {norms.regulatoryBody}
-              </span>
-              Govt. Faculty Norms (Reference)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3 text-sm text-blue-900 pb-4">
-            <div>
-              <p className="text-xs font-medium text-blue-600">Student : Faculty Ratio</p>
-              <p className="font-semibold">{norms.studentFacultyRatio} : 1</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-blue-600">Min. Faculty per Dept</p>
-              <p className="font-semibold">{norms.defaultMinFacultyPerDept}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-blue-600">Teaching Hours / Week</p>
-              <p className="font-semibold">{norms.teachingHoursPerWeek} hrs</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Faculty Requirement Panel */}
+      {reqLoading ? (
+        <div className="h-48 rounded-lg border bg-muted/30 animate-pulse" />
+      ) : requirement ? (
+        <FacultyRequirementPanel
+          data={requirement}
+          highlightDesignation={highlightedCadre}
+        />
+      ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
@@ -200,16 +233,35 @@ export default function NewVacancyPage() {
             {category && (
               <div className="space-y-2">
                 <Label>Designation <span className="text-destructive">*</span></Label>
-                <Select value={designation} onValueChange={setDesignation}>
+                <Select value={designation} onValueChange={handleDesignationChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select designation..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {roleOptions.map((role) => (
-                      <SelectItem key={role} value={role}>{role}</SelectItem>
-                    ))}
+                    {roleOptions.map((role) => {
+                      const cadreKey = DESIGNATION_TO_CADRE[role];
+                      const cadreRow = requirement?.cadre.find((c) => c.key === cadreKey);
+                      return (
+                        <SelectItem key={role} value={role}>
+                          <span className="flex items-center gap-2">
+                            {role}
+                            {cadreRow && cadreRow.gap > 0 && (
+                              <span className="text-xs text-red-500 font-medium">−{cadreRow.gap}</span>
+                            )}
+                            {cadreRow && cadreRow.gap === 0 && cadreRow.surplus === 0 && (
+                              <span className="text-xs text-green-500">✓</span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
+                {designation && DESIGNATION_TO_CADRE[designation] && (
+                  <p className="text-xs text-muted-foreground">
+                    Count auto-filled from cadre gap. You can adjust if needed.
+                  </p>
+                )}
               </div>
             )}
 
@@ -235,6 +287,18 @@ export default function NewVacancyPage() {
                   value={requiredCount}
                   onChange={(e) => setRequiredCount(Number(e.target.value))}
                 />
+                {highlightedCadre && requirement && (() => {
+                  const row = requirement.cadre.find((c) => c.key === highlightedCadre);
+                  return row?.gap ? (
+                    <p className="text-xs text-red-600">
+                      Cadre gap: {row.gap} — auto-filled from ratio calculation
+                    </p>
+                  ) : row?.surplus ? (
+                    <p className="text-xs text-blue-600">
+                      This cadre has a surplus of {row.surplus}. Verify before submitting.
+                    </p>
+                  ) : null;
+                })()}
               </div>
               <div className="space-y-2">
                 <Label>Current Staff Available</Label>
@@ -279,7 +343,14 @@ export default function NewVacancyPage() {
             <CardContent className="p-4 text-sm">
               <p className="font-medium text-green-800 mb-1">Request Summary</p>
               <p className="text-green-700">
-                <span className="font-semibold">{requiredCount}</span> × {finalPosition} &nbsp;·&nbsp; {CATEGORY_LABELS[category as Category]} &nbsp;·&nbsp; {user?.department}
+                <span className="font-semibold">{requiredCount}</span> × {finalPosition}
+                &nbsp;·&nbsp; {CATEGORY_LABELS[category as Category]}
+                &nbsp;·&nbsp; {user?.department}
+                {requirement && requirement.totalStudents > 0 && (
+                  <span className="text-xs ml-2 opacity-80">
+                    (based on {requirement.totalStudents} students · 1:{requirement.studentFacultyRatio} ratio)
+                  </span>
+                )}
               </p>
             </CardContent>
           </Card>

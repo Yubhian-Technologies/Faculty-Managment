@@ -20,6 +20,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
 import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, CheckCircle2, TrendingUp, Users } from "lucide-react";
 import type { VacancyRequest } from "@/types";
 
 export default function PrincipalVacanciesPage() {
@@ -173,15 +174,53 @@ export default function PrincipalVacanciesPage() {
       )}
 
       {/* Approve Dialog */}
-      <ConfirmDialog
-        open={approveDialogOpen}
-        onOpenChange={setApproveDialogOpen}
-        title="Approve Vacancy Request?"
-        description={`Approve the ${selectedVacancy?.position} vacancy for ${selectedVacancy?.department}. The HOD will be notified.`}
-        confirmLabel="Approve"
-        onConfirm={handleApprove}
-        loading={loading}
-      />
+      <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Approve Vacancy Request?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Approving <strong>{selectedVacancy?.position}</strong> ({selectedVacancy?.requiredCount} position{(selectedVacancy?.requiredCount ?? 1) > 1 ? "s" : ""}) for <strong>{selectedVacancy?.department}</strong>.
+            </p>
+
+            {/* Ratio data if available */}
+            {selectedVacancy?.studentStrength != null && selectedVacancy.studentStrength > 0 && (
+              <div className="rounded-lg border bg-muted/30 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
+                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ratio Justification</span>
+                </div>
+                <div className="grid grid-cols-3 divide-x text-center text-xs py-2">
+                  <div className="py-1"><p className="font-bold text-base">{selectedVacancy.studentStrength}</p><p className="text-muted-foreground">Students</p></div>
+                  <div className="py-1"><p className="font-bold text-base">{selectedVacancy.totalFacultyRequired}</p><p className="text-muted-foreground">Required (1:15)</p></div>
+                  <div className="py-1"><p className="font-bold text-base">{selectedVacancy.requiredCount}</p><p className="text-muted-foreground">This Request</p></div>
+                </div>
+                {selectedVacancy.cadreRatioData && selectedVacancy.cadreRatioData.length > 0 && (
+                  <div className="border-t divide-y">
+                    {selectedVacancy.cadreRatioData.map((c) => (
+                      <div key={c.key} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                        <span className="text-muted-foreground">{c.label}</span>
+                        <div className="flex items-center gap-3">
+                          <span>Req: <strong>{c.required}</strong></span>
+                          <span>Now: <strong>{c.current}</strong></span>
+                          <span className={`flex items-center gap-0.5 font-semibold ${c.gap > 0 ? "text-red-600" : c.surplus > 0 ? "text-blue-600" : "text-green-600"}`}>
+                            {c.gap > 0 ? <><AlertTriangle className="h-3 w-3" />−{c.gap}</> : c.surplus > 0 ? <><TrendingUp className="h-3 w-3" />+{c.surplus}</> : <><CheckCircle2 className="h-3 w-3" />✓</>}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveDialogOpen(false)} disabled={loading}>Cancel</Button>
+            <Button onClick={handleApprove} loading={loading}>Approve</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
