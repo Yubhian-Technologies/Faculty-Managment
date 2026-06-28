@@ -244,6 +244,27 @@ export interface FacultyMember {
   status: FacultyStatus;
   userUid?: string;            // links to users/{uid} if they have a system login
   profilePhotoUrl?: string;
+
+  // Extended profile fields (from institution records / bulk import)
+  gender?: "Male" | "Female" | "Other";
+  dateOfBirth?: Timestamp;
+  legalName?: string;          // name as per SSC certificates (CAPITAL LETTERS)
+  fatherName?: string;         // father or husband name
+  motherName?: string;
+  religion?: string;
+  caste?: string;
+  aadharNo?: string;
+  panNo?: string;
+  collegeEmail?: string;
+  ratificationStatus?: "Ratified" | "Not Ratified";
+  ratificationDate?: Timestamp;
+  hasPHD?: boolean;
+  industryExperience?: number; // years
+  researchExperience?: number; // years
+  internalScore?: number;
+  externalScore?: number;
+  inCampusScore?: number;
+
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

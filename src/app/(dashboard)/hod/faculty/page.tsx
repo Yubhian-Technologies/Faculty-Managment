@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Pencil } from "lucide-react";
+import { UserPlus, Pencil, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -179,10 +179,16 @@ export default function HODFacultyPage() {
         title="Faculty Register"
         description="Teaching staff and faculty records for your department"
         actions={
-          <Button onClick={() => router.push("/hod/faculty/new")}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Add Faculty
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => router.push("/hod/faculty/import")}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+            <Button onClick={() => router.push("/hod/faculty/new")}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add Faculty
+            </Button>
+          </div>
         }
       />
 
