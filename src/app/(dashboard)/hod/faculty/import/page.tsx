@@ -21,9 +21,12 @@ const COLUMNS = [
   { key: "specialization",    label: "Specialization",               required: false, sample: "Machine Learning" },
   { key: "employmentType",    label: "Employment Type",              required: true,  sample: "Regular" },
   { key: "joiningDate",       label: "Joining Date (YYYY-MM-DD)",    required: true,  sample: "2020-06-01" },
-  { key: "experienceYears",   label: "Experience Years",             required: false, sample: "5" },
-  { key: "industryExperience",label: "Industry Exp (Years)",         required: false, sample: "2" },
-  { key: "researchExperience",label: "Research Exp (Years)",         required: false, sample: "1" },
+  { key: "experienceYears",    label: "Total Experience (Years)",      required: false, sample: "5" },
+  { key: "internalExperience", label: "Internal Exp (Years)",         required: false, sample: "3" },
+  { key: "externalExperience", label: "External Exp (Years)",         required: false, sample: "1" },
+  { key: "inCampusExperience", label: "In Campus Exp (Years)",        required: false, sample: "1" },
+  { key: "industryExperience", label: "Industry Exp (Years)",         required: false, sample: "2" },
+  { key: "researchExperience", label: "Research Exp (Years)",         required: false, sample: "0" },
   { key: "gender",            label: "Gender",                       required: false, sample: "Male" },
   { key: "dateOfBirth",       label: "Date of Birth (YYYY-MM-DD)",   required: false, sample: "1990-05-15" },
   { key: "legalName",         label: "Legal Name (as per SSC)",      required: false, sample: "RAVI KUMAR ANNAPU" },
@@ -37,9 +40,6 @@ const COLUMNS = [
   { key: "ratificationStatus",label: "Ratification Status",          required: false, sample: "Ratified" },
   { key: "ratificationDate",  label: "Ratification Date (YYYY-MM-DD)", required: false, sample: "2021-04-27" },
   { key: "hasPHD",            label: "Has PhD (Yes/No)",             required: false, sample: "No" },
-  { key: "internalScore",     label: "Internal Score",               required: false, sample: "12.1" },
-  { key: "externalScore",     label: "External Score",               required: false, sample: "3.0" },
-  { key: "inCampusScore",     label: "In Campus Score",              required: false, sample: "1.0" },
 ];
 
 const HINTS = [

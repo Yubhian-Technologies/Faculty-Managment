@@ -259,11 +259,11 @@ export interface FacultyMember {
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationDate?: Timestamp;
   hasPHD?: boolean;
-  industryExperience?: number; // years
-  researchExperience?: number; // years
-  internalScore?: number;
-  externalScore?: number;
-  inCampusScore?: number;
+  internalExperience?: number; // years of experience within the institution
+  externalExperience?: number; // years of experience outside the institution
+  inCampusExperience?: number; // years of on-campus experience
+  industryExperience?: number; // years of industry experience
+  researchExperience?: number; // years of research experience
 
   createdAt: Timestamp;
   updatedAt: Timestamp;

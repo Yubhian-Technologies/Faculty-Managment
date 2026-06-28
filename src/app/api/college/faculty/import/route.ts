@@ -56,11 +56,11 @@ type ImportRow = {
   ratificationDate?: string;
   hasPHD?: string;
   experienceYears?: string;
+  internalExperience?: string;
+  externalExperience?: string;
+  inCampusExperience?: string;
   industryExperience?: string;
   researchExperience?: string;
-  internalScore?: string;
-  externalScore?: string;
-  inCampusScore?: string;
 };
 
 export async function POST(request: Request) {
@@ -159,11 +159,11 @@ export async function POST(request: Request) {
         ratificationStatus: row.ratificationStatus?.toLowerCase().includes("not") ? "Not Ratified" : row.ratificationStatus?.trim() ? "Ratified" : undefined,
         ratificationDate: ratificationDate || undefined,
         hasPHD: row.hasPHD ? row.hasPHD.trim().toLowerCase() === "yes" : undefined,
+        internalExperience: row.internalExperience ? parseFloat(row.internalExperience) || undefined : undefined,
+        externalExperience: row.externalExperience ? parseFloat(row.externalExperience) || undefined : undefined,
+        inCampusExperience: row.inCampusExperience ? parseFloat(row.inCampusExperience) || undefined : undefined,
         industryExperience: row.industryExperience ? parseFloat(row.industryExperience) || undefined : undefined,
         researchExperience: row.researchExperience ? parseFloat(row.researchExperience) || undefined : undefined,
-        internalScore: row.internalScore ? parseFloat(row.internalScore) || undefined : undefined,
-        externalScore: row.externalScore ? parseFloat(row.externalScore) || undefined : undefined,
-        inCampusScore: row.inCampusScore ? parseFloat(row.inCampusScore) || undefined : undefined,
         createdAt: now,
         updatedAt: now,
       };
