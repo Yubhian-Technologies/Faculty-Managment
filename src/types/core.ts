@@ -269,6 +269,22 @@ export interface FacultyMember {
   updatedAt: Timestamp;
 }
 
+// ─── Section ──────────────────────────────────────────────────────────────────
+
+export interface Section {
+  id: string;
+  collegeId: string;
+  department: string;
+  name: string;              // "A", "B", "C" etc.
+  year: 1 | 2 | 3 | 4;      // academic year (1st year = Basic Science)
+  batch: string;             // admission batch e.g. "2023-2027"
+  facultyInchargeUid?: string;
+  facultyInchargeName?: string;
+  studentCount: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export type NotificationType =
