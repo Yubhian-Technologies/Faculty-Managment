@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 
     // Send asynchronously — don't await in prod for faster API response
     transporter.sendMail({
-      from: `"${process.env.EMAIL_FROM_NAME ?? "FMS"}" <${process.env.EMAIL_FROM}>`,
+      from: `"${process.env.EMAIL_FROM_NAME ?? "Vishnu People"}" <${process.env.EMAIL_FROM}>`,
       to: body.to,
       subject,
       html,

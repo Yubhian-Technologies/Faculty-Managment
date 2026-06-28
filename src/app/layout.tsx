@@ -6,8 +6,8 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "FMS — Faculty Management System",
-  description: "End-to-end faculty hiring and management platform for educational institutions",
+  title: "Vishnu People",
+  description: "End-to-end college automation platform for Vishnu institutions",
   icons: { icon: "/favicon.ico" },
 };
 

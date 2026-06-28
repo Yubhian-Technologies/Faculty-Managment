@@ -57,7 +57,7 @@ export function MobileDrawer() {
           <div className="flex items-center gap-3">
             <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
             <div>
-              <p className="text-sm font-bold">FMS Portal</p>
+              <p className="text-sm font-bold">Vishnu People</p>
               <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role]}</p>
             </div>
           </div>
