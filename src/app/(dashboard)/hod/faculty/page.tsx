@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Pencil, Upload, Trash2 } from "lucide-react";
+import { UserPlus, Pencil, Upload, Trash2, LogIn, Eye, EyeOff } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -117,6 +117,11 @@ export default function HODFacultyPage() {
   const [deleteTarget, setDeleteTarget] = useState<FacultyRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [loginTarget, setLoginTarget] = useState<FacultyRow | null>(null);
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [isCreatingLogin, setIsCreatingLogin] = useState(false);
+
   async function load(status: string) {
     setIsLoading(true);
     try {
@@ -173,6 +178,47 @@ export default function HODFacultyPage() {
       toast({ variant: "destructive", title: "Failed to delete faculty record" });
     } finally {
       setIsDeleting(false);
+    }
+  }
+
+  function openLoginDialog(row: FacultyRow) {
+    setLoginTarget(row);
+    setLoginForm({
+      email: (row.collegeEmail as string) || (row.email as string) || "",
+      password: "",
+    });
+    setShowPassword(false);
+  }
+
+  async function handleCreateLogin() {
+    if (!loginTarget) return;
+    if (!loginForm.email.trim()) {
+      toast({ variant: "destructive", title: "Email is required" });
+      return;
+    }
+    if (loginForm.password.length < 8) {
+      toast({ variant: "destructive", title: "Password must be at least 8 characters" });
+      return;
+    }
+    setIsCreatingLogin(true);
+    try {
+      const res = await fetch(`/api/college/faculty/${loginTarget.id as string}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loginForm),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to create login" });
+        return;
+      }
+      toast({ variant: "success", title: `Login created for ${loginTarget.name as string}` });
+      setLoginTarget(null);
+      void load(statusFilter);
+    } catch {
+      toast({ variant: "destructive", title: "Network error, please try again" });
+    } finally {
+      setIsCreatingLogin(false);
     }
   }
 
@@ -234,6 +280,17 @@ export default function HODFacultyPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          {!(row.userUid as string) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              title="Create login account"
+              onClick={(e) => { e.stopPropagation(); openLoginDialog(row); }}
+            >
+              <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditMember(row); setEditForm(buildEditForm(row)); }}>
             <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
           </Button>
@@ -440,6 +497,56 @@ export default function HODFacultyPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditMember(null); setEditForm(null); }} disabled={editSaving}>Cancel</Button>
             <Button onClick={() => void handleSaveEdit()} loading={editSaving}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create Login Dialog ── */}
+      <Dialog open={!!loginTarget} onOpenChange={(open) => { if (!open) setLoginTarget(null); }}>
+        <DialogContent aria-describedby={undefined} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Login — {loginTarget?.name as string}</DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              This will create a system login account for this faculty member. They can sign in as a Panel Member.
+            </p>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="space-y-1.5">
+              <Label>Login Email *</Label>
+              <Input
+                type="email"
+                value={loginForm.email}
+                onChange={(e) => setLoginForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="name@college.edu.in"
+              />
+              <p className="text-xs text-muted-foreground">Pre-filled from college email. Change if needed.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Password *</Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="Min 8 characters"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">Share this password with the faculty member so they can log in.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLoginTarget(null)} disabled={isCreatingLogin}>Cancel</Button>
+            <Button onClick={() => void handleCreateLogin()} loading={isCreatingLogin}>
+              <LogIn className="h-4 w-4 mr-2" />Create Login
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
