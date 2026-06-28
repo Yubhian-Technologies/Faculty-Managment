@@ -16,6 +16,16 @@ import { toast } from "@/hooks/useToast";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { FacultyMember, Designation, EmploymentType, FacultyStatus } from "@/types";
 
+function fmtDate(val: unknown): string {
+  if (!val) return "—";
+  try {
+    const d = typeof (val as { toDate?: () => Date }).toDate === "function"
+      ? (val as { toDate: () => Date }).toDate()
+      : new Date(((val as { seconds?: number }).seconds ?? 0) * 1000);
+    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  } catch { return "—"; }
+}
+
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
@@ -235,44 +245,74 @@ export default function HODFacultyPage() {
       key: "name",
       header: "Faculty Member",
       render: (row) => (
-        <div>
-          <p className="font-medium">{row.name as string}</p>
-          <p className="text-xs text-muted-foreground">{(row.collegeEmail as string) || (row.email as string)}</p>
+        <div className="space-y-0.5 min-w-0">
+          <p className="font-medium leading-tight">{row.name as string}</p>
+          {(row.collegeEmail as string) && (
+            <p className="text-xs text-muted-foreground">{row.collegeEmail as string}</p>
+          )}
+          <p className="text-xs text-muted-foreground">{row.email as string}</p>
           <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
+          <p className="text-xs text-muted-foreground">Joined: {fmtDate(row.joiningDate)}</p>
         </div>
       ),
     },
     {
       key: "designation",
-      header: "Designation",
+      header: "Academic Profile",
       render: (row) => (
-        <div>
+        <div className="space-y-0.5">
           <p className="text-sm font-medium">{DESIGNATION_LABELS[row.designation as Designation] ?? (row.designation as string)}</p>
           <p className="text-xs text-muted-foreground">{row.qualification as string}</p>
+          {(row.specialization as string) && (
+            <p className="text-xs text-muted-foreground italic">{row.specialization as string}</p>
+          )}
+          {(row.hasPHD as boolean) && (
+            <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">Ph.D</span>
+          )}
         </div>
       ),
     },
     {
       key: "employmentType",
-      header: "Type",
+      header: "Employment",
       hideOnMobile: true,
       render: (row) => (
-        <Badge variant="outline">{EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? (row.employmentType as string)}</Badge>
+        <div className="space-y-1">
+          <Badge variant="outline">{EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? (row.employmentType as string)}</Badge>
+          <p className="text-xs text-muted-foreground">{fmtDate(row.joiningDate)}</p>
+        </div>
       ),
     },
     {
       key: "experienceYears",
-      header: "Exp.",
+      header: "Experience",
       hideOnMobile: true,
-      render: (row) => <span>{(row.experienceYears as number) ?? 0} yrs</span>,
+      render: (row) => (
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">{(row.experienceYears as number) ?? 0} yrs</p>
+          {(row.internalExperience as number) != null && (row.internalExperience as number) > 0 && (
+            <p className="text-xs text-muted-foreground">Int: {row.internalExperience as number} · Ext: {(row.externalExperience as number) ?? 0}</p>
+          )}
+          {(row.industryExperience as number) != null && (row.industryExperience as number) > 0 && (
+            <p className="text-xs text-muted-foreground">Industry: {row.industryExperience as number} yrs</p>
+          )}
+        </div>
+      ),
     },
     {
       key: "status",
       header: "Status",
       render: (row) => (
-        <Badge variant={STATUS_VARIANTS[row.status as FacultyStatus] ?? "secondary"}>
-          {FACULTY_STATUS_LABELS[row.status as FacultyStatus] ?? (row.status as string)}
-        </Badge>
+        <div className="space-y-1">
+          <Badge variant={STATUS_VARIANTS[row.status as FacultyStatus] ?? "secondary"}>
+            {FACULTY_STATUS_LABELS[row.status as FacultyStatus] ?? (row.status as string)}
+          </Badge>
+          {(row.ratificationStatus as string) && (
+            <p className={`text-[10px] font-medium ${row.ratificationStatus === "Ratified" ? "text-green-600" : "text-amber-600"}`}>
+              {row.ratificationStatus as string}
+            </p>
+          )}
+        </div>
       ),
     },
     {
