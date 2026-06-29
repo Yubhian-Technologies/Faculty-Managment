@@ -348,8 +348,10 @@ service cloud.firestore {
       // ─── [ SHARED ] ─────────────────────────────────────────────────────────
 
       match /notifications/{notificationId} {
-        allow read: if isAuthenticated() && isStaff(collegeId) &&
-          resource.data.toUid == request.auth.uid;
+        // Any authenticated user can read/mark their own notifications.
+        // Does NOT require custom claims (role/collegeId) so it works before
+        // the first post-claim login.
+        allow read: if isAuthenticated() && resource.data.toUid == request.auth.uid;
         allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
         allow update: if isAuthenticated() && resource.data.toUid == request.auth.uid;
         allow delete: if isSuperAdmin();

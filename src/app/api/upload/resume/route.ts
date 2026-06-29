@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminStorage } from "@/lib/firebase/admin";
 
@@ -29,17 +30,24 @@ export async function POST(request: Request) {
     const filename = `${Date.now()}_${(file as File).name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const path = `colleges/${session.collegeId}/resumes/${filename}`;
 
+    // Generate a download token — this is how Firebase Storage client SDK creates
+    // permanent public-readable URLs without requiring any ACL changes or UBLA workarounds.
+    const downloadToken = randomUUID();
+
     const bucket = getAdminStorage().bucket();
     const fileRef = bucket.file(path);
 
     await fileRef.save(buffer, {
-      metadata: { contentType: "application/pdf" },
+      metadata: {
+        contentType: "application/pdf",
+        metadata: { firebaseStorageDownloadTokens: downloadToken },
+      },
       resumable: false,
     });
 
-    // Make the file publicly readable so it can be opened in browser
-    await fileRef.makePublic();
-    const url = fileRef.publicUrl();
+    // Build the Firebase Storage download URL (same format as getDownloadURL() client SDK).
+    const encodedPath = encodeURIComponent(path);
+    const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
 
     return NextResponse.json({ url }, { status: 200 });
   } catch (err) {
