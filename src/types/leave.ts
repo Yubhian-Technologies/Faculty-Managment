@@ -186,3 +186,231 @@ export interface OnDutyRequest {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Leave Module V2 — comprehensive rule-engine-driven module
+// Collections: leaveTypes (root), colleges/{id}/leaveBalancesV2,
+//              colleges/{id}/leaveRequests, colleges/{id}/employeeLeaveProfiles
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type LeaveTypeCodeV2 =
+  | "CL"    // Casual Leave
+  | "SCL"   // Special Casual Leave (teaching staff)
+  | "EL"    // Earned Leave
+  | "ML"    // Medical / Half-Pay Leave
+  | "MAT"   // Maternity Leave
+  | "FPL"   // Family Planning Leave
+  | "COMP"  // Compensatory Leave
+  | "LND"   // Leave Not Due (advance against EL)
+  | "QUAR"  // Quarantine Leave
+  | "EOL"   // Extraordinary Leave (without pay)
+  | "SAB"   // Sabbatical Leave
+  | "VAC";  // Vacation (vacation-staff entitlement)
+
+export type ApprovalChainV2 = "standard" | "management" | "medical_officer";
+export type AccrualBasis = "annual_fixed" | "per_completed_year" | "prorated" | "none";
+export type EncashPolicy = "never" | "retirement_only";
+
+export interface DurationTier {
+  label: string;
+  maxDays: number;
+  requiresCertificate: boolean;
+  minServiceYears?: number;
+  purpose?: string;
+}
+
+export interface GenderDayAllocation {
+  male: number;
+  female: number;
+  other: number;
+}
+
+export interface DepartmentLeaveOverride {
+  departmentName: string;
+  maxPerApplication?: number;
+  maxAccumulation?: number;
+  restrictedMonths?: number[]; // 1-12
+}
+
+export interface LeaveTypeRules {
+  daysPerYear?: number;
+  accrualBasis?: AccrualBasis;
+  carryForwardCap?: number;          // 0 = lapses; undefined = unlimited
+  maxPerApplication?: number;
+  minPerApplication?: number;
+  advanceNoticeDays?: number;        // 0 = can apply same day / retroactive
+  retroactiveAllowed?: boolean;
+  excludeHolidaysAndSundays?: boolean;
+  eligibility?: {
+    employmentTypes?: ("permanent" | "probation" | "training")[];
+    staffCategories?: ("vacation" | "non-vacation")[];
+    isTeachingStaffOnly?: boolean;
+    genderAllowed?: ("male" | "female" | "other")[];
+    maritalStatus?: "married";
+    minServiceYears?: number;
+    isConfirmedRequired?: boolean;
+    maxLivingChildren?: number;
+    oneTimeOnly?: boolean;
+  };
+  certificateRequiredAfterDays?: number; // 0 = always; undefined = never
+  fitnessCertRequired?: boolean;
+  linkedHolidayWorkRequired?: boolean;
+  remuneratedDutyBlocked?: boolean;
+  encashPolicy?: EncashPolicy;
+  requiresHandoverAfterDays?: number;
+  approvalChain?: ApprovalChainV2;
+  durationTiers?: DurationTier[];
+  genderDayAllocation?: GenderDayAllocation;
+  departmentOverrides?: DepartmentLeaveOverride[];
+  requiresReturnToDutyAck?: boolean;
+  isLeaveWithoutPay?: boolean;
+  isVacationEntitlement?: boolean;
+  isLeaveNotDue?: boolean;           // advance against EL; to be offset on EL credit
+}
+
+export interface LeaveTypeFull {
+  id: string;
+  code: LeaveTypeCodeV2;
+  label: string;
+  shortLabel: string;
+  description: string;
+  color: string;
+  rules: LeaveTypeRules;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// ─── Employee Leave Profile ───────────────────────────────────────────────────
+// doc path: colleges/{collegeId}/employeeLeaveProfiles/{uid}
+
+export type LeaveEmploymentType = "permanent" | "probation" | "training";
+export type StaffCategory = "vacation" | "non-vacation";
+
+export interface EmployeeLeaveProfile {
+  id: string;
+  collegeId: string;
+  uid: string;
+  employmentType: LeaveEmploymentType;
+  staffCategory: StaffCategory;
+  isTeachingStaff: boolean;
+  gender: "male" | "female" | "other";
+  maritalStatus: "married" | "unmarried";
+  dateOfJoining: Timestamp;
+  isConfirmed: boolean;
+  livingChildrenCount: number;
+  maternityLeaveUsedOnce: boolean;
+  retirementDate?: Timestamp;
+  department?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── Leave Balance V2 ─────────────────────────────────────────────────────────
+// doc path: colleges/{collegeId}/leaveBalancesV2/{uid}_{leaveTypeCode}_{year}
+
+export interface LeaveBalanceV2 {
+  id: string;
+  collegeId: string;
+  uid: string;
+  leaveTypeCode: LeaveTypeCodeV2;
+  year: number;
+  opening: number;
+  credited: number;
+  used: number;
+  pending: number;
+  carriedForward: number;
+  updatedAt: Timestamp;
+}
+
+// ─── Leave Request V2 ─────────────────────────────────────────────────────────
+// doc path: colleges/{collegeId}/leaveRequests/{id}
+
+export type LeaveRequestStatus =
+  | "DRAFT"
+  | "PENDING_HOD"
+  | "PENDING_RATIFICATION"
+  | "PENDING_MANAGEMENT"
+  | "PENDING_MEDICAL_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "RECALLED"
+  | "CANCELLED";
+
+export const LEAVE_REQUEST_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
+  DRAFT: "Draft",
+  PENDING_HOD: "Pending HOD",
+  PENDING_RATIFICATION: "Pending Ratification",
+  PENDING_MANAGEMENT: "Pending Management",
+  PENDING_MEDICAL_REVIEW: "Pending Medical Review",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  RECALLED: "Recalled",
+  CANCELLED: "Cancelled",
+};
+
+export interface LeaveRequestV2 {
+  id: string;
+  collegeId: string;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  leaveTypeCode: LeaveTypeCodeV2;
+  fromDate: Timestamp;
+  toDate: Timestamp;
+  computedDays: number;
+  isHalfDay?: boolean;
+  halfDaySession?: "MORNING" | "AFTERNOON";
+  reason: string;
+  leaveAddress: string;
+  contactNumber: string;
+  substituteArrangement?: string;
+  handoverToUserId?: string;
+  handoverNotes?: string;
+  medicalCertificateUrl?: string;
+  fitnessCertificateUrl?: string;
+  linkedHolidayWorkId?: string;
+  otherEmploymentAck: boolean;
+  status: LeaveRequestStatus;
+  currentApproverRole?: string;
+  isExceptionFlag?: boolean;
+  exceptionComment?: string;
+  appliedOn: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface LeaveApprovalStepV2 {
+  id: string;
+  collegeId: string;
+  applicationId: string;
+  approverRole: string;
+  approverId?: string;
+  approverName?: string;
+  sequence: number;
+  action?: "APPROVED" | "REJECTED" | "RECALLED";
+  comments?: string;
+  actedOn?: Timestamp;
+  createdAt: Timestamp;
+}
+
+export interface ValidationResult {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  severity?: "error" | "warning";
+}
+
+export interface LeaveValidationContext {
+  fromDate: Date;
+  toDate: Date;
+  computedDays: number;
+  leaveTypeCode: LeaveTypeCodeV2;
+  leaveType: LeaveTypeFull;
+  profile: EmployeeLeaveProfile;
+  currentBalance: LeaveBalanceV2 | null;
+  holidayDates: Set<string>;
+  today: Date;
+  reason?: string;
+}
