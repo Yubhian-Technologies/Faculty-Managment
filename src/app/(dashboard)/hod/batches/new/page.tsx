@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
+import { ShieldCheck } from "lucide-react";
 import { ROLE_LABELS } from "@/types";
 import type { VacancyRequest, Candidate, FMSUser } from "@/types";
 
@@ -24,7 +25,8 @@ export default function NewBatchPage() {
 
   const [selectedVacancyId, setSelectedVacancyId] = useState("");
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
-  const [selectedPanel, setSelectedPanel] = useState<string[]>([]);
+  // HOD is always a default panel member — initialise with their uid
+  const [selectedPanel, setSelectedPanel] = useState<string[]>(() => user?.uid ? [user.uid] : []);
   const [interviewDate, setInterviewDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -43,9 +45,11 @@ export default function NewBatchPage() {
       .then(([v, c, s]) => {
         setVacancies(v);
         setCandidates(c);
-        // Panel members: Principal, Vice Principal, HOD, Panel Member — exclude self
+        // Panel members: Principal, Vice Principal, HOD, Panel Member — exclude self (shown separately as default)
         const PANEL_ELIGIBLE = ["PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER"];
         setStaffList(s.filter((u) => u.uid !== user?.uid && PANEL_ELIGIBLE.includes(u.role)));
+        // Ensure HOD uid is always pre-selected even if user loaded asynchronously
+        if (user?.uid) setSelectedPanel((prev) => prev.includes(user.uid!) ? prev : [user.uid!, ...prev]);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load data" }));
   }, [user?.uid]);
@@ -75,7 +79,7 @@ export default function NewBatchPage() {
     e.preventDefault();
     if (!selectedVacancyId) { toast({ variant: "destructive", title: "Select a vacancy" }); return; }
     if (selectedCandidates.length === 0) { toast({ variant: "destructive", title: "Select at least one candidate" }); return; }
-    if (selectedPanel.length < 2) { toast({ variant: "destructive", title: "Select at least 2 panel members" }); return; }
+    if (selectedPanel.length < 2) { toast({ variant: "destructive", title: "Select at least 1 additional panel member (you are already included)" }); return; }
     if (!interviewDate) { toast({ variant: "destructive", title: "Set an interview date" }); return; }
 
     const vacancy = vacancies.find((v) => v.id === selectedVacancyId)!;
@@ -197,19 +201,30 @@ export default function NewBatchPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Step 4: Select Panel Members (min 2)
-              {selectedPanel.length > 0 && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {selectedPanel.length} selected
-                </span>
-              )}
+              Step 4: Select Panel Members
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {selectedPanel.length} selected (min 2)
+              </span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+
+            {/* HOD — locked default member */}
+            <div className="flex items-center gap-3 p-2.5 border-2 border-primary/30 bg-primary/5 rounded-lg">
+              <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{user?.name ?? "You"}</p>
+                <p className="text-xs text-muted-foreground">Head of Department · {user?.department ?? ""}</p>
+              </div>
+              <span className="text-[10px] font-semibold bg-primary text-primary-foreground px-2 py-0.5 rounded-full shrink-0">
+                Default
+              </span>
+            </div>
+
             {staffList.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No staff members available.</p>
+              <p className="text-sm text-muted-foreground">No other staff members available.</p>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto">
                 {staffList.map((s) => (
                   <div key={s.uid} className="flex items-center gap-3 p-2 border rounded-lg">
                     <Checkbox
