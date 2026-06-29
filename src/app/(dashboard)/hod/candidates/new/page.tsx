@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { storage } from "@/lib/firebase/client";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
+import { FileText, UploadCloud, X } from "lucide-react";
 import type { Department, VacancyRequest } from "@/types";
 
 const schema = z.object({
@@ -27,11 +30,20 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
 export default function NewCandidatePage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
+
+  // Resume upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [resumeUrl, setResumeUrl] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/departments")
@@ -48,7 +60,6 @@ export default function NewCandidatePage() {
     register,
     handleSubmit,
     setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -58,14 +69,70 @@ export default function NewCandidatePage() {
     },
   });
 
-  const source = watch("source");
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast({ variant: "destructive", title: "Only PDF files are accepted" });
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      toast({ variant: "destructive", title: "File too large", description: "Maximum size is 5 MB" });
+      return;
+    }
+    setResumeFile(file);
+    setResumeUrl(""); // reset previous upload if file changed
+  }
+
+  function clearResume() {
+    setResumeFile(null);
+    setResumeUrl("");
+    setUploadProgress(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function uploadResume(): Promise<string> {
+    if (!resumeFile || !user?.collegeId) return "";
+    setIsUploading(true);
+    return new Promise((resolve, reject) => {
+      const path = `colleges/${user.collegeId}/resumes/${Date.now()}_${resumeFile.name}`;
+      const storageRef = ref(storage, path);
+      const task = uploadBytesResumable(storageRef, resumeFile);
+      task.on(
+        "state_changed",
+        (snap) => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+        (err) => { setIsUploading(false); reject(err); },
+        async () => {
+          const url = await getDownloadURL(task.snapshot.ref);
+          setResumeUrl(url);
+          setIsUploading(false);
+          resolve(url);
+        }
+      );
+    });
+  }
 
   const onSubmit = async (data: FormData) => {
+    if (!resumeFile && !resumeUrl) {
+      toast({ variant: "destructive", title: "Resume required", description: "Please upload the candidate's resume (PDF)" });
+      return;
+    }
+
+    let finalResumeUrl = resumeUrl;
+    if (resumeFile && !resumeUrl) {
+      try {
+        finalResumeUrl = await uploadResume();
+      } catch {
+        toast({ variant: "destructive", title: "Resume upload failed", description: "Please try again" });
+        return;
+      }
+    }
+
     try {
       const res = await fetch("/api/college/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, resumeUrl: finalResumeUrl }),
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
@@ -78,6 +145,8 @@ export default function NewCandidatePage() {
       toast({ variant: "destructive", title: "Network error" });
     }
   };
+
+  const isBusy = isSubmitting || isUploading;
 
   return (
     <div className="max-w-xl">
@@ -167,9 +236,58 @@ export default function NewCandidatePage() {
               </div>
             )}
 
+            {/* Resume Upload */}
+            <div className="space-y-2">
+              <Label>Resume * <span className="text-xs font-normal text-muted-foreground">(PDF, max 5 MB)</span></Label>
+
+              {!resumeFile ? (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex flex-col items-center justify-center gap-2 border-2 border-dashed border-muted-foreground/30 rounded-lg p-6 text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                >
+                  <UploadCloud className="h-7 w-7" />
+                  <span className="text-sm font-medium">Click to upload resume</span>
+                  <span className="text-xs">PDF only</span>
+                </button>
+              ) : (
+                <div className="border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{resumeFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(resumeFile.size / 1024).toFixed(0)} KB
+                        {resumeUrl && <span className="ml-2 text-green-600 font-medium">Uploaded</span>}
+                      </p>
+                    </div>
+                    <button type="button" onClick={clearResume} className="text-muted-foreground hover:text-destructive">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {uploadProgress !== null && !resumeUrl && (
+                    <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-primary h-1.5 rounded-full transition-all duration-200"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+            </div>
+
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={isSubmitting}>Add Candidate</Button>
+              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isBusy}>Cancel</Button>
+              <Button type="submit" loading={isBusy}>Add Candidate</Button>
             </div>
           </form>
         </CardContent>

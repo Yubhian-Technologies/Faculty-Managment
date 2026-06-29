@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, UserCheck, UserX } from "lucide-react";
+import { ExternalLink, Plus, UserCheck, UserX } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,19 @@ export default function HODCandidatesPage() {
           <p className="font-medium">{row.name as string}</p>
           <p className="text-xs text-muted-foreground">{row.email as string}</p>
           <p className="text-xs text-muted-foreground">{row.phone as string}</p>
+          {row.resumeUrl ? (
+            <a
+              href={row.resumeUrl as string}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-0.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3 w-3" /> Resume
+            </a>
+          ) : (
+            <span className="text-xs text-muted-foreground/60 mt-0.5 block">No resume</span>
+          )}
         </div>
       ),
     },
