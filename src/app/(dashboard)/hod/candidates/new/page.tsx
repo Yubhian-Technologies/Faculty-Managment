@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { storage } from "@/lib/firebase/client";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,24 +90,26 @@ export default function NewCandidatePage() {
   }
 
   async function uploadResume(): Promise<string> {
-    if (!resumeFile || !user?.collegeId) return "";
+    if (!resumeFile) return "";
     setIsUploading(true);
-    return new Promise((resolve, reject) => {
-      const path = `colleges/${user.collegeId}/resumes/${Date.now()}_${resumeFile.name}`;
-      const storageRef = ref(storage, path);
-      const task = uploadBytesResumable(storageRef, resumeFile);
-      task.on(
-        "state_changed",
-        (snap) => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-        (err) => { setIsUploading(false); reject(err); },
-        async () => {
-          const url = await getDownloadURL(task.snapshot.ref);
-          setResumeUrl(url);
-          setIsUploading(false);
-          resolve(url);
-        }
-      );
-    });
+    setUploadProgress(0);
+    try {
+      const fd = new FormData();
+      fd.append("file", resumeFile);
+      const ticker = setInterval(() => setUploadProgress((p) => Math.min((p ?? 0) + 10, 85)), 200);
+      const res = await fetch("/api/upload/resume", { method: "POST", body: fd });
+      clearInterval(ticker);
+      setUploadProgress(100);
+      if (!res.ok) {
+        const json = await res.json() as { error?: string };
+        throw new Error(json.error ?? "Upload failed");
+      }
+      const { url } = await res.json() as { url: string };
+      setResumeUrl(url);
+      return url;
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   const onSubmit = async (data: FormData) => {

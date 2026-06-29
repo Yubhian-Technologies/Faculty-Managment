@@ -1,17 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-  updateDoc,
-  doc,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { useCallback, useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import type { AppNotification } from "@/types";
+
+const POLL_INTERVAL = 30_000; // 30 seconds
 
 export function useNotifications() {
   const user = useAuthStore((s) => s.user);
@@ -19,50 +12,48 @@ export function useNotifications() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user?.uid || !user?.collegeId) {
-      setLoading(false);
-      return;
-    }
-
-    const ref = collection(db, "colleges", user.collegeId, "notifications");
-    // Single-field where() avoids the composite index requirement.
-    // Sort and slice client-side until the index is deployed.
-    const q = query(ref, where("toUid", "==", user.uid));
-
-    const unsub = onSnapshot(q, (snap) => {
-      const notifs = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }) as AppNotification)
-        .sort((a, b) => {
-          const at = a.createdAt?.toMillis?.() ?? 0;
-          const bt = b.createdAt?.toMillis?.() ?? 0;
-          return bt - at;
-        })
-        .slice(0, 30);
+  const load = useCallback(async () => {
+    if (!user?.uid || !user?.collegeId) { setLoading(false); return; }
+    try {
+      const res = await fetch("/api/college/notifications");
+      if (!res.ok) return;
+      const data = await res.json() as { notifications: AppNotification[] };
+      const notifs = data.notifications ?? [];
       setNotifications(notifs);
       setUnreadCount(notifs.filter((n) => !n.read).length);
+    } catch {
+      // non-fatal — notifications are a nice-to-have
+    } finally {
       setLoading(false);
-    });
-
-    return unsub;
+    }
   }, [user?.uid, user?.collegeId]);
 
+  useEffect(() => {
+    void load();
+    const id = setInterval(() => { void load(); }, POLL_INTERVAL);
+    return () => clearInterval(id);
+  }, [load]);
+
   const markRead = async (notificationId: string) => {
-    if (!user?.collegeId) return;
-    const ref = doc(
-      db,
-      "colleges",
-      user.collegeId,
-      "notifications",
-      notificationId
+    setNotifications((prev) =>
+      prev.map((n) => n.id === notificationId ? { ...n, read: true } : n)
     );
-    await updateDoc(ref, { read: true });
+    setUnreadCount((c) => Math.max(0, c - 1));
+    await fetch("/api/college/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: notificationId }),
+    });
   };
 
   const markAllRead = async () => {
-    await Promise.all(
-      notifications.filter((n) => !n.read).map((n) => markRead(n.id))
-    );
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+    await fetch("/api/college/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markAll: true }),
+    });
   };
 
   return { notifications, unreadCount, loading, markRead, markAllRead };
