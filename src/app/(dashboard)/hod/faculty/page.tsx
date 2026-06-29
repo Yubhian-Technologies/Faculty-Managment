@@ -19,11 +19,22 @@ import type { FacultyMember, Designation, EmploymentType, FacultyStatus } from "
 function fmtDate(val: unknown): string {
   if (!val) return "—";
   try {
-    const d = typeof (val as { toDate?: () => Date }).toDate === "function"
-      ? (val as { toDate: () => Date }).toDate()
-      : new Date(((val as { seconds?: number }).seconds ?? 0) * 1000);
+    const ts = val as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
+    const d = typeof ts?.toDate === "function"
+      ? ts.toDate()
+      : ts?._seconds != null
+        ? new Date(ts._seconds * 1000)
+        : ts?.seconds != null
+          ? new Date(ts.seconds * 1000)
+          : null;
+    if (!d || isNaN(d.getTime())) return "—";
     return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   } catch { return "—"; }
+}
+
+function fmtExp(val: unknown): string {
+  if (val == null || val === "") return "0";
+  return String(+(Number(val).toFixed(1)));
 }
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
@@ -289,12 +300,12 @@ export default function HODFacultyPage() {
       hideOnMobile: true,
       render: (row) => (
         <div className="space-y-0.5">
-          <p className="text-sm font-medium">{(row.experienceYears as number) ?? 0} yrs</p>
-          {(row.internalExperience as number) != null && (row.internalExperience as number) > 0 && (
-            <p className="text-xs text-muted-foreground">Int: {row.internalExperience as number} · Ext: {(row.externalExperience as number) ?? 0}</p>
+          <p className="text-sm font-medium">{fmtExp(row.experienceYears)} yrs</p>
+          {Number(row.internalExperience) > 0 && (
+            <p className="text-xs text-muted-foreground">Int: {fmtExp(row.internalExperience)} · Ext: {fmtExp(row.externalExperience)}</p>
           )}
-          {(row.industryExperience as number) != null && (row.industryExperience as number) > 0 && (
-            <p className="text-xs text-muted-foreground">Industry: {row.industryExperience as number} yrs</p>
+          {Number(row.industryExperience) > 0 && (
+            <p className="text-xs text-muted-foreground">Industry: {fmtExp(row.industryExperience)} yrs</p>
           )}
         </div>
       ),
