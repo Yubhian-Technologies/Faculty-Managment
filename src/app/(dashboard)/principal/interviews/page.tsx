@@ -33,7 +33,7 @@ export default function PrincipalInterviewsPage() {
   const [loadingCandidates, setLoadingCandidates] = useState(false);
 
   // Action state
-  const [action, setAction] = useState<"approve" | "reject" | "modify" | null>(null);
+  const [action, setAction] = useState<"approve" | "reject" | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -63,7 +63,7 @@ export default function PrincipalInterviewsPage() {
     if (!detailBatch || !action) return;
     setLoading(true);
     try {
-      const statusMap = { approve: "APPROVED", reject: "REJECTED", modify: "MODIFIED" } as const;
+      const statusMap = { approve: "APPROVED", reject: "REJECTED" } as const;
       const res = await fetch(`/api/college/hiring-batches/${detailBatch.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -130,9 +130,6 @@ export default function PrincipalInterviewsPage() {
             <>
               <Button size="sm" onClick={(e) => { e.stopPropagation(); openDetail(row); setAction("approve"); }}>
                 Approve
-              </Button>
-              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openDetail(row); setAction("modify"); }}>
-                Modify
               </Button>
               <Button size="sm" variant="destructive" onClick={(e) => { e.stopPropagation(); openDetail(row); setAction("reject"); }}>
                 Reject
@@ -267,20 +264,15 @@ export default function PrincipalInterviewsPage() {
                   >Approve</Button>
                   <Button
                     size="sm"
-                    variant={action === "modify" ? "default" : "outline"}
-                    onClick={() => setAction("modify")}
-                  >Request Changes</Button>
-                  <Button
-                    size="sm"
                     variant={action === "reject" ? "destructive" : "outline"}
                     onClick={() => setAction("reject")}
                     className={action !== "reject" ? "text-destructive border-destructive hover:bg-destructive/10" : ""}
                   >Reject</Button>
                 </div>
 
-                {(action === "reject" || action === "modify") && (
+                {action === "reject" && (
                   <div className="space-y-1.5">
-                    <Label>Notes {action === "modify" ? "*" : "(optional)"}</Label>
+                    <Label>Notes (optional)</Label>
                     <Textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
@@ -302,9 +294,9 @@ export default function PrincipalInterviewsPage() {
                 variant={action === "reject" ? "destructive" : "default"}
                 onClick={handleAction}
                 loading={loading}
-                disabled={action === "modify" && !notes.trim()}
+                disabled={false}
               >
-                {action === "approve" ? "Approve Plan" : action === "reject" ? "Reject Plan" : "Send for Modification"}
+                {action === "approve" ? "Approve Plan" : "Reject Plan"}
               </Button>
             </DialogFooter>
           )}
