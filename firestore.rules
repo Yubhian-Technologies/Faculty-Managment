@@ -30,7 +30,7 @@ service cloud.firestore {
     }
 
     function isPrincipal(collegeId) {
-      return isCollegeMember(collegeId) && hasAnyRole(['PRINCIPAL', 'SUPER_ADMIN']);
+      return isCollegeMember(collegeId) && hasAnyRole(['PRINCIPAL', 'VICE_PRINCIPAL', 'SUPER_ADMIN']);
     }
 
     function isHOD(collegeId) {
@@ -51,16 +51,16 @@ service cloud.firestore {
 
     function isStaff(collegeId) {
       return isCollegeMember(collegeId) && hasAnyRole([
-        'PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'SUPER_ADMIN'
+        'PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'SUPER_ADMIN'
       ]);
     }
 
     function isHODorAbove(collegeId) {
-      return isCollegeMember(collegeId) && hasAnyRole(['HOD', 'PRINCIPAL', 'SUPER_ADMIN']);
+      return isCollegeMember(collegeId) && hasAnyRole(['HOD', 'PRINCIPAL', 'VICE_PRINCIPAL', 'SUPER_ADMIN']);
     }
 
     function isPrincipalOrOffice(collegeId) {
-      return isCollegeMember(collegeId) && hasAnyRole(['PRINCIPAL', 'COLLEGE_OFFICE', 'SUPER_ADMIN']);
+      return isCollegeMember(collegeId) && hasAnyRole(['PRINCIPAL', 'VICE_PRINCIPAL', 'COLLEGE_OFFICE', 'SUPER_ADMIN']);
     }
 
     function isOwner(uid) {

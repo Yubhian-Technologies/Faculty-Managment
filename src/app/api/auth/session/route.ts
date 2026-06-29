@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
 
 export async function POST(request: Request) {
   try {
@@ -23,6 +23,8 @@ export async function POST(request: Request) {
     let name = (decoded.name as string) ?? "";
     let email = decoded.email ?? "";
 
+    let claimsWereSet = !!role; // already in token — no need to backfill
+
     if (!role) {
       try {
         const db = getAdminDb();
@@ -39,6 +41,18 @@ export async function POST(request: Request) {
       } catch {
         role = "UNKNOWN";
       }
+    }
+
+    // Backfill Firebase Auth custom claims so client-side Firestore rules work.
+    // Only write when claims were missing from the token (avoid redundant writes).
+    if (!claimsWereSet && role !== "UNKNOWN") {
+      try {
+        const adminAuth = await getAdminAuth();
+        const claims: Record<string, string> = { role };
+        if (collegeId) claims.collegeId = collegeId;
+        if (locationId) claims.locationId = locationId;
+        await adminAuth.setCustomUserClaims(decoded.uid, claims);
+      } catch { /* non-fatal — session still works without custom claims */ }
     }
 
     // Fetch full Firestore user profile server-side (bypasses security rules).
@@ -87,7 +101,7 @@ export async function POST(request: Request) {
     const sessionPayload = Buffer.from(JSON.stringify(sessionData)).toString("base64");
     const sessionCookie = `header.${sessionPayload}.signature`;
 
-    const response = NextResponse.json({ ok: true, role, collegeId, locationId, name, email, profile });
+    const response = NextResponse.json({ ok: true, role, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

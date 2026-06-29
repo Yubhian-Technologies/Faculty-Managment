@@ -17,7 +17,7 @@ service firebase.storage {
 
     function isStaff(collegeId) {
       return isSuperAdmin() || (belongsToCollege(collegeId) &&
-        request.auth.token.role in ['PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS']);
+        request.auth.token.role in ['PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS']);
     }
 
     function isValidResume() {

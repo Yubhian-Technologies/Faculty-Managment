@@ -73,7 +73,15 @@ function LoginForm() {
         name?: string;
         email?: string;
         profile?: FMSUser;
+        refreshToken?: boolean;
       };
+
+      // Server just backfilled custom claims — force a token refresh so the new
+      // claims are included in the client's Firebase Auth token. This makes
+      // client-side Firestore security rules work on first login.
+      if (sessionData.refreshToken) {
+        try { await credential.user.getIdToken(true); } catch { /* non-fatal */ }
+      }
       const role = sessionData.role ?? "";
       const collegeId = sessionData.collegeId ?? "";
       const locationId = sessionData.locationId ?? "";
