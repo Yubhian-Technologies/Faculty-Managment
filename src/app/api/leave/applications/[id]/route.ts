@@ -38,16 +38,17 @@ async function notify(
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "SUPER_ADMIN"
     );
 
     const db = getAdminDb();
-    const snap = await REQUESTS_COL(session.collegeId, db).doc(params.id).get();
+    const snap = await REQUESTS_COL(session.collegeId, db).doc(id).get();
 
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -62,7 +63,7 @@ export async function GET(
     const stepsSnap = await db
       .collection("colleges").doc(session.collegeId)
       .collection("leaveApprovalSteps")
-      .where("applicationId", "==", params.id)
+      .where("applicationId", "==", id)
       .get();
     type StepDoc = { id: string; sequence?: number };
     const steps = (stepsSnap.docs
@@ -83,9 +84,10 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"
     );
@@ -96,7 +98,7 @@ export async function PATCH(
     };
 
     const db = getAdminDb();
-    const reqRef = REQUESTS_COL(session.collegeId, db).doc(params.id);
+    const reqRef = REQUESTS_COL(session.collegeId, db).doc(id);
     const snap = await reqRef.get();
 
     if (!snap.exists) {
@@ -153,7 +155,7 @@ export async function PATCH(
         await db.collection("colleges").doc(session.collegeId)
           .collection("leaveApprovalSteps").add({
             collegeId: session.collegeId,
-            applicationId: params.id,
+            applicationId: id,
             approverRole: "HOD",
             approverId: session.uid,
             approverName: hodName,
@@ -172,7 +174,7 @@ export async function PATCH(
             "LEAVE_REJECTED",
             `${ltLabel} Leave Rejected`,
             `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was rejected by ${hodName}.${body.comments ? " Remarks: " + body.comments : ""}`,
-            `${leaveBase}/${params.id}`
+            `${leaveBase}/${id}`
           );
         } else {
           await notify(
@@ -180,7 +182,7 @@ export async function PATCH(
             "GENERAL",
             `${ltLabel} Leave — Pending Principal Approval`,
             `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was approved by ${hodName} and is now awaiting Principal's approval.`,
-            `${leaveBase}/${params.id}`
+            `${leaveBase}/${id}`
           );
         }
 
@@ -205,7 +207,7 @@ export async function PATCH(
         await db.collection("colleges").doc(session.collegeId)
           .collection("leaveApprovalSteps").add({
             collegeId: session.collegeId,
-            applicationId: params.id,
+            applicationId: id,
             approverRole: session.role,
             approverId: session.uid,
             approverName: principalName,
@@ -243,7 +245,7 @@ export async function PATCH(
             "LEAVE_APPROVED",
             `${ltLabel} Leave Approved`,
             `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) has been approved by ${principalName}.`,
-            `${leaveBase}/${params.id}`
+            `${leaveBase}/${id}`
           );
         } else {
           await notify(
@@ -251,7 +253,7 @@ export async function PATCH(
             "LEAVE_REJECTED",
             `${ltLabel} Leave Rejected`,
             `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was rejected by ${principalName}.${body.comments ? " Remarks: " + body.comments : ""}`,
-            `${leaveBase}/${params.id}`
+            `${leaveBase}/${id}`
           );
         }
 
