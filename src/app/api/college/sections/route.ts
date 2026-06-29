@@ -55,6 +55,7 @@ export async function POST(request: Request) {
       name: string;
       year: number;
       batch: string;
+      studentCount?: number;
       facultyInchargeUid?: string;
       facultyInchargeName?: string;
     };
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
       batch: body.batch.trim(),
       facultyInchargeUid: body.facultyInchargeUid ?? null,
       facultyInchargeName: body.facultyInchargeName ?? "",
-      studentCount: 0,
+      studentCount: body.studentCount != null ? Math.max(0, Number(body.studentCount)) : 0,
       createdAt: now,
       updatedAt: now,
     });

@@ -36,10 +36,13 @@ const YEAR_BADGE: Record<number, string> = {
   4: "bg-amber-100 text-amber-700",
 };
 
+const STUDENT_FACULTY_RATIO = 15;
+
 type SectionForm = {
   name: string;
   year: string;
   batch: string;
+  studentCount: number | "";
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
@@ -48,6 +51,7 @@ const EMPTY_FORM: SectionForm = {
   name: "",
   year: "2",
   batch: "",
+  studentCount: "",
   facultyInchargeUid: "",
   facultyInchargeName: "",
 };
@@ -108,6 +112,7 @@ export default function HODSectionsPage() {
       name: s.name,
       year: String(s.year),
       batch: s.batch,
+      studentCount: s.studentCount ?? "",
       facultyInchargeUid: s.facultyInchargeUid ?? "",
       facultyInchargeName: s.facultyInchargeName ?? "",
     });
@@ -134,6 +139,7 @@ export default function HODSectionsPage() {
         name: form.name,
         year: Number(form.year),
         batch: form.batch,
+        studentCount: form.studentCount === "" ? 0 : Number(form.studentCount),
         facultyInchargeUid: form.facultyInchargeUid || null,
         facultyInchargeName: form.facultyInchargeName,
       };
@@ -218,6 +224,15 @@ export default function HODSectionsPage() {
           <Users className="h-4 w-4" />
           <span><strong className="text-foreground">{totalStudents}</strong> students total</span>
         </div>
+        {totalStudents > 0 && (
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <UserCog className="h-4 w-4" />
+            <span>
+              <strong className="text-foreground">{Math.ceil(totalStudents / STUDENT_FACULTY_RATIO)}</strong> faculty needed
+              <span className="ml-1 text-xs">(1:{STUDENT_FACULTY_RATIO} ratio)</span>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Year filter tabs */}
@@ -270,9 +285,16 @@ export default function HODSectionsPage() {
               <div key={y}>
                 <div className="flex items-center gap-3 mb-3">
                   <h2 className="font-semibold text-base">{YEAR_LABELS[y]}</h2>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${YEAR_BADGE[y]}`}>
-                    {list.length} section{list.length !== 1 ? "s" : ""} · {list.reduce((s, r) => s + (r.studentCount ?? 0), 0)} students
-                  </span>
+                  {(() => {
+                    const sts = list.reduce((s, r) => s + (r.studentCount ?? 0), 0);
+                    const req = sts > 0 ? Math.ceil(sts / STUDENT_FACULTY_RATIO) : 0;
+                    return (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${YEAR_BADGE[y]}`}>
+                        {list.length} section{list.length !== 1 ? "s" : ""} · {sts} students
+                        {req > 0 && <span className="ml-1 opacity-75">· {req} faculty needed</span>}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -316,13 +338,22 @@ export default function HODSectionsPage() {
                         </span>
                       </div>
 
-                      {/* Student count */}
+                      {/* Student intake + faculty ratio */}
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 opacity-50 shrink-0" />
                         <span className="text-sm">
-                          <strong>{sec.studentCount ?? 0}</strong> student{(sec.studentCount ?? 0) !== 1 ? "s" : ""}
+                          <strong>{sec.studentCount ?? 0}</strong> students
                         </span>
                       </div>
+                      {(sec.studentCount ?? 0) > 0 && (
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <GraduationCap className="h-4 w-4 opacity-50 shrink-0" />
+                          <span className="text-sm">
+                            <strong>{Math.ceil((sec.studentCount ?? 0) / STUDENT_FACULTY_RATIO)}</strong> faculty needed
+                            <span className="text-[11px] opacity-60 ml-1">(1:{STUDENT_FACULTY_RATIO})</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -374,6 +405,22 @@ export default function HODSectionsPage() {
                 placeholder="e.g. 2023-2027"
               />
               <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Student Intake</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.studentCount}
+                onChange={(e) => setF({ studentCount: e.target.value === "" ? "" : Number(e.target.value) })}
+                placeholder="e.g. 60"
+              />
+              {form.studentCount !== "" && Number(form.studentCount) > 0 && (
+                <p className="text-xs text-blue-600 font-medium">
+                  Faculty required (1:{STUDENT_FACULTY_RATIO} ratio): {Math.ceil(Number(form.studentCount) / STUDENT_FACULTY_RATIO)}
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">

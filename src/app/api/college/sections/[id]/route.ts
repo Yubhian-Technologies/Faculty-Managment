@@ -15,6 +15,7 @@ export async function PATCH(
       name?: string;
       year?: number;
       batch?: string;
+      studentCount?: number;
       facultyInchargeUid?: string | null;
       facultyInchargeName?: string;
     };
@@ -28,6 +29,7 @@ export async function PATCH(
     if (body.name != null) updates.name = body.name.trim().toUpperCase();
     if (body.year != null) updates.year = Number(body.year);
     if (body.batch != null) updates.batch = body.batch.trim();
+    if (body.studentCount != null) updates.studentCount = Math.max(0, Number(body.studentCount));
     if ("facultyInchargeUid" in body) updates.facultyInchargeUid = body.facultyInchargeUid ?? null;
     if (body.facultyInchargeName != null) updates.facultyInchargeName = body.facultyInchargeName;
 
