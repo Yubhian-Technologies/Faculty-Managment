@@ -15,18 +15,26 @@ import { ShieldCheck } from "lucide-react";
 import { ROLE_LABELS } from "@/types";
 import type { VacancyRequest, Candidate, FMSUser } from "@/types";
 
+const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL"] as const;
+const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
+
 export default function NewBatchPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  // Always-included locked panel members (Principal, VP — fetched)
+  const [defaultMembers, setDefaultMembers] = useState<FMSUser[]>([]);
+  // Selectable: other HODs + PANEL_MEMBER
   const [staffList, setStaffList] = useState<FMSUser[]>([]);
 
   const [selectedVacancyId, setSelectedVacancyId] = useState("");
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
-  // HOD is always a default panel member — initialise with their uid
-  const [selectedPanel, setSelectedPanel] = useState<string[]>(() => user?.uid ? [user.uid] : []);
+  // selectedPanel includes HOD + all defaults; extras toggled by user
+  const [selectedPanel, setSelectedPanel] = useState<string[]>(() =>
+    user?.uid ? [user.uid] : []
+  );
   const [interviewDate, setInterviewDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -45,14 +53,41 @@ export default function NewBatchPage() {
       .then(([v, c, s]) => {
         setVacancies(v);
         setCandidates(c);
-        // Panel members: Principal, Vice Principal, HOD, Panel Member — exclude self (shown separately as default)
-        const PANEL_ELIGIBLE = ["PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER"];
-        setStaffList(s.filter((u) => u.uid !== user?.uid && PANEL_ELIGIBLE.includes(u.role)));
-        // Ensure HOD uid is always pre-selected even if user loaded asynchronously
-        if (user?.uid) setSelectedPanel((prev) => prev.includes(user.uid!) ? prev : [user.uid!, ...prev]);
+
+        // Locked defaults: Principal + VP (excluding self, though unlikely)
+        const defaults = s.filter(
+          (u) => u.uid !== user?.uid && (DEFAULT_ROLES as readonly string[]).includes(u.role)
+        );
+        setDefaultMembers(defaults);
+
+        // Selectable: other HODs + PANEL_MEMBER (excluding self)
+        setStaffList(
+          s.filter(
+            (u) => u.uid !== user?.uid && (SELECTABLE_ROLES as readonly string[]).includes(u.role)
+          )
+        );
+
+        // Build full default uid set: HOD + all Principals + all VPs
+        const defaultUids = [
+          ...(user?.uid ? [user.uid] : []),
+          ...defaults.map((u) => u.uid),
+        ];
+        setSelectedPanel((prev) => {
+          const merged = [...prev];
+          for (const uid of defaultUids) {
+            if (!merged.includes(uid)) merged.push(uid);
+          }
+          return merged;
+        });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load data" }));
   }, [user?.uid]);
+
+  // Uids that must always stay in selectedPanel
+  const lockedUids = new Set([
+    ...(user?.uid ? [user.uid] : []),
+    ...defaultMembers.map((u) => u.uid),
+  ]);
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
   const filteredCandidates = selectedVacancy
@@ -70,6 +105,7 @@ export default function NewBatchPage() {
   }
 
   function togglePanel(uid: string) {
+    if (lockedUids.has(uid)) return; // cannot deselect locked members
     setSelectedPanel((prev) =>
       prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]
     );
@@ -79,7 +115,6 @@ export default function NewBatchPage() {
     e.preventDefault();
     if (!selectedVacancyId) { toast({ variant: "destructive", title: "Select a vacancy" }); return; }
     if (selectedCandidates.length === 0) { toast({ variant: "destructive", title: "Select at least one candidate" }); return; }
-    if (selectedPanel.length < 2) { toast({ variant: "destructive", title: "Select at least 1 additional panel member (you are already included)" }); return; }
     if (!interviewDate) { toast({ variant: "destructive", title: "Set an interview date" }); return; }
 
     const vacancy = vacancies.find((v) => v.id === selectedVacancyId)!;
@@ -110,6 +145,8 @@ export default function NewBatchPage() {
       setIsSubmitting(false);
     }
   }
+
+  const extraSelected = selectedPanel.filter((uid) => !lockedUids.has(uid)).length;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -201,28 +238,40 @@ export default function NewBatchPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Step 4: Select Panel Members
+              Step 4: Panel Members
               <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {selectedPanel.length} selected (min 2)
+                {selectedPanel.length} total ({lockedUids.size} default
+                {extraSelected > 0 && ` + ${extraSelected} selected`})
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
 
-            {/* HOD — locked default member */}
-            <div className="flex items-center gap-3 p-2.5 border-2 border-primary/30 bg-primary/5 rounded-lg">
-              <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{user?.name ?? "You"}</p>
-                <p className="text-xs text-muted-foreground">Head of Department · {user?.department ?? ""}</p>
-              </div>
-              <span className="text-[10px] font-semibold bg-primary text-primary-foreground px-2 py-0.5 rounded-full shrink-0">
-                Default
-              </span>
-            </div>
+            {/* HOD — locked */}
+            <DefaultMemberRow
+              name={user?.name ?? "You"}
+              subtitle={`Head of Department${user?.department ? ` · ${user.department}` : ""}`}
+            />
 
+            {/* Principal + VP — locked */}
+            {defaultMembers.map((m) => (
+              <DefaultMemberRow
+                key={m.uid}
+                name={m.name}
+                subtitle={ROLE_LABELS[m.role] ?? m.role}
+              />
+            ))}
+
+            {/* Divider */}
+            {staffList.length > 0 && (
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide pt-1">
+                Additional members (optional)
+              </p>
+            )}
+
+            {/* Selectable: other HODs + PANEL_MEMBER */}
             {staffList.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No other staff members available.</p>
+              <p className="text-sm text-muted-foreground">No additional staff available.</p>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {staffList.map((s) => (
@@ -234,7 +283,9 @@ export default function NewBatchPage() {
                     />
                     <label htmlFor={`p-${s.uid}`} className="flex-1 cursor-pointer">
                       <p className="text-sm font-medium">{s.name}</p>
-                      <p className="text-xs text-muted-foreground">{ROLE_LABELS[s.role] ?? s.role}{s.department ? ` · ${s.department}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {ROLE_LABELS[s.role] ?? s.role}{s.department ? ` · ${s.department}` : ""}
+                      </p>
                     </label>
                   </div>
                 ))}
@@ -248,6 +299,21 @@ export default function NewBatchPage() {
           <Button type="submit" loading={isSubmitting}>Submit to Principal</Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function DefaultMemberRow({ name, subtitle }: { name: string; subtitle: string }) {
+  return (
+    <div className="flex items-center gap-3 p-2.5 border-2 border-primary/30 bg-primary/5 rounded-lg">
+      <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{name}</p>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+      <span className="text-[10px] font-semibold bg-primary text-primary-foreground px-2 py-0.5 rounded-full shrink-0">
+        Default
+      </span>
     </div>
   );
 }
