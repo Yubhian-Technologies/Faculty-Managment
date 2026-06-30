@@ -21,6 +21,7 @@ interface FacultyRow {
   name?: string;
   department?: string;
   email?: string;
+  staffType?: "teaching" | "supporting";
 }
 
 interface ProfilesData {
@@ -92,7 +93,13 @@ export default function HODLeaveProfilesPage() {
         livingChildrenCount: existing.livingChildrenCount ?? 0,
       });
     } else {
-      setForm(EMPTY_FORM);
+      // Auto-fill based on staffType stored at user creation
+      const isTeaching = faculty.staffType === "teaching";
+      setForm({
+        ...EMPTY_FORM,
+        isTeachingStaff: isTeaching,
+        staffCategory: isTeaching ? "vacation" : "non-vacation",
+      });
     }
     setSelectedFaculty(faculty);
     setDialogOpen(true);
@@ -164,6 +171,15 @@ export default function HODLeaveProfilesPage() {
                           <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
                         )}
                         <p className="text-sm font-medium truncate">{f.name ?? f.uid}</p>
+                        {f.staffType && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                            f.staffType === "teaching"
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-gray-100 text-gray-600"
+                          }`}>
+                            {f.staffType === "teaching" ? "Teaching" : "Supporting"}
+                          </span>
+                        )}
                       </div>
                       {hasProfile && profile ? (
                         <p className="text-xs text-muted-foreground ml-6 capitalize">

@@ -23,6 +23,7 @@ const schema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().optional(),
+  staffType: z.enum(["teaching", "supporting"]),
   designation: z.string().min(1, "Designation is required"),
   qualification: z.string().min(1, "Qualification is required"),
   specialization: z.string().optional(),
@@ -44,11 +45,12 @@ export default function NewFacultyPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "ASSISTANT_PROFESSOR", employmentType: "PERMANENT", password: "" },
+    defaultValues: { experienceYears: 0, designation: "ASSISTANT_PROFESSOR", employmentType: "PERMANENT", password: "", staffType: "teaching" },
   });
 
   const designation = watch("designation");
   const employmentType = watch("employmentType");
+  const staffType = watch("staffType");
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -121,6 +123,33 @@ export default function NewFacultyPage() {
               {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
               <p className="text-xs text-muted-foreground">
                 Share this with the faculty member so they can log in as a Panel Member.
+              </p>
+            </div>
+
+            {/* Staff Type */}
+            <div className="space-y-2">
+              <Label>Staff Type *</Label>
+              <div className="flex gap-3">
+                {(["teaching", "supporting"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setValue("staffType", t, { shouldValidate: true })}
+                    className={`flex-1 rounded-lg border-2 py-3 text-sm font-medium transition-all capitalize ${
+                      staffType === t
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    {t === "teaching" ? "Teaching Staff" : "Supporting Staff"}
+                  </button>
+                ))}
+              </div>
+              {errors.staffType && <p className="text-sm text-destructive">{errors.staffType.message}</p>}
+              <p className="text-xs text-muted-foreground">
+                {staffType === "teaching"
+                  ? "Lecturers, professors — follow academic calendar, get vacation leave."
+                  : "Admin, lab, library, accounts — work year-round, higher EL entitlement."}
               </p>
             </div>
 

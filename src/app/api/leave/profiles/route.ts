@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       .where("role", "==", "PANEL_MEMBER")
       .get();
 
-    type FacultyDoc = { uid: string; name?: string; department?: string; role?: string };
+    type FacultyDoc = { uid: string; name?: string; department?: string; role?: string; staffType?: "teaching" | "supporting" };
     let faculty: FacultyDoc[] = usersSnap.docs.map((d) => ({
       uid: d.id,
       ...(d.data() as Omit<FacultyDoc, "uid">),

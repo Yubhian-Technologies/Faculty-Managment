@@ -84,6 +84,7 @@ export async function POST(request: Request) {
       password: string;
       role: UserRole;
       department?: string;
+      staffType?: "teaching" | "supporting";
     };
 
     const { name, email, password, role, department } = body;
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
         email,
         role,
         department: resolvedDepartment,
+        ...(body.staffType ? { staffType: body.staffType } : {}),
         isActive: true,
         createdAt: now,
         updatedAt: now,
