@@ -58,13 +58,9 @@ export default function HODSetupPage() {
     },
     {
       key: "demoClassroom",
-      header: "Demo Room / Mode",
+      header: "Demo Room",
       hideOnMobile: true,
-      render: (row) => {
-        const mode = row.interviewMode as string | undefined;
-        if (mode === "ONLINE") return <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Online</span>;
-        return (row.demoClassroom as string) || <span className="text-xs text-muted-foreground">Not set</span>;
-      },
+      render: (row) => (row.demoClassroom as string) || <span className="text-xs text-muted-foreground">Not set</span>,
     },
     {
       key: "status",

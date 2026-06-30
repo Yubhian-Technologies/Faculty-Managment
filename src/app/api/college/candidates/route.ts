@@ -67,6 +67,7 @@ export async function POST(request: Request) {
       position: string;
       resumeUrl?: string;
       source?: string;
+      interviewMode?: string;
       vacancyId?: string;
       batchId?: string;
       referralType?: string;
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
       referralDescription?: string;
     };
 
-    const { name, email, phone, department, position, resumeUrl, source, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription } = body;
+    const { name, email, phone, department, position, resumeUrl, source, interviewMode, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription } = body;
     if (!name || !email || !phone || !department || !position) {
       return NextResponse.json({ error: "name, email, phone, department, position required" }, { status: 400 });
     }
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
         position: position.trim(),
         resumeUrl: resumeUrl ?? "",
         source: source ?? "WALK_IN",
+        interviewMode: interviewMode ?? "OFFLINE",
         vacancyId: vacancyId ?? "",
         batchId: batchId ?? "",
         ...(source === "REFERRAL" ? {

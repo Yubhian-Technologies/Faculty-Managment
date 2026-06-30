@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
-import { FileText, UploadCloud, X } from "lucide-react";
+import { FileText, MapPin, Monitor, UploadCloud, X } from "lucide-react";
 import type { Department, VacancyRequest } from "@/types";
 
 const schema = z.object({
@@ -24,6 +24,7 @@ const schema = z.object({
   department: z.string().min(1, "Department required"),
   position: z.string().min(1, "Position required"),
   source: z.enum(["WALK_IN", "CAREERS_PAGE", "ADVERTISEMENT", "REFERRAL"]),
+  interviewMode: z.enum(["ONLINE", "OFFLINE"]),
   vacancyId: z.string().optional(),
   referralType: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
   referralName: z.string().optional(),
@@ -70,6 +71,7 @@ export default function NewCandidatePage() {
     defaultValues: {
       department: user?.department ?? "",
       source: "WALK_IN",
+      interviewMode: "OFFLINE",
       referralType: "INTERNAL",
     },
   });
@@ -154,6 +156,7 @@ export default function NewCandidatePage() {
   };
 
   const source = watch("source");
+  const interviewMode = watch("interviewMode");
   const referralType = watch("referralType");
   const isBusy = isSubmitting || isUploading;
 
@@ -287,6 +290,34 @@ export default function NewCandidatePage() {
                 </div>
               </div>
             )}
+
+            {/* Interview Mode */}
+            <div className="space-y-2">
+              <Label>Interview Mode *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {(["OFFLINE", "ONLINE"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setValue("interviewMode", mode, { shouldValidate: true })}
+                    className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all ${
+                      interviewMode === mode
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    {mode === "OFFLINE"
+                      ? <MapPin className="h-5 w-5 shrink-0" />
+                      : <Monitor className="h-5 w-5 shrink-0" />
+                    }
+                    <div>
+                      <p className="text-sm font-medium">{mode === "OFFLINE" ? "Offline" : "Online"}</p>
+                      <p className="text-xs opacity-70">{mode === "OFFLINE" ? "In-person demo class" : "Video call / meet"}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {vacancies.length > 0 && (
               <div className="space-y-2">

@@ -111,6 +111,7 @@ export interface Candidate {
   isShortlisted: boolean;
   hasArrived: boolean;
   arrivedAt?: Timestamp;
+  interviewMode?: InterviewMode;
   referralType?: ReferralType;
   referralName?: string;
   referralPhone?: string;
@@ -156,7 +157,6 @@ export interface HiringBatch {
   panelMemberUids: string[];
   interviewDate: Timestamp;
   interviewVenue?: string;
-  interviewMode?: InterviewMode;
   demoClassroom?: string;
   meetingLink?: string;
   coordinatorFacultyId?: string;
