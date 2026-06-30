@@ -78,8 +78,8 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
   {
     id: "ML",
     code: "ML",
-    label: "Medical Leave",
-    shortLabel: "ML",
+    label: "Sick Leave",
+    shortLabel: "SL",
     description: "Half-pay leave for illness or injury. Accumulates 20 days per completed year of service, capped at 60 days. Medical certificate required for 3+ days.",
     color: "red",
     isActive: true,

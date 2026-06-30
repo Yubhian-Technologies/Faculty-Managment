@@ -14,7 +14,7 @@ import type { LeaveRequestV2, LeaveApprovalStepV2, LeaveTypeCodeV2 } from "@/typ
 
 const LT_LABELS: Partial<Record<LeaveTypeCodeV2, string>> = {
   CL: "Casual Leave", SCL: "Special Casual Leave", EL: "Earned Leave",
-  ML: "Medical Leave", MAT: "Maternity Leave", FPL: "Family Planning Leave",
+  ML: "Sick Leave", MAT: "Maternity Leave", FPL: "Family Planning Leave",
   COMP: "Compensatory Leave", LND: "Leave Not Due", QUAR: "Quarantine Leave",
   EOL: "Extraordinary Leave", SAB: "Sabbatical Leave", VAC: "Vacation",
 };

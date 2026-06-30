@@ -11,7 +11,7 @@ import {
 } from "@/lib/leave/balanceEngine";
 
 const LT_SHORT: Partial<Record<LeaveTypeCodeV2, string>> = {
-  CL: "Casual", SCL: "Special Casual", EL: "Earned", ML: "Medical",
+  CL: "Casual", SCL: "Special Casual", EL: "Earned", ML: "Sick",
   MAT: "Maternity", FPL: "Family Planning", COMP: "Compensatory",
   LND: "Leave Not Due", QUAR: "Quarantine", EOL: "Extraordinary",
   SAB: "Sabbatical", VAC: "Vacation",

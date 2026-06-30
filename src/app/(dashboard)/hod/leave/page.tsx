@@ -17,7 +17,7 @@ const BALANCE_DISPLAY: { code: LeaveTypeCodeV2; label: string; color: string }[]
   { code: "CL",   label: "Casual",      color: "text-blue-600" },
   { code: "EL",   label: "Earned",      color: "text-green-600" },
   { code: "SCL",  label: "Spl. Casual", color: "text-purple-600" },
-  { code: "ML",   label: "Medical",     color: "text-red-600" },
+  { code: "ML",   label: "Sick",        color: "text-red-600" },
   { code: "COMP", label: "Comp",        color: "text-amber-600" },
 ];
 
@@ -45,7 +45,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const LT_LABELS: Partial<Record<LeaveTypeCodeV2, string>> = {
   CL: "Casual Leave", SCL: "Special Casual Leave", EL: "Earned Leave",
-  ML: "Medical Leave", MAT: "Maternity Leave", FPL: "Family Planning Leave",
+  ML: "Sick Leave", MAT: "Maternity Leave", FPL: "Family Planning Leave",
   COMP: "Compensatory Leave", LND: "Leave Not Due", QUAR: "Quarantine Leave",
   EOL: "Extraordinary Leave", SAB: "Sabbatical Leave", VAC: "Vacation",
 };
