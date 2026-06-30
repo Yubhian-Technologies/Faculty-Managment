@@ -8,23 +8,31 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { MobileCard } from "@/components/shared/MobileCard";
+import { FacultyRequirementPanel } from "@/components/shared/FacultyRequirementPanel";
 import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
 import type { VacancyRequest } from "@/types";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
+import type { FacultyRequirementResult } from "@/app/api/college/faculty-requirement/route";
 
 export default function HODVacancyPage() {
   const isMobile = useMobile();
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
+  const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/college/vacancy-requests")
-      .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
-      .then((d) => setVacancies(d.vacancyRequests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacancies" }))
-      .finally(() => setIsLoading(false));
+    void Promise.all([
+      fetch("/api/college/vacancy-requests")
+        .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
+        .then((d) => setVacancies(d.vacancyRequests ?? []))
+        .catch(() => toast({ variant: "destructive", title: "Failed to load vacancies" })),
+      fetch("/api/college/faculty-requirement")
+        .then((r) => r.json() as Promise<FacultyRequirementResult>)
+        .then((d) => setRequirement(d))
+        .catch(() => {}),
+    ]).finally(() => setIsLoading(false));
   }, []);
 
   return (
@@ -41,6 +49,8 @@ export default function HODVacancyPage() {
           </Button>
         }
       />
+
+      {requirement && <FacultyRequirementPanel data={requirement} />}
 
       {isMobile ? (
         <div className="space-y-3">
