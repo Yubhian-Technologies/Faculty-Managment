@@ -18,6 +18,17 @@ import { FileText, MapPin, Monitor, UploadCloud, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import type { Department, VacancyRequest } from "@/types";
 
+const ALL_DESIGNATIONS = [
+  "Professor",
+  "Associate Professor",
+  "Assistant Professor",
+  "Senior Lecturer",
+  "Lecturer",
+  "Technical",
+  "Non-Technical",
+  "Others",
+] as const;
+
 const schema = z.object({
   name: z.string().min(2, "Name required"),
   email: z.string().email("Valid email required"),
@@ -43,6 +54,8 @@ export default function NewCandidatePage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>("");
+  const [selectedDesignation, setSelectedDesignation] = useState("");
+  const [customPosition, setCustomPosition] = useState("");
 
   // Resume upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -141,6 +154,27 @@ export default function NewCandidatePage() {
     } finally {
       setIsUploading(false);
     }
+  }
+
+  function handleDesignationChange(val: string) {
+    setSelectedDesignation(val);
+    if (val !== "Others") {
+      setCustomPosition("");
+      setValue("position", val, { shouldValidate: true });
+    }
+    // "Others": position stays empty until user types in the custom field
+  }
+
+  function syncDesignationFromVacancy(position: string) {
+    const known = ALL_DESIGNATIONS.find((d) => d !== "Others" && d === position);
+    if (known) {
+      setSelectedDesignation(known);
+      setCustomPosition("");
+    } else {
+      setSelectedDesignation("Others");
+      setCustomPosition(position);
+    }
+    setValue("position", position, { shouldValidate: true });
   }
 
   const onSubmit = async (data: FormData) => {
@@ -253,8 +287,27 @@ export default function NewCandidatePage() {
                 {errors.department && <p className="text-sm text-destructive">{errors.department.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="position">Position *</Label>
-                <Input id="position" {...register("position")} placeholder="e.g. Assistant Professor" />
+                <Label>Designation *</Label>
+                <Select value={selectedDesignation} onValueChange={handleDesignationChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select designation..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALL_DESIGNATIONS.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedDesignation === "Others" && (
+                  <Input
+                    placeholder="Enter designation..."
+                    value={customPosition}
+                    onChange={(e) => {
+                      setCustomPosition(e.target.value);
+                      setValue("position", e.target.value, { shouldValidate: true });
+                    }}
+                  />
+                )}
                 {errors.position && <p className="text-sm text-destructive">{errors.position.message}</p>}
               </div>
             </div>
@@ -386,8 +439,8 @@ export default function NewCandidatePage() {
                 {positionValue?.trim() && (
                   <p className="text-xs text-muted-foreground">
                     {matchedVacancies.length === 0
-                      ? `No hiring requests match "${positionValue.trim()}"`
-                      : `Showing ${matchedVacancies.length} request${matchedVacancies.length !== 1 ? "s" : ""} matching "${positionValue.trim()}"`}
+                      ? `No hiring requests found for "${positionValue.trim()}"`
+                      : `${matchedVacancies.length} hiring request${matchedVacancies.length !== 1 ? "s" : ""} for "${positionValue.trim()}"`}
                   </p>
                 )}
 
@@ -401,8 +454,14 @@ export default function NewCandidatePage() {
                         key={v.id}
                         type="button"
                         onClick={() => {
-                          if (isSelected) { setSelectedVacancyId(""); setValue("vacancyId", ""); }
-                          else { setSelectedVacancyId(v.id); setValue("vacancyId", v.id); }
+                          if (isSelected) {
+                            setSelectedVacancyId("");
+                            setValue("vacancyId", "");
+                          } else {
+                            setSelectedVacancyId(v.id);
+                            setValue("vacancyId", v.id);
+                            syncDesignationFromVacancy(v.position);
+                          }
                         }}
                         className={`w-full text-left rounded-lg border-2 px-4 py-3 transition-all ${
                           isSelected
@@ -443,7 +502,7 @@ export default function NewCandidatePage() {
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Fill in the Position field above to auto-filter matching hiring requests.
+                  Select a designation above to auto-filter matching hiring requests. Selecting a card also fills the designation.
                 </p>
               </div>
             )}
