@@ -69,9 +69,13 @@ export async function POST(request: Request) {
       source?: string;
       vacancyId?: string;
       batchId?: string;
+      referralType?: string;
+      referralName?: string;
+      referralPhone?: string;
+      referralDescription?: string;
     };
 
-    const { name, email, phone, department, position, resumeUrl, source, vacancyId, batchId } = body;
+    const { name, email, phone, department, position, resumeUrl, source, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription } = body;
     if (!name || !email || !phone || !department || !position) {
       return NextResponse.json({ error: "name, email, phone, department, position required" }, { status: 400 });
     }
@@ -92,9 +96,15 @@ export async function POST(request: Request) {
         department: department.trim(),
         position: position.trim(),
         resumeUrl: resumeUrl ?? "",
-        source: source ?? "REFERRAL",
+        source: source ?? "WALK_IN",
         vacancyId: vacancyId ?? "",
         batchId: batchId ?? "",
+        ...(source === "REFERRAL" ? {
+          referralType: referralType ?? "INTERNAL",
+          ...(referralName ? { referralName: referralName.trim() } : {}),
+          ...(referralPhone ? { referralPhone: referralPhone.trim() } : {}),
+          ...(referralDescription ? { referralDescription: referralDescription.trim() } : {}),
+        } : {}),
         currentStage: "DEMO",
         status: "PENDING",
         isShortlisted: false,

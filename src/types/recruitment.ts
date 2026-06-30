@@ -42,7 +42,8 @@ export interface VacancyRequest {
 
 // ─── Candidate ────────────────────────────────────────────────────────────────
 
-export type CandidateSource = "REFERRAL" | "CAREERS_PAGE";
+export type CandidateSource = "WALK_IN" | "CAREERS_PAGE" | "ADVERTISEMENT" | "REFERRAL";
+export type ReferralType = "INTERNAL" | "EXTERNAL";
 
 export type CandidateStage =
   | "DEMO"
@@ -110,6 +111,10 @@ export interface Candidate {
   isShortlisted: boolean;
   hasArrived: boolean;
   arrivedAt?: Timestamp;
+  referralType?: ReferralType;
+  referralName?: string;
+  referralPhone?: string;
+  referralDescription?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

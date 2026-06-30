@@ -100,11 +100,23 @@ export default function HODCandidatesPage() {
       key: "source",
       header: "Source",
       hideOnMobile: true,
-      render: (row) => (
-        <Badge variant="outline">
-          {(row.source as string) === "CAREERS_PAGE" ? "Careers Page" : "Referral"}
-        </Badge>
-      ),
+      render: (row) => {
+        const src = row.source as string;
+        const label =
+          src === "CAREERS_PAGE" ? "Careers Page" :
+          src === "ADVERTISEMENT" ? "Advertisement" :
+          src === "WALK_IN" ? "Walk-in" :
+          src === "REFERRAL" ? `Referral${row.referralType ? ` (${(row.referralType as string) === "INTERNAL" ? "Int." : "Ext."})` : ""}` :
+          src;
+        return (
+          <div>
+            <Badge variant="outline">{label}</Badge>
+            {src === "REFERRAL" && row.referralName && (
+              <p className="text-xs text-muted-foreground mt-0.5">{row.referralName as string}</p>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "isShortlisted",

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { FileText, UploadCloud, X } from "lucide-react";
@@ -22,8 +23,12 @@ const schema = z.object({
   phone: z.string().min(6, "Phone required"),
   department: z.string().min(1, "Department required"),
   position: z.string().min(1, "Position required"),
-  source: z.enum(["REFERRAL", "CAREERS_PAGE"]),
+  source: z.enum(["WALK_IN", "CAREERS_PAGE", "ADVERTISEMENT", "REFERRAL"]),
   vacancyId: z.string().optional(),
+  referralType: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
+  referralName: z.string().optional(),
+  referralPhone: z.string().optional(),
+  referralDescription: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -58,12 +63,14 @@ export default function NewCandidatePage() {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       department: user?.department ?? "",
-      source: "REFERRAL",
+      source: "WALK_IN",
+      referralType: "INTERNAL",
     },
   });
 
@@ -146,6 +153,8 @@ export default function NewCandidatePage() {
     }
   };
 
+  const source = watch("source");
+  const referralType = watch("referralType");
   const isBusy = isSubmitting || isUploading;
 
   return (
@@ -203,20 +212,81 @@ export default function NewCandidatePage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Source</Label>
+              <Label>Source *</Label>
               <Select
-                defaultValue="REFERRAL"
-                onValueChange={(v) => setValue("source", v as "REFERRAL" | "CAREERS_PAGE")}
+                defaultValue="WALK_IN"
+                onValueChange={(v) => setValue("source", v as FormData["source"], { shouldValidate: true })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="REFERRAL">Referral / Walk-in</SelectItem>
+                  <SelectItem value="WALK_IN">Walk-in</SelectItem>
                   <SelectItem value="CAREERS_PAGE">Careers Page</SelectItem>
+                  <SelectItem value="ADVERTISEMENT">Advertisement</SelectItem>
+                  <SelectItem value="REFERRAL">Referral</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Referral details */}
+            {source === "REFERRAL" && (
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                <div className="space-y-2">
+                  <Label>Referral Type *</Label>
+                  <div className="flex gap-3">
+                    {(["INTERNAL", "EXTERNAL"] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setValue("referralType", t, { shouldValidate: true })}
+                        className={`flex-1 rounded-lg border-2 py-2.5 text-sm font-medium transition-all ${
+                          referralType === t
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
+                        }`}
+                      >
+                        {t === "INTERNAL" ? "Internal Referral" : "External Referral"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {referralType === "INTERNAL"
+                      ? "Referred by a current employee of this institution."
+                      : "Referred by someone outside the institution."}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="referralName">Referrer Name *</Label>
+                    <Input
+                      id="referralName"
+                      {...register("referralName")}
+                      placeholder="Name of the person referring"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="referralPhone">Referrer Phone</Label>
+                    <Input
+                      id="referralPhone"
+                      {...register("referralPhone")}
+                      placeholder="+91 98765 43210"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="referralDescription">Description</Label>
+                  <Textarea
+                    id="referralDescription"
+                    {...register("referralDescription")}
+                    placeholder="How did they hear about this position? Any relevant context..."
+                    rows={2}
+                  />
+                </div>
+              </div>
+            )}
 
             {vacancies.length > 0 && (
               <div className="space-y-2">
