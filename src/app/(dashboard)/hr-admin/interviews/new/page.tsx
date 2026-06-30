@@ -159,7 +159,7 @@ export default function NewInterviewPlanPage() {
 
         {/* Vacancy selector */}
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Vacancy Request</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Hiring Request</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
               <Label>Select Approved Vacancy <span className="text-destructive">*</span></Label>
@@ -176,7 +176,7 @@ export default function NewInterviewPlanPage() {
                 </SelectContent>
               </Select>
               {vacancies.length === 0 && (
-                <p className="text-xs text-muted-foreground">No approved vacancy requests yet. Administration must approve one first.</p>
+                <p className="text-xs text-muted-foreground">No approved hiring requests yet. Administration must approve one first.</p>
               )}
             </div>
 

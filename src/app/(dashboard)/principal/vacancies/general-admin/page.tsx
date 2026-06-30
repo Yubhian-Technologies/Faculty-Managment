@@ -78,7 +78,7 @@ export default function NewGeneralAdminVacancyPage() {
   return (
     <div className="max-w-2xl space-y-5">
       <PageHeader
-        title="General Admin Vacancy Request"
+        title="Hiring Request"
         description="Submit institution-wide General Admin hiring requests to Super Admin"
       />
 

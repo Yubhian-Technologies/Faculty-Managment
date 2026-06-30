@@ -90,7 +90,7 @@ export default function HODDashboard() {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
           {[
             {
-              label: "Vacancy Requests",
+              label: "Hiring Requests",
               value: isLoading ? "—" : vacancies.length,
               icon: ClipboardPlus,
               color: "text-blue-600 bg-blue-50",
@@ -176,7 +176,7 @@ export default function HODDashboard() {
       {/* Recent Vacancies */}
       <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle className="text-base">Recent Vacancy Requests</CardTitle>
+            <CardTitle className="text-base">Recent Hiring Requests</CardTitle>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/hod/vacancy" className="text-primary">
                 View all <ArrowRight className="h-3 w-3 ml-1 inline" />
@@ -188,7 +188,7 @@ export default function HODDashboard() {
               <div className="space-y-3">{[1, 2].map((i) => <CardSkeleton key={i} />)}</div>
             ) : !vacancies.length ? (
               <div className="text-center py-8">
-                <p className="text-sm text-muted-foreground mb-3">No vacancy requests yet</p>
+                <p className="text-sm text-muted-foreground mb-3">No hiring requests yet</p>
                 <Button asChild size="sm">
                   <Link href="/hod/vacancy/new">Create First Request</Link>
                 </Button>

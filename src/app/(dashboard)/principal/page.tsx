@@ -89,7 +89,7 @@ export default function PrincipalDashboard() {
 
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base">Pending Vacancy Requests</CardTitle>
+          <CardTitle className="text-base">Pending Hiring Requests</CardTitle>
           <Button variant="outline" size="sm" asChild>
             <Link href="/principal/vacancies">View all</Link>
           </Button>

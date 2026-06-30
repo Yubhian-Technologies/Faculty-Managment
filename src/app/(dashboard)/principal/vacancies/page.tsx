@@ -92,8 +92,8 @@ export default function PrincipalVacanciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Vacancy Requests"
-        description="Review and approve HOD and Vice Principal vacancy requests"
+        title="Hiring Requests"
+        description="Review and approve HOD and Vice Principal hiring requests"
       />
 
       {isMobile ? (
@@ -177,7 +177,7 @@ export default function PrincipalVacanciesPage() {
       <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Approve Vacancy Request?</DialogTitle>
+            <DialogTitle>Approve Hiring Request?</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -226,7 +226,7 @@ export default function PrincipalVacanciesPage() {
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Reject Vacancy Request</DialogTitle>
+            <DialogTitle>Reject Hiring Request</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">

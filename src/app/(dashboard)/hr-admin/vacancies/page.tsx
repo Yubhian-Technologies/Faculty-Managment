@@ -82,7 +82,7 @@ export default function HRAdminVacanciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty Vacancy Requests"
+        title="Hiring Requests"
         description={pendingCount > 0 ? `${pendingCount} request${pendingCount > 1 ? "s" : ""} pending your review` : "Review and forward dept head requests to Administration"}
       />
 
@@ -111,7 +111,7 @@ export default function HRAdminVacanciesPage() {
             />
           ))}
           {!isLoading && vacancies.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">No vacancy requests yet.</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No hiring requests yet.</p>
           )}
         </div>
       ) : (
@@ -162,7 +162,7 @@ export default function HRAdminVacanciesPage() {
         open={forwardOpen}
         onOpenChange={setForwardOpen}
         title="Forward to Administration?"
-        description={`Forward the faculty vacancy request for ${selected?.department} (${selected?.requiredCount} position(s)) to Administration for approval.`}
+        description={`Forward the faculty hiring request for ${selected?.department} (${selected?.requiredCount} position(s)) to Administration for approval.`}
         confirmLabel="Forward"
         onConfirm={() => void action("FORWARD")}
         loading={loading}
@@ -170,10 +170,10 @@ export default function HRAdminVacanciesPage() {
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Reject Vacancy Request</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Reject Hiring Request</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Rejecting faculty vacancy request for <strong>{selected?.department}</strong> by {selected?.deptHeadName}.
+              Rejecting faculty hiring request for <strong>{selected?.department}</strong> by {selected?.deptHeadName}.
             </p>
             <div className="space-y-2">
               <Label>Reason (optional)</Label>

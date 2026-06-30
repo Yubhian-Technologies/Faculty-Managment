@@ -33,7 +33,7 @@ export default function HRAdminDashboard() {
 
   const actions = [
     {
-      label: "Vacancy Requests",
+      label: "Hiring Requests",
       href: "/hr-admin/vacancies",
       icon: ClipboardList,
       desc: `${pendingVacancies ?? "…"} pending from Dept Heads — forward to Administration`,

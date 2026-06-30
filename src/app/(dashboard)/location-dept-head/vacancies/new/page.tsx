@@ -54,7 +54,7 @@ export default function NewDeptVacancyPage() {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <PageHeader title="New Faculty Vacancy Request" description="Submit to HR Admin for review" />
+      <PageHeader title="New Hiring Request" description="Submit to HR Admin for review" />
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
           <CardHeader className="pb-3">
@@ -64,7 +64,7 @@ export default function NewDeptVacancyPage() {
             <div className="space-y-2">
               <Label>Position</Label>
               <Input value="Faculty" disabled className="bg-muted text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">All vacancy requests are for Faculty positions.</p>
+              <p className="text-xs text-muted-foreground">All hiring requests are for Faculty positions.</p>
             </div>
 
             <div className="space-y-2">

@@ -33,7 +33,7 @@ export default function AdministrationDashboard() {
   }, []);
 
   const actions = [
-    { label: "Vacancy Requests", href: "/administration/vacancies", icon: ClipboardList, desc: `${pendingVacancies ?? "…"} pending from HR Admin`, section: "Hiring Approvals" },
+    { label: "Hiring Requests", href: "/administration/vacancies", icon: ClipboardList, desc: `${pendingVacancies ?? "…"} pending from HR Admin`, section: "Hiring Approvals" },
     { label: "Interview Plans", href: "/administration/interviews", icon: CalendarCheck, desc: `${pendingInterviews ?? "…"} plans awaiting approval`, section: "" },
     { label: "Offer Letters", href: "/administration/offers", icon: FileText, desc: `${pendingOffers ?? "…"} offer letters to approve`, section: "" },
     { label: "Location Staff", href: "/administration/users", icon: Users, desc: "HR Admin, Admin Office, Accounts, Dept Heads", section: "Management" },

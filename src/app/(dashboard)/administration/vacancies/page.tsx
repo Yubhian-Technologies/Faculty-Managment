@@ -78,8 +78,8 @@ export default function AdministrationVacanciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty Vacancy Requests"
-        description="Approve or reject faculty vacancy requests forwarded by HR Admin"
+        title="Hiring Requests"
+        description="Approve or reject faculty hiring requests forwarded by HR Admin"
       />
 
       {isMobile ? (
@@ -103,7 +103,7 @@ export default function AdministrationVacanciesPage() {
             />
           ))}
           {!isLoading && vacancies.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">No pending vacancy requests.</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No pending hiring requests.</p>
           )}
         </div>
       ) : (
@@ -143,7 +143,7 @@ export default function AdministrationVacanciesPage() {
       <ConfirmDialog
         open={approveOpen}
         onOpenChange={setApproveOpen}
-        title="Approve Vacancy Request?"
+        title="Approve Hiring Request?"
         description={`Approve faculty vacancy for ${selected?.department} (${selected?.requiredCount} position(s)) requested by ${selected?.deptHeadName}. HR Admin will be notified.`}
         confirmLabel="Approve"
         onConfirm={() => void action("APPROVED")}
@@ -152,7 +152,7 @@ export default function AdministrationVacanciesPage() {
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Reject Vacancy Request</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Reject Hiring Request</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Rejecting faculty vacancy for <strong>{selected?.department}</strong> ({selected?.requiredCount} position(s)) requested by {selected?.deptHeadName}.

@@ -37,7 +37,7 @@ export default function LocationDeptHeadDashboard() {
 
   const actions = [
     {
-      label: "Vacancy Requests",
+      label: "Hiring Requests",
       href: "/location-dept-head/vacancies",
       icon: ClipboardPlus,
       desc: pendingVacancies !== null && pendingVacancies > 0

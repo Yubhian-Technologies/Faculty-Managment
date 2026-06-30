@@ -175,7 +175,7 @@ export default function NewVacancyPage() {
   return (
     <div className="max-w-2xl space-y-5">
       <PageHeader
-        title="New Vacancy Request"
+        title="New Hiring Request"
         description="Submit a faculty hiring request to the Principal"
       />
 

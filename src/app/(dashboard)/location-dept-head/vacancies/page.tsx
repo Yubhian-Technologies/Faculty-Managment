@@ -37,8 +37,8 @@ export default function DeptHeadVacanciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My Vacancy Requests"
-        description="Faculty vacancy requests you submitted to HR Admin"
+        title="My Hiring Requests"
+        description="Faculty hiring requests you submitted to HR Admin"
         actions={
           <Button asChild>
             <Link href="/location-dept-head/vacancies/new">+ New Request</Link>
@@ -62,7 +62,7 @@ export default function DeptHeadVacanciesPage() {
             />
           ))}
           {!isLoading && vacancies.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">No requests yet. Submit your first vacancy request.</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No requests yet. Submit your first hiring request.</p>
           )}
         </div>
       ) : (

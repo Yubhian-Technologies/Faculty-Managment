@@ -38,8 +38,8 @@ export default function HODVacancyPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Vacancy Requests"
-        description="Track all your faculty vacancy requests"
+        title="Hiring Requests"
+        description="Track all your faculty hiring requests"
         actions={
           <Button asChild>
             <Link href="/hod/vacancy/new">
@@ -59,8 +59,8 @@ export default function HODVacancyPage() {
           ) : !vacancies.length ? (
             <EmptyState
               icon={<ClipboardList className="h-8 w-8" />}
-              title="No vacancy requests"
-              description="Create your first vacancy request to begin the hiring process."
+              title="No hiring requests"
+              description="Create your first hiring request to begin the hiring process."
               action={<Button asChild><Link href="/hod/vacancy/new">Create Request</Link></Button>}
             />
           ) : (
@@ -85,8 +85,8 @@ export default function HODVacancyPage() {
           isLoading={isLoading}
           searchPlaceholder="Search vacancies..."
           searchKeys={["position", "department"]}
-          emptyTitle="No vacancy requests"
-          emptyDescription="Create your first vacancy request to begin the hiring process."
+          emptyTitle="No hiring requests"
+          emptyDescription="Create your first hiring request to begin the hiring process."
           emptyAction={<Button asChild><Link href="/hod/vacancy/new">Create Request</Link></Button>}
           csvFilename="vacancy-requests"
           columns={[

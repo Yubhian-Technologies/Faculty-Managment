@@ -29,7 +29,7 @@ export default function VicePrincipalVacanciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="General Admin Vacancy Requests"
+        title="Hiring Requests"
         description="Submit General Admin hiring requests — reviewed by the Principal"
         actions={
           <Button asChild>
