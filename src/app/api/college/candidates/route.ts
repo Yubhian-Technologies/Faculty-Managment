@@ -69,12 +69,9 @@ export async function POST(request: Request) {
       source?: string;
       vacancyId?: string;
       batchId?: string;
-      interviewMode?: "ONLINE" | "OFFLINE";
-      demoClassroom?: string;
-      meetingLink?: string;
     };
 
-    const { name, email, phone, department, position, resumeUrl, source, vacancyId, batchId, interviewMode, demoClassroom, meetingLink } = body;
+    const { name, email, phone, department, position, resumeUrl, source, vacancyId, batchId } = body;
     if (!name || !email || !phone || !department || !position) {
       return NextResponse.json({ error: "name, email, phone, department, position required" }, { status: 400 });
     }
@@ -104,9 +101,6 @@ export async function POST(request: Request) {
         hasArrived: false,
         addedByUid: session.uid,
         addedByName,
-        interviewMode: interviewMode ?? "OFFLINE",
-        ...(demoClassroom ? { demoClassroom: demoClassroom.trim() } : {}),
-        ...(meetingLink ? { meetingLink: meetingLink.trim() } : {}),
         createdAt: now,
         updatedAt: now,
       });

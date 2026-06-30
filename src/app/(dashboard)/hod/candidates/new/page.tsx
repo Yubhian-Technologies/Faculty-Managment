@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
-import { FileText, UploadCloud, X, Monitor, MapPin } from "lucide-react";
+import { FileText, UploadCloud, X } from "lucide-react";
 import type { Department, VacancyRequest } from "@/types";
 
 const schema = z.object({
@@ -24,9 +24,6 @@ const schema = z.object({
   position: z.string().min(1, "Position required"),
   source: z.enum(["REFERRAL", "CAREERS_PAGE"]),
   vacancyId: z.string().optional(),
-  interviewMode: z.enum(["ONLINE", "OFFLINE"]),
-  demoClassroom: z.string().optional(),
-  meetingLink: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -61,14 +58,12 @@ export default function NewCandidatePage() {
     register,
     handleSubmit,
     setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       department: user?.department ?? "",
       source: "REFERRAL",
-      interviewMode: "OFFLINE",
     },
   });
 
@@ -137,13 +132,7 @@ export default function NewCandidatePage() {
       const res = await fetch("/api/college/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          resumeUrl: finalResumeUrl,
-          interviewMode: data.interviewMode,
-          ...(data.interviewMode === "OFFLINE" && data.demoClassroom ? { demoClassroom: data.demoClassroom } : {}),
-          ...(data.interviewMode === "ONLINE" && data.meetingLink ? { meetingLink: data.meetingLink } : {}),
-        }),
+        body: JSON.stringify({ ...data, resumeUrl: finalResumeUrl }),
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
@@ -157,7 +146,6 @@ export default function NewCandidatePage() {
     }
   };
 
-  const interviewMode = watch("interviewMode");
   const isBusy = isSubmitting || isUploading;
 
   return (
@@ -245,61 +233,6 @@ export default function NewCandidatePage() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            )}
-
-            {/* Interview Mode */}
-            <div className="space-y-2">
-              <Label>Interview Mode *</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {(["OFFLINE", "ONLINE"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setValue("interviewMode", mode, { shouldValidate: true })}
-                    className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all ${
-                      interviewMode === mode
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    {mode === "OFFLINE"
-                      ? <MapPin className="h-5 w-5 shrink-0" />
-                      : <Monitor className="h-5 w-5 shrink-0" />
-                    }
-                    <div>
-                      <p className="text-sm font-medium">{mode === "OFFLINE" ? "Offline" : "Online"}</p>
-                      <p className="text-xs opacity-70">{mode === "OFFLINE" ? "In-person demo class" : "Video call / meet"}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Demo Classroom (Offline) */}
-            {interviewMode === "OFFLINE" && (
-              <div className="space-y-2">
-                <Label htmlFor="demoClassroom">Demo Classroom</Label>
-                <Input
-                  id="demoClassroom"
-                  {...register("demoClassroom")}
-                  placeholder="e.g. Room 204, Block A"
-                />
-                <p className="text-xs text-muted-foreground">Room where the candidate's teaching demo will be conducted.</p>
-              </div>
-            )}
-
-            {/* Meeting Link (Online) */}
-            {interviewMode === "ONLINE" && (
-              <div className="space-y-2">
-                <Label htmlFor="meetingLink">Meeting Link *</Label>
-                <Input
-                  id="meetingLink"
-                  {...register("meetingLink")}
-                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
-                  type="url"
-                />
-                <p className="text-xs text-muted-foreground">Google Meet, Zoom, or Teams link shared with the candidate.</p>
               </div>
             )}
 

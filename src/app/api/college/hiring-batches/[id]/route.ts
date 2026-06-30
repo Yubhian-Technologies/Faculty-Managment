@@ -66,7 +66,9 @@ export async function PATCH(
       requiredDocuments?: string[];
       setupComplete?: boolean;
       // HOD finalization
+      interviewMode?: string;
       demoClassroom?: string;
+      meetingLink?: string;
       coordinatorFacultyId?: string;
       panelMemberUids?: string[];
       candidateIds?: string[];
@@ -109,7 +111,9 @@ export async function PATCH(
     if (body.requiredDocuments !== undefined) updates.requiredDocuments = body.requiredDocuments;
     if (body.setupComplete !== undefined) updates.setupComplete = body.setupComplete;
     // HOD: demo + coordinator (resolved from faculty register)
+    if (body.interviewMode !== undefined) updates.interviewMode = body.interviewMode;
     if (body.demoClassroom !== undefined) updates.demoClassroom = body.demoClassroom;
+    if (body.meetingLink !== undefined) updates.meetingLink = body.meetingLink;
     if (body.coordinatorFacultyId !== undefined) {
       const facultySnap = await db
         .collection("colleges")

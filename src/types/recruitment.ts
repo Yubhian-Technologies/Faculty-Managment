@@ -110,9 +110,6 @@ export interface Candidate {
   isShortlisted: boolean;
   hasArrived: boolean;
   arrivedAt?: Timestamp;
-  interviewMode?: InterviewMode;
-  demoClassroom?: string;
-  meetingLink?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -154,7 +151,9 @@ export interface HiringBatch {
   panelMemberUids: string[];
   interviewDate: Timestamp;
   interviewVenue?: string;
+  interviewMode?: InterviewMode;
   demoClassroom?: string;
+  meetingLink?: string;
   coordinatorFacultyId?: string;
   coordinatorUid?: string;
   coordinatorName?: string;

@@ -146,7 +146,9 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [editInterviewDate, setEditInterviewDate] = useState("");
   const [isSavingCommittee, setIsSavingCommittee] = useState(false);
 
+  const [interviewMode, setInterviewMode] = useState<"ONLINE" | "OFFLINE">("OFFLINE");
   const [demoClassroom, setDemoClassroom] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
   const [coordinatorFacultyId, setCoordinatorFacultyId] = useState("");
 
   // HR feedback form state
@@ -180,7 +182,9 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       for (const u of users) map[u.uid] = u;
       setUserMap(map);
       setAllUsers(users);
+      setInterviewMode((b.interviewMode as "ONLINE" | "OFFLINE" | undefined) ?? "OFFLINE");
       setDemoClassroom(b.demoClassroom ?? "");
+      setMeetingLink(b.meetingLink ?? "");
       setCoordinatorFacultyId(b.coordinatorFacultyId ?? "");
 
       // Load feedback when demo is complete
@@ -229,8 +233,12 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   useEffect(() => { void load(); }, [id]);
 
   async function saveDetails() {
-    if (!demoClassroom.trim()) {
-      toast({ variant: "destructive", title: "Demo classroom is required" });
+    if (interviewMode === "OFFLINE" && !demoClassroom.trim()) {
+      toast({ variant: "destructive", title: "Demo classroom is required for offline interviews" });
+      return;
+    }
+    if (interviewMode === "ONLINE" && !meetingLink.trim()) {
+      toast({ variant: "destructive", title: "Meeting link is required for online interviews" });
       return;
     }
     if (!coordinatorFacultyId) {
@@ -242,7 +250,12 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       const res = await fetch(`/api/college/hiring-batches/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demoClassroom: demoClassroom.trim(), coordinatorFacultyId }),
+        body: JSON.stringify({
+          interviewMode,
+          demoClassroom: interviewMode === "OFFLINE" ? demoClassroom.trim() : "",
+          meetingLink: interviewMode === "ONLINE" ? meetingLink.trim() : "",
+          coordinatorFacultyId,
+        }),
       });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Details saved", description: "Coordinator has been notified." });
@@ -458,18 +471,59 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            {/* Interview Mode */}
+            <div className="space-y-2">
+              <Label>Interview Mode *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {(["OFFLINE", "ONLINE"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setInterviewMode(mode)}
+                    className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all ${
+                      interviewMode === mode
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    <MapPin className={`h-4 w-4 shrink-0 ${mode === "ONLINE" ? "rotate-0 opacity-0 w-0 hidden" : ""}`} />
+                    <div>
+                      <p className="text-sm font-medium">{mode === "OFFLINE" ? "Offline" : "Online"}</p>
+                      <p className="text-xs opacity-60">{mode === "OFFLINE" ? "In-person demo class" : "Video call / meet"}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="demoClassroom">
-                  <MapPin className="h-3 w-3 inline mr-1" />
-                  Demo Classroom *
-                </Label>
-                <Input
-                  id="demoClassroom"
-                  value={demoClassroom}
-                  onChange={(e) => setDemoClassroom(e.target.value)}
-                  placeholder="e.g. Room 301, Block A"
-                />
+                {interviewMode === "OFFLINE" ? (
+                  <>
+                    <Label htmlFor="demoClassroom">
+                      <MapPin className="h-3 w-3 inline mr-1" />
+                      Demo Classroom *
+                    </Label>
+                    <Input
+                      id="demoClassroom"
+                      value={demoClassroom}
+                      onChange={(e) => setDemoClassroom(e.target.value)}
+                      placeholder="e.g. Room 301, Block A"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Label htmlFor="meetingLink">Meeting Link *</Label>
+                    <Input
+                      id="meetingLink"
+                      type="url"
+                      value={meetingLink}
+                      onChange={(e) => setMeetingLink(e.target.value)}
+                      placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                    />
+                    <p className="text-xs text-muted-foreground">Google Meet, Zoom, or Teams link.</p>
+                  </>
+                )}
               </div>
 
               <div className="space-y-2">

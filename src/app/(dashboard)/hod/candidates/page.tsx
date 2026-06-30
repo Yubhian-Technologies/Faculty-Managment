@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, MapPin, Monitor, Plus, UserCheck, UserX } from "lucide-react";
+import { ExternalLink, Plus, UserCheck, UserX } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -95,26 +95,6 @@ export default function HODCandidatesPage() {
           <p className="text-xs text-muted-foreground">{row.department as string}</p>
         </div>
       ),
-    },
-    {
-      key: "interviewMode",
-      header: "Mode",
-      hideOnMobile: true,
-      render: (row) => {
-        const mode = row.interviewMode as string | undefined;
-        if (mode === "ONLINE") {
-          return (
-            <span className="flex items-center gap-1 text-xs font-medium text-blue-600">
-              <Monitor className="h-3.5 w-3.5" /> Online
-            </span>
-          );
-        }
-        return (
-          <span className="flex items-center gap-1 text-xs font-medium text-gray-600">
-            <MapPin className="h-3.5 w-3.5" /> Offline
-          </span>
-        );
-      },
     },
     {
       key: "source",
