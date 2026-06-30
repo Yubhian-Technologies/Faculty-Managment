@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { FileText, MapPin, Monitor, UploadCloud, X } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 import type { Department, VacancyRequest } from "@/types";
 
 const schema = z.object({
@@ -51,18 +52,34 @@ export default function NewCandidatePage() {
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments(d.departments ?? []))
-      .catch(() => {});
-    fetch("/api/college/vacancy-requests?status=APPROVED")
-      .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
-      .then((d) => {
-        const dept = user?.department ?? "";
-        const all = d.vacancyRequests ?? [];
-        setVacancies(dept ? all.filter((v) => v.department === dept) : all);
-      })
-      .catch(() => {});
+    const dept = user?.department ?? "";
+
+    void Promise.all([
+      fetch("/api/college/departments")
+        .then((r) => r.json() as Promise<{ departments: Department[] }>)
+        .then((d) => setDepartments(d.departments ?? []))
+        .catch(() => {}),
+
+      Promise.all([
+        fetch("/api/college/vacancy-requests?status=APPROVED")
+          .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
+          .then((d) => d.vacancyRequests ?? []),
+        fetch("/api/college/hiring-batches")
+          .then((r) => r.json() as Promise<{ batches: { vacancyId: string; currentPhase: string }[] }>)
+          .then((d) => d.batches ?? [])
+          .catch(() => [] as { vacancyId: string; currentPhase: string }[]),
+      ]).then(([allVacancies, batches]) => {
+        const completedVacancyIds = new Set(
+          batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
+        );
+        const filtered = allVacancies.filter((v) =>
+          (dept ? v.department === dept : true) &&
+          (v.availableCount ?? v.requiredCount) > 0 &&
+          !completedVacancyIds.has(v.id)
+        );
+        setVacancies(filtered);
+      }).catch(() => {}),
+    ]);
   }, []);
 
   const {
@@ -358,13 +375,12 @@ export default function NewCandidatePage() {
                             {v.qualification && (
                               <p className="text-xs text-muted-foreground mt-0.5">{v.qualification}</p>
                             )}
+                            <p className="text-xs text-muted-foreground/70 mt-1">
+                              Raised {formatDate(v.createdAt)}
+                            </p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              (v.availableCount ?? v.requiredCount) > 0
-                                ? "bg-green-50 text-green-700"
-                                : "bg-red-50 text-red-600"
-                            }`}>
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
                               {v.availableCount ?? v.requiredCount} post{(v.availableCount ?? v.requiredCount) !== 1 ? "s" : ""} open
                             </span>
                           </div>
