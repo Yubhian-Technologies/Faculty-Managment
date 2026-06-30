@@ -113,7 +113,7 @@ export default function NewBatchPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedVacancyId) { toast({ variant: "destructive", title: "Select a vacancy" }); return; }
+    if (!selectedVacancyId) { toast({ variant: "destructive", title: "Select a hiring request" }); return; }
     if (selectedCandidates.length === 0) { toast({ variant: "destructive", title: "Select at least one candidate" }); return; }
     if (!interviewDate) { toast({ variant: "destructive", title: "Set an interview date" }); return; }
 
@@ -158,14 +158,14 @@ export default function NewBatchPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Vacancy Selection */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Step 1: Select Vacancy</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Step 1: Select Hiring Request</CardTitle></CardHeader>
           <CardContent>
             {vacancies.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No approved vacancies. Get a vacancy approved first.</p>
+              <p className="text-sm text-muted-foreground">No approved hiring requests. Get a hiring request approved first.</p>
             ) : (
               <Select onValueChange={setSelectedVacancyId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select an approved vacancy" />
+                  <SelectValue placeholder="Select an approved hiring request" />
                 </SelectTrigger>
                 <SelectContent>
                   {vacancies.map((v) => (
