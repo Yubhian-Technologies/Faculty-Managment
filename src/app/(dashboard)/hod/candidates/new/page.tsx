@@ -41,6 +41,7 @@ export default function NewCandidatePage() {
   const user = useAuthStore((s) => s.user);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
+  const [selectedVacancyId, setSelectedVacancyId] = useState<string>("");
 
   // Resume upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,7 +57,11 @@ export default function NewCandidatePage() {
       .catch(() => {});
     fetch("/api/college/vacancy-requests?status=APPROVED")
       .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
-      .then((d) => setVacancies(d.vacancyRequests ?? []))
+      .then((d) => {
+        const dept = user?.department ?? "";
+        const all = d.vacancyRequests ?? [];
+        setVacancies(dept ? all.filter((v) => v.department === dept) : all);
+      })
       .catch(() => {});
   }, []);
 
@@ -321,19 +326,56 @@ export default function NewCandidatePage() {
 
             {vacancies.length > 0 && (
               <div className="space-y-2">
-                <Label>Link to Vacancy (optional)</Label>
-                <Select onValueChange={(v) => setValue("vacancyId", v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select approved vacancy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vacancies.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.position} — {v.department}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label>Link to Vacancy <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  {selectedVacancyId && (
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedVacancyId(""); setValue("vacancyId", ""); }}
+                      className="text-xs text-muted-foreground hover:text-destructive"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {vacancies.map((v) => {
+                    const isSelected = selectedVacancyId === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => { setSelectedVacancyId(v.id); setValue("vacancyId", v.id); }}
+                        className={`w-full text-left rounded-lg border-2 px-4 py-3 transition-all ${
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-muted hover:border-muted-foreground/40"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className={`text-sm font-medium ${isSelected ? "text-primary" : ""}`}>{v.position}</p>
+                            {v.qualification && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{v.qualification}</p>
+                            )}
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              (v.availableCount ?? v.requiredCount) > 0
+                                ? "bg-green-50 text-green-700"
+                                : "bg-red-50 text-red-600"
+                            }`}>
+                              {v.availableCount ?? v.requiredCount} post{(v.availableCount ?? v.requiredCount) !== 1 ? "s" : ""} open
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Linking a vacancy helps track how many candidates are being considered per approved post.
+                </p>
               </div>
             )}
 
