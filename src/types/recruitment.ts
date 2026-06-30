@@ -90,6 +90,8 @@ export const CANDIDATE_STATUS_LABELS: Record<CandidateStatus, string> = {
   WAITLISTED: "Waitlisted",
 };
 
+export type InterviewMode = "ONLINE" | "OFFLINE";
+
 export interface Candidate {
   id: string;
   collegeId: string;
@@ -108,6 +110,9 @@ export interface Candidate {
   isShortlisted: boolean;
   hasArrived: boolean;
   arrivedAt?: Timestamp;
+  interviewMode?: InterviewMode;
+  demoClassroom?: string;
+  meetingLink?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

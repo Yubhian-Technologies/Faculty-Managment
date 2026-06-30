@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor } from "lucide-react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type { HiringBatch, Candidate } from "@/types";
 
@@ -258,12 +258,28 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
               <p className="font-medium">{batch.coordinatorName ?? "—"}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Demo Room</p>
-              <p className="font-medium">{batch.demoClassroom ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">Interview Mode</p>
+              {candidate?.interviewMode === "ONLINE" ? (
+                <span className="flex items-center gap-1 font-medium text-blue-600">
+                  <Monitor className="h-3.5 w-3.5" /> Online
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 font-medium text-gray-700">
+                  <MapPin className="h-3.5 w-3.5" /> Offline
+                </span>
+              )}
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Interview Venue</p>
-              <p className="font-medium">{batch.interviewVenue ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">
+                {candidate?.interviewMode === "ONLINE" ? "Meeting Link" : "Demo Room"}
+              </p>
+              {candidate?.interviewMode === "ONLINE" ? (
+                candidate.meetingLink
+                  ? <a href={candidate.meetingLink} target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline text-xs break-all">{candidate.meetingLink}</a>
+                  : <p className="font-medium text-muted-foreground">—</p>
+              ) : (
+                <p className="font-medium">{candidate?.demoClassroom ?? batch.demoClassroom ?? "—"}</p>
+              )}
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Date</p>
