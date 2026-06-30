@@ -180,7 +180,30 @@ export default function NewCandidatePage() {
   const source = watch("source");
   const interviewMode = watch("interviewMode");
   const referralType = watch("referralType");
+  const positionValue = watch("position");
   const isBusy = isSubmitting || isUploading;
+
+  // Filter hiring requests by the typed position value
+  const matchedVacancies = positionValue?.trim()
+    ? vacancies.filter((v) =>
+        v.position.toLowerCase().includes(positionValue.trim().toLowerCase())
+      )
+    : vacancies;
+
+  // Auto-select when exactly one match; clear when the selected card no longer matches
+  useEffect(() => {
+    if (matchedVacancies.length === 1) {
+      const only = matchedVacancies[0];
+      if (selectedVacancyId !== only.id) {
+        setSelectedVacancyId(only.id);
+        setValue("vacancyId", only.id);
+      }
+    } else if (selectedVacancyId && !matchedVacancies.find((v) => v.id === selectedVacancyId)) {
+      setSelectedVacancyId("");
+      setValue("vacancyId", "");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedVacancies.length, positionValue]);
 
   return (
     <div className="max-w-xl">
@@ -344,7 +367,10 @@ export default function NewCandidatePage() {
             {vacancies.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Link to Vacancy <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  <Label>
+                    Link to Hiring Request{" "}
+                    <span className="font-normal text-muted-foreground">(optional)</span>
+                  </Label>
                   {selectedVacancyId && (
                     <button
                       type="button"
@@ -355,27 +381,51 @@ export default function NewCandidatePage() {
                     </button>
                   )}
                 </div>
+
+                {/* Filtered hint */}
+                {positionValue?.trim() && (
+                  <p className="text-xs text-muted-foreground">
+                    {matchedVacancies.length === 0
+                      ? `No hiring requests match "${positionValue.trim()}"`
+                      : `Showing ${matchedVacancies.length} request${matchedVacancies.length !== 1 ? "s" : ""} matching "${positionValue.trim()}"`}
+                  </p>
+                )}
+
                 <div className="space-y-2">
-                  {vacancies.map((v) => {
+                  {(matchedVacancies.length > 0 ? matchedVacancies : vacancies).map((v) => {
                     const isSelected = selectedVacancyId === v.id;
+                    const refId = v.id.slice(-6).toUpperCase();
+                    const isFiltered = positionValue?.trim() && matchedVacancies.length > 0;
                     return (
                       <button
                         key={v.id}
                         type="button"
-                        onClick={() => { setSelectedVacancyId(v.id); setValue("vacancyId", v.id); }}
+                        onClick={() => {
+                          if (isSelected) { setSelectedVacancyId(""); setValue("vacancyId", ""); }
+                          else { setSelectedVacancyId(v.id); setValue("vacancyId", v.id); }
+                        }}
                         className={`w-full text-left rounded-lg border-2 px-4 py-3 transition-all ${
                           isSelected
                             ? "border-primary bg-primary/5"
+                            : isFiltered
+                            ? "border-muted hover:border-primary/50"
                             : "border-muted hover:border-muted-foreground/40"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className={`text-sm font-medium ${isSelected ? "text-primary" : ""}`}>{v.position}</p>
+                            <div className="flex items-center gap-2">
+                              <p className={`text-sm font-medium ${isSelected ? "text-primary" : ""}`}>
+                                {v.position}
+                              </p>
+                              <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                #{refId}
+                              </span>
+                            </div>
                             {v.qualification && (
                               <p className="text-xs text-muted-foreground mt-0.5">{v.qualification}</p>
                             )}
-                            <p className="text-xs text-muted-foreground/70 mt-1">
+                            <p className="text-xs text-muted-foreground/60 mt-1">
                               Raised {formatDate(v.createdAt)}
                             </p>
                           </div>
@@ -383,6 +433,9 @@ export default function NewCandidatePage() {
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
                               {v.availableCount ?? v.requiredCount} post{(v.availableCount ?? v.requiredCount) !== 1 ? "s" : ""} open
                             </span>
+                            {isSelected && (
+                              <p className="text-[10px] text-primary font-medium mt-1">Selected ✓</p>
+                            )}
                           </div>
                         </div>
                       </button>
@@ -390,7 +443,7 @@ export default function NewCandidatePage() {
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Linking a vacancy helps track how many candidates are being considered per approved post.
+                  Fill in the Position field above to auto-filter matching hiring requests.
                 </p>
               </div>
             )}
