@@ -74,9 +74,11 @@ export async function POST(request: Request) {
       referralName?: string;
       referralPhone?: string;
       referralDescription?: string;
+      residenceAddress?: string;
+      permanentAddress?: string;
     };
 
-    const { name, email, phone, department, position, resumeUrl, source, interviewMode, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription } = body;
+    const { name, email, phone, department, position, resumeUrl, source, interviewMode, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription, residenceAddress, permanentAddress } = body;
     if (!name || !email || !phone || !department || !position) {
       return NextResponse.json({ error: "name, email, phone, department, position required" }, { status: 400 });
     }
@@ -101,6 +103,8 @@ export async function POST(request: Request) {
         interviewMode: interviewMode ?? "OFFLINE",
         vacancyId: vacancyId ?? "",
         batchId: batchId ?? "",
+        ...(residenceAddress ? { residenceAddress: residenceAddress.trim() } : {}),
+        ...(permanentAddress ? { permanentAddress: permanentAddress.trim() } : {}),
         ...(source === "REFERRAL" ? {
           referralType: referralType ?? "INTERNAL",
           ...(referralName ? { referralName: referralName.trim() } : {}),

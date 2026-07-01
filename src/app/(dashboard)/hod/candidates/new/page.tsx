@@ -42,6 +42,8 @@ const schema = z.object({
   referralName: z.string().optional(),
   referralPhone: z.string().optional(),
   referralDescription: z.string().optional(),
+  residenceAddress: z.string().optional(),
+  permanentAddress: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -56,6 +58,7 @@ export default function NewCandidatePage() {
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>("");
   const [selectedDesignation, setSelectedDesignation] = useState("");
   const [customPosition, setCustomPosition] = useState("");
+  const [sameAddress, setSameAddress] = useState(false);
 
   // Resume upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -506,6 +509,57 @@ export default function NewCandidatePage() {
                 </p>
               </div>
             )}
+
+            {/* Address */}
+            <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+              <p className="text-sm font-semibold">Address Details</p>
+
+              <div className="space-y-2">
+                <Label htmlFor="residenceAddress">Residence Address</Label>
+                <Textarea
+                  id="residenceAddress"
+                  {...register("residenceAddress")}
+                  placeholder="Current / temporary address where the candidate lives"
+                  rows={2}
+                  onChange={(e) => {
+                    register("residenceAddress").onChange(e);
+                    if (sameAddress) setValue("permanentAddress", e.target.value);
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="sameAddress"
+                  checked={sameAddress}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSameAddress(checked);
+                    if (checked) {
+                      const res = (document.getElementById("residenceAddress") as HTMLTextAreaElement)?.value ?? "";
+                      setValue("permanentAddress", res);
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-border accent-primary"
+                />
+                <label htmlFor="sameAddress" className="text-sm text-muted-foreground cursor-pointer select-none">
+                  Permanent address same as residence
+                </label>
+              </div>
+
+              {!sameAddress && (
+                <div className="space-y-2">
+                  <Label htmlFor="permanentAddress">Permanent Address</Label>
+                  <Textarea
+                    id="permanentAddress"
+                    {...register("permanentAddress")}
+                    placeholder="Home town / permanent address"
+                    rows={2}
+                  />
+                </div>
+              )}
+            </div>
 
             {/* Resume Upload */}
             <div className="space-y-2">

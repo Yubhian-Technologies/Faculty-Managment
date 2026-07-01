@@ -116,6 +116,9 @@ export interface Candidate {
   referralName?: string;
   referralPhone?: string;
   referralDescription?: string;
+  residenceAddress?: string;
+  permanentAddress?: string;
+  sameAddress?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
