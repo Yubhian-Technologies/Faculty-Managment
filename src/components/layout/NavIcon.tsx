@@ -30,6 +30,8 @@ import {
   UsersRound,
   ClipboardCheck,
   MapPin,
+  GitBranch,
+  BookMarked,
   type LucideProps,
 } from "lucide-react";
 
@@ -65,6 +67,8 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   UsersRound,
   ClipboardCheck,
   MapPin,
+  GitBranch,
+  BookMarked,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {
