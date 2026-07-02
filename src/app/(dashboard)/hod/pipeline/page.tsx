@@ -204,11 +204,12 @@ function PipelineCard({ entry }: { entry: PipelineEntry }) {
       ? "border-l-primary"
       : "border-l-amber-400";
 
+  // Only show secondary Add Candidate button when the primary action is something else
+  // (i.e. when there are already shortlisted candidates and primary = "Create Interview Session")
   const showAddCandidate =
     vacancy.status === "APPROVED" &&
-    (!batch ||
-      batch.currentPhase === "CANDIDATE_COLLECTION" ||
-      batch.currentPhase === "PANEL_SETUP");
+    (!batch || batch.currentPhase === "CANDIDATE_COLLECTION" || batch.currentPhase === "PANEL_SETUP") &&
+    shortlisted >= 1;
 
   return (
     <div className={`rounded-xl border border-l-4 ${accentColor} bg-card shadow-sm overflow-hidden`}>
