@@ -49,15 +49,6 @@ type StudentFeedbackSummary = {
   averages: Record<string, number>;
 };
 
-type HRFeedbackForm = {
-  candidateId: string;
-  ratings: { attitude: number; teamwork: number; adaptability: number; communication: number; overallFit: number };
-  salaryExpectation: string;
-  noticePeriod: string;
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
-  comments: string;
-};
-
 type PanelFeedbackForm = {
   candidateId: string;
   ratings: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
@@ -114,15 +105,6 @@ function HRRatingSelector({ label, value, onChange }: { label: string; value: nu
   );
 }
 
-const defaultHRForm = (candidateId: string): HRFeedbackForm => ({
-  candidateId,
-  ratings: { attitude: 0, teamwork: 0, adaptability: 0, communication: 0, overallFit: 0 },
-  salaryExpectation: "",
-  noticePeriod: "",
-  recommendation: "MAYBE",
-  comments: "",
-});
-
 export default function HODBatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const myUid = useAuthStore((s) => s.user?.uid ?? "");
@@ -132,7 +114,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [facultyList, setFacultyList] = useState<FacultyMember[]>([]);
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
   const [studentFeedbackSummary, setStudentFeedbackSummary] = useState<StudentFeedbackSummary[]>([]);
-  const [hrFeedback, setHRFeedback] = useState<{ candidateId: string; recommendation: string }[]>([]);
   const [userMap, setUserMap] = useState<Record<string, FMSUser>>({});
   const [allUsers, setAllUsers] = useState<FMSUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -151,11 +132,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [interviewTime, setInterviewTime] = useState("");
   const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
   const [newDoc, setNewDoc] = useState("");
-
-  // HR feedback form state
-  const [hrFormCandidate, setHRFormCandidate] = useState<Candidate | null>(null);
-  const [hrForm, setHRForm] = useState<HRFeedbackForm | null>(null);
-  const [isSubmittingHR, setIsSubmittingHR] = useState(false);
 
   // Panel feedback form state (HOD's own submission)
   const [panelFormCandidate, setPanelFormCandidate] = useState<Candidate | null>(null);
@@ -192,20 +168,16 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
 
       // Load feedback when demo is complete
       if (b.demoComplete && cands.length > 0) {
-        const [pfRes, sfRes, hrRes] = await Promise.all([
+        const [pfRes, sfRes] = await Promise.all([
           fetch(`/api/college/panel-feedback?batchId=${id}`)
             .then((r) => r.json() as Promise<{ feedback: PanelFeedbackItem[] }>)
             .then((d) => d.feedback ?? []),
           fetch(`/api/college/student-feedback?batchId=${id}`)
             .then((r) => r.json() as Promise<{ feedback: { candidateId: string; ratings: Record<string, number> }[] }>)
             .then((d) => d.feedback ?? []),
-          fetch(`/api/college/hr-feedback?batchId=${id}`)
-            .then((r) => r.json() as Promise<{ feedback: { candidateId: string; recommendation: string }[] }>)
-            .then((d) => d.feedback ?? []),
         ]);
 
         setPanelFeedback(pfRes);
-        setHRFeedback(hrRes);
 
         // Aggregate student feedback by candidate
         const summaryMap: Record<string, { count: number; sums: Record<string, number> }> = {};
@@ -267,40 +239,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "destructive", title: "Failed to save" });
     } finally {
       setIsSaving(false);
-    }
-  }
-
-  async function submitHRFeedback() {
-    if (!hrForm || !hrFormCandidate) return;
-    const allRated = Object.values(hrForm.ratings).every((v) => v > 0);
-    if (!allRated) {
-      toast({ variant: "destructive", title: "Please rate all 5 criteria" });
-      return;
-    }
-    setIsSubmittingHR(true);
-    try {
-      const res = await fetch("/api/college/hr-feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          batchId: id,
-          candidateId: hrFormCandidate.id,
-          ratings: hrForm.ratings,
-          salaryExpectation: hrForm.salaryExpectation ? parseFloat(hrForm.salaryExpectation) : undefined,
-          noticePeriod: hrForm.noticePeriod,
-          recommendation: hrForm.recommendation,
-          comments: hrForm.comments,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "HR feedback saved" });
-      setHRFormCandidate(null);
-      setHRForm(null);
-      void load();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to save HR feedback" });
-    } finally {
-      setIsSubmittingHR(false);
     }
   }
 
@@ -978,135 +916,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
             </CardContent>
           </Card>
 
-          {/* HR Feedback */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">HR Interview Assessment</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {candidates.map((c) => {
-                const existing = hrFeedback.find((h) => h.candidateId === c.id);
-                const isSelected = hrFormCandidate?.id === c.id;
-
-                return (
-                  <div key={c.id}>
-                    <div className="flex items-center justify-between p-3 rounded-lg border">
-                      <div>
-                        <p className="font-medium text-sm">{c.name}</p>
-                        {existing && (
-                          <span className={`text-xs font-medium ${
-                            existing.recommendation === "ACCEPT" ? "text-green-600"
-                            : existing.recommendation === "REJECT" ? "text-red-600"
-                            : "text-amber-600"
-                          }`}>
-                            {existing.recommendation === "ACCEPT" ? "✓ Accepted" : existing.recommendation === "REJECT" ? "✗ Rejected" : "~ Maybe"}
-                          </span>
-                        )}
-                      </div>
-                      {!isSelected && (
-                        <Button
-                          size="sm"
-                          variant={existing ? "outline" : "default"}
-                          onClick={() => {
-                            setHRFormCandidate(c);
-                            setHRForm(defaultHRForm(c.id));
-                          }}
-                        >
-                          {existing ? "Edit Assessment" : "Add Assessment"}
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Inline HR form */}
-                    {isSelected && hrForm && (
-                      <Card className="mt-2 border-primary/30 bg-primary/5">
-                        <CardContent className="p-4 space-y-4">
-                          <p className="text-sm font-medium">HR Assessment: {c.name}</p>
-
-                          <div className="space-y-3">
-                            {(
-                              [
-                                ["attitude", "Attitude & Professionalism"],
-                                ["teamwork", "Teamwork & Collaboration"],
-                                ["adaptability", "Adaptability"],
-                                ["communication", "Communication"],
-                                ["overallFit", "Overall Cultural Fit"],
-                              ] as [keyof typeof hrForm.ratings, string][]
-                            ).map(([key, label]) => (
-                              <HRRatingSelector
-                                key={key}
-                                label={label}
-                                value={hrForm.ratings[key]}
-                                onChange={(v) =>
-                                  setHRForm((f) => f ? { ...f, ratings: { ...f.ratings, [key]: v } } : f)
-                                }
-                              />
-                            ))}
-                          </div>
-
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Salary Expectation (₹/month)</Label>
-                              <Input
-                                type="number"
-                                value={hrForm.salaryExpectation}
-                                onChange={(e) => setHRForm((f) => f ? { ...f, salaryExpectation: e.target.value } : f)}
-                                placeholder="e.g. 45000"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Notice Period</Label>
-                              <Input
-                                value={hrForm.noticePeriod}
-                                onChange={(e) => setHRForm((f) => f ? { ...f, noticePeriod: e.target.value } : f)}
-                                placeholder="e.g. Immediate / 30 days"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-xs">Recommendation</Label>
-                            <Select
-                              value={hrForm.recommendation}
-                              onValueChange={(v) => setHRForm((f) => f ? { ...f, recommendation: v as "ACCEPT" | "REJECT" | "MAYBE" } : f)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="ACCEPT">Accept — Recommend for hiring</SelectItem>
-                                <SelectItem value="MAYBE">Maybe — Needs further review</SelectItem>
-                                <SelectItem value="REJECT">Reject — Not suitable</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-xs">Comments (optional)</Label>
-                            <Textarea
-                              value={hrForm.comments}
-                              onChange={(e) => setHRForm((f) => f ? { ...f, comments: e.target.value } : f)}
-                              placeholder="Any additional observations..."
-                              rows={2}
-                            />
-                          </div>
-
-                          <div className="flex gap-2 justify-end">
-                            <Button variant="outline" size="sm" onClick={() => { setHRFormCandidate(null); setHRForm(null); }}>
-                              Cancel
-                            </Button>
-                            <Button size="sm" onClick={submitHRFeedback} loading={isSubmittingHR}>
-                              Save Assessment
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
           {/* Submit for Principal Final Review */}
           <Card className={batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED" ? "border-green-200 bg-green-50/40" : "border-primary/20"}>
             <CardHeader>
@@ -1129,14 +938,12 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
                   <div className="space-y-2 text-sm">
                     {candidates.map((c) => {
                       const pf = panelFeedback.filter((f) => f.candidateId === c.id);
-                      const hr = hrFeedback.find((h) => h.candidateId === c.id);
                       const accepts = pf.filter((f) => f.recommendation === "ACCEPT").length;
                       return (
                         <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/40">
                           <p className="font-medium">{c.name}</p>
                           <p className="text-xs text-muted-foreground">
                             Panel: {accepts}/{pf.length} accept
-                            {hr ? ` · HR: ${hr.recommendation}` : " · HR: pending"}
                           </p>
                         </div>
                       );
