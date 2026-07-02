@@ -150,6 +150,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [meetingLink, setMeetingLink] = useState("");
   const [coordinatorFacultyId, setCoordinatorFacultyId] = useState("");
   const [interviewVenue, setInterviewVenue] = useState("");
+  const [interviewTime, setInterviewTime] = useState("");
   const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
   const [newDoc, setNewDoc] = useState("");
 
@@ -188,6 +189,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setMeetingLink(b.meetingLink ?? "");
       setCoordinatorFacultyId(b.coordinatorFacultyId ?? "");
       setInterviewVenue(b.interviewVenue ?? "");
+      setInterviewTime(b.interviewTime ?? "");
       setRequiredDocuments(b.requiredDocuments ?? []);
 
       // Load feedback when demo is complete
@@ -251,6 +253,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           interviewVenue: interviewVenue.trim(),
+          interviewTime: interviewTime.trim(),
           requiredDocuments,
           demoClassroom: demoClassroom.trim(),
           meetingLink: meetingLink.trim(),
@@ -447,7 +450,12 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       <div className="grid gap-4 md:grid-cols-4">
         {[
           { label: "Status", content: <StatusBadge status={batch.status} /> },
-          { label: "Interview Date", content: <p className="font-medium text-sm">{formatDate(batch.interviewDate)}</p> },
+          { label: "Interview Date & Time", content: (
+            <p className="font-medium text-sm">
+              {formatDate(batch.interviewDate)}
+              {batch.interviewTime && <span className="ml-2 text-muted-foreground">{batch.interviewTime}</span>}
+            </p>
+          )},
           { label: "Venue", content: <p className="font-medium text-sm">{batch.interviewVenue || "Not set"}</p> },
           { label: "Demo", content: batch.demoComplete
             ? <span className="text-xs text-green-600 font-medium flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />Complete</span>
@@ -474,18 +482,30 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
           </CardHeader>
           <CardContent className="space-y-5">
 
-            {/* Venue */}
-            <div className="space-y-2">
-              <Label htmlFor="interviewVenue">
-                <MapPin className="h-3 w-3 inline mr-1" />
-                Interview Venue *
-              </Label>
-              <Input
-                id="interviewVenue"
-                value={interviewVenue}
-                onChange={(e) => setInterviewVenue(e.target.value)}
-                placeholder="e.g. Conference Hall, Block B, 2nd Floor"
-              />
+            {/* Venue + Time */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="interviewVenue">
+                  <MapPin className="h-3 w-3 inline mr-1" />
+                  Interview Venue *
+                </Label>
+                <Input
+                  id="interviewVenue"
+                  value={interviewVenue}
+                  onChange={(e) => setInterviewVenue(e.target.value)}
+                  placeholder="e.g. Conference Hall, Block B, 2nd Floor"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="interviewTime">Interview Time</Label>
+                <Input
+                  id="interviewTime"
+                  type="time"
+                  value={interviewTime}
+                  onChange={(e) => setInterviewTime(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Start time of the interview session.</p>
+              </div>
             </div>
 
             {/* Required Documents */}

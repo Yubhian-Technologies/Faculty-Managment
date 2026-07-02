@@ -72,6 +72,7 @@ export async function PATCH(
       panelMemberUids?: string[];
       candidateIds?: string[];
       interviewDate?: string;
+      interviewTime?: string;
       // Coordinator action
       demoComplete?: boolean;
     };
@@ -127,6 +128,7 @@ export async function PATCH(
     if (body.panelMemberUids !== undefined) updates.panelMemberUids = body.panelMemberUids;
     if (body.candidateIds !== undefined) updates.candidateIds = body.candidateIds;
     if (body.interviewDate !== undefined) updates.interviewDate = new Date(body.interviewDate);
+    if (body.interviewTime !== undefined) updates.interviewTime = body.interviewTime;
     if (body.demoComplete === true) updates.demoComplete = true;
 
     await db
