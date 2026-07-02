@@ -60,7 +60,7 @@ function getNextAction(entry: PipelineEntry): NextAction {
     if (shortlisted >= 1) {
       return { label: "Create Interview Session →", href: "/hod/batches/new" };
     }
-    return { label: "Add Candidates", href: "/hod/candidates/new" };
+    return { label: "Add Candidates", href: `/hod/candidates/new?vacancyId=${vacancy.id}` };
   }
 
   const p = batch.currentPhase;
@@ -265,7 +265,7 @@ function PipelineCard({ entry }: { entry: PipelineEntry }) {
           )}
           {showAddCandidate && (
             <Button size="sm" variant="outline" asChild>
-              <Link href="/hod/candidates/new">
+              <Link href={`/hod/candidates/new?vacancyId=${vacancy.id}`}>
                 <Plus className="h-3.5 w-3.5 mr-1" />
                 Add Candidate
               </Link>

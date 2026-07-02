@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -53,6 +53,9 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 export default function NewCandidatePage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const searchParams = useSearchParams();
+  const prefilledVacancyId = searchParams.get("vacancyId") ?? "";
+
   const [departments, setDepartments] = useState<Department[]>([]);
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>("");
@@ -94,8 +97,19 @@ export default function NewCandidatePage() {
           !completedVacancyIds.has(v.id)
         );
         setVacancies(filtered);
+
+        // Auto-select if vacancyId was passed in URL
+        if (prefilledVacancyId) {
+          const match = filtered.find((v) => v.id === prefilledVacancyId);
+          if (match) {
+            setSelectedVacancyId(match.id);
+            setValue("vacancyId", match.id);
+            syncDesignationFromVacancy(match.position);
+          }
+        }
       }).catch(() => {}),
     ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const {
@@ -422,11 +436,33 @@ export default function NewCandidatePage() {
 
             {vacancies.length > 0 && (
               <div className="space-y-2">
+                <Label>Link to Hiring Request</Label>
+
+                {/* Locked: came from pipeline — just show the linked card, no picker */}
+                {prefilledVacancyId ? (
+                  (() => {
+                    const linked = vacancies.find((v) => v.id === prefilledVacancyId);
+                    return linked ? (
+                      <div className="flex items-center justify-between rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-primary">{linked.position}</p>
+                          {linked.qualification && (
+                            <p className="text-xs text-muted-foreground">{linked.qualification}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground/60 mt-0.5">{linked.department}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
+                            {linked.availableCount ?? linked.requiredCount} posts open
+                          </span>
+                          <p className="text-[10px] text-primary font-medium mt-1">Auto-linked ✓</p>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()
+                ) : (
                 <div className="flex items-center justify-between">
-                  <Label>
-                    Link to Hiring Request{" "}
-                    <span className="font-normal text-muted-foreground">(optional)</span>
-                  </Label>
+                  <span />
                   {selectedVacancyId && (
                     <button
                       type="button"
@@ -437,6 +473,8 @@ export default function NewCandidatePage() {
                     </button>
                   )}
                 </div>
+                )}
+                {!prefilledVacancyId && <div className="space-y-0">
 
                 {/* Filtered hint */}
                 {positionValue?.trim() && (
@@ -507,6 +545,7 @@ export default function NewCandidatePage() {
                 <p className="text-xs text-muted-foreground">
                   Select a designation above to auto-filter matching hiring requests. Selecting a card also fills the designation.
                 </p>
+                </div>}
               </div>
             )}
 
