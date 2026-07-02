@@ -58,14 +58,14 @@ function getNextAction(entry: PipelineEntry): NextAction {
   if (!batch) {
     const shortlisted = candidates.filter((c) => c.isShortlisted).length;
     if (shortlisted >= 1) {
-      return { label: "Create Interview Session →", href: "/hod/batches/new" };
+      return { label: "Create Interview Session →", href: `/hod/batches/new?vacancyId=${vacancy.id}` };
     }
     return { label: "Add Candidates", href: `/hod/candidates/new?vacancyId=${vacancy.id}` };
   }
 
   const p = batch.currentPhase;
   if (p === "CANDIDATE_COLLECTION" || p === "PANEL_SETUP") {
-    return { label: "Plan Interview Session →", href: "/hod/batches/new" };
+    return { label: "Plan Interview Session →", href: `/hod/batches/new?vacancyId=${vacancy.id}` };
   }
   if (p === "PRINCIPAL_REVIEW") {
     return { label: "Awaiting Principal Approval", href: "#", disabled: true };

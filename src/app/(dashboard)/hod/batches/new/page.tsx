@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
 export default function NewBatchPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const searchParams = useSearchParams();
+  const prefilledVacancyId = searchParams.get("vacancyId") ?? "";
 
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -53,6 +55,11 @@ export default function NewBatchPage() {
       .then(([v, c, s]) => {
         setVacancies(v);
         setCandidates(c);
+
+        // Auto-select if vacancyId was passed from pipeline
+        if (prefilledVacancyId && v.find((vac) => vac.id === prefilledVacancyId)) {
+          setSelectedVacancyId(prefilledVacancyId);
+        }
 
         // Locked defaults: Principal + VP (excluding self, though unlikely)
         const defaults = s.filter(
@@ -162,8 +169,19 @@ export default function NewBatchPage() {
           <CardContent>
             {vacancies.length === 0 ? (
               <p className="text-sm text-muted-foreground">No approved hiring requests. Get a hiring request approved first.</p>
+            ) : prefilledVacancyId && selectedVacancy ? (
+              // Locked card — came from pipeline
+              <div className="flex items-center justify-between rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-primary">{selectedVacancy.position}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {selectedVacancy.department} · {selectedVacancy.requiredCount} position{selectedVacancy.requiredCount !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <span className="text-[10px] text-primary font-medium">Auto-linked ✓</span>
+              </div>
             ) : (
-              <Select onValueChange={setSelectedVacancyId}>
+              <Select value={selectedVacancyId} onValueChange={setSelectedVacancyId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select an approved hiring request" />
                 </SelectTrigger>
