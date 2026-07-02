@@ -169,15 +169,19 @@ export default function NewBatchPage() {
           <CardContent>
             {vacancies.length === 0 ? (
               <p className="text-sm text-muted-foreground">No approved hiring requests. Get a hiring request approved first.</p>
-            ) : prefilledVacancyId && selectedVacancy ? (
-              // Locked card — came from pipeline
+            ) : prefilledVacancyId ? (
+              // Locked card — came from pipeline; show vacancy details once loaded
               <div className="flex items-center justify-between rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-primary">{selectedVacancy.position}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {selectedVacancy.department} · {selectedVacancy.requiredCount} position{selectedVacancy.requiredCount !== 1 ? "s" : ""}
-                  </p>
-                </div>
+                {selectedVacancy ? (
+                  <div>
+                    <p className="text-sm font-semibold text-primary">{selectedVacancy.position}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {selectedVacancy.department} · {selectedVacancy.requiredCount} position{selectedVacancy.requiredCount !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                )}
                 <span className="text-[10px] text-primary font-medium">Auto-linked ✓</span>
               </div>
             ) : (
