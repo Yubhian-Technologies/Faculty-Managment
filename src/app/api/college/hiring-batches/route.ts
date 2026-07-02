@@ -109,6 +109,7 @@ export async function POST(request: Request) {
         coordinatorName: "",
         requiredDocuments: [],
         status: "PENDING",
+        currentPhase: "PRINCIPAL_REVIEW",
         principalApprovalStatus: "PENDING",
         setupComplete: false,
         createdAt: now,

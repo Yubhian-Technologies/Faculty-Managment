@@ -106,6 +106,10 @@ export async function PATCH(
     if (body.status !== undefined) updates.status = body.status;
     if (body.principalNotes !== undefined) updates.principalNotes = body.principalNotes;
     if (body.currentPhase !== undefined) updates.currentPhase = body.currentPhase;
+    // When Principal approves, transition phase so HOD can set up logistics
+    if (body.status === "APPROVED") {
+      updates.currentPhase = "HOD_FINAL_SETUP";
+    }
     // College Office: venue + docs
     if (body.interviewVenue !== undefined) updates.interviewVenue = body.interviewVenue;
     if (body.requiredDocuments !== undefined) updates.requiredDocuments = body.requiredDocuments;
@@ -142,9 +146,6 @@ export async function PATCH(
     const notifBatch = db.batch();
 
     if (body.status === "APPROVED") {
-      // HOD now handles all logistics — skip College Office, mark setup ready immediately
-      updates.setupComplete = true;
-      updates.currentPhase = "HOD_FINAL_SETUP";
 
       const hodNotifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
       notifBatch.set(hodNotifRef, {

@@ -9,6 +9,7 @@ import { useUIStore } from "@/store/uiStore";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
+import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { getNavItemsForRole, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { ROLE_LABELS } from "@/types";
@@ -29,15 +30,29 @@ export function Sidebar() {
   const { setNotificationDrawerOpen } = useUIStore();
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
+  const { coordinatorBatchId } = useAssignedCoordinator();
 
   if (!user) return null;
 
   const baseNavItems = getNavItemsForRole(user.role);
-  // Inject "My Interviews" after Dashboard when faculty has assigned batches
-  const navItems =
-    user.role === "PANEL_MEMBER" && hasInterviews
-      ? [baseNavItems[0], INTERVIEW_NAV_ITEM, ...baseNavItems.slice(1)]
-      : baseNavItems;
+
+  // Inject dynamic nav items for PANEL_MEMBER based on assignments
+  let navItems = baseNavItems;
+  if (user.role === "PANEL_MEMBER") {
+    const injected: NavItem[] = [];
+    if (hasInterviews) injected.push(INTERVIEW_NAV_ITEM);
+    if (coordinatorBatchId) {
+      injected.push({
+        label: "Demo Session",
+        href: `/coordinator/${coordinatorBatchId}`,
+        iconName: "QrCode",
+        roles: ["PANEL_MEMBER"],
+      });
+    }
+    if (injected.length > 0) {
+      navItems = [baseNavItems[0], ...injected, ...baseNavItems.slice(1)];
+    }
+  }
 
   return (
     <aside className="hidden md:flex md:flex-col w-64 border-r bg-background min-h-screen fixed top-0 left-0 z-30">
