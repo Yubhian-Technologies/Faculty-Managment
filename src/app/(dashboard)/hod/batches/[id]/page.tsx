@@ -149,6 +149,9 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [demoClassroom, setDemoClassroom] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
   const [coordinatorFacultyId, setCoordinatorFacultyId] = useState("");
+  const [interviewVenue, setInterviewVenue] = useState("");
+  const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
+  const [newDoc, setNewDoc] = useState("");
 
   // HR feedback form state
   const [hrFormCandidate, setHRFormCandidate] = useState<Candidate | null>(null);
@@ -184,6 +187,8 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setDemoClassroom(b.demoClassroom ?? "");
       setMeetingLink(b.meetingLink ?? "");
       setCoordinatorFacultyId(b.coordinatorFacultyId ?? "");
+      setInterviewVenue(b.interviewVenue ?? "");
+      setRequiredDocuments(b.requiredDocuments ?? []);
 
       // Load feedback when demo is complete
       if (b.demoComplete && cands.length > 0) {
@@ -235,19 +240,27 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "destructive", title: "Please assign a coordinator" });
       return;
     }
+    if (!interviewVenue.trim()) {
+      toast({ variant: "destructive", title: "Please enter the interview venue" });
+      return;
+    }
     setIsSaving(true);
     try {
       const res = await fetch(`/api/college/hiring-batches/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          interviewVenue: interviewVenue.trim(),
+          requiredDocuments,
           demoClassroom: demoClassroom.trim(),
           meetingLink: meetingLink.trim(),
           coordinatorFacultyId,
+          setupComplete: true,
+          currentPhase: "INTERVIEW_READY",
         }),
       });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Details saved", description: "Coordinator has been notified." });
+      toast({ variant: "success", title: "Setup saved", description: "Coordinator has been notified. Session is ready." });
       void load();
     } catch {
       toast({ variant: "destructive", title: "Failed to save" });
@@ -450,16 +463,81 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         ))}
       </div>
 
-      {/* HOD Final Setup — after college office marks setup complete */}
-      {batch.setupComplete && (
+      {/* Interview Setup — HOD fills venue, documents, demo room, and coordinator */}
+      {batch.status === "APPROVED" && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
-              Interview Logistics
+              Interview Setup
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+
+            {/* Venue */}
+            <div className="space-y-2">
+              <Label htmlFor="interviewVenue">
+                <MapPin className="h-3 w-3 inline mr-1" />
+                Interview Venue *
+              </Label>
+              <Input
+                id="interviewVenue"
+                value={interviewVenue}
+                onChange={(e) => setInterviewVenue(e.target.value)}
+                placeholder="e.g. Conference Hall, Block B, 2nd Floor"
+              />
+            </div>
+
+            {/* Required Documents */}
+            <div className="space-y-2">
+              <Label>Required Documents <span className="font-normal text-muted-foreground">(candidates must bring)</span></Label>
+              <div className="flex gap-2">
+                <Input
+                  value={newDoc}
+                  onChange={(e) => setNewDoc(e.target.value)}
+                  placeholder="e.g. Resume, Aadhar Card, Certificates"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newDoc.trim()) {
+                      e.preventDefault();
+                      setRequiredDocuments((prev) => [...prev, newDoc.trim()]);
+                      setNewDoc("");
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    if (newDoc.trim()) {
+                      setRequiredDocuments((prev) => [...prev, newDoc.trim()]);
+                      setNewDoc("");
+                    }
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+              {requiredDocuments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {requiredDocuments.map((doc) => (
+                    <span
+                      key={doc}
+                      className="flex items-center gap-1 bg-muted text-sm px-2.5 py-1 rounded-full"
+                    >
+                      {doc}
+                      <button
+                        type="button"
+                        onClick={() => setRequiredDocuments((prev) => prev.filter((d) => d !== doc))}
+                        className="ml-0.5 text-muted-foreground hover:text-destructive text-base leading-none"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="demoClassroom">
@@ -472,11 +550,11 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
                   onChange={(e) => setDemoClassroom(e.target.value)}
                   placeholder="e.g. Room 301, Block A"
                 />
-                <p className="text-xs text-muted-foreground">Required for offline candidates.</p>
+                <p className="text-xs text-muted-foreground">Room where offline candidates give demo class.</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="meetingLink">Meeting Link</Label>
+                <Label htmlFor="meetingLink">Online Meeting Link</Label>
                 <Input
                   id="meetingLink"
                   type="url"
@@ -484,7 +562,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
                   onChange={(e) => setMeetingLink(e.target.value)}
                   placeholder="https://meet.google.com/xxx-xxxx-xxx"
                 />
-                <p className="text-xs text-muted-foreground">Required for online candidates.</p>
+                <p className="text-xs text-muted-foreground">For online candidates.</p>
               </div>
             </div>
 
@@ -492,7 +570,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
               <div className="space-y-2">
                 <Label>
                   <Users className="h-3 w-3 inline mr-1" />
-                  Coordinator *
+                  Demo Coordinator *
                 </Label>
                 <Select value={coordinatorFacultyId} onValueChange={setCoordinatorFacultyId}>
                   <SelectTrigger>
@@ -526,7 +604,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
                 </Button>
               )}
               <Button onClick={saveDetails} loading={isSaving}>
-                Save & Notify Coordinator
+                Save Setup & Mark Ready
               </Button>
             </div>
           </CardContent>
@@ -670,22 +748,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         </CardContent>
       </Card>
 
-      {/* Required Documents */}
-      {batch.requiredDocuments && batch.requiredDocuments.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Required Documents</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="text-sm space-y-1">
-              {batch.requiredDocuments.map((doc) => (
-                <li key={doc} className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-foreground shrink-0" />
-                  {doc}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
 
       {/* ── POST-DEMO SECTIONS ──────────────────────────────────────────────────── */}
       {batch.demoComplete && (

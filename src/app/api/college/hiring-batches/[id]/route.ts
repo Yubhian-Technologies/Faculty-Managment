@@ -140,38 +140,21 @@ export async function PATCH(
     const notifBatch = db.batch();
 
     if (body.status === "APPROVED") {
-      // Notify HOD
+      // HOD now handles all logistics — skip College Office, mark setup ready immediately
+      updates.setupComplete = true;
+      updates.currentPhase = "HOD_FINAL_SETUP";
+
       const hodNotifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
       notifBatch.set(hodNotifRef, {
         collegeId: session.collegeId,
         toUid: batchData.hodUid,
         type: "INTERVIEW_PLAN_APPROVED",
-        title: "Interview Plan Approved",
-        message: `Your interview plan for ${batchData.position} has been approved. College Office will now set up logistics.`,
+        title: "Interview Plan Approved — Please Set Up Logistics",
+        message: `Your interview plan for ${batchData.position} has been approved. Please add the venue, required documents, demo classroom, and coordinator.`,
         link: `/hod/batches/${id}`,
         read: false,
         createdAt: now,
       });
-      // Notify College Office
-      const officeSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("users")
-        .where("role", "==", "COLLEGE_OFFICE")
-        .get();
-      for (const d of officeSnap.docs) {
-        const ref = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-        notifBatch.set(ref, {
-          collegeId: session.collegeId,
-          toUid: d.id,
-          type: "GENERAL",
-          title: "Interview Setup Required",
-          message: `Please set up venue and documents for ${batchData.position} interview in ${batchData.department}.`,
-          link: `/college-office/setup/${id}`,
-          read: false,
-          createdAt: now,
-        });
-      }
     } else if (body.status === "REJECTED") {
       const hodNotifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
       notifBatch.set(hodNotifRef, {
@@ -209,21 +192,6 @@ export async function PATCH(
         title: "You are the Demo Coordinator",
         message: `You have been assigned as coordinator for the ${batchData.position} interview (${batchData.department}). Display QR codes during the demo class to collect student feedback.`,
         link: `/coordinator/${id}`,
-        read: false,
-        createdAt: now,
-      });
-    }
-
-    // If setup complete, notify HOD
-    if (body.setupComplete === true) {
-      const hodRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-      notifBatch.set(hodRef, {
-        collegeId: session.collegeId,
-        toUid: batchData.hodUid,
-        type: "GENERAL",
-        title: "Interview Setup Complete",
-        message: `Venue and document setup for ${batchData.position} interview is complete. Please assign demo class and coordinator.`,
-        link: `/hod/batches/${id}`,
         read: false,
         createdAt: now,
       });
