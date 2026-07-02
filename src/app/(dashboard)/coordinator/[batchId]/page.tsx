@@ -7,12 +7,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor, ArrowRight } from "lucide-react";
+import Link from "next/link";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { useAuthStore } from "@/store/authStore";
 import type { HiringBatch, Candidate } from "@/types";
 
 export default function CoordinatorQRPage({ params }: { params: Promise<{ batchId: string }> }) {
   const { batchId } = use(params);
+  const role = useAuthStore((s) => s.user?.role);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -155,10 +158,28 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
         actions={
           <div className="flex gap-2">
             {batch.demoComplete ? (
-              <div className="flex items-center gap-1.5 text-sm text-green-600 font-medium px-3">
-                <CheckCircle2 className="h-4 w-4" />
-                Demo Complete
-              </div>
+              <>
+                <div className="flex items-center gap-1.5 text-sm text-green-600 font-medium px-3">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Demo Complete
+                </div>
+                {role === "HOD" && (
+                  <Button asChild>
+                    <Link href={`/hod/batches/${batchId}`}>
+                      View Evaluations
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Link>
+                  </Button>
+                )}
+                {role === "PANEL_MEMBER" && (
+                  <Button asChild>
+                    <Link href={`/panel/interviews/${batchId}`}>
+                      Submit Assessment
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Link>
+                  </Button>
+                )}
+              </>
             ) : (
               <Button variant="outline" onClick={() => setDemoCompleteDialog(true)}>
                 <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -288,6 +309,42 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
           </div>
         </CardContent>
       </Card>
+
+      {/* What's next after demo complete */}
+      {batch.demoComplete && (
+        <Card className="border-green-200 bg-green-50/50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm text-green-800">Demo day is done — here's what happens next</p>
+                <ol className="mt-2 space-y-1 text-xs text-green-700 list-decimal list-inside">
+                  <li>Panel members submit their interview assessments</li>
+                  <li>HOD fills in the HR assessment for each candidate</li>
+                  <li>HOD submits all evaluations to the Principal</li>
+                  <li>Principal makes final hiring decisions</li>
+                </ol>
+              </div>
+              {role === "HOD" && (
+                <Button size="sm" asChild className="shrink-0">
+                  <Link href={`/hod/batches/${batchId}`}>
+                    Go to Evaluations
+                    <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                  </Link>
+                </Button>
+              )}
+              {role === "PANEL_MEMBER" && (
+                <Button size="sm" asChild className="shrink-0">
+                  <Link href={`/panel/interviews/${batchId}`}>
+                    Submit Assessment
+                    <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                  </Link>
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <ConfirmDialog
         open={demoCompleteDialog}
