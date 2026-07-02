@@ -424,6 +424,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Batch not found</div>;
 
   const canEditCommittee =
+    !batch.demoComplete &&
     batch.currentPhase !== "PRINCIPAL_FINAL_REVIEW" &&
     batch.currentPhase !== "COMPLETED" &&
     batch.status !== "COMPLETED";
@@ -470,7 +471,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Interview Setup — HOD fills venue, documents, demo room, and coordinator */}
-      {batch.status === "APPROVED" && (
+      {batch.status === "APPROVED" && !batch.demoComplete && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
