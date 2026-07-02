@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   MapPin,
   Users,
-  QrCode,
   Star,
   ThumbsUp,
   ThumbsDown,
@@ -25,7 +24,6 @@ import {
   ArrowRight,
   Pencil,
 } from "lucide-react";
-import Link from "next/link";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type { HiringBatch, Candidate, FacultyMember, FMSUser } from "@/types";
@@ -614,15 +612,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
               </div>
             </div>
 
-            <div className="flex justify-end gap-3">
-              {(batch.coordinatorFacultyId ?? batch.coordinatorUid) && (
-                <Button variant="outline" asChild>
-                  <Link href={`/coordinator/${id}`}>
-                    <QrCode className="h-4 w-4 mr-2" />
-                    Open QR Display
-                  </Link>
-                </Button>
-              )}
+            <div className="flex justify-end">
               <Button onClick={saveDetails} loading={isSaving}>
                 Save Setup & Mark Ready
               </Button>
