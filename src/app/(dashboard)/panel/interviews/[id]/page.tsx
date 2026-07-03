@@ -145,7 +145,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
 
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Not found</div>;
 
-  const demoComplete = batch.demoComplete;
+  const canScore = batch.setupComplete || batch.demoComplete;
 
   return (
     <div className="space-y-6">
@@ -158,20 +158,20 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
       <Card>
         <CardContent className="p-4 grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
           <div><p className="text-xs text-muted-foreground">Venue</p><p className="font-medium">{batch.interviewVenue || "TBA"}</p></div>
-          <div><p className="text-xs text-muted-foreground">Date</p><p className="font-medium">{formatDate(batch.interviewDate)}</p></div>
+          <div><p className="text-xs text-muted-foreground">Date & Time</p><p className="font-medium">{formatDate(batch.interviewDate)}{batch.interviewTime && <span className="ml-1 text-muted-foreground">{batch.interviewTime}</span>}</p></div>
           <div><p className="text-xs text-muted-foreground">Demo Room</p><p className="font-medium">{batch.demoClassroom || "TBA"}</p></div>
           <div><p className="text-xs text-muted-foreground">Status</p><StatusBadge status={batch.status} /></div>
         </CardContent>
       </Card>
 
-      {/* Gate: demo must be complete before feedback */}
-      {!demoComplete ? (
+      {/* Gate: batch must be set up before scoring */}
+      {!canScore ? (
         <Card className="border-dashed">
           <CardContent className="p-8 text-center space-y-2">
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
-            <p className="font-medium">Demo Class Not Yet Complete</p>
+            <p className="font-medium">Interview Not Yet Scheduled</p>
             <p className="text-sm text-muted-foreground">
-              The coordinator will mark the demo as complete on interview day. Panel feedback will unlock after that.
+              The HOD is setting up the interview logistics. Assessment will unlock once the session is ready.
             </p>
           </CardContent>
         </Card>
@@ -316,7 +316,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
       )}
 
       {/* All submitted */}
-      {demoComplete && submittedFor.length === candidates.length && candidates.length > 0 && (
+      {canScore && submittedFor.length === candidates.length && candidates.length > 0 && (
         <div className="flex items-center gap-2 text-sm text-green-600">
           <CheckCircle2 className="h-4 w-4" />
           You have submitted feedback for all {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}.
