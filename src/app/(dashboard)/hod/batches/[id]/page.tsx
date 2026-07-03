@@ -406,7 +406,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Interview Setup — HOD fills venue, documents, demo room, and coordinator */}
-      {batch.status === "APPROVED" && !batch.demoComplete && (
+      {batch.currentPhase === "HOD_FINAL_SETUP" && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
