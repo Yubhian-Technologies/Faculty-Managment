@@ -129,7 +129,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [meetingLink, setMeetingLink] = useState("");
   const [coordinatorFacultyId, setCoordinatorFacultyId] = useState("");
   const [interviewVenue, setInterviewVenue] = useState("");
-  const [interviewTime, setInterviewTime] = useState("");
   const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
   const [newDoc, setNewDoc] = useState("");
 
@@ -163,7 +162,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setMeetingLink(b.meetingLink ?? "");
       setCoordinatorFacultyId(b.coordinatorFacultyId ?? "");
       setInterviewVenue(b.interviewVenue ?? "");
-      setInterviewTime(b.interviewTime ?? "");
       setRequiredDocuments(b.requiredDocuments ?? []);
 
       // Load feedback when demo is complete
@@ -223,7 +221,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           interviewVenue: interviewVenue.trim(),
-          interviewTime: interviewTime.trim(),
           requiredDocuments,
           demoClassroom: demoClassroom.trim(),
           meetingLink: meetingLink.trim(),
@@ -419,30 +416,18 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
           </CardHeader>
           <CardContent className="space-y-5">
 
-            {/* Venue + Time */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="interviewVenue">
-                  <MapPin className="h-3 w-3 inline mr-1" />
-                  Interview Venue *
-                </Label>
-                <Input
-                  id="interviewVenue"
-                  value={interviewVenue}
-                  onChange={(e) => setInterviewVenue(e.target.value)}
-                  placeholder="e.g. Conference Hall, Block B, 2nd Floor"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="interviewTime">Interview Time</Label>
-                <Input
-                  id="interviewTime"
-                  type="time"
-                  value={interviewTime}
-                  onChange={(e) => setInterviewTime(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Start time of the interview session.</p>
-              </div>
+            {/* Venue */}
+            <div className="space-y-2">
+              <Label htmlFor="interviewVenue">
+                <MapPin className="h-3 w-3 inline mr-1" />
+                Interview Venue *
+              </Label>
+              <Input
+                id="interviewVenue"
+                value={interviewVenue}
+                onChange={(e) => setInterviewVenue(e.target.value)}
+                placeholder="e.g. Conference Hall, Block B, 2nd Floor"
+              />
             </div>
 
             {/* Required Documents */}
