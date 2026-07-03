@@ -21,12 +21,16 @@ export default function PanelInterviewsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/college/hiring-batches")
+    const url =
+      user?.role === "HOD"
+        ? "/api/college/hiring-batches?asPanelMember=true"
+        : "/api/college/hiring-batches";
+    fetch(url)
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load interviews" }))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [user?.role]);
 
   const columns: Column<BatchRow>[] = [
     {
