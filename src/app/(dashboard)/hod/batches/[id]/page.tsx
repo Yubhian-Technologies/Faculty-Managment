@@ -492,17 +492,19 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
                   <p className="font-medium text-sm">{c.name}</p>
                   <p className="text-xs text-muted-foreground">{c.email} · {c.phone}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {c.hasArrived ? (
-                    <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" />Arrived
-                    </span>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => void markArrived(c.id)}>
-                      Mark Arrived
-                    </Button>
-                  )}
-                </div>
+                {!batch.demoComplete && (
+                  <div className="flex items-center gap-2">
+                    {c.hasArrived ? (
+                      <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />Arrived
+                      </span>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => void markArrived(c.id)}>
+                        Mark Arrived
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           )}
