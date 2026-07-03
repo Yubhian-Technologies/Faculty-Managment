@@ -34,22 +34,19 @@ export async function GET(request: Request) {
 
     let batches = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    if (session.role === "HOD") {
-      const asPanelMember = searchParams.get("asPanelMember") === "true";
-      if (asPanelMember) {
-        // Return batches where HOD is a panel member (for their scoring view)
-        batches = batches.filter((b) =>
-          ((b as { panelMemberUids?: string[] }).panelMemberUids ?? []).includes(session.uid)
-        );
-        batches = batches.filter((b) => (b as { status?: string }).status !== "REJECTED");
-      } else {
-        batches = batches.filter((b) => (b as { hodUid?: string }).hodUid === session.uid);
-      }
-    }
+    const asPanelMember = searchParams.get("asPanelMember") === "true";
 
-    if (session.role === "PANEL_MEMBER") {
+    if (asPanelMember) {
+      // Any role: return batches where this user is a panel member (for scoring)
+      batches = batches.filter((b) =>
+        ((b as { panelMemberUids?: string[] }).panelMemberUids ?? []).includes(session.uid)
+      );
+      batches = batches.filter((b) => (b as { status?: string }).status !== "REJECTED");
+    } else if (session.role === "HOD") {
+      batches = batches.filter((b) => (b as { hodUid?: string }).hodUid === session.uid);
+    } else if (session.role === "PANEL_MEMBER") {
       batches = batches.filter((b) => {
-        const batch = b as { panelMemberUids?: string[]; coordinatorUid?: string; status?: string };
+        const batch = b as { panelMemberUids?: string[]; coordinatorUid?: string };
         return (
           (batch.panelMemberUids ?? []).includes(session.uid) ||
           batch.coordinatorUid === session.uid

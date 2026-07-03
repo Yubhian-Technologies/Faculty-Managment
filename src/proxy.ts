@@ -3,18 +3,21 @@ import type { NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/careers", "/feedback", "/api/auth", "/location-interview"];
 
+// /panel/interviews is shared — any staff role can be added as a panel member
+const PANEL_INTERVIEWS_PATH = "/panel/interviews";
+
 const ROLE_PATH_MAP: Record<string, string[]> = {
-  SUPER_ADMIN: ["/super-admin"],
+  SUPER_ADMIN: ["/super-admin", PANEL_INTERVIEWS_PATH],
   ADMINISTRATION: ["/administration"],
   HR_ADMIN: ["/hr-admin"],
   ADMIN_OFFICE: ["/admin-office"],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
-  PRINCIPAL: ["/principal"],
-  VICE_PRINCIPAL: ["/vice-principal"],
-  HOD: ["/hod", "/coordinator", "/panel/interviews"],
-  COLLEGE_OFFICE: ["/college-office"],
+  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH],
+  VICE_PRINCIPAL: ["/vice-principal", PANEL_INTERVIEWS_PATH],
+  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH],
+  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH],
   PANEL_MEMBER: ["/panel", "/coordinator"],
-  ACCOUNTS: ["/accounts"],
+  ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH],
 };
 
 function isPublicPath(pathname: string): boolean {

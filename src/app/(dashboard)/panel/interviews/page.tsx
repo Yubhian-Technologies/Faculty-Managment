@@ -22,9 +22,9 @@ export default function PanelInterviewsPage() {
 
   useEffect(() => {
     const url =
-      user?.role === "HOD"
-        ? "/api/college/hiring-batches?asPanelMember=true"
-        : "/api/college/hiring-batches";
+      user?.role === "PANEL_MEMBER"
+        ? "/api/college/hiring-batches"
+        : "/api/college/hiring-batches?asPanelMember=true";
     fetch(url)
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))

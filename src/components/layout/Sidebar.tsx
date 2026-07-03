@@ -36,9 +36,9 @@ export function Sidebar() {
 
   const baseNavItems = getNavItemsForRole(user.role);
 
-  // Inject dynamic nav items for PANEL_MEMBER / HOD based on assignments
+  // Inject dynamic nav items based on panel assignments (any role can be a panel member)
   let navItems = baseNavItems;
-  if (user.role === "PANEL_MEMBER" || user.role === "HOD") {
+  {
     const injected: NavItem[] = [];
     if (hasInterviews) {
       injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
@@ -48,7 +48,7 @@ export function Sidebar() {
         label: "Demo Session",
         href: `/coordinator/${coordinatorBatchId}`,
         iconName: "QrCode",
-        roles: ["PANEL_MEMBER"],
+        roles: [user.role],
       });
     }
     if (injected.length > 0) {

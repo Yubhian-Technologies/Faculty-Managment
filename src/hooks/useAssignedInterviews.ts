@@ -8,29 +8,29 @@ export function useAssignedInterviews() {
 
   useEffect(() => {
     const role = user?.role;
-    if (role !== "PANEL_MEMBER" && role !== "HOD") {
-      setLoading(false);
-      return;
-    }
+    if (!role) { setLoading(false); return; }
+
+    // PANEL_MEMBER is already filtered server-side by their uid; all other
+    // roles need the asPanelMember flag to see batches they've been added to.
     const url =
-      role === "HOD"
-        ? "/api/college/hiring-batches?asPanelMember=true"
-        : "/api/college/hiring-batches";
+      role === "PANEL_MEMBER"
+        ? "/api/college/hiring-batches"
+        : "/api/college/hiring-batches?asPanelMember=true";
 
     fetch(url)
       .then((r) => r.json() as Promise<{ batches?: { currentPhase?: string }[] }>)
       .then((d) => {
         const batches = d.batches ?? [];
-        if (role === "HOD") {
-          // Only show nav item when panel scoring is actually open
+        if (role === "PANEL_MEMBER") {
+          setCount(batches.length);
+        } else {
+          // For non-PANEL_MEMBER roles only show the nav when scoring is open
           const active = batches.filter(
             (b) =>
               b.currentPhase === "PANEL_INTERVIEW" ||
               b.currentPhase === "PRINCIPAL_FINAL_REVIEW"
           );
           setCount(active.length);
-        } else {
-          setCount(batches.length);
         }
       })
       .catch(() => {})
