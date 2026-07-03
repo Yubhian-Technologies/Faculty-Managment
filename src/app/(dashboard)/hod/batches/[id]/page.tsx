@@ -49,58 +49,12 @@ type StudentFeedbackSummary = {
   averages: Record<string, number>;
 };
 
-type PanelFeedbackForm = {
-  candidateId: string;
-  ratings: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
-  salaryNegotiated: string;
-  noticePeriod: string;
-  strengths: string;
-  weaknesses: string;
-  comments: string;
-};
-
-const defaultPanelForm = (candidateId: string): PanelFeedbackForm => ({
-  candidateId,
-  ratings: { technicalKnowledge: 0, communicationSkills: 0, teachingMethodology: 0 },
-  recommendation: "MAYBE",
-  salaryNegotiated: "",
-  noticePeriod: "",
-  strengths: "",
-  weaknesses: "",
-  comments: "",
-});
-
 function RatingDots({ value, max = 5 }: { value: number; max?: number }) {
   return (
     <div className="flex gap-0.5">
       {Array.from({ length: max }).map((_, i) => (
         <div key={i} className={`h-2 w-2 rounded-full ${i < value ? "bg-primary" : "bg-muted-foreground/20"}`} />
       ))}
-    </div>
-  );
-}
-
-function HRRatingSelector({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs font-medium">{label}</Label>
-      <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => onChange(n)}
-            className={`w-9 h-9 rounded text-sm font-medium border transition-colors ${
-              value >= n
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border hover:bg-muted"
-            }`}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -132,12 +86,8 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
   const [newDoc, setNewDoc] = useState("");
 
-  // Panel feedback form state (HOD's own submission)
-  const [panelFormCandidate, setPanelFormCandidate] = useState<Candidate | null>(null);
-  const [panelForm, setPanelForm] = useState<PanelFeedbackForm | null>(null);
-  const [isSubmittingPanel, setIsSubmittingPanel] = useState(false);
-
-  // Principal review submission
+  // Phase transitions
+  const [isReleasingToPanel, setIsReleasingToPanel] = useState(false);
   const [isSubmittingForReview, setIsSubmittingForReview] = useState(false);
 
   async function load() {
@@ -239,39 +189,21 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  async function submitPanelFeedback() {
-    if (!panelForm || !panelFormCandidate) return;
-    const allRated = Object.values(panelForm.ratings).every((v) => v > 0);
-    if (!allRated) {
-      toast({ variant: "destructive", title: "Please rate all 3 criteria" });
-      return;
-    }
-    setIsSubmittingPanel(true);
+  async function releaseToPanelInterview() {
+    setIsReleasingToPanel(true);
     try {
-      const res = await fetch("/api/college/panel-feedback", {
-        method: "POST",
+      const res = await fetch(`/api/college/hiring-batches/${id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          batchId: id,
-          candidateId: panelFormCandidate.id,
-          ratings: panelForm.ratings,
-          salaryNegotiated: panelForm.salaryNegotiated ? parseFloat(panelForm.salaryNegotiated) : undefined,
-          noticePeriod: panelForm.noticePeriod,
-          strengths: panelForm.strengths,
-          weaknesses: panelForm.weaknesses,
-          recommendation: panelForm.recommendation,
-          comments: panelForm.comments,
-        }),
+        body: JSON.stringify({ currentPhase: "PANEL_INTERVIEW" }),
       });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Panel feedback saved" });
-      setPanelFormCandidate(null);
-      setPanelForm(null);
+      toast({ variant: "success", title: "Panel scoring opened", description: "Panel members have been notified to submit their assessments." });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to save panel feedback" });
+      toast({ variant: "destructive", title: "Failed to release" });
     } finally {
-      setIsSubmittingPanel(false);
+      setIsReleasingToPanel(false);
     }
   }
 
@@ -683,233 +615,114 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       </Card>
 
 
-      {/* ── POST-DEMO SECTIONS ──────────────────────────────────────────────────── */}
+      {/* ── STEP A: Demo complete — HOD reviews student scores ─────────────────── */}
       {batch.demoComplete && (
-        <>
-          {/* Student Feedback Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Star className="h-4 w-4 text-yellow-500" />
-                Student Demo Feedback
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {studentFeedbackSummary.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No student feedback received yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  {candidates.map((c) => {
-                    const sf = studentFeedbackSummary.find((s) => s.candidateId === c.id);
-                    if (!sf) return (
-                      <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
-                        <p className="text-sm font-medium">{c.name}</p>
-                        <span className="text-xs text-muted-foreground">No responses yet</span>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Star className="h-4 w-4 text-yellow-500" />
+              Student Demo Feedback
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {studentFeedbackSummary.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No student feedback received yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {candidates.map((c) => {
+                  const sf = studentFeedbackSummary.find((s) => s.candidateId === c.id);
+                  if (!sf) return (
+                    <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
+                      <p className="text-sm font-medium">{c.name}</p>
+                      <span className="text-xs text-muted-foreground">No responses yet</span>
+                    </div>
+                  );
+                  const overall = sf.averages.overallImpression ?? 0;
+                  return (
+                    <div key={c.id} className="p-3 rounded-lg border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium text-sm">{c.name}</p>
+                        <div className="flex items-center gap-2">
+                          <RatingDots value={Math.round(overall)} />
+                          <span className="text-xs text-muted-foreground">{sf.count} response{sf.count !== 1 ? "s" : ""} · avg {overall.toFixed(1)}</span>
+                        </div>
                       </div>
-                    );
-                    const overall = sf.averages.overallImpression ?? 0;
-                    return (
-                      <div key={c.id} className="p-3 rounded-lg border space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium text-sm">{c.name}</p>
-                          <div className="flex items-center gap-2">
-                            <RatingDots value={Math.round(overall)} />
-                            <span className="text-xs text-muted-foreground">{sf.count} response{sf.count !== 1 ? "s" : ""} · avg {overall.toFixed(1)}</span>
+                      <div className="grid grid-cols-2 gap-1 sm:grid-cols-5 text-xs text-muted-foreground">
+                        {Object.entries(sf.averages).map(([k, v]) => (
+                          <div key={k} className="text-center">
+                            <p>{v.toFixed(1)}</p>
+                            <p className="truncate">{k.replace(/([A-Z])/g, " $1").trim()}</p>
                           </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1 sm:grid-cols-5 text-xs text-muted-foreground">
-                          {Object.entries(sf.averages).map(([k, v]) => (
-                            <div key={k} className="text-center">
-                              <p>{v.toFixed(1)}</p>
-                              <p className="truncate">{k.replace(/([A-Z])/g, " $1").trim()}</p>
-                            </div>
-                          ))}
-                        </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Panel Feedback Summary */}
+      {/* ── STEP B: HOD releases to panel interview scoring ─────────────────────── */}
+      {batch.demoComplete && batch.currentPhase !== "PANEL_INTERVIEW" && batch.currentPhase !== "PRINCIPAL_FINAL_REVIEW" && batch.currentPhase !== "COMPLETED" && (
+        <Card className="border-primary/30">
+          <CardContent className="p-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="font-medium text-sm">Release for Panel Interview Scoring</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Once you review the demo scores above, open panel scoring so all panel members can submit their interview assessments.
+              </p>
+            </div>
+            <Button onClick={() => void releaseToPanelInterview()} loading={isReleasingToPanel} className="shrink-0">
+              <ArrowRight className="h-4 w-4 mr-2" />
+              Open Panel Scoring
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── STEP C: Panel scoring open — HOD sees summary ───────────────────────── */}
+      {(batch.currentPhase === "PANEL_INTERVIEW" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED") && (
+        <>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Panel Interview Feedback</CardTitle>
+              <CardTitle className="text-base">Panel Interview Assessments</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {candidates.map((c) => {
+            <CardContent className="space-y-3">
+              {candidates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No candidates.</p>
+              ) : candidates.map((c) => {
                 const feedbacks = panelFeedback.filter((f) => f.candidateId === c.id);
-                const myFeedback = feedbacks.find((f) => f.panelUid === myUid);
                 const accepts = feedbacks.filter((f) => f.recommendation === "ACCEPT").length;
                 const rejects = feedbacks.filter((f) => f.recommendation === "REJECT").length;
                 const maybes = feedbacks.filter((f) => f.recommendation === "MAYBE").length;
-                const isSelected = panelFormCandidate?.id === c.id;
-
+                const total = batch.panelMemberUids.length;
                 return (
-                  <div key={c.id}>
-                    <div className="flex items-center justify-between p-3 rounded-lg border">
-                      <div>
-                        <p className="font-medium text-sm">{c.name}</p>
-                        {feedbacks.length > 0 && (
-                          <div className="flex gap-3 text-xs mt-1">
-                            <span className="flex items-center gap-1 text-green-600"><ThumbsUp className="h-3 w-3" />{accepts} Accept</span>
-                            <span className="flex items-center gap-1 text-amber-600"><Minus className="h-3 w-3" />{maybes} Maybe</span>
-                            <span className="flex items-center gap-1 text-red-600"><ThumbsDown className="h-3 w-3" />{rejects} Reject</span>
-                          </div>
-                        )}
-                        {myFeedback && (
-                          <span className={`text-xs font-medium mt-0.5 block ${
-                            myFeedback.recommendation === "ACCEPT" ? "text-green-600"
-                            : myFeedback.recommendation === "REJECT" ? "text-red-600"
-                            : "text-amber-600"
-                          }`}>
-                            Your assessment: {myFeedback.recommendation === "ACCEPT" ? "✓ Accept" : myFeedback.recommendation === "REJECT" ? "✗ Reject" : "~ Maybe"}
-                          </span>
-                        )}
+                  <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border">
+                    <div>
+                      <p className="font-medium text-sm">{c.name}</p>
+                      <div className="flex gap-3 text-xs mt-1">
+                        <span className="flex items-center gap-1 text-green-600"><ThumbsUp className="h-3 w-3" />{accepts} Accept</span>
+                        <span className="flex items-center gap-1 text-amber-600"><Minus className="h-3 w-3" />{maybes} Maybe</span>
+                        <span className="flex items-center gap-1 text-red-600"><ThumbsDown className="h-3 w-3" />{rejects} Reject</span>
                       </div>
-                      <Button
-                        size="sm"
-                        variant={myFeedback ? "outline" : "default"}
-                        onClick={() => {
-                          if (isSelected) {
-                            setPanelFormCandidate(null);
-                            setPanelForm(null);
-                          } else {
-                            setPanelFormCandidate(c);
-                            setPanelForm(myFeedback ? {
-                              candidateId: c.id,
-                              ratings: myFeedback.ratings,
-                              recommendation: myFeedback.recommendation,
-                              salaryNegotiated: myFeedback.salaryNegotiated != null ? String(myFeedback.salaryNegotiated) : "",
-                              noticePeriod: myFeedback.noticePeriod ?? "",
-                              strengths: myFeedback.strengths ?? "",
-                              weaknesses: myFeedback.weaknesses ?? "",
-                              comments: myFeedback.comments ?? "",
-                            } : defaultPanelForm(c.id));
-                          }
-                        }}
-                      >
-                        {myFeedback ? <><Pencil className="h-3.5 w-3.5 mr-1" />Edit</> : "Add Assessment"}
-                      </Button>
                     </div>
-
-                    {isSelected && panelForm && (
-                      <div className="mt-2 p-4 border rounded-lg bg-muted/30 space-y-4">
-                        <HRRatingSelector
-                          label="Technical Knowledge"
-                          value={panelForm.ratings.technicalKnowledge}
-                          onChange={(v) => setPanelForm((f) => f && { ...f, ratings: { ...f.ratings, technicalKnowledge: v } })}
-                        />
-                        <HRRatingSelector
-                          label="Communication Skills"
-                          value={panelForm.ratings.communicationSkills}
-                          onChange={(v) => setPanelForm((f) => f && { ...f, ratings: { ...f.ratings, communicationSkills: v } })}
-                        />
-                        <HRRatingSelector
-                          label="Teaching Methodology"
-                          value={panelForm.ratings.teachingMethodology}
-                          onChange={(v) => setPanelForm((f) => f && { ...f, ratings: { ...f.ratings, teachingMethodology: v } })}
-                        />
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium">Recommendation</Label>
-                          <div className="flex gap-2">
-                            {(["ACCEPT", "MAYBE", "REJECT"] as const).map((r) => (
-                              <button
-                                key={r}
-                                type="button"
-                                onClick={() => setPanelForm((f) => f && { ...f, recommendation: r })}
-                                className={`flex-1 py-1.5 rounded border text-xs font-medium transition-colors ${
-                                  panelForm.recommendation === r
-                                    ? r === "ACCEPT" ? "bg-green-50 border-green-400 text-green-700 ring-2 ring-green-400 ring-offset-1"
-                                      : r === "REJECT" ? "bg-red-50 border-red-400 text-red-700 ring-2 ring-red-400 ring-offset-1"
-                                      : "bg-amber-50 border-amber-400 text-amber-700 ring-2 ring-amber-400 ring-offset-1"
-                                    : "border-muted text-muted-foreground hover:bg-muted"
-                                }`}
-                              >
-                                {r === "ACCEPT" ? "Accept" : r === "REJECT" ? "Reject" : "Maybe"}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs font-medium">Salary Negotiated (₹/month)</Label>
-                            <Input
-                              type="number"
-                              value={panelForm.salaryNegotiated}
-                              onChange={(e) => setPanelForm((f) => f && { ...f, salaryNegotiated: e.target.value })}
-                              placeholder="e.g. 45000"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs font-medium">Notice Period</Label>
-                            <Input
-                              value={panelForm.noticePeriod}
-                              onChange={(e) => setPanelForm((f) => f && { ...f, noticePeriod: e.target.value })}
-                              placeholder="e.g. Immediate / 30 days"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium">Strengths (optional)</Label>
-                          <Textarea
-                            value={panelForm.strengths}
-                            onChange={(e) => setPanelForm((f) => f && { ...f, strengths: e.target.value })}
-                            placeholder="Notable strengths..."
-                            rows={2}
-                            className="text-sm"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium">Weaknesses (optional)</Label>
-                          <Textarea
-                            value={panelForm.weaknesses}
-                            onChange={(e) => setPanelForm((f) => f && { ...f, weaknesses: e.target.value })}
-                            placeholder="Areas of concern..."
-                            rows={2}
-                            className="text-sm"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium">Comments (optional)</Label>
-                          <Textarea
-                            value={panelForm.comments}
-                            onChange={(e) => setPanelForm((f) => f && { ...f, comments: e.target.value })}
-                            placeholder="Additional notes..."
-                            rows={2}
-                            className="text-sm"
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={() => void submitPanelFeedback()} loading={isSubmittingPanel}>
-                            {myFeedback ? "Update Assessment" : "Save Assessment"}
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => { setPanelFormCandidate(null); setPanelForm(null); }}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                    <span className="text-xs text-muted-foreground">{feedbacks.length}/{total} submitted</span>
                   </div>
                 );
               })}
-              {candidates.length === 0 && (
-                <p className="text-sm text-muted-foreground">No candidates in this batch.</p>
+              {batch.currentPhase === "PANEL_INTERVIEW" && (
+                <p className="text-xs text-muted-foreground pt-1">
+                  Panel members are submitting their assessments. Submit to Principal once all assessments are in.
+                </p>
               )}
             </CardContent>
           </Card>
 
           {/* Submit for Principal Final Review */}
           <Card className={batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED" ? "border-green-200 bg-green-50/40" : "border-primary/20"}>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <ArrowRight className="h-4 w-4 text-primary" />
-                Submit for Principal Final Approval
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-5">
               {batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED" ? (
                 <div className="flex items-center gap-2 text-green-700">
                   <CheckCircle2 className="h-5 w-5" />
@@ -919,28 +732,18 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
                   </div>
                 </div>
               ) : (
-                <>
-                  <div className="space-y-2 text-sm">
-                    {candidates.map((c) => {
-                      const pf = panelFeedback.filter((f) => f.candidateId === c.id);
-                      const accepts = pf.filter((f) => f.recommendation === "ACCEPT").length;
-                      return (
-                        <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/40">
-                          <p className="font-medium">{c.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Panel: {accepts}/{pf.length} accept
-                          </p>
-                        </div>
-                      );
-                    })}
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-sm">Submit All Evaluations to Principal</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Submit demo scores and panel assessments to the Principal for final hiring decisions.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Submitting will notify the Principal to make the final hiring decision for each candidate.
-                  </p>
-                  <Button onClick={submitForPrincipalReview} loading={isSubmittingForReview}>
-                    Submit All Evaluations to Principal
+                  <Button onClick={submitForPrincipalReview} loading={isSubmittingForReview} className="shrink-0">
+                    Submit to Principal
+                    <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>

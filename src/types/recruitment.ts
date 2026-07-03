@@ -132,7 +132,8 @@ export type BatchPhase =
   | "COLLEGE_OFFICE_SETUP"    // College office setting venue + required documents
   | "HOD_FINAL_SETUP"         // HOD assigning demo classroom + coordinator
   | "INTERVIEW_READY"         // All setup done, ready for interview day
-  | "IN_PROGRESS"             // Interview day happening
+  | "IN_PROGRESS"             // Demo day happening; coordinator runs QR session
+  | "PANEL_INTERVIEW"         // HOD reviewed demo scores; panel members now scoring
   | "PRINCIPAL_FINAL_REVIEW"  // Principal reviews all feedback + decisions
   | "COMPLETED";              // Batch closed, offer/appointment letters issued
 
@@ -143,7 +144,8 @@ export const BATCH_PHASE_LABELS: Record<BatchPhase, string> = {
   COLLEGE_OFFICE_SETUP: "Office Setup",
   HOD_FINAL_SETUP: "Final HOD Setup",
   INTERVIEW_READY: "Ready for Interview",
-  IN_PROGRESS: "Interview In Progress",
+  IN_PROGRESS: "Demo In Progress",
+  PANEL_INTERVIEW: "Panel Scoring",
   PRINCIPAL_FINAL_REVIEW: "Principal Final Review",
   COMPLETED: "Completed",
 };

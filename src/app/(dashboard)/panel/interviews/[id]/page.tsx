@@ -145,7 +145,10 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
 
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Not found</div>;
 
-  const canScore = batch.setupComplete || batch.demoComplete;
+  const canScore =
+    batch.currentPhase === "PANEL_INTERVIEW" ||
+    batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" ||
+    batch.currentPhase === "COMPLETED";
 
   return (
     <div className="space-y-6">
@@ -169,9 +172,9 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
         <Card className="border-dashed">
           <CardContent className="p-8 text-center space-y-2">
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
-            <p className="font-medium">Interview Not Yet Scheduled</p>
+            <p className="font-medium">Panel Scoring Not Yet Open</p>
             <p className="text-sm text-muted-foreground">
-              The HOD is setting up the interview logistics. Assessment will unlock once the session is ready.
+              The HOD will open panel scoring after reviewing demo day results. Check back after the demo session is complete.
             </p>
           </CardContent>
         </Card>

@@ -200,6 +200,23 @@ export async function PATCH(
       });
     }
 
+    // If HOD releases to panel interview, notify all panel members
+    if (body.currentPhase === "PANEL_INTERVIEW") {
+      for (const panelUid of (batchData.panelMemberUids ?? [])) {
+        const panelRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
+        notifBatch.set(panelRef, {
+          collegeId: session.collegeId,
+          toUid: panelUid,
+          type: "GENERAL",
+          title: "Panel Interview Scoring Open",
+          message: `HOD has reviewed the demo scores for ${batchData.position}. Please submit your interview assessment now.`,
+          link: `/panel/interviews/${id}`,
+          read: false,
+          createdAt: now,
+        });
+      }
+    }
+
     // If transitioning to PRINCIPAL_FINAL_REVIEW, notify all Principals
     if (body.currentPhase === "PRINCIPAL_FINAL_REVIEW") {
       const principalSnap = await db

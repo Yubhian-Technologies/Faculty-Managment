@@ -319,8 +319,8 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm text-green-800">Demo day is done — here's what happens next</p>
                 <ol className="mt-2 space-y-1 text-xs text-green-700 list-decimal list-inside">
+                  <li>HOD reviews student demo scores and opens panel scoring</li>
                   <li>Panel members submit their interview assessments</li>
-                  <li>HOD fills in the HR assessment for each candidate</li>
                   <li>HOD submits all evaluations to the Principal</li>
                   <li>Principal makes final hiring decisions</li>
                 </ol>
