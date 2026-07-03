@@ -37,9 +37,11 @@ export function MobileDrawer() {
 
   const baseNavItems = getNavItemsForRole(user.role);
   let navItems = baseNavItems;
-  if (user.role === "PANEL_MEMBER") {
+  if (user.role === "PANEL_MEMBER" || user.role === "HOD") {
     const injected: NavItem[] = [];
-    if (hasInterviews) injected.push(INTERVIEW_NAV_ITEM);
+    if (hasInterviews) {
+      injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
+    }
     if (coordinatorBatchId) {
       injected.push({
         label: "Demo Session",

@@ -36,11 +36,13 @@ export function Sidebar() {
 
   const baseNavItems = getNavItemsForRole(user.role);
 
-  // Inject dynamic nav items for PANEL_MEMBER based on assignments
+  // Inject dynamic nav items for PANEL_MEMBER / HOD based on assignments
   let navItems = baseNavItems;
-  if (user.role === "PANEL_MEMBER") {
+  if (user.role === "PANEL_MEMBER" || user.role === "HOD") {
     const injected: NavItem[] = [];
-    if (hasInterviews) injected.push(INTERVIEW_NAV_ITEM);
+    if (hasInterviews) {
+      injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
+    }
     if (coordinatorBatchId) {
       injected.push({
         label: "Demo Session",

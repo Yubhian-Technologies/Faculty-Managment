@@ -35,7 +35,16 @@ export async function GET(request: Request) {
     let batches = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
     if (session.role === "HOD") {
-      batches = batches.filter((b) => (b as { hodUid?: string }).hodUid === session.uid);
+      const asPanelMember = searchParams.get("asPanelMember") === "true";
+      if (asPanelMember) {
+        // Return batches where HOD is a panel member (for their scoring view)
+        batches = batches.filter((b) =>
+          ((b as { panelMemberUids?: string[] }).panelMemberUids ?? []).includes(session.uid)
+        );
+        batches = batches.filter((b) => (b as { status?: string }).status !== "REJECTED");
+      } else {
+        batches = batches.filter((b) => (b as { hodUid?: string }).hodUid === session.uid);
+      }
     }
 
     if (session.role === "PANEL_MEMBER") {
