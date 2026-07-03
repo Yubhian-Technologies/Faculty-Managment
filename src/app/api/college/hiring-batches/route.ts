@@ -79,9 +79,10 @@ export async function POST(request: Request) {
       panelMemberUids: string[];
       candidateIds: string[];
       interviewDate: string;
+      interviewTime?: string;
     };
 
-    const { vacancyId, department, position, panelMemberUids, candidateIds, interviewDate } = body;
+    const { vacancyId, department, position, panelMemberUids, candidateIds, interviewDate, interviewTime } = body;
     if (!vacancyId || !department || !position || !panelMemberUids?.length || !candidateIds?.length || !interviewDate) {
       return NextResponse.json({ error: "vacancyId, department, position, panelMemberUids, candidateIds, interviewDate required" }, { status: 400 });
     }
@@ -104,6 +105,7 @@ export async function POST(request: Request) {
         panelMemberUids,
         candidateIds,
         interviewDate: new Date(interviewDate),
+        interviewTime: interviewTime ?? "",
         interviewVenue: "",
         demoClassroom: "",
         coordinatorName: "",

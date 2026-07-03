@@ -38,6 +38,7 @@ export default function NewBatchPage() {
     user?.uid ? [user.uid] : []
   );
   const [interviewDate, setInterviewDate] = useState("");
+  const [interviewTime, setInterviewTime] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -123,6 +124,7 @@ export default function NewBatchPage() {
     if (!selectedVacancyId) { toast({ variant: "destructive", title: "Select a hiring request" }); return; }
     if (selectedCandidates.length === 0) { toast({ variant: "destructive", title: "Select at least one candidate" }); return; }
     if (!interviewDate) { toast({ variant: "destructive", title: "Set an interview date" }); return; }
+    if (!interviewTime) { toast({ variant: "destructive", title: "Set an interview time" }); return; }
 
     const vacancy = vacancies.find((v) => v.id === selectedVacancyId)!;
     setIsSubmitting(true);
@@ -137,6 +139,7 @@ export default function NewBatchPage() {
           panelMemberUids: selectedPanel,
           candidateIds: selectedCandidates,
           interviewDate,
+          interviewTime,
         }),
       });
       const json = await res.json() as { id?: string; error?: string };
@@ -201,19 +204,30 @@ export default function NewBatchPage() {
           </CardContent>
         </Card>
 
-        {/* Interview Date */}
+        {/* Interview Date & Time */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Step 2: Interview Date</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Step 2: Interview Date & Time</CardTitle></CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="interviewDate">Proposed Interview Date *</Label>
-              <Input
-                id="interviewDate"
-                type="date"
-                value={interviewDate}
-                min={new Date().toISOString().split("T")[0]}
-                onChange={(e) => setInterviewDate(e.target.value)}
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="interviewDate">Proposed Interview Date *</Label>
+                <Input
+                  id="interviewDate"
+                  type="date"
+                  value={interviewDate}
+                  min={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => setInterviewDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="interviewTime">Interview Time *</Label>
+                <Input
+                  id="interviewTime"
+                  type="time"
+                  value={interviewTime}
+                  onChange={(e) => setInterviewTime(e.target.value)}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
