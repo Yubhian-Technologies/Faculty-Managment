@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Mail } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -71,9 +71,19 @@ export default function HODBatchesPage() {
       key: "actions",
       header: "",
       render: (row) => (
-        <Button size="sm" variant="outline" asChild>
-          <Link href={`/hod/batches/${row.id as string}`}>View</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {(row.setupComplete as boolean) && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/hod/batches/${row.id as string}#call-letters`}>
+                <Mail className="h-3.5 w-3.5 mr-1" />
+                Call Letters
+              </Link>
+            </Button>
+          )}
+          <Button size="sm" variant="outline" asChild>
+            <Link href={`/hod/batches/${row.id as string}`}>View</Link>
+          </Button>
+        </div>
       ),
     },
   ];

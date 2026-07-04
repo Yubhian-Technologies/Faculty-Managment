@@ -159,6 +159,7 @@ export interface HiringBatch {
   department: string;
   position: string;
   hodUid: string;
+  hodName?: string;
   panelMemberUids: string[];
   interviewDate: Timestamp;
   interviewTime?: string;

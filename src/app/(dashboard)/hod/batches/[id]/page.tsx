@@ -23,6 +23,7 @@ import {
   Clock,
   ArrowRight,
   Pencil,
+  Mail,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
@@ -70,6 +71,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [studentFeedbackSummary, setStudentFeedbackSummary] = useState<StudentFeedbackSummary[]>([]);
   const [userMap, setUserMap] = useState<Record<string, FMSUser>>({});
   const [allUsers, setAllUsers] = useState<FMSUser[]>([]);
+  const [collegeName, setCollegeName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -92,12 +94,14 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
 
   async function load() {
     try {
-      const [batchRes, candidatesRes, facultyRes, usersRes] = await Promise.all([
+      const [batchRes, candidatesRes, facultyRes, usersRes, infoRes] = await Promise.all([
         fetch(`/api/college/hiring-batches/${id}`).then((r) => r.json() as Promise<{ batch: HiringBatch }>),
         fetch(`/api/college/candidates?batchId=${id}`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
         fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>),
         fetch("/api/college/users?allDepts=true&includeAll=true").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
+        fetch("/api/college/info").then((r) => r.json() as Promise<{ name?: string }>),
       ]);
+      setCollegeName(infoRes.name ?? "");
       const b = batchRes.batch;
       setBatch(b);
       const cands = candidatesRes.candidates ?? [];
@@ -277,6 +281,64 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     } catch {
       toast({ variant: "destructive", title: "Failed to update" });
     }
+  }
+
+  function sendCallLetter(candidate: Candidate) {
+    if (!batch) return;
+
+    const institution = collegeName || "Sri Vishnu Educational Society";
+    const date = formatDate(batch.interviewDate);
+    const time = batch.interviewTime || "To be notified";
+    const venue = batch.interviewVenue || "To be notified";
+    const mode = candidate.interviewMode === "ONLINE" ? "Online" : "Offline";
+    const meetLink = batch.meetingLink || "";
+    const docs = (batch.requiredDocuments ?? []).length > 0
+      ? (batch.requiredDocuments ?? []).map((d) => `• ${d}`).join("\n")
+      : "• Updated Resume/Curriculum Vitae\n• Passport-size Photograph\n• Original and Photocopies of Educational Certificates\n• Experience Certificates (if applicable)\n• Government-issued Photo ID Proof";
+
+    const body = `Dear Dr./Mr./Ms. ${candidate.name},
+
+Greetings from ${institution}.
+
+Thank you for your interest in joining our institution. Based on your application and profile, we are pleased to invite you to attend an interview for the position of Faculty – ${batch.department}.
+
+INTERVIEW DETAILS:
+
+• Date: ${date}
+• Time: ${time}
+• Venue: ${venue}
+• Mode: ${mode}
+• Reporting Time: Please arrive 15 minutes before the scheduled time${mode === "Online" && meetLink ? `\n• Meeting Link: ${meetLink}` : ""}
+
+Kindly bring the following documents for verification:
+
+${docs}
+• Any other relevant supporting documents
+
+Please confirm your availability by replying to this email.
+
+Contact Person: ${batch.hodName}
+
+We look forward to meeting you and discussing how your skills and experience can contribute to our institution.
+
+Thank you, and we wish you all the best.
+
+Warm regards,
+
+${batch.hodName}
+Head of Department – ${batch.department}
+${institution}`;
+
+    // Collect principal and VP emails for CC
+    const ccEmails = allUsers
+      .filter((u) => u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL")
+      .map((u) => u.email)
+      .filter(Boolean)
+      .join(",");
+
+    const subject = `Interview Call Letter – ${batch.position} | ${institution}`;
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(ccEmails)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(gmailUrl, "_blank");
   }
 
   if (isLoading) {
@@ -472,6 +534,37 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
               <Button onClick={saveDetails} loading={isSaving}>
                 Save Setup & Mark Ready
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Send Call Letters — available once setup is complete */}
+      {batch.setupComplete && candidates.length > 0 && (
+        <Card id="call-letters" className="border-blue-200 bg-blue-50/30">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Mail className="h-4 w-4 text-blue-600" />
+              Send Interview Call Letters
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Click to open Gmail with a pre-filled call letter. Principal and Vice Principal will be automatically added to CC.
+            </p>
+            <div className="space-y-2">
+              {candidates.map((c) => (
+                <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border bg-white">
+                  <div>
+                    <p className="font-medium text-sm">{c.name}</p>
+                    <p className="text-xs text-muted-foreground">{c.email}</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => sendCallLetter(c)}>
+                    <Mail className="h-3.5 w-3.5 mr-1.5" />
+                    Send Call Letter
+                  </Button>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
