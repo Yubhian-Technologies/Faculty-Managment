@@ -36,7 +36,15 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ batch: { id: snap.id, ...snap.data() } });
+    const data = snap.data() as Record<string, unknown>;
+
+    // Auto-heal: demo marked complete but phase never advanced (pre-fix data)
+    if (data.demoComplete === true && data.currentPhase === "INTERVIEW_READY") {
+      await snap.ref.update({ currentPhase: "IN_PROGRESS", updatedAt: new Date() });
+      data.currentPhase = "IN_PROGRESS";
+    }
+
+    return NextResponse.json({ batch: { id: snap.id, ...data } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
