@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { CheckCircle2, FileCheck } from "lucide-react";
+import { FileCheck } from "lucide-react";
 import type { Candidate } from "@/types";
 
 type CandidateRow = Record<string, unknown> & Candidate;
@@ -23,7 +23,6 @@ function stageBadge(c: CandidateRow) {
 export default function CollegeOfficeCandidatesPage() {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [arriving, setArriving] = useState<CandidateRow | null>(null);
   const [verifying, setVerifying] = useState<CandidateRow | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -32,10 +31,10 @@ export default function CollegeOfficeCandidatesPage() {
     fetch("/api/college/candidates")
       .then((r) => r.json() as Promise<{ candidates: CandidateRow[] }>)
       .then((d) => {
-        // Show: shortlisted (interview day), arrived, approved (doc verification), sent to accounts
+        // Only show post-Principal-decision candidates needing doc verification or sent to accounts
         const relevant = (d.candidates ?? []).filter((c) => {
           const stage = (c as unknown as { currentStage?: string }).currentStage;
-          return c.isShortlisted || c.hasArrived || stage === "DOCUMENT_VERIFICATION" || stage === "DECISION";
+          return stage === "DOCUMENT_VERIFICATION" || stage === "DECISION";
         });
         setCandidates(relevant);
       })
@@ -44,26 +43,6 @@ export default function CollegeOfficeCandidatesPage() {
   }
 
   useEffect(() => { loadCandidates(); }, []);
-
-  async function markArrived() {
-    if (!arriving) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/college/candidates/${arriving.id as string}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hasArrived: true }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Marked as arrived", description: "Panel members notified." });
-      setArriving(null);
-      loadCandidates();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function verifyDocuments() {
     if (!verifying) return;
@@ -109,19 +88,6 @@ export default function CollegeOfficeCandidatesPage() {
       render: (row) => row.position as string,
     },
     {
-      key: "hasArrived",
-      header: "Arrival",
-      render: (row) =>
-        (row.hasArrived as boolean) ? (
-          <span className="text-green-600 text-xs font-medium flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3" />
-            Arrived
-          </span>
-        ) : (
-          <span className="text-xs text-orange-600">Expected</span>
-        ),
-    },
-    {
       key: "status",
       header: "Status",
       render: (row) => (
@@ -144,13 +110,6 @@ export default function CollegeOfficeCandidatesPage() {
             </Button>
           );
         }
-        if (!(row.hasArrived as boolean) && row.isShortlisted) {
-          return (
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setArriving(row); }}>
-              Mark Arrived
-            </Button>
-          );
-        }
         return null;
       },
     },
@@ -160,7 +119,7 @@ export default function CollegeOfficeCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Track arrival for interviews and verify documents for approved candidates"
+        description="Verify documents for Principal-approved candidates and send to Accounts"
       />
 
       <DataTable
@@ -173,16 +132,6 @@ export default function CollegeOfficeCandidatesPage() {
         emptyTitle="No candidates yet"
         emptyDescription="Shortlisted and approved candidates will appear here"
         csvFilename="candidates"
-      />
-
-      <ConfirmDialog
-        open={!!arriving}
-        onOpenChange={(open) => { if (!open) setArriving(null); }}
-        title="Mark Candidate as Arrived?"
-        description={`Confirm that ${arriving?.name as string} has arrived for the interview. Panel members and the HOD will be notified.`}
-        confirmLabel="Confirm Arrival"
-        onConfirm={markArrived}
-        loading={loading}
       />
 
       <ConfirmDialog
