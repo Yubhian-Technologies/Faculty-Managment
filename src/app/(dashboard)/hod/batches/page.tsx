@@ -72,7 +72,7 @@ export default function HODBatchesPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-2">
-          {(row.setupComplete as boolean) && (
+          {(row.setupComplete as boolean) && !(row.demoComplete as boolean) && (
             <Button size="sm" variant="outline" asChild>
               <Link href={`/hod/batches/${row.id as string}#call-letters`}>
                 <Mail className="h-3.5 w-3.5 mr-1" />

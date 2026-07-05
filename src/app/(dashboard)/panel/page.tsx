@@ -232,7 +232,7 @@ export default function FacultyDashboard() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <StatusBadge status={b.status} />
-                        {isCoordinator && (b.currentPhase === "INTERVIEW_READY" || b.currentPhase === "IN_PROGRESS") && !b.demoComplete && (
+                        {isCoordinator && b.currentPhase === "INTERVIEW_READY" && (
                           <Button size="sm" variant="default" asChild>
                             <Link href={`/coordinator/${b.id}`}>
                               <QrCode className="h-3.5 w-3.5 mr-1" />

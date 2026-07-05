@@ -118,8 +118,9 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setInterviewVenue(b.interviewVenue ?? "");
       setRequiredDocuments(b.requiredDocuments ?? []);
 
-      // Load feedback when demo is complete
-      if (b.demoComplete && cands.length > 0) {
+      // Load feedback from demo-complete phase onward
+      const postDemo = ["IN_PROGRESS", "PANEL_INTERVIEW", "PRINCIPAL_FINAL_REVIEW", "COMPLETED"].includes(b.currentPhase);
+      if (postDemo && cands.length > 0) {
         const [pfRes, sfRes] = await Promise.all([
           fetch(`/api/college/panel-feedback?batchId=${id}`)
             .then((r) => r.json() as Promise<{ feedback: PanelFeedbackItem[] }>)
@@ -353,10 +354,10 @@ ${institution}`;
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Batch not found</div>;
 
   const canEditCommittee =
-    !batch.demoComplete &&
+    batch.currentPhase !== "IN_PROGRESS" &&
+    batch.currentPhase !== "PANEL_INTERVIEW" &&
     batch.currentPhase !== "PRINCIPAL_FINAL_REVIEW" &&
-    batch.currentPhase !== "COMPLETED" &&
-    batch.status !== "COMPLETED";
+    batch.currentPhase !== "COMPLETED";
 
   const selectedCoordinator = facultyList.find((f) => f.id === coordinatorFacultyId);
 
@@ -539,8 +540,8 @@ ${institution}`;
         </Card>
       )}
 
-      {/* Send Call Letters — available once setup is complete */}
-      {batch.setupComplete && candidates.length > 0 && (
+      {/* Send Call Letters — only between setup complete and demo day */}
+      {batch.setupComplete && !batch.demoComplete && candidates.length > 0 && (
         <Card id="call-letters" className="border-blue-200 bg-blue-50/30">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -585,7 +586,7 @@ ${institution}`;
                   <p className="font-medium text-sm">{c.name}</p>
                   <p className="text-xs text-muted-foreground">{c.email} · {c.phone}</p>
                 </div>
-                {!batch.demoComplete && (
+                {batch.currentPhase === "INTERVIEW_READY" && (
                   <div className="flex items-center gap-2">
                     {c.hasArrived ? (
                       <span className="text-xs text-green-600 font-medium flex items-center gap-1">
@@ -711,7 +712,7 @@ ${institution}`;
 
 
       {/* ── STEP A: Demo complete — HOD reviews student scores ─────────────────── */}
-      {batch.demoComplete && (
+      {(batch.currentPhase === "IN_PROGRESS" || batch.currentPhase === "PANEL_INTERVIEW" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED") && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -760,7 +761,7 @@ ${institution}`;
       )}
 
       {/* ── STEP B: HOD releases to panel interview scoring ─────────────────────── */}
-      {batch.demoComplete && batch.currentPhase !== "PANEL_INTERVIEW" && batch.currentPhase !== "PRINCIPAL_FINAL_REVIEW" && batch.currentPhase !== "COMPLETED" && (
+      {batch.currentPhase === "IN_PROGRESS" && (
         <Card className="border-primary/30">
           <CardContent className="p-5 flex items-center justify-between gap-4">
             <div>
@@ -846,7 +847,7 @@ ${institution}`;
       )}
 
       {/* Pending demo message */}
-      {!batch.demoComplete && batch.setupComplete && (
+      {batch.currentPhase === "INTERVIEW_READY" && (
         <Card className="border-dashed">
           <CardContent className="p-6 text-center">
             <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />

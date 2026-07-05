@@ -18,8 +18,7 @@ export function useAssignedCoordinator() {
         const coordinatorBatch = (d.batches ?? []).find(
           (b) =>
             b.coordinatorUid === user.uid &&
-            (b.currentPhase === "INTERVIEW_READY" || b.currentPhase === "IN_PROGRESS") &&
-            !b.demoComplete
+            b.currentPhase === "INTERVIEW_READY" // only before demo day
         );
         setCoordinatorBatchId(coordinatorBatch?.id ?? null);
       })

@@ -133,7 +133,10 @@ export async function PATCH(
     if (body.candidateIds !== undefined) updates.candidateIds = body.candidateIds;
     if (body.interviewDate !== undefined) updates.interviewDate = new Date(body.interviewDate);
     if (body.interviewTime !== undefined) updates.interviewTime = body.interviewTime;
-    if (body.demoComplete === true) updates.demoComplete = true;
+    if (body.demoComplete === true) {
+      updates.demoComplete = true;
+      updates.currentPhase = "IN_PROGRESS"; // demo day is done; HOD reviews before opening panel scoring
+    }
 
     await db
       .collection("colleges")
