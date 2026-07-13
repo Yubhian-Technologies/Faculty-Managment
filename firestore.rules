@@ -140,6 +140,18 @@ service cloud.firestore {
         allow delete: if isSuperAdmin();
       }
 
+      // ─── [ BUDGET MODULE ] ────────────────────────────────────────────────
+      // HOD creates -> Principal verifies (L1 freeze) -> Finance approves.
+      // All writes happen server-side via the Admin SDK in
+      // /api/college/budget-requests routes; these rules are defense-in-depth.
+
+      match /budgetRequests/{requestId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHOD(collegeId) || isPrincipal(collegeId) || isFinance(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
       match /candidates/{candidateId} {
         allow read: if isStaff(collegeId);
         allow create: if isHOD(collegeId) && hasCollegeId(collegeId);

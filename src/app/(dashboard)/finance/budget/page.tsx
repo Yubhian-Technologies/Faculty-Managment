@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, History } from "lucide-react";
+import { Plus, History, FileText, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { BudgetItemsTable } from "@/components/shared/budget/BudgetItemsTable";
 import { toast } from "@/hooks/useToast";
 import { formatDate, formatCurrency } from "@/lib/utils";
-import type { FinanceBudget } from "@/types";
+import type { FinanceBudget, BudgetRequest } from "@/types";
 
 type BudgetRow = FinanceBudget & Record<string, unknown>;
 
@@ -41,6 +42,22 @@ export default function FinanceBudgetPage() {
   const [reviseForm, setReviseForm] = useState(emptyReviseForm());
   const [isRevising, setIsRevising] = useState(false);
   const [historyTarget, setHistoryTarget] = useState<BudgetRow | null>(null);
+  const [sourceRequest, setSourceRequest] = useState<BudgetRequest | null>(null);
+  const [isLoadingSource, setIsLoadingSource] = useState(false);
+
+  async function viewSourceRequest(requestId: string) {
+    setIsLoadingSource(true);
+    try {
+      const res = await fetch(`/api/college/budget-requests/${requestId}`);
+      if (!res.ok) throw new Error();
+      const data = (await res.json()) as { request: BudgetRequest };
+      setSourceRequest(data.request);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load original request" });
+    } finally {
+      setIsLoadingSource(false);
+    }
+  }
 
   function load() {
     setIsLoading(true);
@@ -137,6 +154,11 @@ export default function FinanceBudgetPage() {
       key: "actions", header: "", className: "text-right",
       render: (row) => (
         <div className="flex items-center gap-1 justify-end">
+          {row.sourceRequestId && (
+            <Button size="sm" variant="ghost" onClick={() => void viewSourceRequest(row.sourceRequestId as string)} loading={isLoadingSource}>
+              <FileText className="h-3.5 w-3.5" />
+            </Button>
+          )}
           {row.revisions?.length > 0 && (
             <Button size="sm" variant="ghost" onClick={() => setHistoryTarget(row)}>
               <History className="h-3.5 w-3.5" />
@@ -159,10 +181,16 @@ export default function FinanceBudgetPage() {
         title="Budget Management"
         description="Allocate, revise, and monitor department budgets"
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            New Budget
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              New Budget
+            </Button>
+          </>
         }
       />
 
@@ -249,6 +277,21 @@ export default function FinanceBudgetPage() {
               </div>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Original request dialog */}
+      <Dialog open={!!sourceRequest} onOpenChange={(o) => { if (!o) setSourceRequest(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>Original Request — {sourceRequest?.title}</DialogTitle></DialogHeader>
+          {sourceRequest && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Submitted by {sourceRequest.hodName} ({sourceRequest.department}), category {sourceRequest.category}, priority {sourceRequest.priority}
+              </p>
+              <BudgetItemsTable items={sourceRequest.items} readOnly />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

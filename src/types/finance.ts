@@ -48,6 +48,7 @@ export interface FinanceBudget {
   createdByName: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  sourceRequestId?: string; // links back to colleges/{id}/budgetRequests/{id}, if auto-created from one
 }
 
 // ─── Budget Approvals (requests) ───────────────────────────────────────────────
