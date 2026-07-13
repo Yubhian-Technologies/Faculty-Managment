@@ -16,6 +16,7 @@ export function useRole() {
   const isCollegeOffice = hasRole("COLLEGE_OFFICE");
   const isPanelMember = hasRole("PANEL_MEMBER");
   const isAccounts = hasRole("ACCOUNTS");
+  const isFinance = hasRole("FINANCE");
 
-  return { role, hasRole, isAdmin, isPrincipal, isHOD, isCollegeOffice, isPanelMember, isAccounts };
+  return { role, hasRole, isAdmin, isPrincipal, isHOD, isCollegeOffice, isPanelMember, isAccounts, isFinance };
 }

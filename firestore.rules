@@ -49,9 +49,13 @@ service cloud.firestore {
       return isCollegeMember(collegeId) && hasAnyRole(['ACCOUNTS', 'SUPER_ADMIN']);
     }
 
+    function isFinance(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['FINANCE', 'SUPER_ADMIN']);
+    }
+
     function isStaff(collegeId) {
       return isCollegeMember(collegeId) && hasAnyRole([
-        'PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'SUPER_ADMIN'
+        'PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'FINANCE', 'SUPER_ADMIN'
       ]);
     }
 
@@ -343,6 +347,51 @@ service cloud.firestore {
         allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
         allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId);
         allow delete: if isSuperAdmin();
+      }
+
+      // ─── [ FINANCE MODULE ] ─────────────────────────────────────────────────
+      // All writes happen server-side via the Admin SDK in /api/college/finance-*
+      // routes (guarded by requireCollegeMember("FINANCE", "SUPER_ADMIN")), so
+      // client rules here only gate direct reads and block direct client writes.
+
+      match /financeBudgets/{docId} {
+        allow read: if isFinance(collegeId);
+        allow write: if false;
+      }
+
+      match /financeBudgetRequests/{docId} {
+        allow read: if isFinance(collegeId);
+        allow write: if false;
+      }
+
+      match /financeFundAllocations/{docId} {
+        allow read: if isFinance(collegeId);
+        allow write: if false;
+      }
+
+      match /financeExpenseRequests/{docId} {
+        allow read: if isFinance(collegeId);
+        allow write: if false;
+      }
+
+      match /financePayments/{docId} {
+        allow read: if isFinance(collegeId);
+        allow write: if false;
+      }
+
+      match /financePurchaseClearance/{docId} {
+        allow read: if isFinance(collegeId);
+        allow write: if false;
+      }
+
+      match /financeReceipts/{docId} {
+        allow read: if isFinance(collegeId);
+        allow write: if false;
+      }
+
+      match /financeAuditLogs/{docId} {
+        allow read: if isFinance(collegeId);
+        allow write: if false;
       }
 
       // ─── [ SHARED ] ─────────────────────────────────────────────────────────
