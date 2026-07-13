@@ -1,0 +1,65 @@
+export const dynamic = "force-dynamic";
+
+import { NextResponse } from "next/server";
+import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { getAdminDb } from "@/lib/firebase/admin";
+import type { Firestore } from "firebase-admin/firestore";
+
+async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
+  if (!collegeId || !uid) return "Unknown";
+  try {
+    const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
+    return (snap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+  } catch {
+    return "Unknown";
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireCollegeMember("FINANCE", "SUPER_ADMIN");
+    const { id } = await params;
+
+    const db = getAdminDb();
+    const ref = db
+      .collection("colleges")
+      .doc(session.collegeId)
+      .collection("financeReceipts")
+      .doc(id);
+    const snap = await ref.get();
+    if (!snap.exists || (snap.data() as { collegeId?: string })?.collegeId !== session.collegeId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const byName = await getUserName(db, session.collegeId, session.uid);
+    const now = new Date();
+
+    await ref.update({
+      verified: true,
+      verifiedBy: session.uid,
+      verifiedByName: byName,
+      verifiedAt: now,
+      updatedAt: now,
+    });
+
+    await db.collection("colleges").doc(session.collegeId).collection("financeAuditLogs").add({
+      collegeId: session.collegeId,
+      action: "RECEIPT_VERIFIED",
+      performedBy: session.uid,
+      performedByName: byName,
+      targetId: id,
+      timestamp: now,
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/finance-receipts/[id] PATCH]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

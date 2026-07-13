@@ -17,6 +17,7 @@ export type UserRole =
   | "COLLEGE_OFFICE"
   | "PANEL_MEMBER"
   | "ACCOUNTS"
+  | "FINANCE"
   | "STUDENT";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -31,6 +32,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   COLLEGE_OFFICE: "College Office",
   PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
+  FINANCE: "Finance",
   STUDENT: "Student",
 };
 
@@ -46,6 +48,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   COLLEGE_OFFICE: "/college-office",
   PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
+  FINANCE: "/finance",
   STUDENT: "/feedback",
 };
 

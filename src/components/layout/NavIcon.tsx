@@ -33,6 +33,9 @@ import {
   GitBranch,
   BookMarked,
   QrCode,
+  PieChart,
+  ShoppingCart,
+  Receipt,
   type LucideProps,
 } from "lucide-react";
 
@@ -71,6 +74,9 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   GitBranch,
   BookMarked,
   QrCode,
+  PieChart,
+  ShoppingCart,
+  Receipt,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

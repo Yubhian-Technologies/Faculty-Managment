@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getOfferLetterHTML, getAppointmentLetterHTML } from "@/lib/pdf/offerLetterTemplate";
+import { getFinanceReportHTML, getFinanceReceiptHTML } from "@/lib/pdf/financeReportTemplate";
 
 async function verifyToken(request: Request): Promise<string | null> {
   const auth = request.headers.get("Authorization");
@@ -21,20 +22,29 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as {
-      type: "OFFER_LETTER" | "APPOINTMENT_LETTER";
+      type: "OFFER_LETTER" | "APPOINTMENT_LETTER" | "FINANCE_REPORT" | "FINANCE_RECEIPT";
       data: Record<string, unknown>;
     };
 
     let html = "";
-    const filename =
-      body.type === "OFFER_LETTER" ? "offer-letter.pdf" : "appointment-letter.pdf";
+    const filenames: Record<typeof body.type, string> = {
+      OFFER_LETTER: "offer-letter.pdf",
+      APPOINTMENT_LETTER: "appointment-letter.pdf",
+      FINANCE_REPORT: "financial-report.pdf",
+      FINANCE_RECEIPT: "finance-receipt.pdf",
+    };
+    const filename = filenames[body.type];
 
     if (body.type === "OFFER_LETTER") {
       html = getOfferLetterHTML(body.data as Parameters<typeof getOfferLetterHTML>[0]);
-    } else {
+    } else if (body.type === "APPOINTMENT_LETTER") {
       html = getAppointmentLetterHTML(
         body.data as Parameters<typeof getAppointmentLetterHTML>[0]
       );
+    } else if (body.type === "FINANCE_REPORT") {
+      html = getFinanceReportHTML(body.data as Parameters<typeof getFinanceReportHTML>[0]);
+    } else {
+      html = getFinanceReceiptHTML(body.data as Parameters<typeof getFinanceReceiptHTML>[0]);
     }
 
     // Dynamic import via variable to avoid static bundling

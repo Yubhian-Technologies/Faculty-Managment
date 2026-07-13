@@ -10,3 +10,4 @@ export * from "./appraisal";
 export * from "./training";
 export * from "./grievance";
 export * from "./documents";
+export * from "./finance";

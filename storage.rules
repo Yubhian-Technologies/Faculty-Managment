@@ -17,7 +17,11 @@ service firebase.storage {
 
     function isStaff(collegeId) {
       return isSuperAdmin() || (belongsToCollege(collegeId) &&
-        request.auth.token.role in ['PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS']);
+        request.auth.token.role in ['PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'FINANCE']);
+    }
+
+    function isFinance(collegeId) {
+      return isSuperAdmin() || (belongsToCollege(collegeId) && request.auth.token.role == 'FINANCE');
     }
 
     function isValidResume() {
@@ -53,6 +57,12 @@ service firebase.storage {
     match /colleges/{collegeId}/forms/{filename} {
       allow read: if isStaff(collegeId);
       allow write: if isStaff(collegeId);
+    }
+
+    // Finance receipts — isolated to the Finance role
+    match /colleges/{collegeId}/financeReceipts/{filename} {
+      allow read: if isFinance(collegeId);
+      allow write: if isFinance(collegeId);
     }
   }
 }
