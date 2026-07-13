@@ -6,21 +6,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { requestAmount, type BudgetRequest } from "./mockBudgetRequests";
+import { budgetRequestTotal, type BudgetRequest, type BudgetRequestStatus } from "@/types";
 
-const STATUS_OPTIONS = ["All", "PENDING", "APPROVED", "REJECTED"] as const;
+const STATUS_OPTIONS: readonly (BudgetRequestStatus | "All")[] = [
+  "All",
+  "PENDING_PRINCIPAL_VERIFICATION",
+  "RETURNED_TO_HOD",
+  "L1_FROZEN",
+  "PRINCIPAL_REJECTED",
+  "FINANCE_APPROVED",
+  "FINANCE_REJECTED",
+];
 
 interface BudgetRequestsListProps {
   requests: BudgetRequest[];
+  isLoading: boolean;
   onSelectRequest: (request: BudgetRequest) => void;
 }
 
-export function BudgetRequestsList({ requests, onSelectRequest }: BudgetRequestsListProps) {
+export function BudgetRequestsList({ requests, isLoading, onSelectRequest }: BudgetRequestsListProps) {
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [departmentFilter, setDepartmentFilter] = useState<string>("All");
 
   const departments = useMemo(
-    () => Array.from(new Set(requests.map((r) => r.department))).sort(),
+    () => Array.from(new Set(requests.map((r) => r.department).filter(Boolean))).sort(),
     [requests]
   );
 
@@ -38,16 +47,17 @@ export function BudgetRequestsList({ requests, onSelectRequest }: BudgetRequests
       <CardContent>
         <DataTable<Record<string, unknown>>
           data={filtered as unknown as Record<string, unknown>[]}
+          isLoading={isLoading}
           keyExtractor={(row) => row.id as string}
-          searchPlaceholder="Search by request, department, title..."
-          searchKeys={["id", "department", "requestedBy", "category", "title"]}
+          searchPlaceholder="Search by department, title..."
+          searchKeys={["department", "hodName", "category", "title"]}
           emptyTitle="No budget requests found"
           emptyDescription="Try adjusting your search or filters."
           onRowClick={(row) => onSelectRequest(row as unknown as BudgetRequest)}
           filterComponent={
             <div className="flex items-center gap-2">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-36">
+                <SelectTrigger className="w-44">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -70,15 +80,14 @@ export function BudgetRequestsList({ requests, onSelectRequest }: BudgetRequests
             </div>
           }
           columns={[
-            { key: "id", header: "Request ID" },
             { key: "department", header: "Department" },
-            { key: "requestedBy", header: "Requested By", hideOnMobile: true },
+            { key: "hodName", header: "Requested By", hideOnMobile: true },
             { key: "category", header: "Category", hideOnMobile: true },
             { key: "title", header: "Title" },
             {
               key: "amount",
               header: "Amount",
-              render: (row) => formatCurrency(requestAmount(row as unknown as BudgetRequest)),
+              render: (row) => formatCurrency(budgetRequestTotal((row as unknown as BudgetRequest).items)),
             },
             {
               key: "priority",
@@ -87,10 +96,10 @@ export function BudgetRequestsList({ requests, onSelectRequest }: BudgetRequests
               render: (row) => (row as unknown as BudgetRequest).priority,
             },
             {
-              key: "submittedDate",
+              key: "createdAt",
               header: "Submitted",
               hideOnMobile: true,
-              render: (row) => formatDate(new Date((row as unknown as BudgetRequest).submittedDate)),
+              render: (row) => formatDate((row as unknown as BudgetRequest).createdAt),
             },
             {
               key: "status",

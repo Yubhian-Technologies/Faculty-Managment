@@ -319,6 +319,12 @@ export type NotificationType =
   | "APPRAISAL_REVIEWED"
   // Grievance
   | "GRIEVANCE_UPDATE"
+  // Budget
+  | "BUDGET_REQUEST_SUBMITTED"
+  | "BUDGET_REQUEST_VERIFIED"
+  | "BUDGET_REQUEST_RETURNED"
+  | "BUDGET_REQUEST_REJECTED"
+  | "BUDGET_REQUEST_APPROVED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -390,7 +396,14 @@ export type AuditAction =
   // Grievance module
   | "GRIEVANCE_FILED"
   | "GRIEVANCE_ASSIGNED"
-  | "GRIEVANCE_RESOLVED";
+  | "GRIEVANCE_RESOLVED"
+  // Budget module
+  | "BUDGET_REQUEST_SUBMITTED"
+  | "BUDGET_REQUEST_VERIFIED"
+  | "BUDGET_REQUEST_RETURNED"
+  | "BUDGET_REQUEST_REJECTED"
+  | "BUDGET_REQUEST_FINANCE_APPROVED"
+  | "BUDGET_REQUEST_FINANCE_REJECTED";
 
 export interface AuditLog {
   id: string;

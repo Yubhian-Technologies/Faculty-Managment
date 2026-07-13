@@ -11,3 +11,4 @@ export * from "./training";
 export * from "./grievance";
 export * from "./documents";
 export * from "./finance";
+export * from "./budget";
