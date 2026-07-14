@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { UserCog, Users2, ChevronRight, ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -11,13 +11,14 @@ import type { College } from "@/types";
 export default function ManagementCollegeDetailPage() {
   const router = useRouter();
   const { collegeId } = useParams<{ collegeId: string }>();
-  const [college, setCollege] = useState<College | null>(null);
 
-  useEffect(() => {
-    fetch(`/api/management/colleges/${collegeId}`)
-      .then((r) => r.json() as Promise<{ college: College }>)
-      .then((d) => setCollege(d.college ?? null));
-  }, [collegeId]);
+  const { data: college } = useQuery({
+    queryKey: ["mgmt-college", collegeId],
+    queryFn: () =>
+      fetch(`/api/management/colleges/${collegeId}`)
+        .then((r) => r.json() as Promise<{ college: College }>)
+        .then((d) => d.college ?? null),
+  });
 
   const cards = [
     { label: "Principal", icon: UserCog, href: `/management/faculty/${collegeId}/principal` },
@@ -39,7 +40,7 @@ export default function ManagementCollegeDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {cards.map((c) => (
-          <Card key={c.label} className="cursor-pointer hover:border-primary transition-colors" onClick={() => router.push(c.href)}>
+          <Card key={c.label} className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200" onClick={() => router.push(c.href)}>
             <CardContent className="p-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">

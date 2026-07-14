@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Building2, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -13,17 +13,30 @@ interface Props {
   basePath: string;
 }
 
+async function fetchColleges(): Promise<College[]> {
+  const r = await fetch("/api/management/colleges");
+  const d = (await r.json()) as { colleges: College[] };
+  return d.colleges ?? [];
+}
+
 export function CollegesListView({ title, description, basePath }: Props) {
   const router = useRouter();
-  const [colleges, setColleges] = useState<College[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetch("/api/management/colleges")
-      .then((r) => r.json() as Promise<{ colleges: College[] }>)
-      .then((d) => setColleges(d.colleges ?? []))
-      .finally(() => setIsLoading(false));
-  }, []);
+  const { data: colleges = [], isLoading } = useQuery({
+    queryKey: ["mgmt-colleges"],
+    queryFn: fetchColleges,
+  });
+
+  function prefetchCollege(collegeId: string) {
+    queryClient.prefetchQuery({
+      queryKey: ["mgmt-college", collegeId],
+      queryFn: () =>
+        fetch(`/api/management/colleges/${collegeId}`)
+          .then((r) => r.json() as Promise<{ college: College }>)
+          .then((d) => d.college ?? null),
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -38,7 +51,8 @@ export function CollegesListView({ title, description, basePath }: Props) {
           {colleges.map((c) => (
             <Card
               key={c.id}
-              className="cursor-pointer hover:border-primary transition-colors"
+              className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200"
+              onMouseEnter={() => prefetchCollege(c.id)}
               onClick={() => router.push(`${basePath}/${c.id}`)}
             >
               <CardContent className="p-5 flex items-center justify-between">
