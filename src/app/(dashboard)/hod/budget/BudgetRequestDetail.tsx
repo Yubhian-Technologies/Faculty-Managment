@@ -7,9 +7,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { BudgetItemsTable } from "@/components/shared/budget/BudgetItemsTable";
-import { formatDate } from "@/lib/utils";
-import type { BudgetRequest } from "@/types";
+import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import { budgetRequestTotal, NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type BudgetRequest } from "@/types";
 
 interface ReadOnlyFieldProps {
   label: string;
@@ -49,19 +49,22 @@ export function BudgetRequestDetail({ request, onClose, onEditRequest }: BudgetR
             <h3 className="text-sm font-semibold text-muted-foreground">Budget Information</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ReadOnlyField label="Department" value={request.department} />
-              <ReadOnlyField label="Budget Category" value={request.category} />
-              <ReadOnlyField label="Priority" value={request.priority} />
+              <ReadOnlyField label="Academic Year" value={request.academicYear} />
               <ReadOnlyField
-                label="Required Before"
-                value={request.requiredBefore ? formatDate(new Date(request.requiredBefore)) : ""}
+                label="Date of Budget Request"
+                value={request.requestDate ? formatDateTime(new Date(request.requestDate)) : ""}
               />
               <ReadOnlyField label="Submitted" value={formatDate(request.createdAt)} />
             </div>
           </div>
 
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground">Item Details</h3>
-            <BudgetItemsTable items={request.items} readOnly />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-muted-foreground">Item Details</h3>
+              <span className="text-sm font-semibold">{formatCurrency(budgetRequestTotal(request))}</span>
+            </div>
+            <BudgetCategorySection label="Non Recurring" categories={NON_RECURRING_CATEGORIES} groups={request.nonRecurring} readOnly />
+            <BudgetCategorySection label="Recurring" categories={RECURRING_CATEGORIES} groups={request.recurring} readOnly />
           </div>
 
           {request.history?.length > 0 && (
