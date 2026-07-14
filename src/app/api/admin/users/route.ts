@@ -12,12 +12,23 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const collegeId = searchParams.get("collegeId");
+    const scope = searchParams.get("scope");
+
+    const db = getAdminDb();
+
+    if (scope === "global") {
+      // System-wide users (e.g. MANAGEMENT) have no college/location scope — they live only in systemUsers.
+      const snap = await db.collection("systemUsers").where("role", "in", GLOBAL_ROLES).get();
+      const users = snap.docs
+        .map((d) => ({ uid: d.id, ...d.data() }))
+        .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
+      return NextResponse.json({ users });
+    }
 
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
     }
 
-    const db = getAdminDb();
     const snap = await db
       .collection("colleges")
       .doc(collegeId)
@@ -39,6 +50,7 @@ export async function GET(request: Request) {
 
 const COLLEGE_ROLES: UserRole[] = ["PRINCIPAL", "VICE_PRINCIPAL", "ACCOUNTS", "FINANCE"];
 const LOCATION_ROLES: UserRole[] = ["ADMINISTRATION"];
+const GLOBAL_ROLES: UserRole[] = ["MANAGEMENT"];
 
 export async function POST(request: Request) {
   try {
@@ -52,9 +64,11 @@ export async function POST(request: Request) {
       collegeId?: string;
       locationId?: string;
       department?: string;
+      phone?: string;
+      academicProfile?: Record<string, unknown>;
     };
 
-    const { name, email, password, role, collegeId, locationId, department } = body;
+    const { name, email, password, role, collegeId, locationId, department, phone, academicProfile } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -62,10 +76,11 @@ export async function POST(request: Request) {
 
     const isCollegeRole = COLLEGE_ROLES.includes(role);
     const isLocationRole = LOCATION_ROLES.includes(role);
+    const isGlobalRole = GLOBAL_ROLES.includes(role);
 
-    if (!isCollegeRole && !isLocationRole) {
+    if (!isCollegeRole && !isLocationRole && !isGlobalRole) {
       return NextResponse.json(
-        { error: `Super Admin can create: ${[...COLLEGE_ROLES, ...LOCATION_ROLES].join(", ")}` },
+        { error: `Super Admin can create: ${[...COLLEGE_ROLES, ...LOCATION_ROLES, ...GLOBAL_ROLES].join(", ")}` },
         { status: 403 }
       );
     }
@@ -94,6 +109,7 @@ export async function POST(request: Request) {
       await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
         uid, collegeId, name, email, role,
         department: department ?? "",
+        ...(academicProfile ? { academicProfile } : {}),
         isActive: true, createdAt: now, updatedAt: now,
       });
       await db.collection("systemUsers").doc(uid).set({ uid, role, collegeId, email, name });
@@ -102,6 +118,11 @@ export async function POST(request: Request) {
         collegeId, action: "USER_CREATED",
         performedBy: "SUPER_ADMIN", performedByName: "Super Admin",
         targetId: uid, details: { email, role, name }, timestamp: now,
+      });
+    } else if (isGlobalRole) {
+      // MANAGEMENT: no college/location scope — systemUsers is the only record
+      await db.collection("systemUsers").doc(uid).set({
+        uid, role, email, name, phone: phone ?? "", collegeId: "", isActive: true, createdAt: now,
       });
     }
 

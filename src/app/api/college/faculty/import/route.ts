@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Designation, EmploymentType } from "@/types";
+import type { Designation, EmploymentType, DegreeDetail, CourseAssignment, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -61,7 +61,119 @@ type ImportRow = {
   inCampusExperience?: string;
   industryExperience?: string;
   researchExperience?: string;
+  // Academic Profile (Modules 1-5) — flattened columns, all optional
+  [key: string]: string | undefined;
 };
+
+function num(v: string | undefined): number | undefined {
+  if (!v?.trim()) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function degree(row: ImportRow, prefix: string): DegreeDetail | undefined {
+  const degreeAndBranch = row[`${prefix}_degreeAndBranch`]?.trim();
+  const universityOrInstitute = row[`${prefix}_university`]?.trim();
+  const percentageOrDivision = row[`${prefix}_percentage`]?.trim();
+  const yearOfCompletion = num(row[`${prefix}_year`]);
+  if (!degreeAndBranch && !universityOrInstitute && !percentageOrDivision && !yearOfCompletion) return undefined;
+  return { degreeAndBranch: degreeAndBranch ?? "", universityOrInstitute: universityOrInstitute ?? "", percentageOrDivision: percentageOrDivision ?? "", yearOfCompletion: yearOfCompletion ?? 0 };
+}
+
+function courses(row: ImportRow): CourseAssignment[] {
+  return [1, 2, 3]
+    .map((i) => ({ code: row[`course${i}_code`]?.trim() ?? "", name: row[`course${i}_name`]?.trim() ?? "", weeklyCreditHours: num(row[`course${i}_hours`]) ?? 0 }))
+    .filter((c) => c.code || c.name || c.weeklyCreditHours);
+}
+
+function fundedProjects(row: ImportRow): FundedProject[] {
+  return [1, 2, 3]
+    .map((i) => ({ title: row[`project${i}_title`]?.trim() ?? "", fundingAgency: row[`project${i}_agency`]?.trim() ?? "", grantAmountLakhs: num(row[`project${i}_amount`]) ?? 0, year: num(row[`project${i}_year`]) ?? 0, status: row[`project${i}_status`]?.trim() ?? "" }))
+    .filter((p) => p.title || p.fundingAgency);
+}
+
+function consultancyProjects(row: ImportRow): ConsultancyProject[] {
+  return [1, 2, 3]
+    .map((i) => ({ title: row[`consultancy${i}_title`]?.trim() ?? "", clientOrAgency: row[`consultancy${i}_client`]?.trim() ?? "", revenueLakhs: num(row[`consultancy${i}_revenue`]) ?? 0, year: num(row[`consultancy${i}_year`]) ?? 0, status: row[`consultancy${i}_status`]?.trim() ?? "" }))
+    .filter((c) => c.title || c.clientOrAgency);
+}
+
+function labsEstablished(row: ImportRow): LabEstablished[] {
+  return [1, 2, 3]
+    .map((i) => ({ facilityDetails: row[`lab${i}_details`]?.trim() ?? "", outcomes: row[`lab${i}_outcomes`]?.trim() ?? "" }))
+    .filter((l) => l.facilityDetails || l.outcomes);
+}
+
+function authoredBooks(row: ImportRow): AuthoredBook[] {
+  return [1, 2, 3]
+    .map((i) => ({ title: row[`book${i}_title`]?.trim() ?? "", publisher: row[`book${i}_publisher`]?.trim() ?? "", year: num(row[`book${i}_year`]) ?? 0 }))
+    .filter((b) => b.title || b.publisher);
+}
+
+function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefined {
+  const profile: Record<string, unknown> = {
+    highestQualification: row.highestQualification?.trim() ?? "",
+    ugDetails: degree(row, "ug"),
+    pgDetails: degree(row, "pg"),
+    phdDetails: degree(row, "phd"),
+    phdStatus: row.phdStatus?.trim().toUpperCase().includes("PURSU") ? "PURSUING" : row.phdStatus?.trim() ? "AWARDED" : undefined,
+    phdMode: row.phdMode?.trim().toUpperCase().includes("PART") ? "PART_TIME" : row.phdMode?.trim() ? "FULL_TIME" : undefined,
+    phdSupervisorName: row.phdSupervisorName?.trim() || undefined,
+    fellowshipsReceived: row.fellowshipsReceived?.trim() || undefined,
+    gateQualifiedYear: num(row.gateQualifiedYear),
+    gateScore: num(row.gateScore),
+    netSletQualificationYear: num(row.netSletQualificationYear),
+    teachingExperienceBeforeJoiningYears: num(row.teachingExperienceBeforeJoiningYears) ?? 0,
+    teachingExperienceSinceJoiningYears: num(row.teachingExperienceSinceJoiningYears) ?? 0,
+    researchOrIndustryExperienceYears: num(row.researchOrIndustryExperienceYears) ?? 0,
+    totalProfessionalExperienceYears: num(row.totalProfessionalExperienceYears) ?? 0,
+    totalWeeklyTeachingLoadHours: num(row.totalWeeklyTeachingLoadHours) ?? 0,
+    averageStudentFeedbackScore: num(row.averageStudentFeedbackScore),
+    teachingAssignment: row.primaryTeachingRole?.trim() || courses(row).length > 0
+      ? { primaryTeachingRole: row.primaryTeachingRole?.trim() ?? "", courses: courses(row) }
+      : undefined,
+    publicationsFirstOrCorrespondingAuthor: num(row.publicationsFirstOrCorrespondingAuthor) ?? 0,
+    publicationsQ1OrHighImpact: num(row.publicationsQ1OrHighImpact) ?? 0,
+    sciScopusCount: num(row.sciScopusCount) ?? 0,
+    wosCount: num(row.wosCount) ?? 0,
+    conferencePapersCount: num(row.conferencePapersCount) ?? 0,
+    bookChaptersCount: num(row.bookChaptersCount) ?? 0,
+    reviewPublicationsCount: num(row.reviewPublicationsCount) ?? 0,
+    totalPublications: num(row.totalPublications) ?? 0,
+    totalCitations: num(row.totalCitations) ?? 0,
+    hIndex: num(row.hIndex) ?? 0,
+    i10Index: num(row.i10Index) ?? 0,
+    fundedProjects: fundedProjects(row),
+    consultancyProjects: consultancyProjects(row),
+    patents: {
+      indianFiled: num(row.patentIndianFiled) ?? 0,
+      indianPublished: num(row.patentIndianPublished) ?? 0,
+      indianGranted: num(row.patentIndianGranted) ?? 0,
+      internationalFiled: num(row.patentInternationalFiled) ?? 0,
+      internationalPublished: num(row.patentInternationalPublished) ?? 0,
+      internationalGranted: num(row.patentInternationalGranted) ?? 0,
+      details: row.patentDetails?.trim() || undefined,
+    },
+    phdScholarsPursuing: (num(row.phdScholarsPursuingCount) || row.phdScholarsPursuingUniversities?.trim())
+      ? { count: num(row.phdScholarsPursuingCount) ?? 0, universities: row.phdScholarsPursuingUniversities?.trim() ?? "" }
+      : undefined,
+    phdScholarsAwarded: (num(row.phdScholarsAwardedCount) || row.phdScholarsAwardedUniversities?.trim())
+      ? { count: num(row.phdScholarsAwardedCount) ?? 0, universities: row.phdScholarsAwardedUniversities?.trim() ?? "" }
+      : undefined,
+    nationalExposure: row.nationalExposure?.trim() || undefined,
+    internationalExposure: row.internationalExposure?.trim() || undefined,
+    labsEstablished: labsEstablished(row),
+    administrativeResponsibilities: row.administrativeResponsibilities?.trim() || undefined,
+    certificationsAndFdps: row.certificationsAndFdps?.trim() || undefined,
+    professionalBodyMemberships: row.professionalBodyMemberships?.trim() || undefined,
+    authoredBooks: authoredBooks(row),
+    notableAwards: row.notableAwards?.trim() || undefined,
+  };
+  for (const key of Object.keys(profile)) {
+    if (profile[key] === undefined) delete profile[key];
+  }
+  return Object.keys(profile).length > 0 ? profile : undefined;
+}
 
 export async function POST(request: Request) {
   try {
@@ -164,6 +276,7 @@ export async function POST(request: Request) {
         inCampusExperience: row.inCampusExperience ? parseFloat(row.inCampusExperience) || undefined : undefined,
         industryExperience: row.industryExperience ? parseFloat(row.industryExperience) || undefined : undefined,
         researchExperience: row.researchExperience ? parseFloat(row.researchExperience) || undefined : undefined,
+        academicProfile: buildAcademicProfile(row),
         createdAt: now,
         updatedAt: now,
       };

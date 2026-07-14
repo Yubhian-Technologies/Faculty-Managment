@@ -74,6 +74,7 @@ export async function POST(request: Request) {
       joiningDate: string;
       employmentType: EmploymentType;
       department?: string;
+      academicProfile?: Record<string, unknown>;
     };
 
     const {
@@ -165,6 +166,7 @@ export async function POST(request: Request) {
       employmentType,
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
+      ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
       createdAt: now,
       updatedAt: now,
     });
