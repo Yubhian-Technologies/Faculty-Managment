@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
-import type { College, FacultyMember } from "@/types";
+import type { FacultyMember } from "@/types";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
@@ -19,13 +19,12 @@ export default function ManagementFacultyListPage() {
 
   useEffect(() => {
     fetch(`/api/management/colleges/${collegeId}/departments/${deptId}/faculty`)
-      .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
-      .then((d) => setFaculty(d.faculty ?? []))
+      .then((r) => r.json() as Promise<{ faculty: FacultyRow[]; collegeName: string }>)
+      .then((d) => {
+        setFaculty(d.faculty ?? []);
+        setCollegeName(d.collegeName ?? "");
+      })
       .finally(() => setIsLoading(false));
-
-    fetch("/api/management/colleges")
-      .then((r) => r.json() as Promise<{ colleges: College[] }>)
-      .then((d) => setCollegeName((d.colleges ?? []).find((c) => c.id === collegeId)?.name ?? ""));
   }, [collegeId, deptId]);
 
   const columns: Column<FacultyRow>[] = [
@@ -40,7 +39,7 @@ export default function ManagementFacultyListPage() {
         title="Faculty"
         description="Select a faculty member to view their full profile"
         actions={
-          <Button variant="outline" onClick={() => router.push(`/management/${collegeId}/departments/${deptId}`)}>
+          <Button variant="outline" onClick={() => router.push(`/management/faculty/${collegeId}/departments/${deptId}`)}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
           </Button>
         }
@@ -54,7 +53,7 @@ export default function ManagementFacultyListPage() {
         searchPlaceholder="Search faculty..."
         searchKeys={["name"] as (keyof FacultyMember)[]}
         emptyTitle="No faculty in this department"
-        onRowClick={(f) => router.push(`/management/${collegeId}/departments/${deptId}/faculty/${f.id}`)}
+        onRowClick={(f) => router.push(`/management/faculty/${collegeId}/departments/${deptId}/faculty/${f.id}`)}
       />
     </div>
   );

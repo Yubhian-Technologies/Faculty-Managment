@@ -42,6 +42,14 @@ export function formatDateTime(timestamp: Timestamp | Date | FirestoreTimestampL
   });
 }
 
+// Formats a Firestore Timestamp (or admin-SDK-serialized equivalent) as a yyyy-mm-dd
+// string suitable for <input type="date">.
+export function toDateInputValue(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): string {
+  const date = toDate(timestamp);
+  if (!date) return "";
+  return date.toISOString().split("T")[0];
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",

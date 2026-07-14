@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
       employmentType: EmploymentType;
       department?: string;
       academicProfile?: Record<string, unknown>;
-    };
+    } & PersonalDetailsInput;
 
     const {
       employeeId,
@@ -167,6 +168,7 @@ export async function POST(request: Request) {
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
+      ...buildPersonalDetailsUpdate(body),
       createdAt: now,
       updatedAt: now,
     });

@@ -42,7 +42,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin",
-  MANAGEMENT: "/management",
+  MANAGEMENT: "/management/dashboard",
   ADMINISTRATION: "/administration",
   HR_ADMIN: "/hr-admin",
   ADMIN_OFFICE: "/admin-office",
@@ -114,6 +114,19 @@ export interface FMSUser {
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
+
+  // Personal / statutory details (same field names as FacultyMember below, for consistency)
+  gender?: "Male" | "Female" | "Other";
+  legalName?: string;          // name as per SSC certificates (CAPITAL LETTERS)
+  fatherName?: string;         // father or husband name
+  motherName?: string;
+  religion?: string;
+  caste?: string;
+  aadharNo?: string;
+  panNo?: string;
+  ratificationStatus?: "Ratified" | "Not Ratified";
+  ratificationDate?: Timestamp;
+
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile; PRINCIPAL/VICE_PRINCIPAL omit teachingAssignment in the UI
   isActive: boolean;
   createdAt: Timestamp;

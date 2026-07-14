@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
   Dialog,
@@ -20,12 +19,11 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS } from "@/types";
-import type { FMSUser, UserRole } from "@/types";
+import type { FMSUser } from "@/types";
 import type { College } from "@/types";
 
 type UserRow = Record<string, unknown> & FMSUser;
 
-const ASSIGNABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"];
 const GLOBAL_SCOPE = "__system__";
 
 export default function UsersPage() {
@@ -36,9 +34,6 @@ export default function UsersPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [actionUid, setActionUid] = useState<string | null>(null);
   const [confirmUser, setConfirmUser] = useState<{ user: UserRow; action: "deactivate" | "activate" | "delete" } | null>(null);
-  const [editUser, setEditUser] = useState<UserRow | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", role: "" as UserRole, department: "" });
-  const [editSaving, setEditSaving] = useState(false);
   const [resetUser, setResetUser] = useState<UserRow | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [resetSaving, setResetSaving] = useState(false);
@@ -70,16 +65,6 @@ export default function UsersPage() {
       .finally(() => setIsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCollegeId]);
-
-  function reloadUsers() {
-    if (!selectedCollegeId) return;
-    setIsLoading(true);
-    fetch(usersUrl())
-      .then((r) => r.json())
-      .then((data: { users: UserRow[] }) => setUsers(data.users ?? []))
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
-  }
 
   async function handleToggleActive(user: UserRow, isActive: boolean) {
     setActionUid(user.uid);
@@ -113,40 +98,6 @@ export default function UsersPage() {
     } finally {
       setActionUid(null);
       setConfirmUser(null);
-    }
-  }
-
-  function openEdit(user: UserRow) {
-    setEditUser(user);
-    setEditForm({
-      name: user.name,
-      role: user.role,
-      department: user.department ?? "",
-    });
-  }
-
-  async function handleSaveEdit() {
-    if (!editUser) return;
-    setEditSaving(true);
-    try {
-      const res = await fetch(`/api/admin/users/${editUser.uid}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          collegeId: editUser.collegeId,
-          name: editForm.name,
-          role: editForm.role,
-          department: editForm.department,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "User updated" });
-      setEditUser(null);
-      reloadUsers();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to update user" });
-    } finally {
-      setEditSaving(false);
     }
   }
 
@@ -224,7 +175,7 @@ export default function UsersPage() {
           <div className="flex items-center gap-1 flex-wrap">
             {!isSystemWide && (
               <>
-                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(row); }}>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/super-admin/users/${row.uid}/edit?collegeId=${row.collegeId}`); }}>
                   <Pencil className="h-3.5 w-3.5" />
                   <span className="ml-1 hidden lg:inline">Edit</span>
                 </Button>
@@ -333,55 +284,6 @@ export default function UsersPage() {
         }
         csvFilename="users"
       />
-
-      {/* Edit Dialog */}
-      <Dialog open={!!editUser} onOpenChange={(open) => !open && setEditUser(null)}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Full Name</Label>
-              <Input
-                value={editForm.name}
-                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Full name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select
-                value={editForm.role}
-                onValueChange={(v) => setEditForm((f) => ({ ...f, role: v as UserRole }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ASSIGNABLE_ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {(editForm.role === "HOD" || editForm.role === "PANEL_MEMBER") && (
-              <div className="space-y-2">
-                <Label>Department</Label>
-                <Input
-                  value={editForm.department}
-                  onChange={(e) => setEditForm((f) => ({ ...f, department: e.target.value }))}
-                  placeholder="e.g. Computer Science"
-                />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditUser(null)} disabled={editSaving}>Cancel</Button>
-            <Button onClick={handleSaveEdit} loading={editSaving}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Reset Password Dialog */}
       <Dialog open={!!resetUser} onOpenChange={(open) => { if (!open) { setResetUser(null); setNewPassword(""); } }}>

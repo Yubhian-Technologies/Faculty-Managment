@@ -29,7 +29,7 @@ export default function ManagementFacultyDetailPage() {
         title={faculty?.name ?? "Faculty Member"}
         description={faculty ? DESIGNATION_LABELS[faculty.designation] : undefined}
         actions={
-          <Button variant="outline" onClick={() => router.push(`/management/${collegeId}/departments/${deptId}/faculty`)}>
+          <Button variant="outline" onClick={() => router.push(`/management/faculty/${collegeId}/departments/${deptId}/faculty`)}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
           </Button>
         }

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
+import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { ROLE_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields } from "@/types";
@@ -31,6 +32,7 @@ export default function NewUserPage() {
   const [collegeId, setCollegeId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
+  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function NewUserPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name, email, password, role, collegeId, locationId, phone,
-          ...(role === "PRINCIPAL" ? { academicProfile } : {}),
+          ...(role === "PRINCIPAL" ? { academicProfile, ...personalDetails } : {}),
         }),
       });
       const json = await res.json() as { uid?: string; error?: string };
@@ -151,12 +153,20 @@ export default function NewUserPage() {
       </Card>
 
       {role === "PRINCIPAL" && (
-        <Card className="mt-6">
-          <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-          <CardContent>
-            <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} />
-          </CardContent>
-        </Card>
+        <>
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
+            <CardContent>
+              <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
+            </CardContent>
+          </Card>
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
+            <CardContent>
+              <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} />
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   );

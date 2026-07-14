@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
 
 const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL"];
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
       department?: string;
       staffType?: "teaching" | "supporting";
       academicProfile?: Record<string, unknown>;
-    };
+    } & PersonalDetailsInput;
 
     const { name, email, password, role, department, academicProfile } = body;
 
@@ -141,6 +142,7 @@ export async function POST(request: Request) {
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),
         ...(academicProfile ? { academicProfile } : {}),
+        ...buildPersonalDetailsUpdate(body),
         isActive: true,
         createdAt: now,
         updatedAt: now,

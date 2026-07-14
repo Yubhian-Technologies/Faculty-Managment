@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
 
 export async function GET(request: Request) {
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
       department?: string;
       phone?: string;
       academicProfile?: Record<string, unknown>;
-    };
+    } & PersonalDetailsInput;
 
     const { name, email, password, role, collegeId, locationId, department, phone, academicProfile } = body;
 
@@ -110,6 +111,7 @@ export async function POST(request: Request) {
         uid, collegeId, name, email, role,
         department: department ?? "",
         ...(academicProfile ? { academicProfile } : {}),
+        ...buildPersonalDetailsUpdate(body),
         isActive: true, createdAt: now, updatedAt: now,
       });
       await db.collection("systemUsers").doc(uid).set({ uid, role, collegeId, email, name });
