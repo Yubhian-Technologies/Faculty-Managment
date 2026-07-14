@@ -27,7 +27,7 @@ export default function ManagementDepartmentsPage() {
         title="Departments"
         description="Select a department to view its HOD and faculty"
         actions={
-          <Button variant="outline" onClick={() => router.push(`/management/${collegeId}`)}>
+          <Button variant="outline" onClick={() => router.push(`/management/faculty/${collegeId}`)}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
           </Button>
         }
@@ -43,7 +43,7 @@ export default function ManagementDepartmentsPage() {
             <Card
               key={d.id}
               className="cursor-pointer hover:border-primary transition-colors"
-              onClick={() => router.push(`/management/${collegeId}/departments/${d.id}`)}
+              onClick={() => router.push(`/management/faculty/${collegeId}/departments/${d.id}`)}
             >
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="flex items-center gap-3">

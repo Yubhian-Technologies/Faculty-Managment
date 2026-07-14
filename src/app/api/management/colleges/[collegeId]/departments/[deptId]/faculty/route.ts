@@ -11,12 +11,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
     const { collegeId, deptId } = await params;
 
     const db = getAdminDb();
-    const deptSnap = await db.collection("colleges").doc(collegeId).collection("departments").doc(deptId).get();
+    const collegeRef = db.collection("colleges").doc(collegeId);
+    const [collegeSnap, deptSnap] = await Promise.all([
+      collegeRef.get(),
+      collegeRef.collection("departments").doc(deptId).get(),
+    ]);
+    const collegeName = (collegeSnap.data() as { name?: string } | undefined)?.name ?? "";
     const deptName = (deptSnap.data() as { name?: string } | undefined)?.name ?? "";
 
-    const snap = await db
-      .collection("colleges")
-      .doc(collegeId)
+    const snap = await collegeRef
       .collection("facultyMembers")
       .where("department", "==", deptName)
       .get();
@@ -25,7 +28,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
 
-    return NextResponse.json({ faculty });
+    return NextResponse.json({ faculty, collegeName });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

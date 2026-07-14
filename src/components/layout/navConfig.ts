@@ -13,7 +13,9 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   // Management (read-only)
-  { label: "Colleges", href: "/management", iconName: "Building2", roles: ["MANAGEMENT"] },
+  { label: "Dashboard", href: "/management/dashboard", iconName: "LayoutDashboard", roles: ["MANAGEMENT"] },
+  { label: "Budget", href: "/management/budget", iconName: "PiggyBank", roles: ["MANAGEMENT"] },
+  { label: "Faculty Details", href: "/management/faculty", iconName: "UsersRound", roles: ["MANAGEMENT"] },
 
   // Super Admin
   { label: "Dashboard", href: "/super-admin", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN"] },
@@ -131,7 +133,9 @@ export function getNavItemsForRole(role: UserRole): NavItem[] {
 
 export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   MANAGEMENT: [
-    { label: "Colleges", href: "/management", iconName: "Building2", roles: ["MANAGEMENT"] },
+    { label: "Dashboard", href: "/management/dashboard", iconName: "LayoutDashboard", roles: ["MANAGEMENT"] },
+    { label: "Budget", href: "/management/budget", iconName: "PiggyBank", roles: ["MANAGEMENT"] },
+    { label: "Faculty", href: "/management/faculty", iconName: "UsersRound", roles: ["MANAGEMENT"] },
   ],
   SUPER_ADMIN: [
     { label: "Dashboard", href: "/super-admin", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN"] },

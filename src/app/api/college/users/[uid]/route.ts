@@ -3,6 +3,68 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+
+async function loadTargetInScope(
+  db: FirebaseFirestore.Firestore,
+  session: { collegeId: string; role: string; uid: string },
+  uid: string
+) {
+  const targetSnap = await db
+    .collection("colleges")
+    .doc(session.collegeId)
+    .collection("users")
+    .doc(uid)
+    .get();
+
+  if (!targetSnap.exists) return { targetSnap: null, error: "User not found" as const, status: 404 };
+
+  const target = targetSnap.data() as { role: string; department?: string };
+
+  if (session.role === "PRINCIPAL") {
+    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"].includes(target.role)) {
+      return { targetSnap: null, error: "Cannot access this user", status: 403 };
+    }
+  } else if (session.role === "HOD") {
+    if (target.role !== "PANEL_MEMBER") {
+      return { targetSnap: null, error: "HOD can only manage Panel Members", status: 403 };
+    }
+    const hodSnap = await db
+      .collection("colleges")
+      .doc(session.collegeId)
+      .collection("users")
+      .doc(session.uid)
+      .get();
+    const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+    if (hodDept && target.department !== hodDept) {
+      return { targetSnap: null, error: "Can only manage faculty in your department", status: 403 };
+    }
+  }
+
+  return { targetSnap, error: null, status: 200 };
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ uid: string }> }
+) {
+  try {
+    const session = await requireCollegeMember("PRINCIPAL", "HOD");
+    const { uid } = await params;
+    const db = getAdminDb();
+
+    const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
+    if (!targetSnap) return NextResponse.json({ error }, { status });
+
+    return NextResponse.json({ user: { uid: targetSnap.id, ...targetSnap.data() } });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/users/[uid] GET]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
 
 export async function PATCH(
   request: Request,
@@ -11,54 +73,42 @@ export async function PATCH(
   try {
     const session = await requireCollegeMember("PRINCIPAL", "HOD");
     const { uid } = await params;
-    const body = (await request.json()) as { isActive: boolean };
+    const body = (await request.json()) as Partial<{
+      isActive: boolean;
+      name: string;
+      department: string;
+      phone: string;
+      academicProfile: Record<string, unknown>;
+    }> & PersonalDetailsInput;
 
     const db = getAdminDb();
 
-    // Fetch target user to verify scope
-    const targetSnap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("users")
-      .doc(uid)
-      .get();
-
-    if (!targetSnap.exists) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const target = targetSnap.data() as { role: string; department?: string };
-
-    // PRINCIPAL can deactivate HOD and COLLEGE_OFFICE; HOD can only deactivate PANEL_MEMBER in their dept
-    if (session.role === "PRINCIPAL") {
-      if (!["HOD", "COLLEGE_OFFICE", "PANEL_MEMBER"].includes(target.role)) {
-        return NextResponse.json({ error: "Cannot modify this user" }, { status: 403 });
-      }
-    } else if (session.role === "HOD") {
-      if (target.role !== "PANEL_MEMBER") {
-        return NextResponse.json({ error: "HOD can only manage Panel Members" }, { status: 403 });
-      }
-      const hodSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("users")
-        .doc(session.uid)
-        .get();
-      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-      if (hodDept && target.department !== hodDept) {
-        return NextResponse.json({ error: "Can only manage faculty in your department" }, { status: 403 });
-      }
-    }
+    const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
+    if (!targetSnap) return NextResponse.json({ error }, { status });
+    const target = targetSnap.data() as { role: string };
 
     const now = new Date();
+    const updates: Record<string, unknown> = { updatedAt: now, ...buildPersonalDetailsUpdate(body) };
+
+    if (body.isActive !== undefined) updates.isActive = body.isActive;
+    if (body.name !== undefined && body.name.trim()) updates.name = body.name.trim();
+    if (body.department !== undefined) updates.department = body.department;
+    if (body.phone !== undefined) updates.phone = body.phone;
+    if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
+
     await db
       .collection("colleges")
       .doc(session.collegeId)
       .collection("users")
       .doc(uid)
-      .update({ isActive: body.isActive, updatedAt: now });
+      .update(updates);
 
-    const action = body.isActive ? "USER_REACTIVATED" : "USER_DEACTIVATED";
+    // Keep systemUsers in sync (name is the only field mirrored there)
+    if (body.name !== undefined && body.name.trim()) {
+      await db.collection("systemUsers").doc(uid).set({ name: body.name.trim() }, { merge: true });
+    }
+
+    const action = body.isActive === false ? "USER_DEACTIVATED" : body.isActive === true ? "USER_REACTIVATED" : "USER_UPDATED";
     let actorName = "Unknown";
     try {
       const actorSnap = await db
@@ -76,7 +126,7 @@ export async function PATCH(
       performedBy: session.uid,
       performedByName: actorName,
       targetId: uid,
-      details: { isActive: body.isActive, role: target.role },
+      details: { role: target.role },
       timestamp: now,
     });
 
