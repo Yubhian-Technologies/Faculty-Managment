@@ -57,9 +57,9 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex md:flex-col w-64 border-r bg-background min-h-screen fixed top-0 left-0 z-30">
+    <aside className="hidden md:flex md:flex-col w-64 border-r bg-background h-screen fixed top-0 left-0 z-30">
       {/* Logo */}
-      <div className="h-16 flex items-center gap-3 px-4 border-b">
+      <div className="h-16 flex items-center gap-3 px-4 border-b shrink-0">
         <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold truncate">Vishnu People</p>
@@ -99,7 +99,7 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom section */}
-      <div className="border-t p-3 space-y-1">
+      <div className="border-t p-3 space-y-1 shrink-0">
         <button
           onClick={() => setNotificationDrawerOpen(true)}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground w-full transition-colors relative"

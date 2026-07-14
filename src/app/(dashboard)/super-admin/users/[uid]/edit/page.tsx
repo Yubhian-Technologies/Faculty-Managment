@@ -15,7 +15,7 @@ import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS } from "@/types";
 import type { FacultyProfileFields, UserRole } from "@/types";
 
-const ASSIGNABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE"];
+const ASSIGNABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"];
 
 export default function EditUserPage() {
   const router = useRouter();

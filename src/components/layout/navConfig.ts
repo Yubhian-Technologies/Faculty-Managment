@@ -84,6 +84,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"] },
   { label: "My Payslips", href: "/hod/payslips", iconName: "Wallet", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"] },
+  { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
   { label: "My Appraisal", href: "/hod/appraisal", iconName: "TrendingUp", roles: ["HOD"] },
   { label: "Training", href: "/hod/training", iconName: "GraduationCap", roles: ["HOD"] },
   { label: "Grievance", href: "/hod/grievance", iconName: "AlertCircle", roles: ["HOD"] },
@@ -121,10 +122,16 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Fund Allocation", href: "/finance/fund-allocation", iconName: "PieChart", roles: ["FINANCE"] },
   { label: "Expense Requests", href: "/finance/expense-requests", iconName: "ClipboardList", roles: ["FINANCE"], section: "Approvals" },
   { label: "Purchase Finance Clearance", href: "/finance/purchase-clearance", iconName: "ShoppingCart", roles: ["FINANCE"] },
+  { label: "Indent Approvals", href: "/finance/indent-approvals", iconName: "ClipboardCheck", roles: ["FINANCE"] },
   { label: "Payments", href: "/finance/payments", iconName: "IndianRupee", roles: ["FINANCE"], section: "Payments" },
   { label: "Receipts", href: "/finance/receipts", iconName: "Receipt", roles: ["FINANCE"] },
   { label: "Financial Reports", href: "/finance/reports", iconName: "BarChart3", roles: ["FINANCE"], section: "Reports" },
   { label: "Audit & Compliance", href: "/finance/audit", iconName: "ScrollText", roles: ["FINANCE"] },
+
+  // Purchase Department
+  { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
+  { label: "Indent Requests", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
+  { label: "Purchase Requests", href: "/purchase/requests", iconName: "ShoppingCart", roles: ["PURCHASE_DEPT"] },
 ];
 
 export function getNavItemsForRole(role: UserRole): NavItem[] {
@@ -206,6 +213,11 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Approvals", href: "/finance/budget-approvals", iconName: "ClipboardCheck", roles: ["FINANCE"] },
     { label: "Payments", href: "/finance/payments", iconName: "IndianRupee", roles: ["FINANCE"] },
     { label: "Reports", href: "/finance/reports", iconName: "BarChart3", roles: ["FINANCE"] },
+  ],
+  PURCHASE_DEPT: [
+    { label: "Home", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
+    { label: "Indents", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
+    { label: "Requests", href: "/purchase/requests", iconName: "ShoppingCart", roles: ["PURCHASE_DEPT"] },
   ],
   STUDENT: [],
 };

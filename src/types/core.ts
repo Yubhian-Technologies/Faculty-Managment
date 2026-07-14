@@ -19,6 +19,7 @@ export type UserRole =
   | "PANEL_MEMBER"
   | "ACCOUNTS"
   | "FINANCE"
+  | "PURCHASE_DEPT"
   | "STUDENT";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -35,6 +36,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
+  PURCHASE_DEPT: "Purchase Department",
   STUDENT: "Student",
 };
 
@@ -52,6 +54,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
+  PURCHASE_DEPT: "/purchase",
   STUDENT: "/feedback",
 };
 
@@ -468,6 +471,12 @@ export type NotificationType =
   | "BUDGET_REQUEST_RETURNED"
   | "BUDGET_REQUEST_REJECTED"
   | "BUDGET_REQUEST_APPROVED"
+  // Indent (HOD → Purchase → Finance)
+  | "INDENT_SUBMITTED"
+  | "INDENT_SENT_TO_FINANCE"
+  | "INDENT_RETURNED"
+  | "INDENT_REJECTED"
+  | "INDENT_APPROVED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -546,7 +555,15 @@ export type AuditAction =
   | "BUDGET_REQUEST_RETURNED"
   | "BUDGET_REQUEST_REJECTED"
   | "BUDGET_REQUEST_FINANCE_APPROVED"
-  | "BUDGET_REQUEST_FINANCE_REJECTED";
+  | "BUDGET_REQUEST_FINANCE_REJECTED"
+  // Indent module
+  | "INDENT_SUBMITTED"
+  | "INDENT_RETURNED_TO_HOD"
+  | "INDENT_REJECTED_BY_PURCHASE"
+  | "INDENT_SENT_TO_FINANCE"
+  | "INDENT_RETURNED_TO_PURCHASE"
+  | "INDENT_FINANCE_APPROVED"
+  | "INDENT_FINANCE_REJECTED";
 
 export interface AuditLog {
   id: string;

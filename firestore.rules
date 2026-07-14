@@ -53,9 +53,13 @@ service cloud.firestore {
       return isCollegeMember(collegeId) && hasAnyRole(['FINANCE', 'SUPER_ADMIN']);
     }
 
+    function isPurchaseDept(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['PURCHASE_DEPT', 'SUPER_ADMIN']);
+    }
+
     function isStaff(collegeId) {
       return isCollegeMember(collegeId) && hasAnyRole([
-        'PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'FINANCE', 'SUPER_ADMIN'
+        'PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'FINANCE', 'PURCHASE_DEPT', 'SUPER_ADMIN'
       ]);
     }
 
@@ -149,6 +153,18 @@ service cloud.firestore {
         allow read: if isStaff(collegeId);
         allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
         allow update: if isHOD(collegeId) || isPrincipal(collegeId) || isFinance(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      // ─── [ INDENT MODULE ] ────────────────────────────────────────────────
+      // HOD raises -> Purchase Dept sources quotations -> Finance disburses.
+      // All writes happen server-side via the Admin SDK in
+      // /api/college/indent-requests routes; these rules are defense-in-depth.
+
+      match /indentRequests/{requestId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHOD(collegeId) || isPurchaseDept(collegeId) || isFinance(collegeId);
         allow delete: if isSuperAdmin();
       }
 
@@ -367,7 +383,7 @@ service cloud.firestore {
       // client rules here only gate direct reads and block direct client writes.
 
       match /financeBudgets/{docId} {
-        allow read: if isFinance(collegeId);
+        allow read: if isFinance(collegeId) || isPurchaseDept(collegeId);
         allow write: if false;
       }
 
@@ -392,7 +408,7 @@ service cloud.firestore {
       }
 
       match /financePurchaseClearance/{docId} {
-        allow read: if isFinance(collegeId);
+        allow read: if isFinance(collegeId) || isPurchaseDept(collegeId);
         allow write: if false;
       }
 

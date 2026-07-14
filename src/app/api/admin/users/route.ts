@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   }
 }
 
-const COLLEGE_ROLES: UserRole[] = ["PRINCIPAL", "VICE_PRINCIPAL", "ACCOUNTS", "FINANCE"];
+const COLLEGE_ROLES: UserRole[] = ["PRINCIPAL", "VICE_PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"];
 const LOCATION_ROLES: UserRole[] = ["ADMINISTRATION"];
 const GLOBAL_ROLES: UserRole[] = ["MANAGEMENT"];
 

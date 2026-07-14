@@ -7,7 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 export async function GET() {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS", "FINANCE"
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"
     );
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).get();

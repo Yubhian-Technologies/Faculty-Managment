@@ -128,6 +128,7 @@ export interface FinancePayment {
   amount: number;
   purpose: string;
   relatedExpenseId?: string;
+  relatedIndentId?: string;
   status: FinancePaymentStatus;
   paymentReference?: string;
   processedBy?: string;
