@@ -15,22 +15,40 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
   }
 }
 
+function toMillis(value: unknown): number {
+  if (value && typeof (value as { toMillis?: () => number }).toMillis === "function") {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  return value ? new Date(value as string).getTime() : 0;
+}
+
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("FINANCE", "PURCHASE_DEPT", "SUPER_ADMIN");
+    const session = await requireCollegeMember("FINANCE", "PURCHASE_DEPT", "HOD", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
     const db = getAdminDb();
-    const snap = await db
+    let coll = db
       .collection("colleges")
       .doc(session.collegeId)
-      .collection("financePurchaseClearance")
-      .orderBy("createdAt", "desc")
-      .get();
+      .collection("financePurchaseClearance") as FirebaseFirestore.Query;
+
+    // HOD sees only their own department's purchase clearance records
+    if (session.role === "HOD") {
+      const hodSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+      coll = coll.where("department", "==", hodDept || "__NO_DEPARTMENT__");
+    }
+
+    // No .orderBy() here — combined with the HOD department filter it would need a
+    // composite index, so we sort in-memory below instead (same idiom used in
+    // leave-applications/route.ts and this session's budget-requests fix).
+    const snap = await coll.get();
 
     let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (status) requests = requests.filter((r) => (r as { status?: string }).status === status);
+    requests.sort((a, b) => toMillis((b as { createdAt?: unknown }).createdAt) - toMillis((a as { createdAt?: unknown }).createdAt));
 
     return NextResponse.json({ requests });
   } catch (err) {

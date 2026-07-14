@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, History, FileText, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -23,6 +23,16 @@ import { NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type FinanceBudget, typ
 
 type BudgetRow = FinanceBudget & Record<string, unknown>;
 
+interface DepartmentGroup extends Record<string, unknown> {
+  department: string;
+  count: number;
+  totalAllocated: number;
+  totalUtilized: number;
+  totalRemaining: number;
+  statusSummary: string;
+  budgets: BudgetRow[];
+}
+
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: "bg-green-100 text-green-800 border-green-200",
   REVISED: "bg-orange-100 text-orange-800 border-orange-200",
@@ -31,6 +41,32 @@ const STATUS_COLOR: Record<string, string> = {
 
 const emptyCreateForm = () => ({ department: "", purpose: "", fiscalYear: "", allocatedAmount: "" });
 const emptyReviseForm = () => ({ revisedAmount: "", reason: "" });
+
+function groupByDepartment(budgets: BudgetRow[]): DepartmentGroup[] {
+  const map = new Map<string, BudgetRow[]>();
+  for (const b of budgets) {
+    const list = map.get(b.department) ?? [];
+    list.push(b);
+    map.set(b.department, list);
+  }
+  return Array.from(map.entries())
+    .map(([department, rows]) => {
+      const statusCounts: Record<string, number> = {};
+      for (const r of rows) statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
+      return {
+        department,
+        count: rows.length,
+        totalAllocated: rows.reduce((s, r) => s + r.allocatedAmount, 0),
+        totalUtilized: rows.reduce((s, r) => s + r.utilizedAmount, 0),
+        totalRemaining: rows.reduce((s, r) => s + (r.allocatedAmount - r.utilizedAmount), 0),
+        statusSummary: Object.entries(statusCounts)
+          .map(([status, n]) => `${n} ${status.charAt(0)}${status.slice(1).toLowerCase()}`)
+          .join(" · "),
+        budgets: rows,
+      };
+    })
+    .sort((a, b) => a.department.localeCompare(b.department));
+}
 
 export default function FinanceBudgetPage() {
   const [budgets, setBudgets] = useState<BudgetRow[]>([]);
@@ -44,6 +80,13 @@ export default function FinanceBudgetPage() {
   const [historyTarget, setHistoryTarget] = useState<BudgetRow | null>(null);
   const [sourceRequest, setSourceRequest] = useState<BudgetRequest | null>(null);
   const [isLoadingSource, setIsLoadingSource] = useState(false);
+  const [selectedDeptName, setSelectedDeptName] = useState<string | null>(null);
+
+  const groups = useMemo(() => groupByDepartment(budgets), [budgets]);
+  // Derived by name (not a captured object) so the dialog reflects live totals
+  // after a Revise/Close reload recomputes `groups`, instead of freezing on
+  // whatever snapshot was selected at click time.
+  const selectedDept = groups.find((g) => g.department === selectedDeptName) ?? null;
 
   async function viewSourceRequest(requestId: string) {
     setIsLoadingSource(true);
@@ -136,9 +179,8 @@ export default function FinanceBudgetPage() {
     }
   }
 
-  const columns: Column<BudgetRow>[] = [
-    { key: "department", header: "Department" },
-    { key: "purpose", header: "Purpose", hideOnMobile: true },
+  const budgetColumns: Column<BudgetRow>[] = [
+    { key: "purpose", header: "Purpose" },
     { key: "fiscalYear", header: "Fiscal Year" },
     { key: "allocatedAmount", header: "Allocated", render: (row) => formatCurrency(row.allocatedAmount) },
     { key: "utilizedAmount", header: "Utilized", render: (row) => formatCurrency(row.utilizedAmount) },
@@ -175,6 +217,15 @@ export default function FinanceBudgetPage() {
     },
   ];
 
+  const groupColumns: Column<DepartmentGroup>[] = [
+    { key: "department", header: "Department" },
+    { key: "count", header: "Budgets", render: (g) => String(g.count) },
+    { key: "totalAllocated", header: "Allocated", render: (g) => formatCurrency(g.totalAllocated) },
+    { key: "totalUtilized", header: "Utilized", render: (g) => formatCurrency(g.totalUtilized) },
+    { key: "totalRemaining", header: "Remaining", render: (g) => formatCurrency(g.totalRemaining) },
+    { key: "statusSummary", header: "Status", hideOnMobile: true },
+  ];
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -195,16 +246,51 @@ export default function FinanceBudgetPage() {
       />
 
       <DataTable
-        data={budgets}
-        columns={columns}
+        data={groups}
+        columns={groupColumns}
         isLoading={isLoading}
         searchPlaceholder="Search by department..."
-        searchKeys={["department", "purpose", "fiscalYear"]}
-        csvFilename="finance-budgets"
+        searchKeys={["department"]}
+        csvFilename="finance-budgets-by-department"
         emptyTitle="No budgets yet"
         emptyDescription="Create a budget to start tracking allocations and utilization."
-        keyExtractor={(row) => row.id}
+        keyExtractor={(g) => g.department}
+        onRowClick={(g) => setSelectedDeptName(g.department)}
       />
+
+      {/* Department budget overview dialog */}
+      <Dialog open={!!selectedDeptName} onOpenChange={(o) => { if (!o) setSelectedDeptName(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>Budget Overview — {selectedDept?.department}</DialogTitle></DialogHeader>
+          {selectedDept && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">Total Allocated</p>
+                  <p className="text-lg font-semibold">{formatCurrency(selectedDept.totalAllocated)}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">Total Utilized</p>
+                  <p className="text-lg font-semibold">{formatCurrency(selectedDept.totalUtilized)}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">Total Remaining</p>
+                  <p className="text-lg font-semibold">{formatCurrency(selectedDept.totalRemaining)}</p>
+                </div>
+              </div>
+              <DataTable
+                data={selectedDept.budgets}
+                columns={budgetColumns}
+                searchPlaceholder="Search by purpose..."
+                searchKeys={["purpose", "fiscalYear"]}
+                csvFilename={`finance-budgets-${selectedDept.department}`}
+                emptyTitle="No budgets"
+                keyExtractor={(row) => row.id}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={(o) => { if (!o) setCreateForm(emptyCreateForm()); setCreateOpen(o); }}>

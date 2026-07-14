@@ -19,6 +19,8 @@ const STATUS_STYLES: Record<string, string> = {
   APPROVED: "bg-green-100 text-green-800 border-green-200",
   REJECTED: "bg-red-100 text-red-800 border-red-200",
   RETURNED: "bg-orange-100 text-orange-800 border-orange-200",
+  GOODS_PURCHASED: "bg-blue-100 text-blue-800 border-blue-200",
+  COMPLETED: "bg-emerald-100 text-emerald-800 border-emerald-200",
 };
 
 interface ApprovalItem {
@@ -33,6 +35,10 @@ interface ApprovalWorkflowListProps<T extends ApprovalItem> {
   onChanged: () => void;
   renderSummary: (item: T) => ReactNode;
   renderDetails?: (item: T) => ReactNode;
+  /** Extra actions rendered alongside (or instead of) the built-in Approve/Return/Reject
+   *  row, for workflows with statuses beyond the built-in PENDING/APPROVED/REJECTED/RETURNED
+   *  set (e.g. Purchase Clearance's "Mark Goods Purchased" step). */
+  customActions?: (item: T) => ReactNode;
   emptyTitle?: string;
   emptyDescription?: string;
   icon?: ReactNode;
@@ -45,6 +51,7 @@ export function ApprovalWorkflowList<T extends ApprovalItem>({
   onChanged,
   renderSummary,
   renderDetails,
+  customActions,
   emptyTitle = "No requests found",
   emptyDescription,
   icon,
@@ -112,6 +119,8 @@ export function ApprovalWorkflowList<T extends ApprovalItem>({
             {isExpanded && (
               <CardContent className="pt-0 space-y-3">
                 {renderDetails?.(item)}
+
+                {customActions?.(item)}
 
                 {isPending && !isReturningThis && (
                   <div className="flex flex-wrap gap-2 pt-2 border-t">

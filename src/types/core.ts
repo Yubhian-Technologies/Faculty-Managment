@@ -478,6 +478,9 @@ export type NotificationType =
   | "INDENT_REJECTED"
   | "INDENT_APPROVED"
   | "INDENT_RECEIPT_UPLOADED"
+  // Purchase Finance Clearance
+  | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
+  | "PURCHASE_CLEARANCE_GRN_UPLOADED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -565,7 +568,10 @@ export type AuditAction =
   | "INDENT_RETURNED_TO_PURCHASE"
   | "INDENT_FINANCE_APPROVED"
   | "INDENT_FINANCE_REJECTED"
-  | "INDENT_RECEIPT_UPLOADED";
+  | "INDENT_RECEIPT_UPLOADED"
+  // Purchase Finance Clearance module
+  | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
+  | "PURCHASE_CLEARANCE_GRN_UPLOADED";
 
 export interface AuditLog {
   id: string;

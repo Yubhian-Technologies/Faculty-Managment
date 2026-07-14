@@ -28,6 +28,10 @@ service firebase.storage {
       return isSuperAdmin() || (belongsToCollege(collegeId) && request.auth.token.role == 'PURCHASE_DEPT');
     }
 
+    function isHod(collegeId) {
+      return isSuperAdmin() || (belongsToCollege(collegeId) && request.auth.token.role == 'HOD');
+    }
+
     function isValidResume() {
       return request.resource.size < 5 * 1024 * 1024 &&
         request.resource.contentType.matches('application/(pdf|msword|vnd.openxmlformats-officedocument.wordprocessingml.document)');
@@ -73,6 +77,12 @@ service firebase.storage {
     match /colleges/{collegeId}/indentReceipts/{filename} {
       allow read: if isPurchaseDept(collegeId) || isFinance(collegeId);
       allow write: if isPurchaseDept(collegeId);
+    }
+
+    // HOD-uploaded GRNs confirming goods received for Purchase Finance Clearance
+    match /colleges/{collegeId}/purchaseGrn/{filename} {
+      allow read: if isHod(collegeId) || isFinance(collegeId);
+      allow write: if isHod(collegeId);
     }
   }
 }

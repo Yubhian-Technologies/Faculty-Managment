@@ -6,15 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 import type { BudgetCategoryGroup, BudgetRequest } from "@/types";
 import { budgetRequestTotal, normalizeBudgetRequest } from "@/types";
-
-async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
-  try {
-    const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-    return (snap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-  } catch {
-    return "Unknown";
-  }
-}
+import { resolveUserName } from "@/lib/budget/departmentScope";
 
 async function notify(
   db: Firestore,
@@ -56,6 +48,9 @@ export async function GET(
     }
 
     const req = normalizeBudgetRequest({ id: snap.id, ...snap.data() } as BudgetRequest);
+    // Ownership (hodUid === session.uid) is strictly narrower than department
+    // membership — an HOD can only ever view a request they authored, so this
+    // already fully prevents cross-department access without a separate check.
     if (session.role === "HOD" && req.hodUid !== session.uid) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -101,6 +96,8 @@ export async function PATCH(
     // ── HOD edits and resubmits a returned request ─────────────────────────
 
     if (session.role === "HOD") {
+      // Ownership check (same rationale as GET above): strictly narrower than
+      // department membership, so no separate department check is needed.
       if (req.hodUid !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
@@ -117,7 +114,7 @@ export async function PATCH(
         );
       }
 
-      const hodName = await getUserName(db, session.collegeId, session.uid);
+      const hodName = await resolveUserName(db, session.collegeId, session.uid);
       const historyEntry = {
         action: "PENDING_PRINCIPAL_VERIFICATION" as const,
         byRole: "HOD" as const,
@@ -162,7 +159,7 @@ export async function PATCH(
         return NextResponse.json({ error: "remarks required" }, { status: 400 });
       }
 
-      const principalName = await getUserName(db, session.collegeId, session.uid);
+      const principalName = await resolveUserName(db, session.collegeId, session.uid);
       const nextStatus =
         body.action === "VERIFY" ? "L1_FROZEN"
         : body.action === "REJECT" ? "PRINCIPAL_REJECTED"
@@ -238,7 +235,7 @@ export async function PATCH(
         return NextResponse.json({ error: "remarks required" }, { status: 400 });
       }
 
-      const financeName = await getUserName(db, session.collegeId, session.uid);
+      const financeName = await resolveUserName(db, session.collegeId, session.uid);
       const nextStatus =
         body.action === "APPROVE" ? "FINANCE_APPROVED"
         : body.action === "REJECT" ? "FINANCE_REJECTED"
