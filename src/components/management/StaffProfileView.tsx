@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, User, IdCard, GraduationCap } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SectionCard } from "@/components/shared/SectionCard";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
+import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import type { FMSUser, FacultyProfileFields, UserRole } from "@/types";
 
 interface Props {
@@ -19,16 +20,16 @@ interface Props {
 
 export function StaffProfileView({ collegeId, role, title, department, backHref }: Props) {
   const router = useRouter();
-  const [profile, setProfile] = useState<(FMSUser & { academicProfile?: FacultyProfileFields }) | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const qs = new URLSearchParams({ role, ...(department ? { department } : {}) });
-    fetch(`/api/management/colleges/${collegeId}/staff?${qs}`)
-      .then((r) => r.json() as Promise<{ profile: (FMSUser & { academicProfile?: FacultyProfileFields }) | null }>)
-      .then((d) => setProfile(d.profile))
-      .finally(() => setIsLoading(false));
-  }, [collegeId, role, department]);
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["mgmt-staff", collegeId, role, department],
+    queryFn: () => {
+      const qs = new URLSearchParams({ role, ...(department ? { department } : {}) });
+      return fetch(`/api/management/colleges/${collegeId}/staff?${qs}`)
+        .then((r) => r.json() as Promise<{ profile: (FMSUser & { academicProfile?: FacultyProfileFields }) | null }>)
+        .then((d) => d.profile);
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -48,24 +49,24 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
         <p className="text-sm text-muted-foreground">No {title.toLowerCase()} is currently assigned.</p>
       ) : (
         <>
-          <Card>
-            <CardHeader><CardTitle className="text-base">Identity</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <SectionCard icon={User} title="Identity" accent="blue">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div><p className="text-xs text-muted-foreground">Name</p><p className="text-sm font-medium">{profile.name}</p></div>
               <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium">{profile.email}</p></div>
               <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{profile.phone || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Employee ID</p><p className="text-sm font-medium">{profile.employeeId || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{profile.designation || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{profile.department || "—"}</p></div>
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card>
-            <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-            <CardContent>
-              <ProfileFieldsView profile={profile.academicProfile} includeTeachingAssignment={role === "HOD"} />
-            </CardContent>
-          </Card>
+          <SectionCard icon={IdCard} title="Personal Details" accent="violet">
+            <PersonalDetailsView value={profile} />
+          </SectionCard>
+
+          <SectionCard icon={GraduationCap} title="Academic Profile" accent="emerald">
+            <ProfileFieldsView profile={profile.academicProfile} includeTeachingAssignment={role === "HOD"} />
+          </SectionCard>
         </>
       )}
     </div>

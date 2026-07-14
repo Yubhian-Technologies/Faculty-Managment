@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Building2, BookOpen, UsersRound, IdCard } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -14,14 +14,10 @@ interface Stats {
 }
 
 export default function ManagementDashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-
-  useEffect(() => {
-    fetch("/api/management/stats")
-      .then((r) => r.json() as Promise<Stats>)
-      .then(setStats)
-      .catch(() => {});
-  }, []);
+  const { data: stats } = useQuery({
+    queryKey: ["mgmt-stats"],
+    queryFn: () => fetch("/api/management/stats").then((r) => r.json() as Promise<Stats>),
+  });
 
   const statCards = [
     { label: "Total Colleges", value: stats?.totalColleges, icon: Building2, color: "text-blue-600 bg-blue-50" },
@@ -36,7 +32,7 @@ export default function ManagementDashboardPage() {
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {statCards.map((stat) => (
-          <Card key={stat.label}>
+          <Card key={stat.label} className="shadow-md hover:shadow-lg transition-shadow duration-200">
             <CardContent className="p-4 flex items-center gap-3">
               <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${stat.color}`}>
                 <stat.icon className="h-5 w-5" />
@@ -51,7 +47,7 @@ export default function ManagementDashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+        <Card className="shadow-md hover:shadow-lg transition-shadow duration-200">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="font-medium">Budget</p>
@@ -62,7 +58,7 @@ export default function ManagementDashboardPage() {
             </Link>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-md hover:shadow-lg transition-shadow duration-200">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="font-medium">Faculty Details</p>

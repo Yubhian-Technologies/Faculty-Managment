@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { PiggyBank, ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -11,13 +11,14 @@ import type { College } from "@/types";
 export default function ManagementBudgetDetailPage() {
   const router = useRouter();
   const { collegeId } = useParams<{ collegeId: string }>();
-  const [college, setCollege] = useState<College | null>(null);
 
-  useEffect(() => {
-    fetch(`/api/management/colleges/${collegeId}`)
-      .then((r) => r.json() as Promise<{ college: College }>)
-      .then((d) => setCollege(d.college ?? null));
-  }, [collegeId]);
+  const { data: college } = useQuery({
+    queryKey: ["mgmt-college", collegeId],
+    queryFn: () =>
+      fetch(`/api/management/colleges/${collegeId}`)
+        .then((r) => r.json() as Promise<{ college: College }>)
+        .then((d) => d.college ?? null),
+  });
 
   return (
     <div className="space-y-6">
@@ -31,7 +32,7 @@ export default function ManagementBudgetDetailPage() {
         }
       />
 
-      <Card>
+      <Card className="shadow-md">
         <CardContent className="p-8 flex flex-col items-center justify-center text-center gap-3">
           <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
             <PiggyBank className="h-6 w-6 text-primary" />
