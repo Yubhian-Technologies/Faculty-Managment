@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle, RotateCcw, Send, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle, ExternalLink, RotateCcw, Send, ShoppingBag, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FileUpload } from "@/components/shared/FileUpload";
 import { IndentStatusBadge } from "@/components/shared/indent/IndentStatusBadge";
 import { IndentItemsTable } from "@/components/shared/indent/IndentItemsTable";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
@@ -26,6 +28,9 @@ export default function PurchaseIndentDetailPage() {
   const [selectedQuotationId, setSelectedQuotationId] = useState<string>("");
   const [actionState, setActionState] = useState<{ type: "RETURN" | "REJECT"; remarks: string } | null>(null);
   const [isActing, setIsActing] = useState(false);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptAmount, setReceiptAmount] = useState("");
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
 
   function load() {
     setIsLoading(true);
@@ -36,6 +41,10 @@ export default function PurchaseIndentDetailPage() {
         setRequest(d.request);
         setQuotations(d.request.quotations?.length ? d.request.quotations : []);
         setSelectedQuotationId(d.request.selectedQuotationId ?? "");
+        if (d.request.status === "APPROVED") {
+          const selected = d.request.quotations?.find((q) => q.id === d.request?.selectedQuotationId);
+          setReceiptAmount(selected ? String(selected.price) : "");
+        }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load indent" }))
       .finally(() => setIsLoading(false));
@@ -70,6 +79,44 @@ export default function PurchaseIndentDetailPage() {
       toast({ variant: "destructive", title: "Action failed", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsActing(false);
+    }
+  }
+
+  async function handleUploadReceipt() {
+    if (!request || !receiptFile) {
+      toast({ variant: "destructive", title: "Attach a receipt file" });
+      return;
+    }
+    setIsUploadingReceipt(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", receiptFile);
+      const uploadRes = await fetch("/api/upload/indent-receipt", { method: "POST", body: fd });
+      const uploadData = (await uploadRes.json()) as { url?: string; filename?: string; error?: string };
+      if (!uploadRes.ok) throw new Error(uploadData.error ?? "Upload failed");
+
+      const res = await fetch(`/api/college/indent-requests/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "UPLOAD_RECEIPT",
+          receiptUrl: uploadData.url,
+          receiptFileName: uploadData.filename,
+          receiptAmount: receiptAmount ? Number(receiptAmount) : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err.error ?? "Failed to save receipt");
+      }
+
+      toast({ variant: "success", title: "Receipt uploaded — indent completed" });
+      setReceiptFile(null);
+      load();
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to upload receipt", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setIsUploadingReceipt(false);
     }
   }
 
@@ -140,6 +187,60 @@ export default function PurchaseIndentDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {request.status === "APPROVED" && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShoppingBag className="h-4 w-4" />
+              Mark Goods Purchased
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Finance has disbursed the funds. Once you&apos;ve bought the goods, upload the bill/receipt below to notify Finance and close out this indent.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Amount Paid</Label>
+                <Input type="number" min={0} value={receiptAmount} onChange={(e) => setReceiptAmount(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Receipt / Bill <span className="text-destructive">*</span></Label>
+              <FileUpload onFileSelect={setReceiptFile} accept=".pdf,.jpg,.jpeg,.png" />
+            </div>
+            <Button disabled={!receiptFile || isUploadingReceipt} loading={isUploadingReceipt} onClick={() => void handleUploadReceipt()}>
+              <CheckCircle className="h-4 w-4 mr-1" />
+              Mark Purchased & Upload Receipt
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {request.status === "COMPLETED" && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShoppingBag className="h-4 w-4" />
+              Purchase Completed
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p className="text-muted-foreground">
+              Purchased and receipt submitted to Finance by {request.receiptUploadedByName} on {request.receiptUploadedAt ? formatDate(request.receiptUploadedAt) : "—"}.
+            </p>
+            <div className="flex items-center gap-3">
+              <span className="font-medium">{formatCurrency(request.receiptAmount ?? 0)}</span>
+              {request.receiptUrl && (
+                <a href={request.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-1 text-xs">
+                  {request.receiptFileName ?? "View receipt"} <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {(canReview || canSourceQuotations) && (
         <Card>
@@ -226,10 +327,12 @@ export default function PurchaseIndentDetailPage() {
           </CardContent>
         </Card>
       )}
-      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-        <CheckCircle className="h-3.5 w-3.5" />
-        Once sent to Finance, this indent moves to Finance&apos;s review queue for approval and disbursement.
-      </div>
+      {canSourceQuotations && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <CheckCircle className="h-3.5 w-3.5" />
+          Once sent to Finance, this indent moves to Finance&apos;s review queue for approval and disbursement.
+        </div>
+      )}
     </div>
   );
 }

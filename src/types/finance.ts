@@ -161,7 +161,7 @@ export interface FinancePurchaseClearance {
 
 // ─── Receipts ───────────────────────────────────────────────────────────────────
 
-export type FinanceReceiptRelatedType = "BUDGET" | "EXPENSE" | "PAYMENT" | "ALLOCATION";
+export type FinanceReceiptRelatedType = "BUDGET" | "EXPENSE" | "PAYMENT" | "ALLOCATION" | "INDENT";
 
 export interface FinanceReceipt {
   id: string;

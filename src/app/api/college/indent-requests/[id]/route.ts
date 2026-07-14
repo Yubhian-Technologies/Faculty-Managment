@@ -78,11 +78,14 @@ export async function PATCH(
     const session = await requireCollegeMember("HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
-      action?: "REJECT" | "RETURN" | "SEND_TO_FINANCE" | "APPROVE";
+      action?: "REJECT" | "RETURN" | "SEND_TO_FINANCE" | "APPROVE" | "UPLOAD_RECEIPT";
       remarks?: string;
       items?: IndentItem[];
       quotations?: IndentQuotation[];
       selectedQuotationId?: string;
+      receiptUrl?: string;
+      receiptFileName?: string;
+      receiptAmount?: number;
     };
 
     const db = getAdminDb();
@@ -240,7 +243,79 @@ export async function PATCH(
         return NextResponse.json({ ok: true });
       }
 
-      return NextResponse.json({ error: "action must be REJECT, RETURN, or SEND_TO_FINANCE" }, { status: 400 });
+      if (body.action === "UPLOAD_RECEIPT") {
+        if (req.status !== "APPROVED") {
+          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+        }
+        if (!body.receiptUrl) {
+          return NextResponse.json({ error: "receiptUrl required" }, { status: 400 });
+        }
+
+        const selected = (req.quotations ?? []).find((q) => q.id === req.selectedQuotationId);
+        const amount = body.receiptAmount ?? selected?.price ?? 0;
+
+        const historyEntry = {
+          action: "COMPLETED" as const,
+          byRole: "PURCHASE_DEPT" as const,
+          byUid: session.uid,
+          byName: purchaseName,
+          at: now,
+        };
+
+        await ref.update({
+          status: "COMPLETED",
+          receiptUrl: body.receiptUrl,
+          receiptFileName: body.receiptFileName ?? null,
+          receiptAmount: amount,
+          receiptUploadedBy: session.uid,
+          receiptUploadedByName: purchaseName,
+          receiptUploadedAt: now,
+          history: [...(req.history ?? []), historyEntry],
+          updatedAt: now,
+        });
+
+        await db.collection("colleges").doc(session.collegeId).collection("financeReceipts").add({
+          collegeId: session.collegeId,
+          relatedType: "INDENT",
+          relatedId: id,
+          amount,
+          description: req.title,
+          fileUrl: body.receiptUrl,
+          verified: false,
+          createdBy: session.uid,
+          createdByName: purchaseName,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        await db.collection("colleges").doc(session.collegeId).collection("financeAuditLogs").add({
+          collegeId: session.collegeId,
+          action: "RECEIPT_RECORDED",
+          performedBy: session.uid,
+          performedByName: purchaseName,
+          targetId: id,
+          details: { relatedType: "INDENT", relatedId: id, amount },
+          timestamp: now,
+        });
+
+        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+          collegeId: session.collegeId,
+          action: "INDENT_RECEIPT_UPLOADED",
+          performedBy: session.uid,
+          performedByName: purchaseName,
+          targetId: id,
+          details: { title: req.title, department: req.department, amount },
+          timestamp: now,
+        });
+
+        const notifMessage = `${purchaseName} uploaded the purchase receipt for "${req.title}" (${req.department}).`;
+        await notify(db, session.collegeId, req.hodUid, "INDENT_RECEIPT_UPLOADED", "Indent Completed", notifMessage, "/hod/indents");
+        await notifyRole(db, session.collegeId, "FINANCE", "INDENT_RECEIPT_UPLOADED", "Purchase Receipt Uploaded", notifMessage, "/finance/receipts");
+
+        return NextResponse.json({ ok: true });
+      }
+
+      return NextResponse.json({ error: "action must be REJECT, RETURN, SEND_TO_FINANCE, or UPLOAD_RECEIPT" }, { status: 400 });
     }
 
     // ── Finance approves (auto-creates FinancePayment) / rejects / returns ──
