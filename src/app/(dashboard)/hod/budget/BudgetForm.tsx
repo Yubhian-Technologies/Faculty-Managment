@@ -5,15 +5,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { BudgetItemsTable } from "@/components/shared/budget/BudgetItemsTable";
-import { BUDGET_CATEGORIES, type BudgetRequest, type BudgetRequestItem } from "@/types";
+import { BudgetCategorySection, emptyBudgetCategoryGroup } from "@/components/shared/budget/BudgetCategorySection";
+import {
+  NON_RECURRING_CATEGORIES,
+  RECURRING_CATEGORIES,
+  type BudgetCategoryGroup,
+  type BudgetRequest,
+} from "@/types";
 
-const PRIORITIES = ["High", "Medium", "Low"] as const;
-
-function emptyItem(): BudgetRequestItem {
-  return { id: crypto.randomUUID(), itemName: "", specification: "", quantity: 1, unitPrice: 0 };
+function nowForDateTimeInput(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 interface BudgetFormProps {
@@ -24,27 +28,23 @@ interface BudgetFormProps {
 
 export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProps) {
   const lastRemarks = [...(editingRequest?.history ?? [])].reverse().find((h) => h.remarks)?.remarks;
-  const editingCategoryIsCustom =
-    !!editingRequest && !(BUDGET_CATEGORIES as readonly string[]).includes(editingRequest.category);
-  const [category, setCategory] = useState<string>(
-    editingCategoryIsCustom ? "Other" : editingRequest?.category ?? ""
-  );
-  const [customCategory, setCustomCategory] = useState(
-    editingCategoryIsCustom ? editingRequest!.category : ""
-  );
+  const [academicYear, setAcademicYear] = useState(editingRequest?.academicYear ?? "");
   const [title, setTitle] = useState(editingRequest?.title ?? "");
-  const [priority, setPriority] = useState<string>(editingRequest?.priority ?? "");
-  const [requiredBefore, setRequiredBefore] = useState(editingRequest?.requiredBefore ?? "");
-  const [items, setItems] = useState<BudgetRequestItem[]>(editingRequest?.items ?? [emptyItem()]);
+  const [requestDate, setRequestDate] = useState(editingRequest?.requestDate ?? nowForDateTimeInput());
+  const [nonRecurring, setNonRecurring] = useState<BudgetCategoryGroup[]>(
+    editingRequest?.nonRecurring?.length ? editingRequest.nonRecurring : [emptyBudgetCategoryGroup()]
+  );
+  const [recurring, setRecurring] = useState<BudgetCategoryGroup[]>(
+    editingRequest?.recurring?.length ? editingRequest.recurring : [emptyBudgetCategoryGroup()]
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   function resetForm() {
-    setCategory("");
-    setCustomCategory("");
+    setAcademicYear("");
     setTitle("");
-    setPriority("");
-    setRequiredBefore("");
-    setItems([emptyItem()]);
+    setRequestDate(nowForDateTimeInput());
+    setNonRecurring([emptyBudgetCategoryGroup()]);
+    setRecurring([emptyBudgetCategoryGroup()]);
   }
 
   function handleCancel() {
@@ -55,20 +55,27 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const resolvedCategory = category === "Other" ? customCategory.trim() : category;
-    if (!resolvedCategory || !title.trim() || !priority || items.some((i) => !i.itemName.trim())) {
-      toast({ variant: "destructive", title: "Fill in all required fields" });
+    const cleanedNonRecurring = nonRecurring.filter((g) => g.items.some((i) => i.title.trim()));
+    const cleanedRecurring = recurring.filter((g) => g.items.some((i) => i.title.trim()));
+    const totalItems = cleanedNonRecurring.length + cleanedRecurring.length;
+
+    if (!academicYear.trim() || !title.trim() || !requestDate || totalItems === 0) {
+      toast({ variant: "destructive", title: "Fill in all required fields", description: "Add at least one item under Non Recurring or Recurring." });
+      return;
+    }
+    if ([...cleanedNonRecurring, ...cleanedRecurring].some((g) => !g.category.trim())) {
+      toast({ variant: "destructive", title: "Every category with items needs a category selected" });
       return;
     }
 
     setIsSaving(true);
     try {
       const payload = {
-        category: resolvedCategory,
+        academicYear: academicYear.trim(),
         title: title.trim(),
-        priority,
-        requiredBefore: requiredBefore || undefined,
-        items,
+        requestDate,
+        nonRecurring: cleanedNonRecurring,
+        recurring: cleanedRecurring,
       };
 
       const res = editingRequest
@@ -114,72 +121,56 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label>Budget Category <span className="text-destructive">*</span></Label>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select category..." />
-              </SelectTrigger>
-              <SelectContent>
-                {BUDGET_CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {category === "Other" && (
-            <div className="space-y-2">
-              <Label>Specify Category <span className="text-destructive">*</span></Label>
-              <Input
-                value={customCategory}
-                onChange={(e) => setCustomCategory(e.target.value)}
-                placeholder="Enter category..."
-              />
-            </div>
-          )}
-
-          <div className="space-y-2">
             <Label>Budget Title <span className="text-destructive">*</span></Label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. New CAD workstations for final-year lab"
+              placeholder="e.g. Department budget proposal"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Priority <span className="text-destructive">*</span></Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select priority..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Academic Year <span className="text-destructive">*</span></Label>
+              <Input
+                value={academicYear}
+                onChange={(e) => setAcademicYear(e.target.value)}
+                placeholder="e.g. 2026-27"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Required Before</Label>
+              <Label>Date of Budget Request <span className="text-destructive">*</span></Label>
               <Input
-                type="date"
-                value={requiredBefore}
-                onChange={(e) => setRequiredBefore(e.target.value)}
+                type="datetime-local"
+                value={requestDate}
+                onChange={(e) => setRequestDate(e.target.value)}
               />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Section 2 — Item Details */}
+      {/* Section 2 — Non Recurring */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Item Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BudgetItemsTable items={items} onChange={setItems} />
+        <CardContent className="pt-6">
+          <BudgetCategorySection
+            label="Non Recurring"
+            categories={NON_RECURRING_CATEGORIES}
+            groups={nonRecurring}
+            onChange={setNonRecurring}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Section 3 — Recurring */}
+      <Card>
+        <CardContent className="pt-6">
+          <BudgetCategorySection
+            label="Recurring"
+            categories={RECURRING_CATEGORIES}
+            groups={recurring}
+            onChange={setRecurring}
+          />
         </CardContent>
       </Card>
 

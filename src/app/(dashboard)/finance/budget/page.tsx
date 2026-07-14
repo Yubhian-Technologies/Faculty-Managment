@@ -16,10 +16,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { BudgetItemsTable } from "@/components/shared/budget/BudgetItemsTable";
+import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
 import { toast } from "@/hooks/useToast";
-import { formatDate, formatCurrency } from "@/lib/utils";
-import type { FinanceBudget, BudgetRequest } from "@/types";
+import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
+import { NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type FinanceBudget, type BudgetRequest } from "@/types";
 
 type BudgetRow = FinanceBudget & Record<string, unknown>;
 
@@ -287,9 +287,11 @@ export default function FinanceBudgetPage() {
           {sourceRequest && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Submitted by {sourceRequest.hodName} ({sourceRequest.department}), category {sourceRequest.category}, priority {sourceRequest.priority}
+                Submitted by {sourceRequest.hodName} ({sourceRequest.department}), academic year {sourceRequest.academicYear}
+                {sourceRequest.requestDate ? `, requested on ${formatDateTime(new Date(sourceRequest.requestDate))}` : ""}
               </p>
-              <BudgetItemsTable items={sourceRequest.items} readOnly />
+              <BudgetCategorySection label="Non Recurring" categories={NON_RECURRING_CATEGORIES} groups={sourceRequest.nonRecurring} readOnly />
+              <BudgetCategorySection label="Recurring" categories={RECURRING_CATEGORIES} groups={sourceRequest.recurring} readOnly />
             </div>
           )}
         </DialogContent>

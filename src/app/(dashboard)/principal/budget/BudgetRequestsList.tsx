@@ -50,7 +50,7 @@ export function BudgetRequestsList({ requests, isLoading, onSelectRequest }: Bud
           isLoading={isLoading}
           keyExtractor={(row) => row.id as string}
           searchPlaceholder="Search by department, title..."
-          searchKeys={["department", "hodName", "category", "title"]}
+          searchKeys={["department", "hodName", "title"]}
           emptyTitle="No budget requests found"
           emptyDescription="Try adjusting your search or filters."
           onRowClick={(row) => onSelectRequest(row as unknown as BudgetRequest)}
@@ -82,18 +82,12 @@ export function BudgetRequestsList({ requests, isLoading, onSelectRequest }: Bud
           columns={[
             { key: "department", header: "Department" },
             { key: "hodName", header: "Requested By", hideOnMobile: true },
-            { key: "category", header: "Category", hideOnMobile: true },
+            { key: "academicYear", header: "Academic Year", hideOnMobile: true },
             { key: "title", header: "Title" },
             {
               key: "amount",
               header: "Amount",
-              render: (row) => formatCurrency(budgetRequestTotal((row as unknown as BudgetRequest).items)),
-            },
-            {
-              key: "priority",
-              header: "Priority",
-              hideOnMobile: true,
-              render: (row) => (row as unknown as BudgetRequest).priority,
+              render: (row) => formatCurrency(budgetRequestTotal(row as unknown as BudgetRequest)),
             },
             {
               key: "createdAt",

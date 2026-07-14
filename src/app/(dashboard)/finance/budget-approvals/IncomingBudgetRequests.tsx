@@ -10,10 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
-import { BudgetItemsTable } from "@/components/shared/budget/BudgetItemsTable";
+import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
 import { toast } from "@/hooks/useToast";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { budgetRequestTotal, type BudgetRequest } from "@/types";
+import { budgetRequestTotal, NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type BudgetRequest } from "@/types";
 
 export function IncomingBudgetRequests() {
   const [requests, setRequests] = useState<BudgetRequest[]>([]);
@@ -131,7 +131,7 @@ export function IncomingBudgetRequests() {
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-semibold text-sm">{item.department}</span>
-                    <Badge variant="secondary" className="text-xs">{formatCurrency(budgetRequestTotal(item.items))}</Badge>
+                    <Badge variant="secondary" className="text-xs">{formatCurrency(budgetRequestTotal(item))}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">{item.title}</p>
                 </div>
@@ -149,7 +149,8 @@ export function IncomingBudgetRequests() {
                 <p className="text-xs text-muted-foreground">
                   Requested by {item.hodName}, verified by Principal on {formatDate(item.updatedAt)}
                 </p>
-                <BudgetItemsTable items={item.items} readOnly />
+                <BudgetCategorySection label="Non Recurring" categories={NON_RECURRING_CATEGORIES} groups={item.nonRecurring} readOnly />
+                <BudgetCategorySection label="Recurring" categories={RECURRING_CATEGORIES} groups={item.recurring} readOnly />
 
                 {mode === "idle" && (
                   <div className="flex flex-wrap gap-2 pt-2 border-t">

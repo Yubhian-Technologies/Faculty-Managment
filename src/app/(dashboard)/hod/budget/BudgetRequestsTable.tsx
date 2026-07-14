@@ -18,9 +18,8 @@ interface BudgetRequestsTableProps {
 export function BudgetRequestsTable({ requests, isLoading, onEditRequest, onViewRequest }: BudgetRequestsTableProps) {
   const columns: Column<BudgetRequest & Record<string, unknown>>[] = [
     { key: "title", header: "Title" },
-    { key: "category", header: "Category", hideOnMobile: true },
-    { key: "amount", header: "Amount", render: (row) => formatCurrency(budgetRequestTotal(row.items)) },
-    { key: "priority", header: "Priority", hideOnMobile: true },
+    { key: "academicYear", header: "Academic Year", hideOnMobile: true },
+    { key: "amount", header: "Amount", render: (row) => formatCurrency(budgetRequestTotal(row)) },
     { key: "createdAt", header: "Submitted", hideOnMobile: true, render: (row) => formatDate(row.createdAt) },
     { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
     {
@@ -51,8 +50,8 @@ export function BudgetRequestsTable({ requests, isLoading, onEditRequest, onView
           data={requests as (BudgetRequest & Record<string, unknown>)[]}
           columns={columns}
           isLoading={isLoading}
-          searchPlaceholder="Search by title, category..."
-          searchKeys={["title", "category"]}
+          searchPlaceholder="Search by title, academic year..."
+          searchKeys={["title", "academicYear"]}
           emptyTitle="No budget requests yet."
           emptyDescription="Requests you submit will appear here with their approval status."
           keyExtractor={(row) => row.id}

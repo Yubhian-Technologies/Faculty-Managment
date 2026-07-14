@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { LOCATION_SCOPED_ROLES } from "@/types";
 
 export function useAssignedInterviews() {
   const user = useAuthStore((s) => s.user);
@@ -8,7 +9,12 @@ export function useAssignedInterviews() {
 
   useEffect(() => {
     const role = user?.role;
-    if (!role) { setLoading(false); return; }
+    // Panel membership is a college-scoped concept — Super Admin and
+    // location-scoped roles never have a collegeId, so this call would 401.
+    if (!role || role === "SUPER_ADMIN" || LOCATION_SCOPED_ROLES.includes(role)) {
+      setLoading(false);
+      return;
+    }
 
     // PANEL_MEMBER is already filtered server-side by their uid; all other
     // roles need the asPanelMember flag to see batches they've been added to.

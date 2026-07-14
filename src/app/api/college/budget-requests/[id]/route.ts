@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
-import type { BudgetRequest, BudgetRequestItem } from "@/types";
-import { budgetRequestTotal } from "@/types";
+import type { BudgetCategoryGroup, BudgetRequest } from "@/types";
+import { budgetRequestTotal, normalizeBudgetRequest } from "@/types";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   try {
@@ -55,7 +55,7 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const req = { id: snap.id, ...snap.data() } as BudgetRequest;
+    const req = normalizeBudgetRequest({ id: snap.id, ...snap.data() } as BudgetRequest);
     if (session.role === "HOD" && req.hodUid !== session.uid) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -81,11 +81,11 @@ export async function PATCH(
       action?: "VERIFY" | "REJECT" | "RETURN" | "APPROVE";
       remarks?: string;
       fiscalYear?: string;
-      category?: string;
+      academicYear?: string;
       title?: string;
-      priority?: string;
-      requiredBefore?: string;
-      items?: BudgetRequestItem[];
+      requestDate?: string;
+      nonRecurring?: BudgetCategoryGroup[];
+      recurring?: BudgetCategoryGroup[];
     };
 
     const db = getAdminDb();
@@ -95,7 +95,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const req = { id: snap.id, ...snap.data() } as BudgetRequest;
+    const req = normalizeBudgetRequest({ id: snap.id, ...snap.data() } as BudgetRequest);
     const now = new Date();
 
     // ── HOD edits and resubmits a returned request ─────────────────────────
@@ -107,8 +107,14 @@ export async function PATCH(
       if (req.status !== "RETURNED_TO_HOD") {
         return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
       }
-      if (!Array.isArray(body.items) || body.items.length === 0) {
-        return NextResponse.json({ error: "items required" }, { status: 400 });
+      const nonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
+      const recurring = Array.isArray(body.recurring) ? body.recurring : [];
+      const allGroups = [...nonRecurring, ...recurring];
+      if (allGroups.length === 0 || allGroups.some((g) => !g.category || !Array.isArray(g.items) || g.items.length === 0)) {
+        return NextResponse.json(
+          { error: "Every category must have a name and at least one item" },
+          { status: 400 }
+        );
       }
 
       const hodName = await getUserName(db, session.collegeId, session.uid);
@@ -121,11 +127,11 @@ export async function PATCH(
       };
 
       await ref.update({
-        category: body.category ?? req.category,
+        academicYear: (body.academicYear ?? req.academicYear).trim(),
         title: (body.title ?? req.title).trim(),
-        priority: body.priority ?? req.priority,
-        requiredBefore: body.requiredBefore ?? req.requiredBefore ?? null,
-        items: body.items,
+        requestDate: body.requestDate ?? req.requestDate ?? now.toISOString(),
+        nonRecurring,
+        recurring,
         status: "PENDING_PRINCIPAL_VERIFICATION",
         history: [...(req.history ?? []), historyEntry],
         updatedAt: now,
@@ -274,7 +280,7 @@ export async function PATCH(
             department: req.department,
             purpose: req.title,
             fiscalYear: body.fiscalYear,
-            allocatedAmount: budgetRequestTotal(req.items),
+            allocatedAmount: budgetRequestTotal(req),
             utilizedAmount: 0,
             status: "ACTIVE",
             revisions: [],

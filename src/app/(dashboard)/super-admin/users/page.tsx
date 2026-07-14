@@ -103,7 +103,8 @@ export default function UsersPage() {
   async function handleDelete(user: UserRow) {
     setActionUid(user.uid);
     try {
-      const res = await fetch(`/api/admin/users/${user.uid}`, { method: "DELETE" });
+      const collegeId = user.collegeId || selectedCollegeId;
+      const res = await fetch(`/api/admin/users/${user.uid}?collegeId=${collegeId}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "User deleted" });
       setUsers((prev) => prev.filter((u) => u.uid !== user.uid));

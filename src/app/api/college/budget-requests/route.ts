@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
-import type { BudgetRequestItem } from "@/types";
+import { normalizeBudgetRequest, type BudgetCategoryGroup, type BudgetRequest } from "@/types";
 
 async function getUser(db: Firestore, collegeId: string, uid: string): Promise<{ name: string; department: string }> {
   try {
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       .orderBy("createdAt", "desc")
       .get();
 
-    let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    let requests = snap.docs.map((d) => normalizeBudgetRequest({ id: d.id, ...d.data() } as BudgetRequest));
 
     if (session.role === "HOD") {
       requests = requests.filter((r) => (r as { hodUid?: string }).hodUid === session.uid);
@@ -53,17 +53,27 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
     const body = (await request.json()) as {
-      category: string;
+      academicYear: string;
       title: string;
-      priority: string;
-      requiredBefore?: string;
-      items: BudgetRequestItem[];
+      requestDate?: string;
+      nonRecurring?: BudgetCategoryGroup[];
+      recurring?: BudgetCategoryGroup[];
     };
 
-    const { category, title, priority, requiredBefore, items } = body;
-    if (!category || !title || !priority || !Array.isArray(items) || items.length === 0) {
+    const { academicYear, title } = body;
+    const nonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
+    const recurring = Array.isArray(body.recurring) ? body.recurring : [];
+    const allGroups = [...nonRecurring, ...recurring];
+
+    if (!academicYear || !title || allGroups.length === 0) {
       return NextResponse.json(
-        { error: "category, title, priority, items required" },
+        { error: "academicYear, title, and at least one category with items are required" },
+        { status: 400 }
+      );
+    }
+    if (allGroups.some((g) => !g.category || !Array.isArray(g.items) || g.items.length === 0)) {
+      return NextResponse.json(
+        { error: "Every category must have a name and at least one item" },
         { status: 400 }
       );
     }
@@ -87,11 +97,11 @@ export async function POST(request: Request) {
         hodUid: session.uid,
         hodName,
         department,
-        category,
+        academicYear: academicYear.trim(),
         title: title.trim(),
-        priority,
-        requiredBefore: requiredBefore ?? null,
-        items,
+        requestDate: body.requestDate ?? now.toISOString(),
+        nonRecurring,
+        recurring,
         status: "PENDING_PRINCIPAL_VERIFICATION",
         history: [],
         createdAt: now,

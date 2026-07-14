@@ -79,7 +79,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ uid: string }> }
 ) {
   try {
@@ -88,10 +88,16 @@ export async function DELETE(
     const { uid } = await params;
     const db = getAdminDb();
 
-    // Look up collegeId from systemUsers (avoids firebase-admin/auth)
+    // Prefer the collegeId the caller already knows (e.g. from the scoped list
+    // it fetched the user from) — systemUsers can be missing/stale for users
+    // created outside the normal creation flow, which previously left the
+    // college-scoped user doc undeleted while still reporting success.
+    const { searchParams } = new URL(request.url);
+    const explicitCollegeId = searchParams.get("collegeId") ?? "";
+
     const sysSnap = await db.collection("systemUsers").doc(uid).get();
     const sysData = sysSnap.data() as { collegeId?: string; email?: string } | undefined;
-    const collegeId = sysData?.collegeId ?? "";
+    const collegeId = explicitCollegeId || sysData?.collegeId || "";
     const userEmail = sysData?.email ?? "";
 
     // Delete from Firestore first (always succeeds)
