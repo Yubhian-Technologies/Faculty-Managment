@@ -88,6 +88,38 @@ export async function POST(request: Request) {
   }
 }
 
+export async function DELETE(request: Request) {
+  try {
+    await requireSuperAdmin();
+
+    const { searchParams } = new URL(request.url);
+    const collegeId = searchParams.get("collegeId");
+    if (!collegeId) {
+      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+
+    const usersSnap = await db.collection("colleges").doc(collegeId).collection("users").limit(1).get();
+    if (!usersSnap.empty) {
+      return NextResponse.json(
+        { error: "Cannot delete a college that still has users. Remove or reassign its users first." },
+        { status: 400 }
+      );
+    }
+
+    await db.collection("colleges").doc(collegeId).delete();
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof Error && err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[admin/colleges DELETE]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: Request) {
   try {
     await requireSuperAdmin();

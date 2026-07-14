@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Plus, ToggleLeft, ToggleRight, Pencil } from "lucide-react";
+import { Building2, Plus, ToggleLeft, ToggleRight, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,9 @@ export default function CollegesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [confirmCollege, setConfirmCollege] = useState<CollegeRow | null>(null);
+  const [deleteCollege, setDeleteCollege] = useState<CollegeRow | null>(null);
   const [editCollege, setEditCollege] = useState<CollegeRow | null>(null);
   const [editForm, setEditForm] = useState({ name: "", address: "", contactEmail: "", contactPhone: "" });
 
@@ -118,6 +120,26 @@ export default function CollegesPage() {
     }
   }
 
+  async function handleDelete(college: CollegeRow) {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/colleges?collegeId=${college.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Failed to delete college");
+      toast({ variant: "success", title: "College deleted" });
+      setDeleteCollege(null);
+      await load();
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Failed to delete college",
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const columns: Column<CollegeRow>[] = [
     {
       key: "name",
@@ -191,6 +213,15 @@ export default function CollegesPage() {
             <span className="ml-1 hidden sm:inline">
               {row.isActive ? "Deactivate" : "Activate"}
             </span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={(e) => { e.stopPropagation(); setDeleteCollege(row); }}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="ml-1 hidden sm:inline">Delete</span>
           </Button>
         </div>
       ),
@@ -299,6 +330,18 @@ export default function CollegesPage() {
         confirmLabel={confirmCollege?.isActive ? "Deactivate" : "Activate"}
         variant={confirmCollege?.isActive ? "destructive" : "default"}
         onConfirm={() => { if (confirmCollege) void toggleActive(confirmCollege); }}
+      />
+
+      {/* Delete Confirm Dialog */}
+      <ConfirmDialog
+        open={!!deleteCollege}
+        onOpenChange={(open) => !open && setDeleteCollege(null)}
+        title="Delete College?"
+        description={`This will permanently delete "${deleteCollege?.name}". This cannot be undone. The college must have no users before it can be deleted.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={deleting}
+        onConfirm={() => { if (deleteCollege) void handleDelete(deleteCollege); }}
       />
     </div>
   );
