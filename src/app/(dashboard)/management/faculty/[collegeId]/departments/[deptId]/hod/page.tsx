@@ -10,9 +10,9 @@ export default function ManagementHodPage() {
   const [departmentName, setDepartmentName] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/management/colleges/${collegeId}/departments`)
-      .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartmentName((d.departments ?? []).find((x) => x.id === deptId)?.name ?? ""));
+    fetch(`/api/management/colleges/${collegeId}/departments/${deptId}`)
+      .then((r) => r.json() as Promise<{ department: Department }>)
+      .then((d) => setDepartmentName(d.department?.name ?? ""));
   }, [collegeId, deptId]);
 
   if (departmentName === null) return <p className="text-sm text-muted-foreground">Loading…</p>;
@@ -23,7 +23,7 @@ export default function ManagementHodPage() {
       role="HOD"
       title="Head of Department"
       department={departmentName}
-      backHref={`/management/${collegeId}/departments/${deptId}`}
+      backHref={`/management/faculty/${collegeId}/departments/${deptId}`}
     />
   );
 }

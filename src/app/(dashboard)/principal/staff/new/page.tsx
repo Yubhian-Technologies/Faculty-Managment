@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
+import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { createUserSchema } from "@/lib/validations";
 import type { z } from "zod";
 
@@ -29,6 +30,7 @@ export default function NewStaffPage() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
+  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
 
   useEffect(() => {
     fetch("/api/college/departments")
@@ -57,6 +59,7 @@ export default function NewStaffPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
+          ...personalDetails,
           ...(data.role === "VICE_PRINCIPAL" || data.role === "HOD" ? { academicProfile } : {}),
         }),
       });
@@ -171,6 +174,13 @@ export default function NewStaffPage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
+        <CardContent>
+          <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
         </CardContent>
       </Card>
 

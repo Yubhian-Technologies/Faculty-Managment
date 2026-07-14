@@ -73,6 +73,7 @@ export async function PATCH(
       ratificationDate: string;
       hasPHD: boolean;
       userUid: string;
+      academicProfile: Record<string, unknown>;
     }>;
 
     const db = getAdminDb();
@@ -113,6 +114,9 @@ export async function PATCH(
 
     // Boolean
     if (body.hasPHD !== undefined) updates.hasPHD = body.hasPHD;
+
+    // Academic profile (Modules 1-5)
+    if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);

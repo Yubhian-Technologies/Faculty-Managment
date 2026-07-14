@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, UserX } from "lucide-react";
+import { UserPlus, UserX, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -101,18 +101,29 @@ export default function PrincipalStaffPage() {
     {
       key: "actions",
       header: "",
-      render: (row) =>
-        (row.isActive as boolean) ? (
+      render: (row) => (
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
-            loading={deactivating === (row.uid as string)}
-            onClick={(e) => { e.stopPropagation(); setConfirmUser(row); }}
+            onClick={(e) => { e.stopPropagation(); router.push(`/principal/staff/${row.uid}/edit`); }}
           >
-            <UserX className="h-4 w-4 text-destructive" />
-            <span className="ml-1 hidden sm:inline text-destructive">Deactivate</span>
+            <Pencil className="h-3.5 w-3.5" />
+            <span className="ml-1 hidden sm:inline">Edit</span>
           </Button>
-        ) : null,
+          {(row.isActive as boolean) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={deactivating === (row.uid as string)}
+              onClick={(e) => { e.stopPropagation(); setConfirmUser(row); }}
+            >
+              <UserX className="h-4 w-4 text-destructive" />
+              <span className="ml-1 hidden sm:inline text-destructive">Deactivate</span>
+            </Button>
+          )}
+        </div>
+      ),
     },
   ];
 

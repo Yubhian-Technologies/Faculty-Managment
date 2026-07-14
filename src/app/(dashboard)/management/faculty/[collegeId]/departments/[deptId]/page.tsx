@@ -2,42 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { UserCog, Users2, ChevronRight, ArrowLeft } from "lucide-react";
+import { UserCog, UsersRound, ChevronRight, ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { College } from "@/types";
+import type { Department } from "@/types";
 
-export default function ManagementCollegeDetailPage() {
+export default function ManagementDepartmentDetailPage() {
   const router = useRouter();
-  const { collegeId } = useParams<{ collegeId: string }>();
-  const [college, setCollege] = useState<College | null>(null);
+  const { collegeId, deptId } = useParams<{ collegeId: string; deptId: string }>();
+  const [department, setDepartment] = useState<Department | null>(null);
 
   useEffect(() => {
-    fetch("/api/management/colleges")
-      .then((r) => r.json() as Promise<{ colleges: College[] }>)
-      .then((d) => setCollege((d.colleges ?? []).find((c) => c.id === collegeId) ?? null));
-  }, [collegeId]);
+    fetch(`/api/management/colleges/${collegeId}/departments/${deptId}`)
+      .then((r) => r.json() as Promise<{ department: Department }>)
+      .then((d) => setDepartment(d.department ?? null));
+  }, [collegeId, deptId]);
 
+  const base = `/management/faculty/${collegeId}/departments/${deptId}`;
   const cards = [
-    { label: "Principal", icon: UserCog, href: `/management/${collegeId}/principal` },
-    { label: "Vice Principal", icon: UserCog, href: `/management/${collegeId}/vice-principal` },
-    { label: "Departments", icon: Users2, href: `/management/${collegeId}/departments` },
+    { label: "HOD", icon: UserCog, href: `${base}/hod` },
+    { label: "Faculty", icon: UsersRound, href: `${base}/faculty` },
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={college?.name ?? "College"}
-        description="Institutional overview"
+        title={department?.name ?? "Department"}
+        description={department?.code}
         actions={
-          <Button variant="outline" onClick={() => router.push("/management")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />All Colleges
+          <Button variant="outline" onClick={() => router.push(`/management/faculty/${collegeId}/departments`)}>
+            <ArrowLeft className="h-4 w-4 mr-2" />Back
           </Button>
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {cards.map((c) => (
           <Card key={c.label} className="cursor-pointer hover:border-primary transition-colors" onClick={() => router.push(c.href)}>
             <CardContent className="p-5 flex items-center justify-between">

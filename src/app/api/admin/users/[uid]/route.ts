@@ -3,7 +3,38 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ uid: string }> }
+) {
+  try {
+    await requireSuperAdmin();
+
+    const { uid } = await params;
+    const { searchParams } = new URL(request.url);
+    const collegeId = searchParams.get("collegeId");
+    if (!collegeId) {
+      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+    const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ user: { uid: snap.id, ...snap.data() } });
+  } catch (err) {
+    if (err instanceof Error && err.message === "UNAUTHORIZED") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[admin/users/[uid] GET]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
 
 export async function PATCH(
   request: Request,
@@ -19,21 +50,25 @@ export async function PATCH(
       isActive?: boolean;
       department?: string;
       name?: string;
-    };
+      phone?: string;
+      academicProfile?: Record<string, unknown>;
+    } & PersonalDetailsInput;
 
-    const { collegeId, role, isActive, department, name } = body;
+    const { collegeId, role, isActive, department, name, phone, academicProfile } = body;
 
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
     }
 
     const db = getAdminDb();
-    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    const updates: Record<string, unknown> = { updatedAt: new Date(), ...buildPersonalDetailsUpdate(body) };
 
     if (role !== undefined) updates.role = role;
     if (isActive !== undefined) updates.isActive = isActive;
     if (department !== undefined) updates.department = department;
     if (name !== undefined && name.trim()) updates.name = name.trim();
+    if (phone !== undefined) updates.phone = phone;
+    if (academicProfile !== undefined) updates.academicProfile = academicProfile;
 
     await db
       .collection("colleges")

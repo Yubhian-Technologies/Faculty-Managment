@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
+import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { toast } from "@/hooks/useToast";
 import {
   DESIGNATION_LABELS,
@@ -39,6 +40,7 @@ type FormData = z.infer<typeof schema>;
 export default function NewFacultyPage() {
   const router = useRouter();
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
+  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
 
   const {
     register,
@@ -60,7 +62,7 @@ export default function NewFacultyPage() {
       const res = await fetch("/api/college/faculty", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, academicProfile }),
+        body: JSON.stringify({ ...data, academicProfile, ...personalDetails }),
       });
       const json = await res.json() as { id?: string; error?: string };
 
@@ -256,6 +258,13 @@ export default function NewFacultyPage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
+        <CardContent>
+          <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
         </CardContent>
       </Card>
 
