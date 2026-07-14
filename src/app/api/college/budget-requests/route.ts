@@ -3,17 +3,14 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Firestore } from "firebase-admin/firestore";
 import { normalizeBudgetRequest, type BudgetCategoryGroup, type BudgetRequest } from "@/types";
+import { resolveUserProfile, scopeBudgetQueryByDepartment } from "@/lib/budget/departmentScope";
 
-async function getUser(db: Firestore, collegeId: string, uid: string): Promise<{ name: string; department: string }> {
-  try {
-    const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-    const data = snap.data() as { name?: string; department?: string } | undefined;
-    return { name: data?.name ?? "Unknown", department: data?.department ?? "" };
-  } catch {
-    return { name: "Unknown", department: "" };
+function toMillis(value: unknown): number {
+  if (value && typeof (value as { toMillis?: () => number }).toMillis === "function") {
+    return (value as { toMillis: () => number }).toMillis();
   }
+  return value ? new Date(value as string).getTime() : 0;
 }
 
 export async function GET(request: Request) {
@@ -23,21 +20,18 @@ export async function GET(request: Request) {
     const status = searchParams.get("status");
 
     const db = getAdminDb();
-    const snap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("budgetRequests")
-      .orderBy("createdAt", "desc")
-      .get();
+    const baseQuery = db.collection("colleges").doc(session.collegeId).collection("budgetRequests");
+    const scopedQuery = await scopeBudgetQueryByDepartment(db, baseQuery, session);
+    const snap = await scopedQuery.get();
 
     let requests = snap.docs.map((d) => normalizeBudgetRequest({ id: d.id, ...d.data() } as BudgetRequest));
 
-    if (session.role === "HOD") {
-      requests = requests.filter((r) => (r as { hodUid?: string }).hodUid === session.uid);
-    }
     if (status) {
       requests = requests.filter((r) => (r as { status?: string }).status === status);
     }
+
+    // In-memory sort (avoids a composite index for where(department) + orderBy(createdAt))
+    requests.sort((a, b) => toMillis((b as { createdAt?: unknown }).createdAt) - toMillis((a as { createdAt?: unknown }).createdAt));
 
     return NextResponse.json({ requests });
   } catch (err) {
@@ -79,7 +73,7 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
-    const { name: hodName, department } = await getUser(db, session.collegeId, session.uid);
+    const { name: hodName, department } = await resolveUserProfile(db, session.collegeId, session.uid);
     if (!department) {
       return NextResponse.json(
         { error: "Your profile has no department set. Contact your administrator before submitting a budget request." },

@@ -85,6 +85,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Payslips", href: "/hod/payslips", iconName: "Wallet", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"] },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
+  { label: "Purchase Clearance", href: "/hod/purchase-clearance", iconName: "Receipt", roles: ["HOD"] },
   { label: "My Appraisal", href: "/hod/appraisal", iconName: "TrendingUp", roles: ["HOD"] },
   { label: "Training", href: "/hod/training", iconName: "GraduationCap", roles: ["HOD"] },
   { label: "Grievance", href: "/hod/grievance", iconName: "AlertCircle", roles: ["HOD"] },
