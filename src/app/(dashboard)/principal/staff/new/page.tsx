@@ -10,13 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { createUserSchema } from "@/lib/validations";
 import type { z } from "zod";
 
 type StaffFormData = z.infer<ReturnType<typeof createUserSchema.omit<{ collegeId: true }>>>;
 import { ROLE_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
-import type { Department } from "@/types";
+import type { Department, FacultyProfileFields } from "@/types";
 
 const PRINCIPAL_ASSIGNABLE_ROLES = [
   { value: "VICE_PRINCIPAL", label: ROLE_LABELS.VICE_PRINCIPAL },
@@ -27,6 +28,7 @@ const PRINCIPAL_ASSIGNABLE_ROLES = [
 export default function NewStaffPage() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
 
   useEffect(() => {
     fetch("/api/college/departments")
@@ -53,7 +55,10 @@ export default function NewStaffPage() {
       const res = await fetch("/api/college/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          ...(data.role === "VICE_PRINCIPAL" || data.role === "HOD" ? { academicProfile } : {}),
+        }),
       });
       const json = await res.json() as { uid?: string; error?: string };
 
@@ -168,6 +173,19 @@ export default function NewStaffPage() {
           </form>
         </CardContent>
       </Card>
+
+      {(role === "VICE_PRINCIPAL" || role === "HOD") && (
+        <Card className="mt-6">
+          <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
+          <CardContent>
+            <AcademicProfileFields
+              value={academicProfile}
+              onChange={setAcademicProfile}
+              includeTeachingAssignment={role === "HOD"}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

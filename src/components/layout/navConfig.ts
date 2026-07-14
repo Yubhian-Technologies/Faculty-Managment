@@ -12,6 +12,9 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  // Management (read-only)
+  { label: "Colleges", href: "/management", iconName: "Building2", roles: ["MANAGEMENT"] },
+
   // Super Admin
   { label: "Dashboard", href: "/super-admin", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN"] },
   { label: "Locations", href: "/super-admin/locations", iconName: "MapPin", roles: ["SUPER_ADMIN"] },
@@ -127,6 +130,9 @@ export function getNavItemsForRole(role: UserRole): NavItem[] {
 }
 
 export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
+  MANAGEMENT: [
+    { label: "Colleges", href: "/management", iconName: "Building2", roles: ["MANAGEMENT"] },
+  ],
   SUPER_ADMIN: [
     { label: "Dashboard", href: "/super-admin", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN"] },
     { label: "Locations", href: "/super-admin/locations", iconName: "MapPin", roles: ["SUPER_ADMIN"] },

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, UserX, UserCheck, Pencil, KeyRound, Trash2 } from "lucide-react";
+import { UserPlus, UserX, UserCheck, Pencil, KeyRound, Trash2, Globe } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import type { College } from "@/types";
 type UserRow = Record<string, unknown> & FMSUser;
 
 const ASSIGNABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE"];
+const GLOBAL_SCOPE = "__system__";
 
 export default function UsersPage() {
   const router = useRouter();
@@ -53,20 +54,27 @@ export default function UsersPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
   }, []);
 
+  function usersUrl() {
+    return selectedCollegeId === GLOBAL_SCOPE
+      ? "/api/admin/users?scope=global"
+      : `/api/admin/users?collegeId=${selectedCollegeId}`;
+  }
+
   useEffect(() => {
     if (!selectedCollegeId) return;
     setIsLoading(true);
-    fetch(`/api/admin/users?collegeId=${selectedCollegeId}`)
+    fetch(usersUrl())
       .then((r) => r.json())
       .then((data: { users: UserRow[] }) => setUsers(data.users ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load users" }))
       .finally(() => setIsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCollegeId]);
 
   function reloadUsers() {
     if (!selectedCollegeId) return;
     setIsLoading(true);
-    fetch(`/api/admin/users?collegeId=${selectedCollegeId}`)
+    fetch(usersUrl())
       .then((r) => r.json())
       .then((data: { users: UserRow[] }) => setUsers(data.users ?? []))
       .catch(() => {})
@@ -189,7 +197,14 @@ export default function UsersPage() {
       key: "department",
       header: "Department",
       hideOnMobile: true,
-      render: (row) => <span>{(row.department as string) || "—"}</span>,
+      render: (row) =>
+        !(row.collegeId as string) ? (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <Globe className="h-3 w-3" />System-Wide
+          </span>
+        ) : (
+          <span>{(row.department as string) || "—"}</span>
+        ),
     },
     {
       key: "isActive",
@@ -203,50 +218,59 @@ export default function UsersPage() {
     {
       key: "actions",
       header: "",
-      render: (row) => (
-        <div className="flex items-center gap-1 flex-wrap">
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(row); }}>
-            <Pencil className="h-3.5 w-3.5" />
-            <span className="ml-1 hidden lg:inline">Edit</span>
-          </Button>
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setResetUser(row); setNewPassword(""); }}>
-            <KeyRound className="h-3.5 w-3.5" />
-            <span className="ml-1 hidden lg:inline">Reset</span>
-          </Button>
-          {(row.isActive as boolean) ? (
+      render: (row) => {
+        const isSystemWide = !(row.collegeId as string);
+        return (
+          <div className="flex items-center gap-1 flex-wrap">
+            {!isSystemWide && (
+              <>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(row); }}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  <span className="ml-1 hidden lg:inline">Edit</span>
+                </Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setResetUser(row); setNewPassword(""); }}>
+                  <KeyRound className="h-3.5 w-3.5" />
+                  <span className="ml-1 hidden lg:inline">Reset</span>
+                </Button>
+                {(row.isActive as boolean) ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={actionUid === (row.uid as string)}
+                    onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "deactivate" }); }}
+                  >
+                    <UserX className="h-3.5 w-3.5 text-destructive" />
+                    <span className="ml-1 hidden lg:inline text-destructive">Deactivate</span>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={actionUid === (row.uid as string)}
+                    onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "activate" }); }}
+                  >
+                    <UserCheck className="h-3.5 w-3.5 text-green-600" />
+                    <span className="ml-1 hidden lg:inline text-green-600">Activate</span>
+                  </Button>
+                )}
+              </>
+            )}
             <Button
               variant="ghost"
               size="sm"
-              loading={actionUid === (row.uid as string)}
-              onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "deactivate" }); }}
+              onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "delete" }); }}
             >
-              <UserX className="h-3.5 w-3.5 text-destructive" />
-              <span className="ml-1 hidden lg:inline text-destructive">Deactivate</span>
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              loading={actionUid === (row.uid as string)}
-              onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "activate" }); }}
-            >
-              <UserCheck className="h-3.5 w-3.5 text-green-600" />
-              <span className="ml-1 hidden lg:inline text-green-600">Activate</span>
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "delete" }); }}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
-        </div>
-      ),
+          </div>
+        );
+      },
     },
   ];
 
-  const collegeLabel = colleges.find((c) => c.id === selectedCollegeId)?.name ?? "All Users";
+  const collegeLabel = selectedCollegeId === GLOBAL_SCOPE
+    ? "System-Wide Users"
+    : colleges.find((c) => c.id === selectedCollegeId)?.name ?? "All Users";
 
   return (
     <div className="space-y-6">
@@ -278,6 +302,16 @@ export default function UsersPage() {
                 {c.name}
               </button>
             ))}
+            <button
+              onClick={() => setSelectedCollegeId(GLOBAL_SCOPE)}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm border transition-colors ${
+                selectedCollegeId === GLOBAL_SCOPE
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              }`}
+            >
+              <Globe className="h-3.5 w-3.5" />System-Wide
+            </button>
           </div>
         </div>
       )}
@@ -289,8 +323,8 @@ export default function UsersPage() {
         keyExtractor={(r) => r.uid as string}
         searchPlaceholder="Search users..."
         searchKeys={["name", "email", "department"] as (keyof UserRow)[]}
-        emptyTitle={`No users in ${collegeLabel}`}
-        emptyDescription="Create the first user for this college"
+        emptyTitle={selectedCollegeId === GLOBAL_SCOPE ? "No system-wide users" : `No users in ${collegeLabel}`}
+        emptyDescription={selectedCollegeId === GLOBAL_SCOPE ? "Create a Management account to see it here" : "Create the first user for this college"}
         emptyAction={
           <Button onClick={() => router.push("/super-admin/users/new")}>
             <UserPlus className="h-4 w-4 mr-2" />

@@ -8,6 +8,7 @@ const PANEL_INTERVIEWS_PATH = "/panel/interviews";
 
 const ROLE_PATH_MAP: Record<string, string[]> = {
   SUPER_ADMIN: ["/super-admin", PANEL_INTERVIEWS_PATH],
+  MANAGEMENT: ["/management"],
   ADMINISTRATION: ["/administration"],
   HR_ADMIN: ["/hr-admin"],
   ADMIN_OFFICE: ["/admin-office"],

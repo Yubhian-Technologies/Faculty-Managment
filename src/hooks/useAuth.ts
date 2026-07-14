@@ -66,6 +66,16 @@ export function useAuth() {
             isActive: true,
             createdAt: {} as never,
           });
+        } else if (role === "MANAGEMENT") {
+          setUser({
+            uid: firebaseUser.uid,
+            collegeId: "",
+            name: serverName ?? firebaseUser.displayName ?? "Management",
+            email: serverEmail ?? firebaseUser.email ?? "",
+            role: "MANAGEMENT",
+            isActive: true,
+            createdAt: {} as never,
+          });
         } else if (role && LOCATION_ROLES.includes(role)) {
           // Location-scoped users have collegeId: "" — do NOT gate on collegeId.
           setUser(
