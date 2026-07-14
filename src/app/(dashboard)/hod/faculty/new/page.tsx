@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -10,12 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { toast } from "@/hooks/useToast";
 import {
   DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS,
 } from "@/types";
-import type { Designation, EmploymentType } from "@/types";
+import type { Designation, EmploymentType, FacultyProfileFields } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -36,6 +38,7 @@ type FormData = z.infer<typeof schema>;
 
 export default function NewFacultyPage() {
   const router = useRouter();
+  const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
 
   const {
     register,
@@ -57,7 +60,7 @@ export default function NewFacultyPage() {
       const res = await fetch("/api/college/faculty", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, academicProfile }),
       });
       const json = await res.json() as { id?: string; error?: string };
 
@@ -253,6 +256,13 @@ export default function NewFacultyPage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
+        <CardContent>
+          <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment />
         </CardContent>
       </Card>
     </div>

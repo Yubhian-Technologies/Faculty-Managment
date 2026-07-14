@@ -85,9 +85,10 @@ export async function POST(request: Request) {
       role: UserRole;
       department?: string;
       staffType?: "teaching" | "supporting";
+      academicProfile?: Record<string, unknown>;
     };
 
-    const { name, email, password, role, department } = body;
+    const { name, email, password, role, department, academicProfile } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -139,6 +140,7 @@ export async function POST(request: Request) {
         role,
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),
+        ...(academicProfile ? { academicProfile } : {}),
         isActive: true,
         createdAt: now,
         updatedAt: now,

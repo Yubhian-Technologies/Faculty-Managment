@@ -34,6 +34,15 @@ export async function requireSuperAdmin(): Promise<SessionPayload> {
   return session;
 }
 
+// MANAGEMENT is a global, read-only role — routes using this must only implement GET handlers
+export async function requireManagement(): Promise<SessionPayload> {
+  const session = await verifySession();
+  if (!session || session.role !== "MANAGEMENT") {
+    throw new Error("UNAUTHORIZED");
+  }
+  return session;
+}
+
 export async function requireRole(...roles: string[]): Promise<SessionPayload> {
   const session = await verifySession();
   if (!session || !roles.includes(session.role)) {

@@ -103,6 +103,17 @@ function LoginForm() {
           createdAt: {} as never,
         });
         router.push(redirect ?? "/super-admin");
+      } else if (role === "MANAGEMENT") {
+        setUser({
+          uid: credential.user.uid,
+          collegeId: "",
+          name: sessionData.name ?? credential.user.displayName ?? "Management",
+          email: sessionData.email ?? credential.user.email ?? "",
+          role: "MANAGEMENT",
+          isActive: true,
+          createdAt: {} as never,
+        });
+        router.push(redirect ?? ROLE_DASHBOARD_PATHS.MANAGEMENT);
       } else if (LOCATION_ROLES.includes(role) && locationId) {
         // Location-scoped role — profile comes from locations/{id}/locationUsers/{uid}
         const profile: FMSUser = sessionData.profile ?? {
