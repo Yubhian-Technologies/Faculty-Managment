@@ -9,7 +9,8 @@ const STATUS_STYLES: Record<IndentStatus, string> = {
   PENDING_FINANCE_REVIEW: "bg-blue-100 text-blue-800 border-blue-200",
   RETURNED_TO_PURCHASE: "bg-orange-100 text-orange-800 border-orange-200",
   REJECTED: "bg-red-100 text-red-800 border-red-200",
-  APPROVED: "bg-green-100 text-green-800 border-green-200",
+  APPROVED: "bg-teal-100 text-teal-800 border-teal-200",
+  COMPLETED: "bg-green-100 text-green-800 border-green-200",
 };
 
 export function IndentStatusBadge({ status, className }: { status: IndentStatus; className?: string }) {

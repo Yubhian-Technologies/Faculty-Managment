@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { ExternalLink, Pencil } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -66,6 +66,25 @@ export function IndentRequestDetail({ request, onClose, onEditRequest }: IndentR
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground">Vendor Quotations</h3>
               <QuotationsForm quotations={request.quotations} selectedQuotationId={request.selectedQuotationId} readOnly />
+            </div>
+          )}
+
+          {request.status === "COMPLETED" && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground">Purchase Receipt</h3>
+              <div className="rounded-md border p-3 text-sm space-y-2">
+                <p className="text-muted-foreground">
+                  Purchased and receipt submitted by {request.receiptUploadedByName} on {request.receiptUploadedAt ? formatDate(request.receiptUploadedAt) : "—"}.
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="font-medium">{formatCurrency(request.receiptAmount ?? 0)}</span>
+                  {request.receiptUrl && (
+                    <a href={request.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-1 text-xs">
+                      {request.receiptFileName ?? "View receipt"} <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

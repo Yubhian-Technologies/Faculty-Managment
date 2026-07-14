@@ -18,7 +18,7 @@ import type { FinanceReceipt, FinanceReceiptRelatedType } from "@/types";
 
 type Row = FinanceReceipt & Record<string, unknown>;
 
-const RELATED_TYPES: FinanceReceiptRelatedType[] = ["BUDGET", "EXPENSE", "PAYMENT", "ALLOCATION"];
+const RELATED_TYPES: FinanceReceiptRelatedType[] = ["BUDGET", "EXPENSE", "PAYMENT", "ALLOCATION", "INDENT"];
 
 const emptyForm = () => ({ relatedType: "EXPENSE" as FinanceReceiptRelatedType, relatedId: "", amount: "", description: "" });
 
