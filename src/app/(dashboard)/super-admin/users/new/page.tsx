@@ -13,7 +13,7 @@ import { ROLE_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields } from "@/types";
 
-const COLLEGE_ROLES = ["PRINCIPAL", "ACCOUNTS", "FINANCE"] as const;
+const COLLEGE_ROLES = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"] as const;
 const LOCATION_ROLES = ["ADMINISTRATION"] as const;
 const GLOBAL_ROLES = ["MANAGEMENT"] as const;
 const ALL_ROLES = [...COLLEGE_ROLES, ...LOCATION_ROLES, ...GLOBAL_ROLES] as const;

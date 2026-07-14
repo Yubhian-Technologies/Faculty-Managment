@@ -25,7 +25,7 @@ import type { College } from "@/types";
 
 type UserRow = Record<string, unknown> & FMSUser;
 
-const ASSIGNABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE"];
+const ASSIGNABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"];
 const GLOBAL_SCOPE = "__system__";
 
 export default function UsersPage() {
