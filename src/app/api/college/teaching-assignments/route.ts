@@ -93,3 +93,104 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const body = (await request.json()) as {
+      facultyId: string;
+      subjectId: string;
+      academicYear: string;
+      semester: number;
+      section?: string;
+      hoursPerWeek?: number;
+      totalHoursAllotted?: number;
+    };
+
+    if (!body.facultyId || !body.subjectId || !body.academicYear || !body.semester) {
+      return NextResponse.json({ error: "facultyId, subjectId, academicYear, semester are required" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    const [facultySnap, subjectSnap] = await Promise.all([
+      collegeRef.collection("users").doc(body.facultyId).get(),
+      collegeRef.collection("subjects").doc(body.subjectId).get(),
+    ]);
+
+    if (!facultySnap.exists) {
+      return NextResponse.json({ error: "Faculty not found" }, { status: 400 });
+    }
+    if (!subjectSnap.exists) {
+      return NextResponse.json({ error: "Subject not found" }, { status: 400 });
+    }
+
+    const faculty = facultySnap.data() as { name?: string; department?: string };
+    const subject = subjectSnap.data() as { name?: string; code?: string; department?: string; hoursPerWeek?: number };
+
+    // HOD may only assign within their own department; Principal/Super Admin can cross departments.
+    if (session.role === "HOD") {
+      const hodSnap = await collegeRef.collection("users").doc(session.uid).get();
+      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+      if (!hodDept || faculty.department !== hodDept || subject.department !== hodDept) {
+        return NextResponse.json({ error: "Faculty/subject must be in your department" }, { status: 403 });
+      }
+    }
+
+    const now = new Date();
+    const ref = await collegeRef.collection("teachingAssignments").add({
+      collegeId: session.collegeId,
+      facultyId: body.facultyId,
+      facultyName: faculty.name ?? "",
+      subjectId: body.subjectId,
+      subjectName: subject.name ?? "",
+      subjectCode: subject.code ?? "",
+      department: subject.department ?? faculty.department ?? "",
+      academicYear: body.academicYear,
+      semester: Number(body.semester),
+      section: body.section ?? "",
+      hoursPerWeek: body.hoursPerWeek ?? subject.hoursPerWeek ?? 0,
+      ...(body.totalHoursAllotted != null ? { totalHoursAllotted: Number(body.totalHoursAllotted) } : {}),
+      assignedBy: session.uid,
+      assignedByName: session.role,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return NextResponse.json({ id: ref.id }, { status: 201 });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/teaching-assignments POST]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const { searchParams } = new URL(request.url);
+    const assignmentId = searchParams.get("id");
+    if (!assignmentId) {
+      return NextResponse.json({ error: "id required" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+    await db
+      .collection("colleges")
+      .doc(session.collegeId)
+      .collection("teachingAssignments")
+      .doc(assignmentId)
+      .delete();
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/teaching-assignments DELETE]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

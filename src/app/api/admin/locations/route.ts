@@ -1,12 +1,15 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireSuperAdmin } from "@/lib/auth/verifySession";
+import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
+// SUPER_ADMIN (L0) and MANAGEMENT (L1, global) can both view/create locations —
+// Management gained location-creation rights so it can act as a real L1 role
+// per the org hierarchy (creates locations, assigns Administrators to them).
 export async function GET() {
   try {
-    await requireSuperAdmin();
+    await requireRole("SUPER_ADMIN", "MANAGEMENT");
     const db = getAdminDb();
     const snap = await db.collection("locations").orderBy("name").get();
     const locations = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -22,7 +25,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireSuperAdmin();
+    await requireRole("SUPER_ADMIN", "MANAGEMENT");
     const body = (await request.json()) as {
       name: string;
       city: string;

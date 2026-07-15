@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
+import { LOCATION_SCOPED_ROLES } from "@/types";
 
 export async function POST(request: Request) {
   try {
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
     let profile: Record<string, unknown> | null = null;
     const db = getAdminDb();
 
-    const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD"];
+    const LOCATION_ROLES = LOCATION_SCOPED_ROLES as string[];
 
     if (role !== "UNKNOWN" && LOCATION_ROLES.includes(role) && locationId) {
       try {

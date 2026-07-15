@@ -6,6 +6,7 @@ import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
 import { useAuthStore } from "@/store/authStore";
 import type { FMSUser, UserRole } from "@/types";
+import { LOCATION_SCOPED_ROLES, ROLE_SCOPE } from "@/types";
 
 export function useAuth() {
   const { user, isLoading, setUser, setLoading, setFirebaseToken, logout } =
@@ -54,8 +55,6 @@ export function useAuth() {
           } catch { /* non-fatal */ }
         }
 
-        const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD"];
-
         if (role === "SUPER_ADMIN") {
           setUser({
             uid: firebaseUser.uid,
@@ -66,17 +65,18 @@ export function useAuth() {
             isActive: true,
             createdAt: {} as never,
           });
-        } else if (role === "MANAGEMENT") {
+        } else if (role && ROLE_SCOPE[role as UserRole] === "GLOBAL") {
+          // MANAGEMENT, FINANCE, PURCHASE_DEPT — global, no college/location scope.
           setUser({
             uid: firebaseUser.uid,
             collegeId: "",
-            name: serverName ?? firebaseUser.displayName ?? "Management",
+            name: serverName ?? firebaseUser.displayName ?? "User",
             email: serverEmail ?? firebaseUser.email ?? "",
-            role: "MANAGEMENT",
+            role: role as UserRole,
             isActive: true,
             createdAt: {} as never,
           });
-        } else if (role && LOCATION_ROLES.includes(role)) {
+        } else if (role && (LOCATION_SCOPED_ROLES as string[]).includes(role)) {
           // Location-scoped users have collegeId: "" — do NOT gate on collegeId.
           setUser(
             serverProfile ?? {

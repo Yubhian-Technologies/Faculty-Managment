@@ -20,12 +20,14 @@ export const createUserSchema = z.object({
     "VICE_PRINCIPAL",
     "HOD",
     "COLLEGE_OFFICE",
+    "COLLEGE_STAFF",
     "PANEL_MEMBER",
     "ACCOUNTS",
     "STUDENT",
   ]),
   collegeId: z.string().min(1, "Select a college"),
   department: z.string().optional(),
+  designation: z.string().optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
