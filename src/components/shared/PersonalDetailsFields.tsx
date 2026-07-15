@@ -3,6 +3,10 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
 export interface PersonalDetailsValue {
   gender?: string;
@@ -16,6 +20,15 @@ export interface PersonalDetailsValue {
   panNo?: string;
   ratificationStatus?: string;
   ratificationDate?: string;   // yyyy-mm-dd
+  maritalStatus?: string;
+  spouseName?: string;
+  numberOfChildren?: number;
+  referral?: string;
+  nativePlace?: string;
+  temporaryAddress?: string;
+  permanentSameAsTemporary?: boolean;
+  permanentAddress?: string;
+  bloodGroup?: string;
 }
 
 interface Props {
@@ -95,6 +108,77 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           />
         </div>
       </div>
+
+      <div className="pt-2 pb-1 border-t">
+        <p className="text-sm font-medium text-muted-foreground">Family &amp; Other Details</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Marital Status</Label>
+          <Select value={value.maritalStatus ?? ""} onValueChange={(v) => set("maritalStatus", v)}>
+            <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Single">Single</SelectItem>
+              <SelectItem value="Married">Married</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Blood Group</Label>
+          <Select value={value.bloodGroup ?? ""} onValueChange={(v) => set("bloodGroup", v)}>
+            <SelectTrigger><SelectValue placeholder="Select blood group" /></SelectTrigger>
+            <SelectContent>
+              {BLOOD_GROUPS.map((bg) => <SelectItem key={bg} value={bg}>{bg}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        {value.maritalStatus === "Married" && (
+          <>
+            <div className="space-y-2">
+              <Label>Spouse Name</Label>
+              <Input value={value.spouseName ?? ""} onChange={(e) => set("spouseName", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Number of Children</Label>
+              <Input
+                type="number"
+                min={0}
+                value={value.numberOfChildren ?? ""}
+                onChange={(e) => set("numberOfChildren", e.target.value === "" ? undefined : Number(e.target.value))}
+              />
+            </div>
+          </>
+        )}
+        <div className="space-y-2">
+          <Label>Referral (if any)</Label>
+          <Input value={value.referral ?? ""} onChange={(e) => set("referral", e.target.value)} placeholder="Name of referring person/source" />
+        </div>
+        <div className="space-y-2">
+          <Label>Native Place</Label>
+          <Input value={value.nativePlace ?? ""} onChange={(e) => set("nativePlace", e.target.value)} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Temporary Address</Label>
+        <Textarea value={value.temporaryAddress ?? ""} onChange={(e) => set("temporaryAddress", e.target.value)} />
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="permanentSameAsTemporary"
+          checked={value.permanentSameAsTemporary ?? false}
+          onCheckedChange={(checked) => set("permanentSameAsTemporary", checked === true)}
+        />
+        <Label htmlFor="permanentSameAsTemporary" className="cursor-pointer font-normal">
+          Permanent address same as temporary
+        </Label>
+      </div>
+      {!value.permanentSameAsTemporary && (
+        <div className="space-y-2">
+          <Label>Permanent Address</Label>
+          <Textarea value={value.permanentAddress ?? ""} onChange={(e) => set("permanentAddress", e.target.value)} />
+        </div>
+      )}
 
       <div className="pt-2 pb-1 border-t">
         <p className="text-sm font-medium text-muted-foreground">Ratification</p>

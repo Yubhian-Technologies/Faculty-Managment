@@ -71,6 +71,15 @@ export async function PATCH(
       panNo: string;
       ratificationStatus: string;
       ratificationDate: string;
+      maritalStatus: string;
+      spouseName: string;
+      numberOfChildren: number;
+      referral: string;
+      nativePlace: string;
+      temporaryAddress: string;
+      permanentSameAsTemporary: boolean;
+      permanentAddress: string;
+      bloodGroup: string;
       hasPHD: boolean;
       userUid: string;
       academicProfile: Record<string, unknown>;
@@ -94,6 +103,7 @@ export async function PATCH(
       "name", "email", "phone", "collegeEmail", "designation", "qualification",
       "specialization", "employmentType", "status", "gender", "legalName",
       "fatherName", "motherName", "religion", "caste", "aadharNo", "ratificationStatus", "userUid",
+      "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
     ] as const;
 
     for (const key of stringFields) {
@@ -106,7 +116,7 @@ export async function PATCH(
     // Numeric fields
     const numFields = [
       "experienceYears", "internalExperience", "externalExperience",
-      "inCampusExperience", "industryExperience", "researchExperience",
+      "inCampusExperience", "industryExperience", "researchExperience", "numberOfChildren",
     ] as const;
     for (const key of numFields) {
       if (body[key] !== undefined) updates[key] = Number(body[key]);
@@ -114,6 +124,7 @@ export async function PATCH(
 
     // Boolean
     if (body.hasPHD !== undefined) updates.hasPHD = body.hasPHD;
+    if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
 
     // Academic profile (Modules 1-5)
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;

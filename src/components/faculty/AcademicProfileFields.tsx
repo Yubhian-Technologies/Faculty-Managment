@@ -9,7 +9,6 @@ import { Plus, Trash2 } from "lucide-react";
 import type {
   FacultyProfileFields,
   DegreeDetail,
-  CourseAssignment,
   FundedProject,
   ConsultancyProject,
   LabEstablished,
@@ -23,7 +22,6 @@ interface Props {
 }
 
 const EMPTY_DEGREE: DegreeDetail = { degreeAndBranch: "", universityOrInstitute: "", percentageOrDivision: "", yearOfCompletion: new Date().getFullYear() };
-const EMPTY_COURSE: CourseAssignment = { code: "", name: "", weeklyCreditHours: 0 };
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
@@ -166,34 +164,15 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
 
       {includeTeachingAssignment && (
         <div className="space-y-3 rounded-lg border p-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Teaching Assignment</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Teaching Role</p>
           <TextInput
             label="Primary Teaching Role / Specialization"
             value={teaching?.primaryTeachingRole}
             onChange={(v) => set("teachingAssignment", { primaryTeachingRole: v, courses: teaching?.courses ?? [] })}
           />
-          {[0, 1, 2].map((i) => {
-            const course = teaching?.courses?.[i] ?? EMPTY_COURSE;
-            return (
-              <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <TextInput label={`Course ${i + 1} — Code`} value={course.code} onChange={(v) => {
-                  const courses = [...(teaching?.courses ?? [])];
-                  courses[i] = { ...course, code: v };
-                  set("teachingAssignment", { primaryTeachingRole: teaching?.primaryTeachingRole ?? "", courses });
-                }} />
-                <TextInput label="Name" value={course.name} onChange={(v) => {
-                  const courses = [...(teaching?.courses ?? [])];
-                  courses[i] = { ...course, name: v };
-                  set("teachingAssignment", { primaryTeachingRole: teaching?.primaryTeachingRole ?? "", courses });
-                }} />
-                <NumInput label="Weekly Credit Hours" value={course.weeklyCreditHours} onChange={(v) => {
-                  const courses = [...(teaching?.courses ?? [])];
-                  courses[i] = { ...course, weeklyCreditHours: v };
-                  set("teachingAssignment", { primaryTeachingRole: teaching?.primaryTeachingRole ?? "", courses });
-                }} />
-              </div>
-            );
-          })}
+          <p className="text-xs text-muted-foreground">
+            Subject-level teaching assignments (course, section, subject, weekly schedule) are managed below in &ldquo;Current Teaching Assignments&rdquo;.
+          </p>
         </div>
       )}
 

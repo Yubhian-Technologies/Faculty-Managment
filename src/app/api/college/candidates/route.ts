@@ -65,6 +65,11 @@ export async function POST(request: Request) {
       phone: string;
       department: string;
       position: string;
+      courseId?: string;
+      courseName?: string;
+      year?: number;
+      preferredSubjectIds?: string[];
+      preferredSubjectNames?: string[];
       resumeUrl?: string;
       source?: string;
       interviewMode?: string;
@@ -78,7 +83,7 @@ export async function POST(request: Request) {
       permanentAddress?: string;
     };
 
-    const { name, email, phone, department, position, resumeUrl, source, interviewMode, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription, residenceAddress, permanentAddress } = body;
+    const { name, email, phone, department, position, courseId, courseName, year, preferredSubjectIds, preferredSubjectNames, resumeUrl, source, interviewMode, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription, residenceAddress, permanentAddress } = body;
     if (!name || !email || !phone || !department || !position) {
       return NextResponse.json({ error: "name, email, phone, department, position required" }, { status: 400 });
     }
@@ -98,6 +103,9 @@ export async function POST(request: Request) {
         phone: phone.trim(),
         department: department.trim(),
         position: position.trim(),
+        ...(courseId ? { courseId, courseName: courseName ?? "" } : {}),
+        ...(year ? { year: Number(year) } : {}),
+        ...(preferredSubjectIds?.length ? { preferredSubjectIds, preferredSubjectNames: preferredSubjectNames ?? [] } : {}),
         resumeUrl: resumeUrl ?? "",
         source: source ?? "WALK_IN",
         interviewMode: interviewMode ?? "OFFLINE",

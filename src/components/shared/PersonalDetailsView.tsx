@@ -13,6 +13,15 @@ export interface PersonalDetailsSource {
   panNo?: string;
   ratificationStatus?: string;
   ratificationDate?: Timestamp | Date | { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
+  maritalStatus?: string;
+  spouseName?: string;
+  numberOfChildren?: number;
+  referral?: string;
+  nativePlace?: string;
+  temporaryAddress?: string;
+  permanentSameAsTemporary?: boolean;
+  permanentAddress?: string;
+  bloodGroup?: string;
 }
 
 interface Props {
@@ -43,6 +52,29 @@ export function PersonalDetailsView({ value }: Props) {
         <Field label="Caste" value={p.caste} />
         <Field label="Aadhar No" value={p.aadharNo} />
         <Field label="PAN No" value={p.panNo} />
+      </div>
+
+      <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Family &amp; Other Details</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Field label="Marital Status" value={p.maritalStatus} />
+          <Field label="Blood Group" value={p.bloodGroup} />
+          {p.maritalStatus === "Married" && (
+            <>
+              <Field label="Spouse Name" value={p.spouseName} />
+              <Field label="Number of Children" value={p.numberOfChildren !== undefined ? String(p.numberOfChildren) : undefined} />
+            </>
+          )}
+          <Field label="Referral" value={p.referral} />
+          <Field label="Native Place" value={p.nativePlace} />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mt-3">
+          <Field label="Temporary Address" value={p.temporaryAddress} />
+          <Field
+            label="Permanent Address"
+            value={p.permanentSameAsTemporary ? "Same as temporary" : p.permanentAddress}
+          />
+        </div>
       </div>
 
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">

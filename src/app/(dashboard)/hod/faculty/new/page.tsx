@@ -12,7 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
+import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { toast } from "@/hooks/useToast";
 import {
   DESIGNATION_LABELS,
@@ -41,6 +43,7 @@ export default function NewFacultyPage() {
   const router = useRouter();
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
+  const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
 
   const {
     register,
@@ -73,6 +76,13 @@ export default function NewFacultyPage() {
       if (!res.ok) {
         toast({ variant: "destructive", title: "Failed to add faculty", description: json.error });
         return;
+      }
+
+      if (json.id && teachingRows.length > 0) {
+        const errors = await syncTeachingAssignments(json.id, data.name, [], teachingRows);
+        if (errors.length > 0) {
+          toast({ variant: "destructive", title: "Some teaching assignments failed to save", description: errors.join("; ") });
+        }
       }
 
       toast({ variant: "success", title: "Faculty member added", description: `${data.name} has been added to the register.` });
@@ -272,6 +282,13 @@ export default function NewFacultyPage() {
         <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
         <CardContent>
           <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Current Teaching Assignments</CardTitle></CardHeader>
+        <CardContent>
+          <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />
         </CardContent>
       </Card>
     </div>

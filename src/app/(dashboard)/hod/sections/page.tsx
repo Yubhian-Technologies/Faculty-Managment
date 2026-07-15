@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -10,35 +10,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import type { Section } from "@/types";
+import type { Section, Course } from "@/types";
 
 type SectionRow = Section & { id: string };
 type FacultyOption = { id: string; name: string; designation: string };
 
-const YEAR_LABELS: Record<number, string> = {
-  1: "1st Year",
-  2: "2nd Year",
-  3: "3rd Year",
-  4: "4th Year",
-};
-
-const YEAR_COLORS: Record<number, string> = {
-  1: "bg-purple-50 border-purple-200 text-purple-800",
-  2: "bg-blue-50 border-blue-200 text-blue-800",
-3: "bg-emerald-50 border-emerald-200 text-emerald-800",
-  4: "bg-amber-50 border-amber-200 text-amber-800",
-};
-
-const YEAR_BADGE: Record<number, string> = {
-  1: "bg-purple-100 text-purple-700",
-  2: "bg-blue-100 text-blue-700",
-  3: "bg-emerald-100 text-emerald-700",
-  4: "bg-amber-100 text-amber-700",
-};
+const YEAR_PALETTE = [
+  "bg-purple-50 border-purple-200 text-purple-800",
+  "bg-blue-50 border-blue-200 text-blue-800",
+  "bg-emerald-50 border-emerald-200 text-emerald-800",
+  "bg-amber-50 border-amber-200 text-amber-800",
+  "bg-rose-50 border-rose-200 text-rose-800",
+  "bg-cyan-50 border-cyan-200 text-cyan-800",
+];
+const YEAR_BADGE_PALETTE = [
+  "bg-purple-100 text-purple-700",
+  "bg-blue-100 text-blue-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-amber-100 text-amber-700",
+  "bg-rose-100 text-rose-700",
+  "bg-cyan-100 text-cyan-700",
+];
+function yearColor(year: number) { return YEAR_PALETTE[(year - 1) % YEAR_PALETTE.length]; }
+function yearBadge(year: number) { return YEAR_BADGE_PALETTE[(year - 1) % YEAR_BADGE_PALETTE.length]; }
+function ordinalYear(year: number) {
+  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
+  return `${year}${suffix} Year`;
+}
 
 const STUDENT_FACULTY_RATIO = 15;
 
 type SectionForm = {
+  courseId: string;
   name: string;
   year: string;
   batch: string;
@@ -48,8 +51,9 @@ type SectionForm = {
 };
 
 const EMPTY_FORM: SectionForm = {
+  courseId: "",
   name: "",
-  year: "2",
+  year: "",
   batch: "",
   studentCount: "",
   facultyInchargeUid: "",
@@ -58,7 +62,9 @@ const EMPTY_FORM: SectionForm = {
 
 export default function HODSectionsPage() {
   const [sections, setSections] = useState<SectionRow[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeCourseId, setActiveCourseId] = useState<string>("all");
   const [activeYear, setActiveYear] = useState<number | "all">("all");
 
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
@@ -74,9 +80,12 @@ export default function HODSectionsPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/sections");
-      const data = await res.json() as { sections: SectionRow[] };
-      setSections(data.sections ?? []);
+      const [sectionsRes, coursesRes] = await Promise.all([
+        fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: SectionRow[] }>),
+        fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
+      ]);
+      setSections(sectionsRes.sections ?? []);
+      setCourses((coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
     } catch {
       toast({ variant: "destructive", title: "Failed to load sections" });
     } finally {
@@ -102,13 +111,14 @@ export default function HODSectionsPage() {
 
   function openCreate() {
     setEditTarget(null);
-    setForm(EMPTY_FORM);
+    setForm(activeCourseId !== "all" ? { ...EMPTY_FORM, courseId: activeCourseId } : EMPTY_FORM);
     setDialogOpen(true);
   }
 
   function openEdit(s: SectionRow) {
     setEditTarget(s);
     setForm({
+      courseId: s.courseId ?? "",
       name: s.name,
       year: String(s.year),
       batch: s.batch,
@@ -128,7 +138,14 @@ export default function HODSectionsPage() {
     setF({ facultyInchargeUid: facultyId, facultyInchargeName: f?.name ?? "" });
   }
 
+  const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
+  const formYearOptions = useMemo(
+    () => (formCourse ? Array.from({ length: formCourse.durationYears }, (_, i) => i + 1) : []),
+    [formCourse]
+  );
+
   async function handleSave() {
+    if (!form.courseId) { toast({ variant: "destructive", title: "Course is required" }); return; }
     if (!form.name.trim()) { toast({ variant: "destructive", title: "Section name is required" }); return; }
     if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
     if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
@@ -136,6 +153,7 @@ export default function HODSectionsPage() {
     setIsSaving(true);
     try {
       const payload = {
+        courseId: form.courseId,
         name: form.name,
         year: Number(form.year),
         batch: form.batch,
@@ -189,16 +207,26 @@ export default function HODSectionsPage() {
     }
   }
 
-  // Group sections by year
-  const years = [1, 2, 3, 4];
-  const grouped: Record<number, SectionRow[]> = {};
-  for (const y of years) {
-    grouped[y] = sections.filter((s) => s.year === y);
-  }
+  const activeCourse = activeCourseId !== "all" ? courses.find((c) => c.id === activeCourseId) ?? null : null;
 
-  const visibleYears = activeYear === "all"
-    ? years.filter((y) => grouped[y].length > 0 || activeYear === "all")
-    : [activeYear];
+  const filteredSections = sections.filter((s) => {
+    if (activeCourseId !== "all" && s.courseId !== activeCourseId) return false;
+    if (activeCourse && activeYear !== "all" && s.year !== activeYear) return false;
+    return true;
+  });
+
+  // Group by course, then by year within each course
+  type Group = { courseId: string; courseName: string; year: number; sections: SectionRow[] };
+  const groups: Group[] = [];
+  for (const s of filteredSections) {
+    let g = groups.find((x) => x.courseId === s.courseId && x.year === s.year);
+    if (!g) {
+      g = { courseId: s.courseId, courseName: s.courseName ?? "Unknown Course", year: s.year, sections: [] };
+      groups.push(g);
+    }
+    g.sections.push(s);
+  }
+  groups.sort((a, b) => a.courseName.localeCompare(b.courseName) || a.year - b.year);
 
   const totalStudents = sections.reduce((sum, s) => sum + (s.studentCount ?? 0), 0);
 
@@ -208,11 +236,17 @@ export default function HODSectionsPage() {
         title="Sections"
         description="Manage class sections, assign faculty incharge, and track student count"
         actions={
-          <Button onClick={openCreate}>
+          <Button onClick={openCreate} disabled={courses.length === 0}>
             <Plus className="h-4 w-4 mr-2" />Add Section
           </Button>
         }
       />
+
+      {!isLoading && courses.length === 0 && (
+        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          No courses have been set up for your department yet. Ask the Principal to add courses under Departments before creating sections.
+        </div>
+      )}
 
       {/* Summary strip */}
       <div className="flex flex-wrap gap-4 text-sm">
@@ -235,25 +269,53 @@ export default function HODSectionsPage() {
         )}
       </div>
 
-      {/* Year filter tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {(["all", 1, 2, 3, 4] as const).map((y) => (
+      {/* Course filter tabs */}
+      {courses.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
           <button
-            key={y}
-            onClick={() => setActiveYear(y)}
+            onClick={() => { setActiveCourseId("all"); setActiveYear("all"); }}
             className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              activeYear === y
+              activeCourseId === "all"
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-background border-border hover:bg-muted"
             }`}
           >
-            {y === "all" ? "All Years" : YEAR_LABELS[y]}
-            {y !== "all" && grouped[y].length > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({grouped[y].length})</span>
-            )}
+            All Courses
           </button>
-        ))}
-      </div>
+          {courses.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => { setActiveCourseId(c.id); setActiveYear("all"); }}
+              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                activeCourseId === c.id
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              }`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Year filter tabs (only when a specific course is selected) */}
+      {activeCourse && (
+        <div className="flex gap-2 flex-wrap">
+          {(["all", ...Array.from({ length: activeCourse.durationYears }, (_, i) => i + 1)] as const).map((y) => (
+            <button
+              key={y}
+              onClick={() => setActiveYear(y)}
+              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                activeYear === y
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              }`}
+            >
+              {y === "all" ? "All Years" : ordinalYear(y)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Loading */}
       {isLoading && (
@@ -265,7 +327,7 @@ export default function HODSectionsPage() {
       )}
 
       {/* Empty state */}
-      {!isLoading && sections.length === 0 && (
+      {!isLoading && courses.length > 0 && sections.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <GraduationCap className="h-10 w-10 text-muted-foreground mb-3" />
           <p className="font-medium">No sections yet</p>
@@ -274,34 +336,29 @@ export default function HODSectionsPage() {
         </div>
       )}
 
-      {/* Sections grouped by year */}
-      {!isLoading && sections.length > 0 && (
+      {/* Sections grouped by course + year */}
+      {!isLoading && groups.length > 0 && (
         <div className="space-y-8">
-          {visibleYears.map((y) => {
-            const list = grouped[y];
-            if (list.length === 0 && activeYear !== "all") return null;
-            if (list.length === 0) return null;
+          {groups.map((g) => {
+            const sts = g.sections.reduce((s, r) => s + (r.studentCount ?? 0), 0);
+            const req = sts > 0 ? Math.ceil(sts / STUDENT_FACULTY_RATIO) : 0;
             return (
-              <div key={y}>
+              <div key={`${g.courseId}_${g.year}`}>
                 <div className="flex items-center gap-3 mb-3">
-                  <h2 className="font-semibold text-base">{YEAR_LABELS[y]}</h2>
-                  {(() => {
-                    const sts = list.reduce((s, r) => s + (r.studentCount ?? 0), 0);
-                    const req = sts > 0 ? Math.ceil(sts / STUDENT_FACULTY_RATIO) : 0;
-                    return (
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${YEAR_BADGE[y]}`}>
-                        {list.length} section{list.length !== 1 ? "s" : ""} · {sts} students
-                        {req > 0 && <span className="ml-1 opacity-75">· {req} faculty needed</span>}
-                      </span>
-                    );
-                  })()}
+                  <h2 className="font-semibold text-base">
+                    {activeCourseId === "all" ? `${g.courseName} · ${ordinalYear(g.year)}` : ordinalYear(g.year)}
+                  </h2>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${yearBadge(g.year)}`}>
+                    {g.sections.length} section{g.sections.length !== 1 ? "s" : ""} · {sts} students
+                    {req > 0 && <span className="ml-1 opacity-75">· {req} faculty needed</span>}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {list.map((sec) => (
+                  {g.sections.map((sec) => (
                     <div
                       key={sec.id}
-                      className={`rounded-xl border-2 p-5 flex flex-col gap-3 ${YEAR_COLORS[sec.year]}`}
+                      className={`rounded-xl border-2 p-5 flex flex-col gap-3 ${yearColor(sec.year)}`}
                     >
                       {/* Header row */}
                       <div className="flex items-start justify-between">
@@ -371,6 +428,16 @@ export default function HODSectionsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-1">
+            <div className="space-y-1.5">
+              <Label>Course *</Label>
+              <Select value={form.courseId} onValueChange={(v) => setF({ courseId: v, year: "" })}>
+                <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                <SelectContent>
+                  {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Section Name *</Label>
@@ -385,13 +452,12 @@ export default function HODSectionsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Year *</Label>
-                <Select value={form.year} onValueChange={(v) => setF({ year: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                  <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">1st Year</SelectItem>
-                    <SelectItem value="2">2nd Year</SelectItem>
-                    <SelectItem value="3">3rd Year</SelectItem>
-                    <SelectItem value="4">4th Year</SelectItem>
+                    {formYearOptions.map((y) => (
+                      <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

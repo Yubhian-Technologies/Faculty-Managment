@@ -12,6 +12,7 @@ export async function PATCH(
     const session = await requireCollegeMember("HOD", "PRINCIPAL");
     const { id } = await params;
     const body = (await request.json()) as {
+      courseId?: string;
       name?: string;
       year?: number;
       batch?: string;
@@ -26,6 +27,23 @@ export async function PATCH(
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
+
+    const courseId = body.courseId ?? (snap.data() as { courseId?: string }).courseId;
+    const targetYear = body.year != null ? Number(body.year) : (snap.data() as { year?: number }).year;
+
+    if (courseId && (body.courseId != null || body.year != null)) {
+      const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId).get();
+      if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+      const course = courseSnap.data() as { name: string; durationYears: number };
+      if (targetYear != null && (targetYear < 1 || targetYear > course.durationYears)) {
+        return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
+      }
+      if (body.courseId != null) {
+        updates.courseId = courseId;
+        updates.courseName = course.name;
+      }
+    }
+
     if (body.name != null) updates.name = body.name.trim().toUpperCase();
     if (body.year != null) updates.year = Number(body.year);
     if (body.batch != null) updates.batch = body.batch.trim();

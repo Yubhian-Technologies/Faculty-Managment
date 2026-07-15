@@ -36,6 +36,7 @@ import {
   PieChart,
   ShoppingCart,
   Receipt,
+  Library,
   type LucideProps,
 } from "lucide-react";
 
@@ -77,6 +78,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   PieChart,
   ShoppingCart,
   Receipt,
+  Library,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

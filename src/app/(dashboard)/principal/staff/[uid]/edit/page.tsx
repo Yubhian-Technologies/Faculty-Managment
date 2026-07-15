@@ -67,6 +67,15 @@ export default function EditStaffPage() {
           panNo: (u.panNo as string) ?? "",
           ratificationStatus: (u.ratificationStatus as string) ?? "",
           ratificationDate: toDateInputValue(u.ratificationDate as never),
+          maritalStatus: (u.maritalStatus as string) ?? "",
+          spouseName: (u.spouseName as string) ?? "",
+          numberOfChildren: u.numberOfChildren as number | undefined,
+          referral: (u.referral as string) ?? "",
+          nativePlace: (u.nativePlace as string) ?? "",
+          temporaryAddress: (u.temporaryAddress as string) ?? "",
+          permanentSameAsTemporary: (u.permanentSameAsTemporary as boolean) ?? false,
+          permanentAddress: (u.permanentAddress as string) ?? "",
+          bloodGroup: (u.bloodGroup as string) ?? "",
         });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff member" }))

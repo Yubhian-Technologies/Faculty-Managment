@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Designation, EmploymentType, DegreeDetail, CourseAssignment, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -30,6 +30,13 @@ const EMPLOYMENT_MAP: Record<string, EmploymentType> = {
   "part time": "PART_TIME",
   "regular(phy)": "PERMANENT",
   "dummy": "CONTRACT",
+};
+
+const STATUS_MAP: Record<string, FacultyStatus> = {
+  "active": "ACTIVE",
+  "on leave": "ON_LEAVE",
+  "resigned": "RESIGNED",
+  "retired": "RETIRED",
 };
 
 type ImportRow = {
@@ -61,6 +68,16 @@ type ImportRow = {
   inCampusExperience?: string;
   industryExperience?: string;
   researchExperience?: string;
+  status?: string;
+  maritalStatus?: string;
+  spouseName?: string;
+  numberOfChildren?: string;
+  referral?: string;
+  nativePlace?: string;
+  temporaryAddress?: string;
+  permanentSameAsTemporary?: string;
+  permanentAddress?: string;
+  bloodGroup?: string;
   // Academic Profile (Modules 1-5) — flattened columns, all optional
   [key: string]: string | undefined;
 };
@@ -234,6 +251,10 @@ export async function POST(request: Request) {
       const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
       const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
 
+      // Map status
+      const statusKey = (row.status ?? "").trim().toLowerCase();
+      const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
+
       // Parse dates
       const joiningDate = row.joiningDate ? new Date(row.joiningDate) : now;
       const dateOfBirth = row.dateOfBirth ? new Date(row.dateOfBirth) : undefined;
@@ -257,7 +278,7 @@ export async function POST(request: Request) {
         employmentType,
         experienceYears: parseFloat(row.experienceYears ?? "0") || 0,
         joiningDate,
-        status: "ACTIVE",
+        status,
         gender: row.gender?.trim() || undefined,
         dateOfBirth: dateOfBirth || undefined,
         legalName: row.legalName?.trim() || undefined,
@@ -271,6 +292,15 @@ export async function POST(request: Request) {
         ratificationStatus: row.ratificationStatus?.toLowerCase().includes("not") ? "Not Ratified" : row.ratificationStatus?.trim() ? "Ratified" : undefined,
         ratificationDate: ratificationDate || undefined,
         hasPHD: row.hasPHD ? row.hasPHD.trim().toLowerCase() === "yes" : undefined,
+        maritalStatus: row.maritalStatus?.trim().toLowerCase().startsWith("married") ? "Married" : row.maritalStatus?.trim() ? "Single" : undefined,
+        spouseName: row.spouseName?.trim() || undefined,
+        numberOfChildren: row.numberOfChildren ? parseFloat(row.numberOfChildren) || undefined : undefined,
+        referral: row.referral?.trim() || undefined,
+        nativePlace: row.nativePlace?.trim() || undefined,
+        bloodGroup: row.bloodGroup?.trim() || undefined,
+        temporaryAddress: row.temporaryAddress?.trim() || undefined,
+        permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
+        permanentAddress: row.permanentAddress?.trim() || undefined,
         internalExperience: row.internalExperience ? parseFloat(row.internalExperience) || undefined : undefined,
         externalExperience: row.externalExperience ? parseFloat(row.externalExperience) || undefined : undefined,
         inCampusExperience: row.inCampusExperience ? parseFloat(row.inCampusExperience) || undefined : undefined,

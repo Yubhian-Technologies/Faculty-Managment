@@ -77,7 +77,11 @@ export async function POST(
       return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
     }
 
-    const candidate = candSnap.data() as { name?: string; email?: string; phone?: string; department?: string };
+    const candidate = candSnap.data() as {
+      name?: string; email?: string; phone?: string; department?: string;
+      courseId?: string; courseName?: string; year?: number;
+      preferredSubjectIds?: string[]; preferredSubjectNames?: string[];
+    };
     const email = candidate.email ?? "";
     const name = candidate.name ?? letter.candidateName ?? "";
     if (!email) return NextResponse.json({ error: "Candidate has no email" }, { status: 400 });
@@ -151,6 +155,15 @@ export async function POST(
       employmentType: "FULL_TIME",
       status: "ACTIVE",
       userUid: uid,
+      ...(candidate.courseId && candidate.preferredSubjectIds?.length ? {
+        pendingTeachingPreference: {
+          courseId: candidate.courseId,
+          courseName: candidate.courseName ?? "",
+          year: candidate.year ?? 1,
+          subjectIds: candidate.preferredSubjectIds,
+          subjectNames: candidate.preferredSubjectNames ?? [],
+        },
+      } : {}),
       createdAt: now,
       updatedAt: now,
     });

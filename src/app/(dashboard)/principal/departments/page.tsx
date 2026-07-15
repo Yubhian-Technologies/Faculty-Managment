@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
@@ -18,6 +19,7 @@ import { toast } from "@/hooks/useToast";
 import type { Department, FMSUser } from "@/types";
 
 export default function DepartmentsPage() {
+  const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [hods, setHods] = useState<FMSUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -161,7 +163,11 @@ export default function DepartmentsPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {departments.map((dept) => (
-            <Card key={dept.id} className={!dept.isActive ? "opacity-60" : ""}>
+            <Card
+              key={dept.id}
+              className={`cursor-pointer transition-colors hover:border-primary/50 ${!dept.isActive ? "opacity-60" : ""}`}
+              onClick={() => router.push(`/principal/departments/${dept.id}`)}
+            >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -182,19 +188,25 @@ export default function DepartmentsPage() {
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(dept)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => { e.stopPropagation(); openEdit(dept); }}
+                    >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => setDeletingDept(dept)}
+                      onClick={(e) => { e.stopPropagation(); setDeletingDept(dept); }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
+                <p className="text-xs text-primary mt-3">Manage courses &amp; timings →</p>
               </CardContent>
             </Card>
           ))}

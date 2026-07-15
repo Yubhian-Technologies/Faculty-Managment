@@ -13,10 +13,20 @@ export interface PersonalDetailsInput {
   panNo?: string;
   ratificationStatus?: string;
   ratificationDate?: string;   // yyyy-mm-dd
+  maritalStatus?: string;
+  spouseName?: string;
+  numberOfChildren?: number;
+  referral?: string;
+  nativePlace?: string;
+  temporaryAddress?: string;
+  permanentSameAsTemporary?: boolean;
+  permanentAddress?: string;
+  bloodGroup?: string;
 }
 
 const STRING_FIELDS = [
   "gender", "legalName", "fatherName", "motherName", "religion", "caste", "aadharNo", "ratificationStatus",
+  "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
 ] as const;
 
 // Builds a Firestore update/set fragment from whichever personal-detail keys are
@@ -30,5 +40,7 @@ export function buildPersonalDetailsUpdate(body: PersonalDetailsInput): Record<s
   if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
   if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
   if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
+  if (body.numberOfChildren !== undefined) updates.numberOfChildren = body.numberOfChildren;
+  if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
   return updates;
 }
