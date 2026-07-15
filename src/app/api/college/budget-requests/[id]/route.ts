@@ -27,6 +27,13 @@ async function notify(
   }
 }
 
+async function notifyRole(db: Firestore, collegeId: string, role: string, type: string, title: string, message: string, link?: string) {
+  const snap = await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
+  for (const u of snap.docs) {
+    await notify(db, collegeId, u.id, type, title, message, link);
+  }
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -261,7 +268,10 @@ export async function PATCH(
       const budgetRef = db.collection("colleges").doc(session.collegeId).collection("financeBudgets").doc();
       const financeAuditRef = db.collection("colleges").doc(session.collegeId).collection("financeAuditLogs").doc();
       const auditRef = db.collection("colleges").doc(session.collegeId).collection("auditLogs").doc();
+      const purchaseClearanceRef = db.collection("colleges").doc(session.collegeId).collection("financePurchaseClearance").doc();
+      const purchaseClearanceAuditRef = db.collection("colleges").doc(session.collegeId).collection("financeAuditLogs").doc();
       let financeBudgetId: string | undefined;
+      let purchaseClearanceId: string | undefined;
 
       await db.runTransaction(async (tx) => {
         const freshSnap = await tx.get(ref);
@@ -297,6 +307,39 @@ export async function PATCH(
             details: { department: req.department, fiscalYear: body.fiscalYear, sourceRequestId: id },
             timestamp: now,
           });
+
+          // Auto-create a linked Purchase Finance Clearance request so this
+          // budget's procurement can proceed through Purchase Dept — same
+          // record shape the HOD would raise manually, pre-filled and
+          // pre-linked via budgetId, attributed to the same HOD who raised
+          // the budget request (their uid/name are already on `req`). Starts
+          // at PENDING_PURCHASE_REVIEW so it goes through the normal
+          // quotation-sourcing → Finance-approval flow like any other request.
+          purchaseClearanceId = purchaseClearanceRef.id;
+          tx.set(purchaseClearanceRef, {
+            collegeId: session.collegeId,
+            hodUid: req.hodUid,
+            hodName: req.hodName,
+            department: req.department,
+            items: req.title,
+            estimatedAmount: budgetRequestTotal(req),
+            budgetId: budgetRef.id,
+            status: "PENDING_PURCHASE_REVIEW",
+            quotations: [],
+            history: [],
+            createdAt: now,
+            updatedAt: now,
+          });
+
+          tx.set(purchaseClearanceAuditRef, {
+            collegeId: session.collegeId,
+            action: "PURCHASE_CLEARANCE_SUBMITTED",
+            performedBy: session.uid,
+            performedByName: financeName,
+            targetId: purchaseClearanceRef.id,
+            details: { department: req.department, estimatedAmount: budgetRequestTotal(req), sourceRequestId: id, autoCreated: true },
+            timestamp: now,
+          });
         }
 
         tx.update(ref, {
@@ -327,7 +370,16 @@ export async function PATCH(
         "/hod/budget"
       );
 
-      return NextResponse.json({ ok: true, financeBudgetId });
+      if (purchaseClearanceId) {
+        await notifyRole(
+          db, session.collegeId, "PURCHASE_DEPT",
+          "PURCHASE_CLEARANCE_SUBMITTED", "New Purchase Clearance Request",
+          `${req.hodName} raised a purchase clearance request for "${req.title}" (${req.department}).`,
+          "/purchase/indents"
+        );
+      }
+
+      return NextResponse.json({ ok: true, financeBudgetId, purchaseClearanceId });
     }
 
     return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });

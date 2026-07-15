@@ -132,7 +132,6 @@ export const NAV_ITEMS: NavItem[] = [
   // Purchase Department
   { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
   { label: "Indent Requests", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
-  { label: "Purchase Requests", href: "/purchase/requests", iconName: "ShoppingCart", roles: ["PURCHASE_DEPT"] },
 ];
 
 export function getNavItemsForRole(role: UserRole): NavItem[] {
@@ -218,7 +217,6 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   PURCHASE_DEPT: [
     { label: "Home", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
     { label: "Indents", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
-    { label: "Requests", href: "/purchase/requests", iconName: "ShoppingCart", roles: ["PURCHASE_DEPT"] },
   ],
   STUDENT: [],
 };
