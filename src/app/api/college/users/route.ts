@@ -7,7 +7,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
 
-const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL"];
+const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF"];
 const HOD_ROLES: UserRole[] = ["PANEL_MEMBER"];
 
 export async function GET(request: Request) {
@@ -86,10 +86,11 @@ export async function POST(request: Request) {
       role: UserRole;
       department?: string;
       staffType?: "teaching" | "supporting";
+      designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Dean - R&D")
       academicProfile?: Record<string, unknown>;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile } = body;
+    const { name, email, password, role, department, academicProfile, designation } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -141,6 +142,7 @@ export async function POST(request: Request) {
         role,
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),
+        ...(designation ? { designation } : {}),
         ...(academicProfile ? { academicProfile } : {}),
         ...buildPersonalDetailsUpdate(body),
         isActive: true,

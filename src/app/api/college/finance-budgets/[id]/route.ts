@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 
@@ -20,7 +20,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
       action: "REVISE" | "CLOSE";

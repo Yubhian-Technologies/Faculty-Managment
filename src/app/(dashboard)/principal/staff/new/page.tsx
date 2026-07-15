@@ -24,6 +24,7 @@ const PRINCIPAL_ASSIGNABLE_ROLES = [
   { value: "VICE_PRINCIPAL", label: ROLE_LABELS.VICE_PRINCIPAL },
   { value: "HOD", label: ROLE_LABELS.HOD },
   { value: "COLLEGE_OFFICE", label: ROLE_LABELS.COLLEGE_OFFICE },
+  { value: "COLLEGE_STAFF", label: ROLE_LABELS.COLLEGE_STAFF },
 ] as const;
 
 export default function NewStaffPage() {
@@ -162,6 +163,17 @@ export default function NewStaffPage() {
                   </div>
                 )}
                 {errors.department && <p className="text-sm text-destructive">{errors.department.message}</p>}
+              </div>
+            )}
+
+            {role === "COLLEGE_STAFF" && (
+              <div className="space-y-2">
+                <Label htmlFor="designation">Title *</Label>
+                <Input id="designation" {...register("designation")} placeholder="e.g. Dean - R&D, IQAC Coordinator" />
+                <p className="text-xs text-muted-foreground">
+                  A free-text title for this staff member — not a fixed system role.
+                </p>
+                {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
               </div>
             )}
 

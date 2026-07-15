@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { canRoleAccessRole } from "@/types";
+import type { UserRole } from "@/types";
 
 export interface SessionPayload {
   uid: string;
@@ -52,6 +54,46 @@ export async function requireRole(...roles: string[]): Promise<SessionPayload> {
     throw new Error("UNAUTHORIZED");
   }
   return session;
+}
+
+// Passes if the caller's role IS one of `targetRoles` OR inherits it via the
+// L0–L6 level hierarchy (higher level, same-or-broader scope). Opt-in helper for
+// routes that want inherited access — existing explicit guards are left untouched.
+// Callers that read college/location-scoped data must still validate the tenant
+// context (collegeId/locationId) themselves, since a higher role may carry none.
+export async function requireRoleOrHigher(
+  ...targetRoles: string[]
+): Promise<SessionPayload> {
+  const session = await verifySession();
+  if (!session) {
+    throw new Error("UNAUTHORIZED");
+  }
+  const actor = session.role as UserRole;
+  const ok = targetRoles.some((t) => canRoleAccessRole(actor, t as UserRole));
+  if (!ok) {
+    throw new Error("UNAUTHORIZED");
+  }
+  return session;
+}
+
+// Resolve the operative college for a route that may be called by BOTH
+// college-scoped roles and the GLOBAL Finance/Purchase roles:
+//   • college-scoped caller  → their own session.collegeId
+//   • GLOBAL caller (FINANCE / PURCHASE_DEPT / SUPER_ADMIN, collegeId "") → the
+//     `?collegeId=` query param set by the finance college-switcher.
+// The body is never consumed (query param only), so routes can still read it.
+// Drop-in replacement for requireCollegeMember on any finance-touching route.
+export async function requireCollegeContext(
+  request: Request,
+  ...roles: string[]
+): Promise<SessionPayload & { collegeId: string }> {
+  const session = await requireRole(...roles);
+  const collegeId =
+    session.collegeId || (new URL(request.url).searchParams.get("collegeId") ?? "");
+  if (!collegeId) {
+    throw new Error("NO_COLLEGE_CONTEXT");
+  }
+  return { ...session, collegeId };
 }
 
 // For college-scoped roles (existing behavior — unchanged)

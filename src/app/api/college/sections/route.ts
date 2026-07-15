@@ -11,7 +11,7 @@ async function getHodDept(db: FirebaseFirestore.Firestore, collegeId: string, ui
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER");
     const { searchParams } = new URL(request.url);
     const yearFilter = searchParams.get("year");
 
@@ -24,6 +24,8 @@ export async function GET(request: Request) {
     if (session.role === "HOD") {
       const dept = await getHodDept(db, session.collegeId, session.uid);
       if (dept) query = query.where("department", "==", dept);
+    } else if (session.role === "PANEL_MEMBER") {
+      query = query.where("facultyInchargeUid", "==", session.uid);
     }
 
     if (yearFilter) query = query.where("year", "==", Number(yearFilter));
@@ -65,6 +67,27 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+
+    // Reject years the college hasn't opened via Academic Years. Colleges that have
+    // never configured any academic years yet are left unrestricted (no doc to check
+    // against), so this only enforces once someone has actually set the list up.
+    const academicYearsSnap = await db
+      .collection("colleges")
+      .doc(session.collegeId)
+      .collection("academicYears")
+      .get();
+    if (!academicYearsSnap.empty) {
+      const activeYears = new Set(
+        academicYearsSnap.docs
+          .map((d) => d.data() as { yearNumber: number; isActive: boolean })
+          .filter((y) => y.isActive)
+          .map((y) => y.yearNumber)
+      );
+      if (!activeYears.has(Number(body.year))) {
+        return NextResponse.json({ error: `Year ${body.year} is not open for this college` }, { status: 400 });
+      }
+    }
+
     const dept = session.role === "HOD"
       ? await getHodDept(db, session.collegeId, session.uid)
       : "";

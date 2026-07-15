@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminStorage } from "@/lib/firebase/admin";
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -10,7 +10,7 @@ const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PURCHASE_DEPT", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "PURCHASE_DEPT", "SUPER_ADMIN");
 
     const formData = await request.formData();
     const file = formData.get("file");
