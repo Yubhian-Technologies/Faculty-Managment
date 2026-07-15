@@ -140,26 +140,34 @@ export interface FinancePayment {
   updatedAt: Timestamp;
 }
 
-// ─── Purchase Finance Clearance ─────────────────────────────────────────────────
+// ─── Purchase Finance Clearance (HOD → Purchase → Finance → Purchase → HOD) ────
 // Status/history kept local to this module (not the shared FinanceApprovalStatus/
-// FinanceApprovalAction, which Budget Requests and Expense Requests also use) since
-// this workflow has two extra steps those don't: Finance marking goods purchased,
-// then the HOD confirming receipt with a GRN.
+// FinanceApprovalAction, which Budget Requests and Expense Requests also use).
+// Mirrors the Indent Requests state machine (src/types/indent.ts) exactly through
+// vendor-quotation sourcing and Finance approval, but ends differently: instead of
+// Purchase Dept uploading its own receipt, the request is handed back to the
+// original HOD to upload a GRN and confirm receipt.
 
 export type PurchaseClearanceStatus =
-  | "PENDING"
-  | "APPROVED"
-  | "REJECTED"
-  | "RETURNED"
-  | "GOODS_PURCHASED" // Finance marked the purchase as made; awaiting HOD's GRN
-  | "COMPLETED";      // terminal; HOD uploaded the GRN confirming receipt
+  | "PENDING_PURCHASE_REVIEW" // HOD submitted; awaiting Purchase Dept
+  | "REJECTED_BY_PURCHASE"    // terminal
+  | "RETURNED_TO_HOD"         // Purchase Dept sent back; HOD edits + resubmits
+  | "PENDING_FINANCE_REVIEW"  // Purchase Dept forwarded with >=3 quotations + 1 selected
+  | "RETURNED_TO_PURCHASE"    // Finance sent back; Purchase Dept revises quotations + resubmits
+  | "REJECTED"                // terminal (Finance)
+  | "APPROVED"                // Finance approved; Purchase Dept can now buy the goods
+  | "GOODS_PURCHASED"         // Purchase Dept bought the goods; awaiting the HOD's GRN
+  | "COMPLETED";              // terminal; HOD uploaded the GRN confirming receipt
 
 export const PURCHASE_CLEARANCE_STATUS_LABELS: Record<PurchaseClearanceStatus, string> = {
-  PENDING: "Pending",
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  RETURNED: "Returned for Correction",
-  GOODS_PURCHASED: "Goods Purchased",
+  PENDING_PURCHASE_REVIEW: "Pending Purchase Review",
+  REJECTED_BY_PURCHASE: "Rejected by Purchase Dept",
+  RETURNED_TO_HOD: "Returned to HOD",
+  PENDING_FINANCE_REVIEW: "Pending Finance Review",
+  RETURNED_TO_PURCHASE: "Returned to Purchase Dept",
+  REJECTED: "Rejected by Finance",
+  APPROVED: "Approved — Ready to Purchase",
+  GOODS_PURCHASED: "Goods Purchased — Awaiting GRN",
   COMPLETED: "Completed — GRN Confirmed",
 };
 
@@ -167,25 +175,34 @@ export interface PurchaseClearanceHistoryEntry {
   action: PurchaseClearanceStatus;
   by: string;
   byName: string;
-  byRole: "FINANCE" | "HOD";
+  byRole: "HOD" | "PURCHASE_DEPT" | "FINANCE";
   at: Timestamp;
   remarks?: string;
+}
+
+export interface PurchaseQuotation {
+  id: string;
+  vendorName: string;
+  termsAndConditions: string;
+  price: number;
+  expectedDeliveryDate: string;
 }
 
 export interface FinancePurchaseClearance {
   id: string;
   collegeId: string;
+  hodUid: string;
+  hodName: string;
   department: string;
-  requestedByName: string;
   items: string;
   estimatedAmount: number;
   budgetId?: string;
   status: PurchaseClearanceStatus;
-  financeComments?: string;
   history: PurchaseClearanceHistoryEntry[];
-  loggedBy: string;
-  loggedByName: string;
-  sourceRequestId?: string; // links back to colleges/{id}/budgetRequests/{id}, if auto-created from an emergency request
+  // Vendor quotations — sourced by Purchase Dept, locked once sent to Finance
+  quotations: PurchaseQuotation[];
+  selectedQuotationId?: string;
+  sourceRequestId?: string; // links back to colleges/{id}/budgetRequests/{id}, if auto-created from an approved budget request
   // GRN (Goods Receipt Note) — set by the HOD once goods are confirmed received
   grnUrl?: string;
   grnFileName?: string;
@@ -239,10 +256,13 @@ export type FinanceAuditAction =
   | "PAYMENT_CREATED"
   | "PAYMENT_PROCESSED"
   | "PAYMENT_VERIFIED"
-  | "PURCHASE_CLEARANCE_LOGGED"
-  | "PURCHASE_CLEARANCE_APPROVED"
-  | "PURCHASE_CLEARANCE_REJECTED"
-  | "PURCHASE_CLEARANCE_RETURNED"
+  | "PURCHASE_CLEARANCE_SUBMITTED"
+  | "PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE"
+  | "PURCHASE_CLEARANCE_RETURNED_TO_HOD"
+  | "PURCHASE_CLEARANCE_SENT_TO_FINANCE"
+  | "PURCHASE_CLEARANCE_RETURNED_TO_PURCHASE"
+  | "PURCHASE_CLEARANCE_FINANCE_APPROVED"
+  | "PURCHASE_CLEARANCE_FINANCE_REJECTED"
   | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
   | "PURCHASE_CLEARANCE_GRN_UPLOADED"
   | "RECEIPT_RECORDED"
@@ -265,10 +285,13 @@ export const FINANCE_AUDIT_ACTION_LABELS: Record<FinanceAuditAction, string> = {
   PAYMENT_CREATED: "Payment Created",
   PAYMENT_PROCESSED: "Payment Processed",
   PAYMENT_VERIFIED: "Payment Verified",
-  PURCHASE_CLEARANCE_LOGGED: "Purchase Clearance Logged",
-  PURCHASE_CLEARANCE_APPROVED: "Purchase Clearance Approved",
-  PURCHASE_CLEARANCE_REJECTED: "Purchase Clearance Rejected",
-  PURCHASE_CLEARANCE_RETURNED: "Purchase Clearance Returned",
+  PURCHASE_CLEARANCE_SUBMITTED: "Purchase Clearance Submitted",
+  PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE: "Purchase Clearance Rejected by Purchase Dept",
+  PURCHASE_CLEARANCE_RETURNED_TO_HOD: "Purchase Clearance Returned to HOD",
+  PURCHASE_CLEARANCE_SENT_TO_FINANCE: "Purchase Clearance Sent to Finance",
+  PURCHASE_CLEARANCE_RETURNED_TO_PURCHASE: "Purchase Clearance Returned to Purchase Dept",
+  PURCHASE_CLEARANCE_FINANCE_APPROVED: "Purchase Clearance Approved by Finance",
+  PURCHASE_CLEARANCE_FINANCE_REJECTED: "Purchase Clearance Rejected by Finance",
   PURCHASE_CLEARANCE_GOODS_PURCHASED: "Purchase Clearance — Goods Purchased",
   PURCHASE_CLEARANCE_GRN_UPLOADED: "Purchase Clearance — GRN Uploaded",
   RECEIPT_RECORDED: "Receipt Recorded",

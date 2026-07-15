@@ -74,13 +74,7 @@ export default function PurchaseDashboard() {
             <Button variant="outline" asChild className="w-full justify-start">
               <Link href="/purchase/indents">
                 <ShoppingCart className="h-4 w-4 mr-2" />
-                Review Indent Requests
-              </Link>
-            </Button>
-            <Button variant="outline" asChild className="w-full justify-start">
-              <Link href="/purchase/requests">
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                Log a Purchase Request
+                Review Indent & Purchase Clearance Requests
               </Link>
             </Button>
           </CardContent>

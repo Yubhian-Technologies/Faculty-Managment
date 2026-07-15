@@ -19,6 +19,7 @@ const STATUS_STYLES: Record<string, string> = {
   APPROVED: "bg-green-100 text-green-800 border-green-200",
   REJECTED: "bg-red-100 text-red-800 border-red-200",
   RETURNED: "bg-orange-100 text-orange-800 border-orange-200",
+  PURCHASE_APPROVED: "bg-cyan-100 text-cyan-800 border-cyan-200",
   GOODS_PURCHASED: "bg-blue-100 text-blue-800 border-blue-200",
   COMPLETED: "bg-emerald-100 text-emerald-800 border-emerald-200",
 };
