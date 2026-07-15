@@ -45,14 +45,32 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       academicYear: string;
       title: string;
       requestDate?: string;
       nonRecurring?: BudgetCategoryGroup[];
       recurring?: BudgetCategoryGroup[];
+      isEmergency?: boolean;
+      department?: string;
+      emergencyReason?: string;
     };
+
+    const isEmergencyRequester = session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL";
+
+    if (isEmergencyRequester && !body.isEmergency) {
+      return NextResponse.json(
+        { error: "Only emergency budget requests can be raised from this role." },
+        { status: 400 }
+      );
+    }
+    if (!isEmergencyRequester && body.isEmergency) {
+      return NextResponse.json(
+        { error: "Only Principal or Vice Principal can raise an emergency budget request." },
+        { status: 400 }
+      );
+    }
 
     const { academicYear, title } = body;
     const nonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
@@ -73,6 +91,66 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+    const now = new Date();
+
+    if (isEmergencyRequester) {
+      const department = body.department?.trim();
+      const emergencyReason = body.emergencyReason?.trim();
+      if (!department || !emergencyReason) {
+        return NextResponse.json(
+          { error: "department and emergencyReason are required for an emergency budget request" },
+          { status: 400 }
+        );
+      }
+      if (nonRecurring.length > 0 && recurring.length > 0) {
+        return NextResponse.json(
+          { error: "An emergency request must use either Non-Recurring (Goods) or Recurring (Non-Goods) items, not both" },
+          { status: 400 }
+        );
+      }
+      // Server-derived, never trusted from the client.
+      const emergencyType = nonRecurring.length > 0 ? "GOODS" : "NON_GOODS";
+      const { name: requesterName } = await resolveUserProfile(db, session.collegeId, session.uid);
+
+      const ref = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("budgetRequests")
+        .add({
+          collegeId: session.collegeId,
+          hodUid: session.uid,
+          hodName: requesterName,
+          department,
+          academicYear: academicYear.trim(),
+          title: title.trim(),
+          requestDate: body.requestDate ?? now.toISOString(),
+          nonRecurring,
+          recurring,
+          status: "PENDING_MANAGEMENT_APPROVAL",
+          history: [],
+          isEmergency: true,
+          emergencyReason,
+          emergencyType,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "BUDGET_REQUEST_SUBMITTED",
+        performedBy: session.uid,
+        performedByName: requesterName,
+        targetId: ref.id,
+        details: { title, department, isEmergency: true, emergencyType },
+        timestamp: now,
+      });
+
+      // Nothing to notify — Management works pull-style (visits the page to see
+      // what's pending), since notifications are gated on collegeId and MANAGEMENT
+      // sessions carry none.
+      return NextResponse.json({ id: ref.id }, { status: 201 });
+    }
+
     const { name: hodName, department } = await resolveUserProfile(db, session.collegeId, session.uid);
     if (!department) {
       return NextResponse.json(
@@ -80,7 +158,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const now = new Date();
 
     const ref = await db
       .collection("colleges")

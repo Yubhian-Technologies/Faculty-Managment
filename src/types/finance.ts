@@ -185,6 +185,7 @@ export interface FinancePurchaseClearance {
   history: PurchaseClearanceHistoryEntry[];
   loggedBy: string;
   loggedByName: string;
+  sourceRequestId?: string; // links back to colleges/{id}/budgetRequests/{id}, if auto-created from an emergency request
   // GRN (Goods Receipt Note) — set by the HOD once goods are confirmed received
   grnUrl?: string;
   grnFileName?: string;

@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, XCircle, RotateCcw } from "lucide-react";
+import { CheckCircle2, XCircle, RotateCcw, AlertTriangle, FileText, Pencil } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
 import { toast } from "@/hooks/useToast";
+import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { budgetRequestTotal, NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type BudgetRequest } from "@/types";
 
@@ -32,9 +34,11 @@ interface BudgetRequestDetailProps {
   request: BudgetRequest | null;
   onClose: () => void;
   onActed: () => void;
+  onEditEmergencyRequest?: (request: BudgetRequest) => void;
 }
 
-export function BudgetRequestDetail({ request, onClose, onActed }: BudgetRequestDetailProps) {
+export function BudgetRequestDetail({ request, onClose, onActed, onEditEmergencyRequest }: BudgetRequestDetailProps) {
+  const { user } = useAuth();
   const [mode, setMode] = useState<"idle" | "reject" | "return">("idle");
   const [remarks, setRemarks] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -42,6 +46,8 @@ export function BudgetRequestDetail({ request, onClose, onActed }: BudgetRequest
   if (!request) return null;
 
   const isPending = request.status === "PENDING_PRINCIPAL_VERIFICATION";
+  const canResubmit =
+    request.isEmergency && request.status === "RETURNED_TO_PRINCIPAL" && request.hodUid === user?.uid;
 
   function reset() {
     setMode("idle");
@@ -82,9 +88,15 @@ export function BudgetRequestDetail({ request, onClose, onActed }: BudgetRequest
     <Dialog open={!!request} onOpenChange={(open) => { if (!open) { reset(); onClose(); } }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <DialogTitle>{request.title}</DialogTitle>
             <StatusBadge status={request.status} />
+            {request.isEmergency && (
+              <Badge variant="destructive" className="gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Emergency · {request.emergencyType === "GOODS" ? "Goods" : "Non-Goods"}
+              </Badge>
+            )}
           </div>
         </DialogHeader>
 
@@ -102,6 +114,25 @@ export function BudgetRequestDetail({ request, onClose, onActed }: BudgetRequest
               />
               <ReadOnlyField label="Submitted" value={formatDate(request.createdAt)} />
             </div>
+            {request.isEmergency && (
+              <ReadOnlyField label="Emergency Reason" value={request.emergencyReason ?? ""} />
+            )}
+            {request.reportFileUrl && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground font-normal">Finance Report</Label>
+                <div>
+                  <a
+                    href={request.reportFileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <FileText className="h-4 w-4" />
+                    {request.reportFileName ?? "View Report"}
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Item Details */}
@@ -133,6 +164,15 @@ export function BudgetRequestDetail({ request, onClose, onActed }: BudgetRequest
             </div>
           )}
         </div>
+
+        {canResubmit && onEditEmergencyRequest && (
+          <DialogFooter className="gap-2 pt-2">
+            <Button type="button" onClick={() => onEditEmergencyRequest(request)}>
+              <Pencil className="h-4 w-4 mr-1" />
+              Edit &amp; Resubmit
+            </Button>
+          </DialogFooter>
+        )}
 
         {isPending && mode === "idle" && (
           <DialogFooter className="gap-2 pt-2">

@@ -34,7 +34,10 @@ export async function requireSuperAdmin(): Promise<SessionPayload> {
   return session;
 }
 
-// MANAGEMENT is a global, read-only role — routes using this must only implement GET handlers
+// MANAGEMENT is a global, read-only role — routes using this must only implement GET handlers,
+// with one deliberate exception: src/app/api/management/emergency-budget-requests/[id]/route.ts's
+// PATCH, which lets Management approve/reject/return emergency budget requests. Don't add more
+// write routes under this role without the same justification.
 export async function requireManagement(): Promise<SessionPayload> {
   const session = await verifySession();
   if (!session || session.role !== "MANAGEMENT") {
