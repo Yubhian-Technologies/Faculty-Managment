@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle, XCircle, RotateCcw, Building2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle, XCircle, RotateCcw, Building2, RefreshCw, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -128,10 +128,16 @@ export function IncomingBudgetRequests() {
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-semibold text-sm">{item.department}</span>
                     <Badge variant="secondary" className="text-xs">{formatCurrency(budgetRequestTotal(item))}</Badge>
+                    {item.isEmergency && (
+                      <Badge variant="destructive" className="text-xs gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Emergency · {item.emergencyType === "GOODS" ? "Goods" : "Non-Goods"}
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">{item.title}</p>
                 </div>

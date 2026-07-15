@@ -5,6 +5,7 @@ import { Plus, ClipboardCheck, Building2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ApprovalWorkflowList } from "@/components/finance/ApprovalWorkflowList";
 import { IncomingBudgetRequests } from "./IncomingBudgetRequests";
+import { EmergencyReportUpload } from "./EmergencyReportUpload";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -91,6 +92,14 @@ export default function FinanceBudgetApprovalsPage() {
           Requests HODs submitted and Principals verified (Level 1 freeze) — approving one creates the budget automatically.
         </p>
         <IncomingBudgetRequests />
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold">Emergency Reports</h2>
+        <p className="text-sm text-muted-foreground -mt-2">
+          Approved Non-Goods emergency requests — send a report to the requesting Principal / Vice Principal to view.
+        </p>
+        <EmergencyReportUpload />
       </div>
 
       <div className="space-y-3">

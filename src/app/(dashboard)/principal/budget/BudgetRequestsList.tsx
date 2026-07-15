@@ -16,6 +16,9 @@ const STATUS_OPTIONS: readonly (BudgetRequestStatus | "All")[] = [
   "PRINCIPAL_REJECTED",
   "FINANCE_APPROVED",
   "FINANCE_REJECTED",
+  "PENDING_MANAGEMENT_APPROVAL",
+  "RETURNED_TO_PRINCIPAL",
+  "MANAGEMENT_REJECTED",
 ];
 
 interface BudgetRequestsListProps {

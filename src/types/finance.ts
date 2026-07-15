@@ -202,6 +202,7 @@ export interface FinancePurchaseClearance {
   // Vendor quotations — sourced by Purchase Dept, locked once sent to Finance
   quotations: PurchaseQuotation[];
   selectedQuotationId?: string;
+  sourceRequestId?: string; // links back to colleges/{id}/budgetRequests/{id}, if auto-created from an approved budget request
   // GRN (Goods Receipt Note) — set by the HOD once goods are confirmed received
   grnUrl?: string;
   grnFileName?: string;

@@ -33,7 +33,7 @@ export default function HODBudgetPage() {
   useEffect(() => { load(); }, []);
 
   const requestCounts = useMemo(() => {
-    const terminal = new Set(["PRINCIPAL_REJECTED", "FINANCE_REJECTED"]);
+    const terminal = new Set(["PRINCIPAL_REJECTED", "FINANCE_REJECTED", "MANAGEMENT_REJECTED"]);
     const approved = new Set(["L1_FROZEN", "FINANCE_APPROVED"]);
     return {
       total: requests.length,
