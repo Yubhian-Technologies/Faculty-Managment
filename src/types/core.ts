@@ -114,6 +114,7 @@ export interface FMSUser {
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
+  profilePhotoUrl?: string; // Firebase Storage download URL, same field name as FacultyMember below
 
   // Personal / statutory details (same field names as FacultyMember below, for consistency)
   gender?: "Male" | "Female" | "Other";
@@ -413,6 +414,9 @@ export interface FacultyProfileFields {
   professionalBodyMemberships?: string;
   authoredBooks: AuthoredBook[];
   notableAwards?: string;
+
+  // Module 6 — Others
+  otherInformation?: string;
 }
 
 // PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object
@@ -519,6 +523,7 @@ export type AuditAction =
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_DEACTIVATED"
+  | "PROFILE_PHOTO_UPDATED"
   // Faculty module
   | "FACULTY_CREATED"
   | "FACULTY_UPDATED"

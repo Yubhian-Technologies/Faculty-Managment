@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { FacultyMember, Designation, EmploymentType, FacultyStatus } from "@/types";
@@ -144,14 +145,17 @@ export default function HODFacultyPage() {
       key: "name",
       header: "Faculty Member",
       render: (row) => (
-        <div className="space-y-0.5 min-w-0">
-          <p className="font-medium leading-tight">{row.name as string}</p>
-          {(row.collegeEmail as string) && (
-            <p className="text-xs text-muted-foreground">{row.collegeEmail as string}</p>
-          )}
-          <p className="text-xs text-muted-foreground">{row.email as string}</p>
-          <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
-          <p className="text-xs text-muted-foreground">Joined: {fmtDate(row.joiningDate)}</p>
+        <div className="flex items-start gap-3 min-w-0">
+          <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
+          <div className="space-y-0.5 min-w-0">
+            <p className="font-medium leading-tight">{row.name as string}</p>
+            {(row.collegeEmail as string) && (
+              <p className="text-xs text-muted-foreground">{row.collegeEmail as string}</p>
+            )}
+            <p className="text-xs text-muted-foreground">{row.email as string}</p>
+            <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
+            <p className="text-xs text-muted-foreground">Joined: {fmtDate(row.joiningDate)}</p>
+          </div>
         </div>
       ),
     },

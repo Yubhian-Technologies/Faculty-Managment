@@ -35,7 +35,7 @@ export async function POST(
       return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
     }
 
-    const data = snap.data() as { userUid?: string; name?: string; department?: string };
+    const data = snap.data() as { userUid?: string; name?: string; department?: string; profilePhotoUrl?: string };
 
     if (data.userUid) {
       return NextResponse.json(
@@ -46,6 +46,7 @@ export async function POST(
 
     const name = data.name ?? "";
     const department = data.department ?? "";
+    const profilePhotoUrl = data.profilePhotoUrl;
 
     // Create Firebase Auth user
     const uid = await createFirebaseUser(email, password, name);
@@ -65,6 +66,7 @@ export async function POST(
         email,
         role: "PANEL_MEMBER",
         department,
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         isActive: true,
         createdAt: now,
         updatedAt: now,
@@ -77,6 +79,7 @@ export async function POST(
       collegeId: session.collegeId,
       email,
       name,
+      ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
     // Link the login account back to the faculty record

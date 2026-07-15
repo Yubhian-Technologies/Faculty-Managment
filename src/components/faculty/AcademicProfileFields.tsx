@@ -326,6 +326,18 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         <Label>Notable Awards</Label>
         <Textarea value={value.notableAwards ?? ""} onChange={(e) => set("notableAwards", e.target.value)} />
       </div>
+
+      {/* Module 6 */}
+      <SectionTitle>Module 6 — Others</SectionTitle>
+      <div className="space-y-2">
+        <Label>Other Information</Label>
+        <Textarea
+          value={value.otherInformation ?? ""}
+          onChange={(e) => set("otherInformation", e.target.value)}
+          placeholder="Anything not covered above — add it here"
+          rows={4}
+        />
+      </div>
     </div>
   );
 }

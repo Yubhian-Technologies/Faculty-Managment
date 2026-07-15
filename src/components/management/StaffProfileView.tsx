@@ -6,6 +6,7 @@ import { ArrowLeft, User, IdCard, GraduationCap } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/shared/SectionCard";
+import { Avatar } from "@/components/shared/Avatar";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import type { FMSUser, FacultyProfileFields, UserRole } from "@/types";
@@ -50,6 +51,9 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
       ) : (
         <>
           <SectionCard icon={User} title="Identity" accent="blue">
+            <div className="flex items-center gap-4 mb-4">
+              <Avatar name={profile.name} photoUrl={profile.profilePhotoUrl} size="lg" />
+            </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div><p className="text-xs text-muted-foreground">Name</p><p className="text-sm font-medium">{profile.name}</p></div>
               <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium">{profile.email}</p></div>

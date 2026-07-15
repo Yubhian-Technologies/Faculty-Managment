@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, UserCog, ChevronDown, ChevronUp, User, IdCard, GraduationCap } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, User, IdCard, GraduationCap } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
+import { Avatar } from "@/components/shared/Avatar";
 import type { FacultyMember, FMSUser, FacultyProfileFields } from "@/types";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
@@ -34,7 +35,16 @@ export default function ManagementDepartmentFacultyPage() {
   const hod = data?.hod ?? null;
 
   const columns: Column<FacultyRow>[] = [
-    { key: "name", header: "Name" },
+    {
+      key: "name",
+      header: "Name",
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <Avatar name={row.name} photoUrl={row.profilePhotoUrl} size="sm" />
+          <span>{row.name}</span>
+        </div>
+      ),
+    },
     { key: "college", header: "College", render: () => <span>{collegeName}</span> },
     { key: "department", header: "Department" },
   ];
@@ -58,9 +68,7 @@ export default function ManagementDepartmentFacultyPage() {
             onClick={() => setShowHodDetails((v) => !v)}
           >
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
-                <UserCog className="h-5 w-5 text-amber-600" />
-              </div>
+              <Avatar name={hod.name} photoUrl={hod.profilePhotoUrl} size="md" />
               <div>
                 <div className="flex items-center gap-2">
                   <p className="font-medium">{hod.name}</p>

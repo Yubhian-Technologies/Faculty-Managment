@@ -76,6 +76,7 @@ export async function POST(request: Request) {
       employmentType: EmploymentType;
       department?: string;
       academicProfile?: Record<string, unknown>;
+      profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
     const {
@@ -88,10 +89,16 @@ export async function POST(request: Request) {
       experienceYears,
       joiningDate,
       employmentType,
+      profilePhotoUrl,
     } = body;
 
     if (!employeeId || !name || !email || !password || !designation || !qualification || !employmentType || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Uploaded before the record exists (under a temp id), so we can only check
+    // it came from our own upload endpoint, not that it names this specific id.
+    if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
+      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -140,6 +147,7 @@ export async function POST(request: Request) {
         email,
         role: "PANEL_MEMBER",
         department,
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         isActive: true,
         createdAt: now,
         updatedAt: now,
@@ -168,13 +176,17 @@ export async function POST(request: Request) {
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
+      ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),
       createdAt: now,
       updatedAt: now,
     });
 
     // Role mapping for Firestore-based session resolution
-    await db.collection("systemUsers").doc(uid).set({ uid, role: "PANEL_MEMBER", collegeId, email, name });
+    await db.collection("systemUsers").doc(uid).set({
+      uid, role: "PANEL_MEMBER", collegeId, email, name,
+      ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+    });
 
     return NextResponse.json({ id: docRef.id, uid }, { status: 201 });
   } catch (err) {

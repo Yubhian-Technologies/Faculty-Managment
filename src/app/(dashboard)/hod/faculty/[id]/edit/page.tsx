@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import {
@@ -64,6 +65,7 @@ export default function EditFacultyPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
   const [form, setForm] = useState<EmploymentForm>(EMPTY_FORM);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
 
@@ -111,6 +113,7 @@ export default function EditFacultyPage() {
           ratificationDate: toDateInputValue(m.ratificationDate as never),
         });
         setAcademicProfile((m.academicProfile as Partial<FacultyProfileFields>) ?? {});
+        setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));
@@ -131,7 +134,12 @@ export default function EditFacultyPage() {
       const res = await fetch(`/api/college/faculty/${facultyId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, ...personalDetails, academicProfile }),
+        body: JSON.stringify({
+          ...form,
+          ...personalDetails,
+          academicProfile,
+          ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
+        }),
       });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Faculty record updated" });
@@ -159,6 +167,11 @@ export default function EditFacultyPage() {
         <CardHeader><CardTitle className="text-base">Faculty Details</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2 pb-3 border-b">
+              <Label>Profile Photo</Label>
+              <AvatarUploadField name={form.name || "?"} photoUrl={photoUrl} targetId={facultyId} onUploaded={setPhotoUrl} />
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Full Name *</Label>

@@ -72,6 +72,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Grievance Desk", href: "/principal/grievance", iconName: "AlertCircle", roles: ["PRINCIPAL"] },
   { label: "Documents", href: "/principal/documents", iconName: "FolderOpen", roles: ["PRINCIPAL"] },
   { label: "Reports", href: "/principal/reports", iconName: "BarChart2", roles: ["PRINCIPAL"] },
+  { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL"] },
 
   // HOD
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
@@ -92,6 +93,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Documents", href: "/hod/documents", iconName: "FolderOpen", roles: ["HOD"] },
   { label: "Hiring Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"], section: "Hiring" },
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
+  { label: "My Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"], section: "My Work" },
 
   // College Office
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
@@ -109,6 +111,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Training", href: "/panel/training", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
   { label: "Grievance", href: "/panel/grievance", iconName: "AlertCircle", roles: ["PANEL_MEMBER"] },
   { label: "My Documents", href: "/panel/documents", iconName: "FolderOpen", roles: ["PANEL_MEMBER"] },
+  { label: "My Profile", href: "/panel/profile", iconName: "UserCircle", roles: ["PANEL_MEMBER"] },
 
   // Accounts
   { label: "Dashboard", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
