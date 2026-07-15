@@ -5,13 +5,39 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 
-async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
-  if (!collegeId || !uid) return "Unknown";
+async function getUserProfile(db: Firestore, collegeId: string, uid: string): Promise<{ name: string; department: string }> {
   try {
     const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-    return (snap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    const data = snap.data() as { name?: string; department?: string } | undefined;
+    return { name: data?.name ?? "Unknown", department: data?.department ?? "" };
   } catch {
-    return "Unknown";
+    return { name: "Unknown", department: "" };
+  }
+}
+
+async function notify(
+  db: Firestore,
+  collegeId: string,
+  toUid: string,
+  type: string,
+  title: string,
+  message: string,
+  link?: string
+) {
+  try {
+    await db.collection("colleges").doc(collegeId).collection("notifications").add({
+      collegeId, toUid, type, title, message,
+      read: false, link: link ?? null, createdAt: new Date(),
+    });
+  } catch {
+    /* non-fatal */
+  }
+}
+
+async function notifyRole(db: Firestore, collegeId: string, role: string, type: string, title: string, message: string, link?: string) {
+  const snap = await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
+  for (const u of snap.docs) {
+    await notify(db, collegeId, u.id, type, title, message, link);
   }
 }
 
@@ -24,29 +50,23 @@ function toMillis(value: unknown): number {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("FINANCE", "PURCHASE_DEPT", "HOD", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
     const db = getAdminDb();
-    let coll = db
+    const snap = await db
       .collection("colleges")
       .doc(session.collegeId)
-      .collection("financePurchaseClearance") as FirebaseFirestore.Query;
-
-    // HOD sees only their own department's purchase clearance records
-    if (session.role === "HOD") {
-      const hodSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-      coll = coll.where("department", "==", hodDept || "__NO_DEPARTMENT__");
-    }
-
-    // No .orderBy() here — combined with the HOD department filter it would need a
-    // composite index, so we sort in-memory below instead (same idiom used in
-    // leave-applications/route.ts and this session's budget-requests fix).
-    const snap = await coll.get();
+      .collection("financePurchaseClearance")
+      .get();
 
     let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // HOD sees only the requests they themselves raised
+    if (session.role === "HOD") {
+      requests = requests.filter((r) => (r as { hodUid?: string }).hodUid === session.uid);
+    }
     if (status) requests = requests.filter((r) => (r as { status?: string }).status === status);
     requests.sort((a, b) => toMillis((b as { createdAt?: unknown }).createdAt) - toMillis((a as { createdAt?: unknown }).createdAt));
 
@@ -62,55 +82,63 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("FINANCE", "PURCHASE_DEPT", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
     const body = (await request.json()) as {
-      department: string;
-      requestedByName: string;
       items: string;
       estimatedAmount: number;
       budgetId?: string;
     };
 
-    const { department, requestedByName, items, estimatedAmount, budgetId } = body;
-    if (!department || !requestedByName || !items || !estimatedAmount) {
+    const { items, estimatedAmount, budgetId } = body;
+    if (!items || !estimatedAmount) {
+      return NextResponse.json({ error: "items and estimatedAmount are required" }, { status: 400 });
+    }
+
+    const db = getAdminDb();
+    const { name: hodName, department } = await getUserProfile(db, session.collegeId, session.uid);
+    if (!department) {
       return NextResponse.json(
-        { error: "department, requestedByName, items, estimatedAmount required" },
+        { error: "Your profile has no department set. Contact your administrator before raising a purchase request." },
         { status: 400 }
       );
     }
 
-    const db = getAdminDb();
-    const byName = await getUserName(db, session.collegeId, session.uid);
     const now = new Date();
-
     const ref = await db
       .collection("colleges")
       .doc(session.collegeId)
       .collection("financePurchaseClearance")
       .add({
         collegeId: session.collegeId,
+        hodUid: session.uid,
+        hodName,
         department,
-        requestedByName,
         items,
         estimatedAmount: Number(estimatedAmount),
         budgetId: budgetId ?? null,
-        status: "PENDING",
+        status: "PENDING_PURCHASE_REVIEW",
+        quotations: [],
         history: [],
-        loggedBy: session.uid,
-        loggedByName: byName,
         createdAt: now,
         updatedAt: now,
       });
 
-    await db.collection("colleges").doc(session.collegeId).collection("financeAuditLogs").add({
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
       collegeId: session.collegeId,
-      action: "PURCHASE_CLEARANCE_LOGGED",
+      action: "PURCHASE_CLEARANCE_SUBMITTED",
       performedBy: session.uid,
-      performedByName: byName,
+      performedByName: hodName,
       targetId: ref.id,
       details: { department, estimatedAmount },
       timestamp: now,
     });
+
+    await notifyRole(
+      db, session.collegeId, "PURCHASE_DEPT",
+      "PURCHASE_CLEARANCE_SUBMITTED", "New Purchase Clearance Request",
+      `${hodName} raised a purchase clearance request for "${items}" (${department}).`,
+      "/purchase/indents"
+    );
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

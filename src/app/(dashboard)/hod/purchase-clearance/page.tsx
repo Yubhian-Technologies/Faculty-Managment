@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, ExternalLink } from "lucide-react";
+import { Plus, RefreshCw, ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUpload } from "@/components/shared/FileUpload";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PURCHASE_CLEARANCE_STATUS_LABELS, type FinancePurchaseClearance } from "@/types";
@@ -18,15 +19,19 @@ import { PURCHASE_CLEARANCE_STATUS_LABELS, type FinancePurchaseClearance } from 
 type Row = FinancePurchaseClearance & Record<string, unknown>;
 
 const STATUS_COLOR: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  APPROVED: "bg-green-100 text-green-800 border-green-200",
+  PENDING_PURCHASE_REVIEW: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  REJECTED_BY_PURCHASE: "bg-red-100 text-red-800 border-red-200",
+  RETURNED_TO_HOD: "bg-orange-100 text-orange-800 border-orange-200",
+  PENDING_FINANCE_REVIEW: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  RETURNED_TO_PURCHASE: "bg-orange-100 text-orange-800 border-orange-200",
   REJECTED: "bg-red-100 text-red-800 border-red-200",
-  RETURNED: "bg-orange-100 text-orange-800 border-orange-200",
+  APPROVED: "bg-green-100 text-green-800 border-green-200",
   GOODS_PURCHASED: "bg-blue-100 text-blue-800 border-blue-200",
   COMPLETED: "bg-emerald-100 text-emerald-800 border-emerald-200",
 };
 
 const emptyGrnForm = () => ({ grnNumber: "", grnMessage: "" });
+const emptyCreateForm = () => ({ items: "", estimatedAmount: "" });
 
 export default function HODPurchaseClearancePage() {
   const [requests, setRequests] = useState<Row[]>([]);
@@ -35,8 +40,14 @@ export default function HODPurchaseClearancePage() {
   const [grnForm, setGrnForm] = useState(emptyGrnForm());
   const [grnFile, setGrnFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm());
+  const [isCreating, setIsCreating] = useState(false);
+  const [resubmitForm, setResubmitForm] = useState(emptyCreateForm());
+  const [isResubmitting, setIsResubmitting] = useState(false);
 
   const selected = requests.find((r) => r.id === selectedId) ?? null;
+  const latestRemarks = selected ? [...(selected.history ?? [])].reverse().find((h) => h.remarks)?.remarks : undefined;
 
   function load() {
     setIsLoading(true);
@@ -48,6 +59,61 @@ export default function HODPurchaseClearancePage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  async function handleCreate() {
+    const { items, estimatedAmount } = createForm;
+    if (!items || !estimatedAmount) {
+      toast({ variant: "destructive", title: "Fill in all required fields" });
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const res = await fetch("/api/college/finance-purchase-clearance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items, estimatedAmount: Number(estimatedAmount) }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err.error ?? "Failed to raise request");
+      }
+      toast({ variant: "success", title: "Purchase clearance request raised" });
+      setCreateOpen(false);
+      setCreateForm(emptyCreateForm());
+      load();
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to raise request", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  async function handleResubmit() {
+    if (!selected) return;
+    const { items, estimatedAmount } = resubmitForm;
+    if (!items || !estimatedAmount) {
+      toast({ variant: "destructive", title: "Fill in all required fields" });
+      return;
+    }
+    setIsResubmitting(true);
+    try {
+      const res = await fetch(`/api/college/finance-purchase-clearance/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "RESUBMIT", items, estimatedAmount: Number(estimatedAmount) }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err.error ?? "Failed to resubmit");
+      }
+      toast({ variant: "success", title: "Request resubmitted" });
+      load();
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to resubmit", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setIsResubmitting(false);
+    }
+  }
 
   async function handleUploadGrn() {
     if (!selected) return;
@@ -98,23 +164,29 @@ export default function HODPurchaseClearancePage() {
       key: "status", header: "Status",
       render: (row) => (
         <Badge variant="outline" className={STATUS_COLOR[row.status]}>
-          {PURCHASE_CLEARANCE_STATUS_LABELS[row.status]}
+          {PURCHASE_CLEARANCE_STATUS_LABELS[row.status as keyof typeof PURCHASE_CLEARANCE_STATUS_LABELS] ?? row.status}
         </Badge>
       ),
     },
-    { key: "createdAt", header: "Logged On", hideOnMobile: true, render: (row) => formatDate(row.createdAt) },
+    { key: "createdAt", header: "Raised On", hideOnMobile: true, render: (row) => formatDate(row.createdAt) },
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Purchase Clearance"
-        description="Track your department's purchase clearances and confirm goods received"
+        description="Raise purchase clearance requests and confirm goods received"
         actions={
-          <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Refresh
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              Raise Request
+            </Button>
+          </>
         }
       />
 
@@ -125,13 +197,35 @@ export default function HODPurchaseClearancePage() {
         searchPlaceholder="Search by items..."
         searchKeys={["items"]}
         emptyTitle="No purchase clearance requests"
-        emptyDescription="Requests logged by Finance for your department will appear here."
+        emptyDescription="Requests you raise will appear here."
         keyExtractor={(row) => row.id}
         onRowClick={(row) => setSelectedId(row.id)}
       />
 
+      {/* Raise request dialog */}
+      <Dialog open={createOpen} onOpenChange={(o) => { if (!o) setCreateForm(emptyCreateForm()); setCreateOpen(o); }}>
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>Raise Purchase Clearance Request</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Items / Purpose *</Label>
+              <Textarea value={createForm.items} onChange={(e) => setCreateForm((f) => ({ ...f, items: e.target.value }))} rows={2} />
+            </div>
+            <div className="space-y-2">
+              <Label>Estimated Amount *</Label>
+              <Input type="number" value={createForm.estimatedAmount} onChange={(e) => setCreateForm((f) => ({ ...f, estimatedAmount: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isCreating}>Cancel</Button>
+            <Button onClick={() => void handleCreate()} loading={isCreating}>Raise Request</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail dialog */}
       <Dialog open={!!selectedId} onOpenChange={(o) => { if (!o) { setSelectedId(null); setGrnForm(emptyGrnForm()); setGrnFile(null); } }}>
-        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{selected?.items}</DialogTitle></DialogHeader>
           {selected && (
             <div className="space-y-4">
@@ -142,20 +236,50 @@ export default function HODPurchaseClearancePage() {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Status</span>
                 <Badge variant="outline" className={STATUS_COLOR[selected.status]}>
-                  {PURCHASE_CLEARANCE_STATUS_LABELS[selected.status]}
+                  {PURCHASE_CLEARANCE_STATUS_LABELS[selected.status as keyof typeof PURCHASE_CLEARANCE_STATUS_LABELS] ?? selected.status}
                 </Badge>
               </div>
-              {selected.financeComments && (
+              {latestRemarks && (
                 <div className="text-sm">
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Finance Comments</span>
-                  <p className="mt-1 rounded bg-muted/40 p-2">{selected.financeComments}</p>
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Remarks</span>
+                  <p className="mt-1 rounded bg-muted/40 p-2">{latestRemarks}</p>
+                </div>
+              )}
+
+              {selected.status === "RETURNED_TO_HOD" && (
+                <div className="space-y-4 border-t pt-4">
+                  <p className="text-sm text-muted-foreground">Edit and resubmit this request for Purchase Dept review.</p>
+                  <div className="space-y-2">
+                    <Label>Items / Purpose *</Label>
+                    <Textarea
+                      value={resubmitForm.items || selected.items}
+                      onChange={(e) => setResubmitForm((f) => ({ ...f, items: e.target.value }))}
+                      rows={2}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Estimated Amount *</Label>
+                    <Input
+                      type="number"
+                      value={resubmitForm.estimatedAmount || String(selected.estimatedAmount)}
+                      onChange={(e) => setResubmitForm((f) => ({ ...f, estimatedAmount: e.target.value }))}
+                    />
+                  </div>
+                  <Button loading={isResubmitting} onClick={() => void handleResubmit()}>Resubmit</Button>
+                </div>
+              )}
+
+              {(selected.quotations ?? []).length > 0 && (
+                <div className="space-y-2 border-t pt-4">
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Vendor Quotations</span>
+                  <QuotationsForm quotations={selected.quotations ?? []} selectedQuotationId={selected.selectedQuotationId} readOnly />
                 </div>
               )}
 
               {selected.status === "GOODS_PURCHASED" && (
                 <div className="space-y-4 border-t pt-4">
                   <p className="text-sm text-muted-foreground">
-                    Finance has purchased these goods. Upload the GRN to confirm they were received and close out this request.
+                    Purchase Dept has bought these goods. Upload the GRN to confirm they were received and close out this request.
                   </p>
                   <div className="space-y-2">
                     <Label>GRN Number *</Label>
@@ -196,6 +320,22 @@ export default function HODPurchaseClearancePage() {
                       {selected.grnFileName ?? "View GRN"} <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
+                </div>
+              )}
+
+              {(selected.history ?? []).length > 0 && (
+                <div className="space-y-2 border-t pt-4">
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">History</span>
+                  {selected.history.map((h, i) => (
+                    <div key={i} className="rounded-md border p-3 text-sm space-y-1">
+                      <div className="flex justify-between font-medium">
+                        <span>{PURCHASE_CLEARANCE_STATUS_LABELS[h.action as keyof typeof PURCHASE_CLEARANCE_STATUS_LABELS] ?? h.action}</span>
+                        <span className="text-xs text-muted-foreground">{formatDate(h.at)}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">by {h.byName} ({h.byRole})</p>
+                      {h.remarks && <p className="text-muted-foreground">{h.remarks}</p>}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
