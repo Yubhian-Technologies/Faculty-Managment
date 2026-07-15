@@ -35,9 +35,9 @@ export default function HODIndentsPage() {
   const requestCounts = useMemo(() => {
     const terminal = new Set(["REJECTED_BY_PURCHASE", "REJECTED"]);
     return {
-      total: requests.length,
-      pending: requests.filter((r) => !terminal.has(r.status) && r.status !== "APPROVED").length,
+      pending: requests.filter((r) => !terminal.has(r.status) && r.status !== "APPROVED" && r.status !== "COMPLETED").length,
       approved: requests.filter((r) => r.status === "APPROVED").length,
+      completed: requests.filter((r) => r.status === "COMPLETED").length,
       rejected: requests.filter((r) => terminal.has(r.status)).length,
     };
   }, [requests]);

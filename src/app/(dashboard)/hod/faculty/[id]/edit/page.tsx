@@ -12,6 +12,7 @@ import { AcademicProfileFields } from "@/components/faculty/AcademicProfileField
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import {
@@ -74,6 +75,7 @@ export default function EditFacultyPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
   const [form, setForm] = useState<EmploymentForm>(EMPTY_FORM);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
@@ -135,6 +137,7 @@ export default function EditFacultyPage() {
         });
         setAcademicProfile((m.academicProfile as Partial<FacultyProfileFields>) ?? {});
         setPendingPreference((m.pendingTeachingPreference as PendingTeachingPreference | undefined) ?? null);
+        setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));
@@ -215,7 +218,12 @@ export default function EditFacultyPage() {
       const res = await fetch(`/api/college/faculty/${facultyId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, ...personalDetails, academicProfile }),
+        body: JSON.stringify({
+          ...form,
+          ...personalDetails,
+          academicProfile,
+          ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
+        }),
       });
       if (!res.ok) throw new Error();
 
@@ -249,6 +257,11 @@ export default function EditFacultyPage() {
         <CardHeader><CardTitle className="text-base">Faculty Details</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2 pb-3 border-b">
+              <Label>Profile Photo</Label>
+              <AvatarUploadField name={form.name || "?"} photoUrl={photoUrl} targetId={facultyId} onUploaded={setPhotoUrl} />
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Full Name *</Label>

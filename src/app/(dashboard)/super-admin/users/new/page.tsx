@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
+import { Textarea } from "@/components/ui/textarea";
 import { ROLE_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields } from "@/types";
@@ -33,6 +35,8 @@ export default function NewUserPage() {
   const [locationId, setLocationId] = useState("");
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  const [tempPhotoId] = useState(() => crypto.randomUUID());
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -62,7 +66,9 @@ export default function NewUserPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name, email, password, role, collegeId, locationId, phone,
-          ...(role === "PRINCIPAL" ? { academicProfile, ...personalDetails } : {}),
+          academicProfile,
+          ...(role === "PRINCIPAL" ? personalDetails : {}),
+          ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
       const json = await res.json() as { uid?: string; error?: string };
@@ -90,20 +96,27 @@ export default function NewUserPage() {
         <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label>Full Name <span className="text-destructive">*</span></Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
-            </div>
-            <div className="space-y-2">
-              <Label>Email <span className="text-destructive">*</span></Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
-            </div>
-            <div className="space-y-2">
-              <Label>Temporary Password <span className="text-destructive">*</span></Label>
-              <Input value={password} onChange={(e) => setPassword(e.target.value)} />
+            <div className="space-y-2 pb-3 border-b">
+              <Label>Profile Photo</Label>
+              <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Full Name <span className="text-destructive">*</span></Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+              </div>
+              <div className="space-y-2">
+                <Label>Email <span className="text-destructive">*</span></Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Temporary Password <span className="text-destructive">*</span></Label>
+                <Input value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
               <div className="space-y-2">
                 <Label>Role <span className="text-destructive">*</span></Label>
                 <Select value={role} onValueChange={(v) => { setRole(v as typeof ALL_ROLES[number]); setCollegeId(""); setLocationId(""); }}>
@@ -115,7 +128,9 @@ export default function NewUserPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {isGlobalRole ? (
                 <div className="space-y-2">
                   <Label>Phone</Label>
@@ -142,6 +157,12 @@ export default function NewUserPage() {
                   </Select>
                 </div>
               )}
+              {!isGlobalRole && (
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
@@ -152,7 +173,7 @@ export default function NewUserPage() {
         </CardContent>
       </Card>
 
-      {role === "PRINCIPAL" && (
+      {role === "PRINCIPAL" ? (
         <>
           <Card className="mt-6">
             <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
@@ -167,6 +188,21 @@ export default function NewUserPage() {
             </CardContent>
           </Card>
         </>
+      ) : (
+        <Card className="mt-6">
+          <CardHeader><CardTitle className="text-base">Module 6 — Others</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label>Other Information</Label>
+              <Textarea
+                value={academicProfile.otherInformation ?? ""}
+                onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
+                placeholder="Anything not covered above — add it here"
+                rows={4}
+              />
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

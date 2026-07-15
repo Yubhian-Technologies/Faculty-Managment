@@ -67,12 +67,18 @@ export async function POST(request: Request) {
       department?: string;
       phone?: string;
       academicProfile?: Record<string, unknown>;
+      profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, collegeId, locationId, department, phone, academicProfile } = body;
+    const { name, email, password, role, collegeId, locationId, department, phone, academicProfile, profilePhotoUrl } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Uploaded before the account exists (under a temp id), so we can only check
+    // it came from our own upload endpoint, not that it names this specific uid.
+    if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
+      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
     const isCollegeRole = COLLEGE_ROLES.includes(role);
@@ -101,20 +107,30 @@ export async function POST(request: Request) {
     if (isLocationRole && locationId) {
       // Write to location subcollection
       await db.collection("locations").doc(locationId).collection("locationUsers").doc(uid).set({
-        uid, locationId, name, email, role,
+        uid, locationId, name, email, role, phone: phone ?? "",
+        ...(academicProfile ? { academicProfile } : {}),
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         isActive: true, createdAt: now, updatedAt: now,
       });
-      await db.collection("systemUsers").doc(uid).set({ uid, role, locationId, collegeId: "", email, name });
+      await db.collection("systemUsers").doc(uid).set({
+        uid, role, locationId, collegeId: "", email, name,
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      });
     } else if (isCollegeRole && collegeId) {
       // Write user profile to college subcollection
       await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
         uid, collegeId, name, email, role,
         department: department ?? "",
+        phone: phone ?? "",
         ...(academicProfile ? { academicProfile } : {}),
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         ...buildPersonalDetailsUpdate(body),
         isActive: true, createdAt: now, updatedAt: now,
       });
-      await db.collection("systemUsers").doc(uid).set({ uid, role, collegeId, email, name });
+      await db.collection("systemUsers").doc(uid).set({
+        uid, role, collegeId, email, name,
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+      });
       // Write audit log
       await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
         collegeId, action: "USER_CREATED",
@@ -124,7 +140,10 @@ export async function POST(request: Request) {
     } else if (isGlobalRole) {
       // MANAGEMENT: no college/location scope — systemUsers is the only record
       await db.collection("systemUsers").doc(uid).set({
-        uid, role, email, name, phone: phone ?? "", collegeId: "", isActive: true, createdAt: now,
+        uid, role, email, name, phone: phone ?? "", collegeId: "",
+        ...(academicProfile ? { academicProfile } : {}),
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+        isActive: true, createdAt: now,
       });
     }
 

@@ -212,6 +212,10 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true }:
         </div>
         <Field label="Notable Awards" value={p.notableAwards} />
       </Section>
+
+      <Section number={6} title="Others">
+        <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "—"}</p>
+      </Section>
     </div>
   );
 }

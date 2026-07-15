@@ -114,8 +114,12 @@ export function Sidebar() {
         </button>
 
         <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-semibold shrink-0">
-            {getInitials(user.name)}
+          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-semibold shrink-0 overflow-hidden">
+            {user.profilePhotoUrl ? (
+              <img src={user.profilePhotoUrl} alt={user.name} className="h-full w-full object-cover" />
+            ) : (
+              getInitials(user.name)
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user.name}</p>

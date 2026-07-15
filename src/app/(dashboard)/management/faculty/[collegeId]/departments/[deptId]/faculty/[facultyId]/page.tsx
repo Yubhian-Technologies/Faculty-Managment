@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
+import { Avatar } from "@/components/shared/Avatar";
 import { DESIGNATION_LABELS } from "@/types";
 import type { FacultyMember } from "@/types";
 
@@ -42,6 +43,9 @@ export default function ManagementFacultyDetailPage() {
       ) : (
         <>
           <SectionCard icon={User} title="Identity" accent="blue">
+            <div className="flex items-center gap-4 mb-4">
+              <Avatar name={faculty.name} photoUrl={faculty.profilePhotoUrl} size="lg" />
+            </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div><p className="text-xs text-muted-foreground">Employee ID</p><p className="text-sm font-medium">{faculty.employeeId}</p></div>
               <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium">{faculty.email}</p></div>

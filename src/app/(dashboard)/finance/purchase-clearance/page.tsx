@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, ShoppingCart, Building2 } from "lucide-react";
+import { Plus, ShoppingCart, Building2, CheckCircle, ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ApprovalWorkflowList } from "@/components/finance/ApprovalWorkflowList";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +27,7 @@ export default function FinancePurchaseClearancePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
+  const [markingId, setMarkingId] = useState<string | null>(null);
 
   function load() {
     setIsLoading(true);
@@ -62,6 +63,24 @@ export default function FinancePurchaseClearancePage() {
       toast({ variant: "destructive", title: "Failed to log request" });
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function markGoodsPurchased(item: Row) {
+    setMarkingId(item.id);
+    try {
+      const res = await fetch(`/api/college/finance-purchase-clearance/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "GOODS_PURCHASED" }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Marked as goods purchased", description: "The department's HOD has been notified to upload a GRN." });
+      load();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update status" });
+    } finally {
+      setMarkingId(null);
     }
   }
 
@@ -114,8 +133,41 @@ export default function FinancePurchaseClearancePage() {
                 <p className="mt-1 rounded bg-muted/40 p-2">{item.financeComments}</p>
               </div>
             )}
+            {item.status === "COMPLETED" && (
+              <div>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">GRN Confirmation</span>
+                <div className="mt-1 rounded bg-muted/40 p-2 space-y-1">
+                  <p>GRN #{item.grnNumber}</p>
+                  <p className="text-muted-foreground">{item.grnMessage}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Uploaded by {item.grnUploadedByName}{item.grnUploadedAt ? ` on ${formatDate(item.grnUploadedAt)}` : ""}
+                  </p>
+                  {item.grnUrl && (
+                    <a href={item.grnUrl} target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-1 text-xs">
+                      {item.grnFileName ?? "View GRN"} <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
+        customActions={(item) =>
+          item.status === "APPROVED" ? (
+            <div className="pt-2 border-t">
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                loading={markingId === item.id}
+                disabled={markingId !== null}
+                onClick={() => void markGoodsPurchased(item)}
+              >
+                <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                Mark Goods Purchased
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) setForm(emptyForm()); setDialogOpen(o); }}>

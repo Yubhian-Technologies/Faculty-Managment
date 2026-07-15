@@ -141,6 +141,36 @@ export interface FinancePayment {
 }
 
 // ─── Purchase Finance Clearance ─────────────────────────────────────────────────
+// Status/history kept local to this module (not the shared FinanceApprovalStatus/
+// FinanceApprovalAction, which Budget Requests and Expense Requests also use) since
+// this workflow has two extra steps those don't: Finance marking goods purchased,
+// then the HOD confirming receipt with a GRN.
+
+export type PurchaseClearanceStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "RETURNED"
+  | "GOODS_PURCHASED" // Finance marked the purchase as made; awaiting HOD's GRN
+  | "COMPLETED";      // terminal; HOD uploaded the GRN confirming receipt
+
+export const PURCHASE_CLEARANCE_STATUS_LABELS: Record<PurchaseClearanceStatus, string> = {
+  PENDING: "Pending",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  RETURNED: "Returned for Correction",
+  GOODS_PURCHASED: "Goods Purchased",
+  COMPLETED: "Completed — GRN Confirmed",
+};
+
+export interface PurchaseClearanceHistoryEntry {
+  action: PurchaseClearanceStatus;
+  by: string;
+  byName: string;
+  byRole: "FINANCE" | "HOD";
+  at: Timestamp;
+  remarks?: string;
+}
 
 export interface FinancePurchaseClearance {
   id: string;
@@ -150,18 +180,26 @@ export interface FinancePurchaseClearance {
   items: string;
   estimatedAmount: number;
   budgetId?: string;
-  status: FinanceApprovalStatus;
+  status: PurchaseClearanceStatus;
   financeComments?: string;
-  history: FinanceApprovalAction[];
+  history: PurchaseClearanceHistoryEntry[];
   loggedBy: string;
   loggedByName: string;
+  // GRN (Goods Receipt Note) — set by the HOD once goods are confirmed received
+  grnUrl?: string;
+  grnFileName?: string;
+  grnNumber?: string;
+  grnMessage?: string;
+  grnUploadedBy?: string;
+  grnUploadedByName?: string;
+  grnUploadedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
 // ─── Receipts ───────────────────────────────────────────────────────────────────
 
-export type FinanceReceiptRelatedType = "BUDGET" | "EXPENSE" | "PAYMENT" | "ALLOCATION";
+export type FinanceReceiptRelatedType = "BUDGET" | "EXPENSE" | "PAYMENT" | "ALLOCATION" | "INDENT";
 
 export interface FinanceReceipt {
   id: string;
@@ -204,6 +242,8 @@ export type FinanceAuditAction =
   | "PURCHASE_CLEARANCE_APPROVED"
   | "PURCHASE_CLEARANCE_REJECTED"
   | "PURCHASE_CLEARANCE_RETURNED"
+  | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
+  | "PURCHASE_CLEARANCE_GRN_UPLOADED"
   | "RECEIPT_RECORDED"
   | "RECEIPT_VERIFIED";
 
@@ -228,6 +268,8 @@ export const FINANCE_AUDIT_ACTION_LABELS: Record<FinanceAuditAction, string> = {
   PURCHASE_CLEARANCE_APPROVED: "Purchase Clearance Approved",
   PURCHASE_CLEARANCE_REJECTED: "Purchase Clearance Rejected",
   PURCHASE_CLEARANCE_RETURNED: "Purchase Clearance Returned",
+  PURCHASE_CLEARANCE_GOODS_PURCHASED: "Purchase Clearance — Goods Purchased",
+  PURCHASE_CLEARANCE_GRN_UPLOADED: "Purchase Clearance — GRN Uploaded",
   RECEIPT_RECORDED: "Receipt Recorded",
   RECEIPT_VERIFIED: "Receipt Verified",
 };

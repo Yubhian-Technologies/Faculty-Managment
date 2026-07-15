@@ -5,19 +5,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 interface IndentSummaryCardsProps {
-  total: number;
   pending: number;
   approved: number;
+  completed: number;
   rejected: number;
   onNewRequest: () => void;
   showForm: boolean;
 }
 
-export function IndentSummaryCards({ total, pending, approved, rejected, onNewRequest, showForm }: IndentSummaryCardsProps) {
+export function IndentSummaryCards({ pending, approved, completed, rejected, onNewRequest, showForm }: IndentSummaryCardsProps) {
   const stats = [
-    { label: "Total Indents", value: total, icon: ClipboardList, color: "text-blue-600 bg-blue-50" },
     { label: "Pending", value: pending, icon: Clock, color: "text-amber-600 bg-amber-50" },
-    { label: "Approved", value: approved, icon: CheckCircle2, color: "text-green-600 bg-green-50" },
+    { label: "Approved", value: approved, icon: ClipboardList, color: "text-teal-600 bg-teal-50" },
+    { label: "Completed", value: completed, icon: CheckCircle2, color: "text-green-600 bg-green-50" },
     { label: "Rejected", value: rejected, icon: XCircle, color: "text-red-600 bg-red-50" },
   ];
 

@@ -116,8 +116,12 @@ export function MobileDrawer() {
 
         <div className="border-t p-4 absolute bottom-0 left-0 right-0">
           <div className="flex items-center gap-3 mb-3">
-            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold shrink-0">
-              {getInitials(user.name)}
+            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold shrink-0 overflow-hidden">
+              {user.profilePhotoUrl ? (
+                <img src={user.profilePhotoUrl} alt={user.name} className="h-full w-full object-cover" />
+              ) : (
+                getInitials(user.name)
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.name}</p>

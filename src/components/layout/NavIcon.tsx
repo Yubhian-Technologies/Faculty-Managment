@@ -37,6 +37,7 @@ import {
   ShoppingCart,
   Receipt,
   Library,
+  UserCircle,
   type LucideProps,
 } from "lucide-react";
 
@@ -79,6 +80,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   ShoppingCart,
   Receipt,
   Library,
+  UserCircle,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

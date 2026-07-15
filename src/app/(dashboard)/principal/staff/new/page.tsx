@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { createUserSchema } from "@/lib/validations";
 import type { z } from "zod";
 
@@ -31,6 +32,8 @@ export default function NewStaffPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  const [tempPhotoId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     fetch("/api/college/departments")
@@ -51,6 +54,7 @@ export default function NewStaffPage() {
   });
 
   const role = watch("role");
+  const name = watch("name");
 
   const onSubmit = async (data: StaffFormData) => {
     try {
@@ -61,6 +65,7 @@ export default function NewStaffPage() {
           ...data,
           ...personalDetails,
           ...(data.role === "VICE_PRINCIPAL" || data.role === "HOD" ? { academicProfile } : {}),
+          ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
       const json = await res.json() as { uid?: string; error?: string };
@@ -94,43 +99,52 @@ export default function NewStaffPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
-              <Input id="name" {...register("name")} placeholder="Dr. Ramesh Kumar" />
-              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+            <div className="space-y-2 pb-3 border-b">
+              <Label>Profile Photo</Label>
+              <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
-              <Input id="email" type="email" {...register("email")} placeholder="staff@college.edu" />
-              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="name">Full Name *</Label>
+                <Input id="name" {...register("name")} placeholder="Dr. Ramesh Kumar" />
+                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input id="email" type="email" {...register("email")} placeholder="staff@college.edu" />
+                {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Temporary Password *</Label>
-              <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
-              {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-              <p className="text-xs text-muted-foreground">Share this with the staff member to log in for the first time.</p>
-            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="password">Temporary Password *</Label>
+                <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
+                {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+                <p className="text-xs text-muted-foreground">Share this with the staff member to log in for the first time.</p>
+              </div>
 
-            <div className="space-y-2">
-              <Label>Role *</Label>
-              <Select
-                value={role}
-                onValueChange={(v) => setValue("role", v as StaffFormData["role"])}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRINCIPAL_ASSIGNABLE_ROLES.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
+              <div className="space-y-2">
+                <Label>Role *</Label>
+                <Select
+                  value={role}
+                  onValueChange={(v) => setValue("role", v as StaffFormData["role"])}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRINCIPAL_ASSIGNABLE_ROLES.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
+              </div>
             </div>
 
             {role === "HOD" && (

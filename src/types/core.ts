@@ -114,6 +114,7 @@ export interface FMSUser {
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
+  profilePhotoUrl?: string; // Firebase Storage download URL, same field name as FacultyMember below
 
   // Personal / statutory details (same field names as FacultyMember below, for consistency)
   gender?: "Male" | "Female" | "Other";
@@ -494,6 +495,9 @@ export interface FacultyProfileFields {
   professionalBodyMemberships?: string;
   authoredBooks: AuthoredBook[];
   notableAwards?: string;
+
+  // Module 6 — Others
+  otherInformation?: string;
 }
 
 // PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object
@@ -560,6 +564,10 @@ export type NotificationType =
   | "INDENT_RETURNED"
   | "INDENT_REJECTED"
   | "INDENT_APPROVED"
+  | "INDENT_RECEIPT_UPLOADED"
+  // Purchase Finance Clearance
+  | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
+  | "PURCHASE_CLEARANCE_GRN_UPLOADED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -598,6 +606,7 @@ export type AuditAction =
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_DEACTIVATED"
+  | "PROFILE_PHOTO_UPDATED"
   // Faculty module
   | "FACULTY_CREATED"
   | "FACULTY_UPDATED"
@@ -647,6 +656,10 @@ export type AuditAction =
   | "INDENT_RETURNED_TO_PURCHASE"
   | "INDENT_FINANCE_APPROVED"
   | "INDENT_FINANCE_REJECTED"
+  | "INDENT_RECEIPT_UPLOADED"
+  // Purchase Finance Clearance module
+  | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
+  | "PURCHASE_CLEARANCE_GRN_UPLOADED"
   // Academic Year module
   | "ACADEMIC_YEAR_ADVANCED";
 

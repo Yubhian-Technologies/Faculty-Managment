@@ -15,6 +15,7 @@ import { AcademicProfileFields } from "@/components/faculty/AcademicProfileField
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { toast } from "@/hooks/useToast";
 import {
   DESIGNATION_LABELS,
@@ -44,6 +45,8 @@ export default function NewFacultyPage() {
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  const [tempPhotoId] = useState(() => crypto.randomUUID());
 
   const {
     register,
@@ -59,13 +62,19 @@ export default function NewFacultyPage() {
   const designation = watch("designation");
   const employmentType = watch("employmentType");
   const staffType = watch("staffType");
+  const name = watch("name");
 
   const onSubmit = async (data: FormData) => {
     try {
       const res = await fetch("/api/college/faculty", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, academicProfile, ...personalDetails }),
+        body: JSON.stringify({
+          ...data,
+          academicProfile,
+          ...personalDetails,
+          ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
+        }),
       });
       const json = await res.json() as { id?: string; error?: string };
 
@@ -105,6 +114,10 @@ export default function NewFacultyPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <div className="space-y-2 pb-3 border-b">
+              <Label>Profile Photo</Label>
+              <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} />
+            </div>
 
             {/* Identity */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

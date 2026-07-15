@@ -8,6 +8,7 @@ import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS } from "@/types";
 import type { FMSUser } from "@/types";
@@ -17,6 +18,7 @@ type UserRow = Record<string, unknown> & FMSUser;
 const ROLE_TABS = [
   { key: "", label: "All Staff" },
   { key: "HOD", label: "Head of Dept." },
+  { key: "VICE_PRINCIPAL", label: "Vice Principal" },
   { key: "COLLEGE_OFFICE", label: "College Office" },
 ];
 
@@ -68,9 +70,12 @@ export default function PrincipalStaffPage() {
       key: "name",
       header: "Name",
       render: (row) => (
-        <div>
-          <p className="font-medium">{row.name as string}</p>
-          <p className="text-xs text-muted-foreground">{row.email as string}</p>
+        <div className="flex items-center gap-3">
+          <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" />
+          <div>
+            <p className="font-medium">{row.name as string}</p>
+            <p className="text-xs text-muted-foreground">{row.email as string}</p>
+          </div>
         </div>
       ),
     },

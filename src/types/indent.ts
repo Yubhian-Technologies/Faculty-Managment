@@ -13,7 +13,8 @@ export type IndentStatus =
   | "PENDING_FINANCE_REVIEW"  // Purchase Dept forwarded with >=3 quotations + 1 selected
   | "RETURNED_TO_PURCHASE"    // Finance sent back; Purchase Dept revises quotations + resubmits
   | "REJECTED"                // terminal (Finance)
-  | "APPROVED";                // terminal; FinancePayment auto-created ("green flag")
+  | "APPROVED"                // FinancePayment auto-created ("green flag"); Purchase Dept can now buy the goods
+  | "COMPLETED";              // terminal; Purchase Dept bought the goods and uploaded the receipt
 
 export const INDENT_STATUS_LABELS: Record<IndentStatus, string> = {
   PENDING_PURCHASE_REVIEW: "Pending Purchase Review",
@@ -22,7 +23,8 @@ export const INDENT_STATUS_LABELS: Record<IndentStatus, string> = {
   PENDING_FINANCE_REVIEW: "Pending Finance Review",
   RETURNED_TO_PURCHASE: "Returned to Purchase Dept",
   REJECTED: "Rejected by Finance",
-  APPROVED: "Approved & Disbursed",
+  APPROVED: "Approved — Ready to Purchase",
+  COMPLETED: "Completed — Receipt Submitted",
 };
 
 // ─── Line Items ─────────────────────────────────────────────────────────────
@@ -78,6 +80,12 @@ export interface IndentRequest {
   selectedQuotationId?: string;  // Purchase Dept's recommended vendor
   history: IndentApprovalAction[];
   financePaymentId?: string;     // set once Finance approves
+  receiptUrl?: string;           // set once Purchase Dept buys the goods and uploads a bill
+  receiptFileName?: string;
+  receiptAmount?: number;        // actual amount paid, may differ slightly from the quoted price
+  receiptUploadedBy?: string;
+  receiptUploadedByName?: string;
+  receiptUploadedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
