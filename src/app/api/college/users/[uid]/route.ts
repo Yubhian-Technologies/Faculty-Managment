@@ -88,8 +88,10 @@ export async function PATCH(
     if (!targetSnap) return NextResponse.json({ error }, { status });
     const target = targetSnap.data() as { role: string };
 
+    // Empty string clears the photo — everything else must be a real upload of ours.
     if (
       body.profilePhotoUrl !== undefined &&
+      body.profilePhotoUrl !== "" &&
       (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
         !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${uid}_`)))
     ) {

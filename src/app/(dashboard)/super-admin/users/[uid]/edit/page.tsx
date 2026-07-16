@@ -158,6 +158,26 @@ export default function EditUserPage() {
     }
   }
 
+  async function handlePhotoDeleted() {
+    try {
+      const res = await fetch(`/api/admin/users/${uid}/photo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoUrl: "",
+          role,
+          collegeId: collegeId || undefined,
+          locationId: locationId || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setPhotoUrl(undefined);
+      toast({ variant: "success", title: "Photo removed" });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to remove photo" });
+    }
+  }
+
   async function handleOtherInfoSaved() {
     setSaving(true);
     try {
@@ -222,27 +242,26 @@ export default function EditUserPage() {
     <div className="max-w-xl">
       <PageHeader title="Edit User" description={email} />
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Profile Photo</CardTitle></CardHeader>
-        <CardContent>
-          <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={handlePhotoUploaded} />
-        </CardContent>
-      </Card>
-
       {isCollegeScoped ? (
         <>
-          <Card className="mt-6">
+          <Card>
             <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Full Name *</Label>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+                <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
+                  <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
+                    <Label>Profile Photo</Label>
+                    <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={handlePhotoUploaded} onDeleted={() => void handlePhotoDeleted()} />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Phone</Label>
-                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+                  <div className="grid flex-1 grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <Label>Full Name *</Label>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone</Label>
+                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+                    </div>
                   </div>
                 </div>
 
@@ -298,6 +317,19 @@ export default function EditUserPage() {
         </>
       ) : (
         <>
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                <div className="flex shrink-0 flex-col items-center gap-2">
+                  <Label>Profile Photo</Label>
+                  <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={handlePhotoUploaded} onDeleted={() => void handlePhotoDeleted()} />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {ROLE_LABELS[role]} accounts only support editing the profile photo and Module 6 — Others from Super Admin. Name: <strong className="text-foreground">{name}</strong>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
           <Card className="mt-6">
             <CardHeader><CardTitle className="text-base">Module 6 — Others</CardTitle></CardHeader>
             <CardContent>
@@ -312,13 +344,6 @@ export default function EditUserPage() {
                   <Button type="button" loading={saving} onClick={() => void handleOtherInfoSaved()}>Save</Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-          <Card className="mt-6">
-            <CardContent className="py-4">
-              <p className="text-sm text-muted-foreground">
-                {ROLE_LABELS[role]} accounts only support editing the profile photo and Module 6 — Others from Super Admin. Name: <strong className="text-foreground">{name}</strong>
-              </p>
             </CardContent>
           </Card>
         </>

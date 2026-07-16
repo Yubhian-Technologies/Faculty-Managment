@@ -257,19 +257,20 @@ export default function EditFacultyPage() {
         <CardHeader><CardTitle className="text-base">Faculty Details</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2 pb-3 border-b">
-              <Label>Profile Photo</Label>
-              <AvatarUploadField name={form.name || "?"} photoUrl={photoUrl} targetId={facultyId} onUploaded={setPhotoUrl} />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Full Name *</Label>
-                <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
+            <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
+              <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
+                <Label>Profile Photo</Label>
+                <AvatarUploadField name={form.name || "?"} photoUrl={photoUrl} targetId={facultyId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
               </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
+              <div className="grid flex-1 grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label>Full Name *</Label>
+                  <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
+                </div>
               </div>
             </div>
 

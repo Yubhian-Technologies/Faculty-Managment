@@ -33,8 +33,10 @@ export async function PATCH(
     if (!role || (photoUrl === undefined && otherInformation === undefined)) {
       return NextResponse.json({ error: "role and photoUrl or otherInformation are required" }, { status: 400 });
     }
+    // Empty string clears the photo — everything else must be a real upload of ours.
     if (
       photoUrl !== undefined &&
+      photoUrl !== "" &&
       (!photoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
         !photoUrl.includes(encodeURIComponent(`profile-photos/${uid}_`)))
     ) {
