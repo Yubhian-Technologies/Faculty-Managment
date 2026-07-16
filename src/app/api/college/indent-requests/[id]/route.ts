@@ -1,10 +1,11 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
-import type { IndentItem, IndentQuotation, IndentRequest } from "@/types";
+import type { IndentItem, IndentQuotation, IndentRequest, UserRole } from "@/types";
+import { ROLE_SCOPE } from "@/types";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   try {
@@ -35,18 +36,24 @@ async function notify(
 }
 
 async function notifyRole(db: Firestore, collegeId: string, role: string, type: string, title: string, message: string, link?: string) {
-  const snap = await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
+  // GLOBAL roles (FINANCE, PURCHASE_DEPT) live in systemUsers, not the college
+  // users subcollection. The notification is still stored under this college so
+  // the recipient sees it when acting on this college.
+  const isGlobal = ROLE_SCOPE[role as UserRole] === "GLOBAL";
+  const snap = isGlobal
+    ? await db.collection("systemUsers").where("role", "==", role).get()
+    : await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
   for (const u of snap.docs) {
     await notify(db, collegeId, u.id, type, title, message, link);
   }
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
 
     const db = getAdminDb();
@@ -75,7 +82,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
       action?: "REJECT" | "RETURN" | "SEND_TO_FINANCE" | "APPROVE" | "UPLOAD_RECEIPT";

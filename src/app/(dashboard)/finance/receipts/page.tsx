@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { FileUpload } from "@/components/shared/FileUpload";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency } from "@/lib/utils";
 import type { FinanceReceipt, FinanceReceiptRelatedType } from "@/types";
 
@@ -33,7 +34,7 @@ export default function FinanceReceiptsPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/finance-receipts")
+    collegeFetch("/api/college/finance-receipts")
       .then((r) => r.json() as Promise<{ receipts: Row[] }>)
       .then((d) => setReceipts(d.receipts ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load receipts" }))
@@ -59,7 +60,7 @@ export default function FinanceReceiptsPage() {
         if (!uploadRes.ok) throw new Error(uploadData.error ?? "Upload failed");
         fileUrl = uploadData.url;
       }
-      const res = await fetch("/api/college/finance-receipts", {
+      const res = await collegeFetch("/api/college/finance-receipts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ relatedType, relatedId, amount: Number(amount), description, fileUrl }),
@@ -80,7 +81,7 @@ export default function FinanceReceiptsPage() {
   async function handleVerify(row: Row) {
     setVerifyingId(row.id);
     try {
-      const res = await fetch(`/api/college/finance-receipts/${row.id}`, { method: "PATCH" });
+      const res = await collegeFetch(`/api/college/finance-receipts/${row.id}`, { method: "PATCH" });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Receipt verified" });
       load();

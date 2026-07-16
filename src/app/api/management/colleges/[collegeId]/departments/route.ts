@@ -1,13 +1,14 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireManagement } from "@/lib/auth/verifySession";
+import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// MANAGEMENT is read-only — this route only implements GET.
+// MANAGEMENT and PURCHASE_DEPT are both read-only here — Purchase Dept uses this
+// to populate the department level of its Location → College → Department browse view.
 export async function GET(_request: Request, { params }: { params: Promise<{ collegeId: string }> }) {
   try {
-    await requireManagement();
+    await requireRole("SUPER_ADMIN", "MANAGEMENT", "PURCHASE_DEPT");
     const { collegeId } = await params;
 
     const db = getAdminDb();

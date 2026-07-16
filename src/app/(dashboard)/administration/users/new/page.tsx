@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
+import { LEVEL_LABELS } from "@/types";
 import type { LocationDepartment, FMSUser } from "@/types";
 
 const CREATABLE_ROLES = [
@@ -130,17 +131,22 @@ export default function NewLocationUserPage() {
                   <SelectValue placeholder={loadingUsers ? "Loading..." : "Select role..."} />
                 </SelectTrigger>
                 <SelectContent>
-                  {CREATABLE_ROLES.map((r) => {
-                    const isFilled = SINGLETON_ROLES.includes(r.value) && !!filledSingletons[r.value];
-                    return (
-                      <SelectItem key={r.value} value={r.value} disabled={isFilled}>
-                        <span className={isFilled ? "text-muted-foreground" : ""}>
-                          {r.label}
-                          {isFilled && ` — assigned to ${filledSingletons[r.value]}`}
-                        </span>
-                      </SelectItem>
-                    );
-                  })}
+                  <SelectGroup>
+                    <SelectLabel className="text-xs uppercase tracking-wide text-muted-foreground">
+                      {LEVEL_LABELS[2]}
+                    </SelectLabel>
+                    {CREATABLE_ROLES.map((r) => {
+                      const isFilled = SINGLETON_ROLES.includes(r.value) && !!filledSingletons[r.value];
+                      return (
+                        <SelectItem key={r.value} value={r.value} disabled={isFilled}>
+                          <span className={isFilled ? "text-muted-foreground" : ""}>
+                            {r.label}
+                            {isFilled && ` — assigned to ${filledSingletons[r.value]}`}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
               {selectedRoleHolder && (

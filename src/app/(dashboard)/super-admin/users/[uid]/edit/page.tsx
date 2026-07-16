@@ -14,11 +14,18 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
-import { ROLE_LABELS } from "@/types";
+import { ROLE_LABELS, ROLE_SCOPE } from "@/types";
 import type { FacultyProfileFields, UserRole } from "@/types";
 
-const ASSIGNABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"];
-const COLLEGE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"];
+// The 6 roles Super Admin directly administers. Scope (COLLEGE/LOCATION/GLOBAL) is
+// read from ROLE_SCOPE — a role's tenancy tier, not something re-declared here —
+// so this stays correct as roles move between tiers (e.g. ACCOUNTS is LOCATION-
+// scoped, FINANCE/PURCHASE_DEPT are GLOBAL-scoped; only PRINCIPAL is COLLEGE).
+const SUPER_ADMIN_EDITABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "ADMINISTRATION", "MANAGEMENT"];
+// Role-reassignment dropdown only offers roles within the same (COLLEGE) tier —
+// reassigning across tiers would move the profile doc to a different collection,
+// which this page's PATCH route doesn't do.
+const COLLEGE_SCOPE_ROLES: UserRole[] = SUPER_ADMIN_EDITABLE_ROLES.filter((r) => ROLE_SCOPE[r] === "COLLEGE");
 
 export default function EditUserPage() {
   const router = useRouter();
@@ -28,10 +35,15 @@ export default function EditUserPage() {
   const collegeId = searchParams.get("collegeId") ?? "";
   const locationId = searchParams.get("locationId") ?? "";
   const roleParam = (searchParams.get("role") ?? "") as UserRole | "";
+  // Gate on role membership first — HOD/PANEL_MEMBER/etc. share the COLLEGE scope
+  // tier with PRINCIPAL but aren't Super-Admin-editable at all.
+  const isEditableRole = roleParam !== "" && SUPER_ADMIN_EDITABLE_ROLES.includes(roleParam);
+  const roleParamScope = isEditableRole ? ROLE_SCOPE[roleParam as UserRole] : undefined;
 
-  // College-scoped roles have a full edit form; Administration/Management only get
-  // the photo and Module 6 — Others (no PATCH route exists for their other fields).
-  const isCollegeScoped = (roleParam !== "" && COLLEGE_ROLES.includes(roleParam)) || (!roleParam && !!collegeId);
+  // College-scoped roles have a full edit form; Location/Global-scoped roles
+  // (Administration/Accounts, Management/Finance/Purchase) only get the photo and
+  // Module 6 — Others (no PATCH route exists for their other fields).
+  const isCollegeScoped = roleParamScope === "COLLEGE" || (!roleParam && !!collegeId);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -90,7 +102,8 @@ export default function EditUserPage() {
         })
         .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
         .finally(() => setLoading(false));
-    } else if (roleParam === "ADMINISTRATION") {
+    } else if (roleParamScope === "LOCATION") {
+      // Administration or Accounts — profile lives at locations/{id}/locationUsers.
       if (!locationId) {
         toast({ variant: "destructive", title: "Missing location context" });
         router.push("/super-admin/users");
@@ -107,13 +120,14 @@ export default function EditUserPage() {
           }
           setEmail((u.email as string) ?? "");
           setName((u.name as string) ?? "");
-          setRole("ADMINISTRATION");
+          setRole(roleParam as UserRole);
           setPhotoUrl((u.profilePhotoUrl as string) || undefined);
           setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
         })
         .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
         .finally(() => setLoading(false));
-    } else if (roleParam === "MANAGEMENT") {
+    } else if (roleParamScope === "GLOBAL") {
+      // Management, Finance, or Purchase — profile lives only in systemUsers.
       fetch("/api/admin/users?scope=global")
         .then((r) => r.json() as Promise<{ users?: Record<string, unknown>[] }>)
         .then((data) => {
@@ -125,7 +139,7 @@ export default function EditUserPage() {
           }
           setEmail((u.email as string) ?? "");
           setName((u.name as string) ?? "");
-          setRole("MANAGEMENT");
+          setRole(roleParam as UserRole);
           setPhotoUrl((u.profilePhotoUrl as string) || undefined);
           setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
         })
@@ -136,7 +150,7 @@ export default function EditUserPage() {
       router.push("/super-admin/users");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, collegeId, locationId, roleParam]);
+  }, [uid, collegeId, locationId, roleParam, roleParamScope]);
 
   async function handlePhotoUploaded(url: string) {
     try {
@@ -270,7 +284,7 @@ export default function EditUserPage() {
                   <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {ASSIGNABLE_ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
+                      {COLLEGE_SCOPE_ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

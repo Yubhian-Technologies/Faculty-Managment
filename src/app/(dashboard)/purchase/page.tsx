@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import type { IndentRequest } from "@/types";
 
 export default function PurchaseDashboard() {
@@ -19,7 +20,7 @@ export default function PurchaseDashboard() {
   });
 
   useEffect(() => {
-    fetch("/api/college/indent-requests")
+    collegeFetch("/api/college/indent-requests")
       .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>)
       .then((d) => d.requests ?? [])
       .then((requests) => {
@@ -74,13 +75,7 @@ export default function PurchaseDashboard() {
             <Button variant="outline" asChild className="w-full justify-start">
               <Link href="/purchase/indents">
                 <ShoppingCart className="h-4 w-4 mr-2" />
-                Review Indent Requests
-              </Link>
-            </Button>
-            <Button variant="outline" asChild className="w-full justify-start">
-              <Link href="/purchase/requests">
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                Log a Purchase Request
+                Review Indent & Purchase Clearance Requests
               </Link>
             </Button>
           </CardContent>

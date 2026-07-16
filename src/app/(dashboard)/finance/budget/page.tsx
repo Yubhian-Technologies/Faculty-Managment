@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
 import { NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type FinanceBudget, type BudgetRequest } from "@/types";
 
@@ -91,7 +92,7 @@ export default function FinanceBudgetPage() {
   async function viewSourceRequest(requestId: string) {
     setIsLoadingSource(true);
     try {
-      const res = await fetch(`/api/college/budget-requests/${requestId}`);
+      const res = await collegeFetch(`/api/college/budget-requests/${requestId}`);
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { request: BudgetRequest };
       setSourceRequest(data.request);
@@ -104,7 +105,7 @@ export default function FinanceBudgetPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/finance-budgets")
+    collegeFetch("/api/college/finance-budgets")
       .then((r) => r.json() as Promise<{ budgets: BudgetRow[] }>)
       .then((d) => setBudgets(d.budgets ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load budgets" }))
@@ -121,7 +122,7 @@ export default function FinanceBudgetPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/finance-budgets", {
+      const res = await collegeFetch("/api/college/finance-budgets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ department, purpose, fiscalYear, allocatedAmount: Number(allocatedAmount) }),
@@ -147,7 +148,7 @@ export default function FinanceBudgetPage() {
     }
     setIsRevising(true);
     try {
-      const res = await fetch(`/api/college/finance-budgets/${reviseTarget.id}`, {
+      const res = await collegeFetch(`/api/college/finance-budgets/${reviseTarget.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "REVISE", revisedAmount: Number(revisedAmount), reason }),
@@ -166,7 +167,7 @@ export default function FinanceBudgetPage() {
 
   async function handleClose(budget: BudgetRow) {
     try {
-      const res = await fetch(`/api/college/finance-budgets/${budget.id}`, {
+      const res = await collegeFetch(`/api/college/finance-budgets/${budget.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "CLOSE" }),

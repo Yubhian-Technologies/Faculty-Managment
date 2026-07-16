@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 import type { IndentItem, IndentRequest } from "@/types";
@@ -18,7 +18,7 @@ async function getUser(db: Firestore, collegeId: string, uid: string): Promise<{
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "SUPER_ADMIN");
     const body = (await request.json()) as {
       title: string;
       items: IndentItem[];
@@ -112,10 +112,9 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
+    // PURCHASE_DEPT is a GLOBAL role (systemUsers), not in the college users subcollection.
     const purchaseSnap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("users")
+      .collection("systemUsers")
       .where("role", "==", "PURCHASE_DEPT")
       .get();
 

@@ -3,11 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-
-// Cadre ratio constants
-const STUDENT_FACULTY_RATIO = 15;   // 1 faculty per 15 students
-const CADRE_PARTS = { prof: 1, assoc: 2, asst: 6 }; // 1:2:6
-const CADRE_TOTAL_PARTS = CADRE_PARTS.prof + CADRE_PARTS.assoc + CADRE_PARTS.asst; // 9
+import { STUDENT_FACULTY_RATIO, CADRE_PARTS, CADRE_TOTAL_PARTS, requiredFacultyCount } from "@/lib/college/facultyRatio";
 
 export type CadreEntry = {
   key: "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR";
@@ -32,7 +28,7 @@ export type FacultyRequirementResult = {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
 
     // Allow principal to query a specific dept
@@ -71,7 +67,7 @@ export async function GET(request: Request) {
     );
 
     // ── Total faculty required (1:15) ─────────────────────────────────────────
-    const totalRequired = totalStudents > 0 ? Math.ceil(totalStudents / STUDENT_FACULTY_RATIO) : 0;
+    const totalRequired = requiredFacultyCount(totalStudents);
 
     // ── Cadre split (1:2:6) ───────────────────────────────────────────────────
     const unit = totalRequired / CADRE_TOTAL_PARTS;

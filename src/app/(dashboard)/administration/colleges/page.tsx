@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus, CalendarRange } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import type { College } from "@/types";
+import type { College, AcademicYear } from "@/types";
+
+const YEAR_NUMBERS = [1, 2, 3, 4] as const;
+const YEAR_LABELS: Record<number, string> = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
 
 type PrincipalRow = { uid: string; name: string; email: string; role: string; isActive: boolean };
 
@@ -36,6 +39,12 @@ export default function AdministrationCollegesPage() {
   const [dialogCollege, setDialogCollege] = useState<College | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "12345678", role: "PRINCIPAL" });
   const [saving, setSaving] = useState(false);
+
+  // Academic years dialog
+  const [yearsCollege, setYearsCollege] = useState<College | null>(null);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [loadingYears, setLoadingYears] = useState(false);
+  const [savingYear, setSavingYear] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -98,6 +107,41 @@ export default function AdministrationCollegesPage() {
   function openDialog(college: College) {
     setDialogCollege(college);
     setForm((f) => ({ ...f, name: "", email: "", password: "12345678" }));
+  }
+
+  async function openYearsDialog(college: College) {
+    setYearsCollege(college);
+    setLoadingYears(true);
+    try {
+      const res = await fetch(`/api/college/academic-years?collegeId=${college.id}`);
+      const data = await res.json() as { academicYears: AcademicYear[] };
+      setAcademicYears(data.academicYears ?? []);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load academic years" });
+    } finally {
+      setLoadingYears(false);
+    }
+  }
+
+  async function toggleYear(yearNumber: number, isActive: boolean) {
+    if (!yearsCollege) return;
+    setSavingYear(yearNumber);
+    try {
+      const res = await fetch(`/api/college/academic-years?collegeId=${yearsCollege.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yearNumber, isActive }),
+      });
+      if (!res.ok) throw new Error();
+      const refreshed = await fetch(`/api/college/academic-years?collegeId=${yearsCollege.id}`)
+        .then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>)
+        .then((d) => d.academicYears ?? []);
+      setAcademicYears(refreshed);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update academic year" });
+    } finally {
+      setSavingYear(null);
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -182,6 +226,14 @@ export default function AdministrationCollegesPage() {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openYearsDialog(college)}
+                  >
+                    <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+                    Academic Years
+                  </Button>
                   {showAddBtn && (
                     <Button
                       size="sm"
@@ -338,6 +390,48 @@ export default function AdministrationCollegesPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Academic Years Dialog */}
+      <Dialog open={!!yearsCollege} onOpenChange={(open) => !open && setYearsCollege(null)}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Academic Years — {yearsCollege?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-sm text-muted-foreground">
+              Toggle which years are open for this college. Sections can only be created for an open year.
+            </p>
+            {loadingYears ? (
+              <div className="space-y-2">
+                {YEAR_NUMBERS.map((y) => <div key={y} className="h-12 bg-muted animate-pulse rounded-lg" />)}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {YEAR_NUMBERS.map((y) => {
+                  const existing = academicYears.find((ay) => ay.yearNumber === y);
+                  const isActive = existing?.isActive ?? false;
+                  return (
+                    <div key={y} className="flex items-center justify-between rounded-lg border p-3">
+                      <span className="text-sm font-medium">{YEAR_LABELS[y]}</span>
+                      <Button
+                        size="sm"
+                        variant={isActive ? "default" : "outline"}
+                        loading={savingYear === y}
+                        onClick={() => void toggleYear(y, !isActive)}
+                      >
+                        {isActive ? "Open" : "Closed"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setYearsCollege(null)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

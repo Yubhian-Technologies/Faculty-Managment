@@ -7,12 +7,12 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
 
-const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL"];
+const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF"];
 const HOD_ROLES: UserRole[] = ["PANEL_MEMBER"];
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD");
     const { searchParams } = new URL(request.url);
     const roleFilter = searchParams.get("role");
     const allDepts = searchParams.get("allDepts") === "true";
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
 
     const body = (await request.json()) as {
       name: string;
@@ -86,11 +86,12 @@ export async function POST(request: Request) {
       role: UserRole;
       department?: string;
       staffType?: "teaching" | "supporting";
+      designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Dean - R&D")
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile, profilePhotoUrl } = body;
+    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -101,8 +102,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
-    // Enforce role-based creation rules
-    if (session.role === "PRINCIPAL" && !PRINCIPAL_ROLES.includes(role)) {
+    // Enforce role-based creation rules — Vice Principal mirrors Principal's authority.
+    if ((session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") && !PRINCIPAL_ROLES.includes(role)) {
       return NextResponse.json(
         { error: `Principal can only create: ${PRINCIPAL_ROLES.join(", ")}` },
         { status: 403 }
@@ -147,6 +148,7 @@ export async function POST(request: Request) {
         role,
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),
+        ...(designation ? { designation } : {}),
         ...(academicProfile ? { academicProfile } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         ...buildPersonalDetailsUpdate(body),

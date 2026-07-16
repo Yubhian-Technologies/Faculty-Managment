@@ -1,12 +1,12 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "FINANCE", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
 

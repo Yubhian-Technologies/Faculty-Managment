@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency } from "@/lib/utils";
 import type { FinancePayment, FinancePaymentType } from "@/types";
 
@@ -42,7 +43,7 @@ export default function FinancePaymentsPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/finance-payments")
+    collegeFetch("/api/college/finance-payments")
       .then((r) => r.json() as Promise<{ payments: Row[] }>)
       .then((d) => setPayments(d.payments ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load payments" }))
@@ -59,7 +60,7 @@ export default function FinancePaymentsPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/finance-payments", {
+      const res = await collegeFetch("/api/college/finance-payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, payeeName, amount: Number(amount), purpose }),
@@ -80,7 +81,7 @@ export default function FinancePaymentsPage() {
     if (!actionTarget) return;
     setIsActing(true);
     try {
-      const res = await fetch(`/api/college/finance-payments/${actionTarget.row.id}`, {
+      const res = await collegeFetch(`/api/college/finance-payments/${actionTarget.row.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: actionTarget.status, paymentReference: reference || undefined }),

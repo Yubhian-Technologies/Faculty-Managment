@@ -5,6 +5,7 @@ import { Plus, ClipboardCheck, Building2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ApprovalWorkflowList } from "@/components/finance/ApprovalWorkflowList";
 import { IncomingBudgetRequests } from "./IncomingBudgetRequests";
+import { EmergencyReportUpload } from "./EmergencyReportUpload";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { FinanceBudgetRequest } from "@/types";
 
@@ -29,7 +31,7 @@ export default function FinanceBudgetApprovalsPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/finance-budget-requests")
+    collegeFetch("/api/college/finance-budget-requests")
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
       .then((d) => setRequests(d.requests ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
@@ -46,7 +48,7 @@ export default function FinanceBudgetApprovalsPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/finance-budget-requests", {
+      const res = await collegeFetch("/api/college/finance-budget-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ department, requestedAmount: Number(requestedAmount), purpose, justification }),
@@ -91,6 +93,14 @@ export default function FinanceBudgetApprovalsPage() {
           Requests HODs submitted and Principals verified (Level 1 freeze) — approving one creates the budget automatically.
         </p>
         <IncomingBudgetRequests />
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold">Emergency Reports</h2>
+        <p className="text-sm text-muted-foreground -mt-2">
+          Approved Non-Goods emergency requests — send a report to the requesting Principal / Vice Principal to view.
+        </p>
+        <EmergencyReportUpload />
       </div>
 
       <div className="space-y-3">
