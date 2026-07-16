@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { FinanceBudgetRequest } from "@/types";
 
@@ -30,7 +31,7 @@ export default function FinanceBudgetApprovalsPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/finance-budget-requests")
+    collegeFetch("/api/college/finance-budget-requests")
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
       .then((d) => setRequests(d.requests ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
@@ -47,7 +48,7 @@ export default function FinanceBudgetApprovalsPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/finance-budget-requests", {
+      const res = await collegeFetch("/api/college/finance-budget-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ department, requestedAmount: Number(requestedAmount), purpose, justification }),

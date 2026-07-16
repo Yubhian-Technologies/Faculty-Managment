@@ -3,22 +3,13 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Section, StudentStatus } from "@/types";
-
-type ImportRow = {
-  rollNumber: string;
-  name: string;
-  status?: string;
-};
-
-function parseStatus(v: string | undefined): StudentStatus {
-  return v?.trim().toUpperCase().startsWith("DET") ? "DETAINED" : "REGULAR";
-}
+import { buildStudentDoc, type StudentImportRow } from "@/lib/students/importRow";
+import type { Section } from "@/types";
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { sectionId: string; records: ImportRow[] };
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const body = (await request.json()) as { sectionId: string; records: StudentImportRow[] };
 
     if (!body.sectionId) {
       return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -83,17 +74,7 @@ export async function POST(request: Request) {
       }
 
       const docRef = studentsColl.doc();
-      batch.set(docRef, {
-        collegeId: session.collegeId,
-        department: section.department,
-        section: section.name,
-        year: section.year,
-        rollNumber: roll,
-        name: row.name.trim(),
-        status: parseStatus(row.status),
-        createdAt: now,
-        updatedAt: now,
-      });
+      batch.set(docRef, buildStudentDoc(section, row, now));
       existingRolls.add(roll);
       created.push(roll);
       batchCount++;

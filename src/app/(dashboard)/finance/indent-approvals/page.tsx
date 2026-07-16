@@ -13,6 +13,7 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { IndentItemsTable } from "@/components/shared/indent/IndentItemsTable";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { indentItemsTotal, type IndentRequest } from "@/types";
 
@@ -26,7 +27,7 @@ export default function FinanceIndentApprovalsPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/indent-requests?status=PENDING_FINANCE_REVIEW")
+    collegeFetch("/api/college/indent-requests?status=PENDING_FINANCE_REVIEW")
       .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load incoming indents" }))
@@ -47,7 +48,7 @@ export default function FinanceIndentApprovalsPage() {
     }
     setActingId(request.id);
     try {
-      const res = await fetch(`/api/college/indent-requests/${request.id}`, {
+      const res = await collegeFetch(`/api/college/indent-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, remarks: remarks.trim() || undefined }),

@@ -7,10 +7,12 @@ import type { College } from "@/types";
 
 export async function GET(request: Request) {
   try {
-    // Super Admin sees all; Administration sees only their location's colleges
+    // Super Admin sees all; Administration sees only their location's colleges;
+    // FINANCE/PURCHASE_DEPT (GLOBAL roles, no college of their own) also see all —
+    // this is how their CollegeSwitcher populates its options.
     const { verifySession } = await import("@/lib/auth/verifySession");
     const session = await verifySession();
-    if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE"].includes(session.role)) {
+    if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "FINANCE", "PURCHASE_DEPT"].includes(session.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

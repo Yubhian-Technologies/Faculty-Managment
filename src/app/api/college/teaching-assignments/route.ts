@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       facultyId: string;
       subjectId: string;
@@ -158,7 +159,33 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    return NextResponse.json({ id: ref.id }, { status: 201 });
+    // Non-blocking ratio reference: surface whether this department is now
+    // staffed at/beyond the 1:15 hiring-pipeline ratio, without preventing the
+    // assignment (HOD/Principal still decide) — see faculty-requirement route
+    // for the same STUDENT_FACULTY_RATIO used during hiring/vacancy sizing.
+    let ratioWarning: string | undefined;
+    const dept = subject.department ?? faculty.department ?? "";
+    if (dept) {
+      const [sectionsSnap, assignmentsSnap] = await Promise.all([
+        collegeRef.collection("sections").where("department", "==", dept).get(),
+        collegeRef.collection("teachingAssignments")
+          .where("department", "==", dept)
+          .where("academicYear", "==", body.academicYear)
+          .get(),
+      ]);
+      const totalStudents = sectionsSnap.docs.reduce(
+        (sum, d) => sum + ((d.data() as { studentCount?: number }).studentCount ?? 0), 0
+      );
+      const required = requiredFacultyCount(totalStudents);
+      const distinctFaculty = new Set(
+        assignmentsSnap.docs.map((d) => (d.data() as { facultyId?: string }).facultyId).filter(Boolean)
+      );
+      if (required > 0 && distinctFaculty.size >= required) {
+        ratioWarning = `${dept} now has ${distinctFaculty.size} faculty assigned against a ratio-based requirement of ${required} (1:15 student-faculty ratio).`;
+      }
+    }
+
+    return NextResponse.json({ id: ref.id, ...(ratioWarning ? { ratioWarning } : {}) }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -170,7 +197,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const assignmentId = searchParams.get("id");
     if (!assignmentId) {

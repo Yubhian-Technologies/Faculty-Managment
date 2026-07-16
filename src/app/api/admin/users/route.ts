@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
-import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { provisionCollegeUser, provisionLocationUser } from "@/lib/firestore/userProvisioning";
 import type { UserRole } from "@/types";
 import { ROLE_SCOPE } from "@/types";
 
@@ -123,43 +124,26 @@ export async function POST(request: Request) {
       }
     }
 
-    // Create Firebase Auth user via REST API (no firebase-admin/auth needed)
-    const uid = await createFirebaseUser(email, password, name);
-    const now = new Date();
+    let uid: string;
 
     if (scope === "GLOBAL") {
       // MANAGEMENT / FINANCE / PURCHASE_DEPT: no college/location scope — systemUsers only.
+      uid = await createFirebaseUser(email, password, name);
       await db.collection("systemUsers").doc(uid).set({
-        uid, role, email, name, phone: phone ?? "", collegeId: "", isActive: true, createdAt: now,
+        uid, role, email, name, phone: phone ?? "", collegeId: "", isActive: true, createdAt: new Date(),
       });
     } else if (scope === "LOCATION" && locationId) {
       // ADMINISTRATION / ACCOUNTS: location subcollection.
-      await db.collection("locations").doc(locationId).collection("locationUsers").doc(uid).set({
-        uid, locationId, name, email, role,
-        isActive: true, createdAt: now, updatedAt: now,
-      });
-      await db.collection("systemUsers").doc(uid).set({ uid, role, locationId, collegeId: "", email, name });
+      uid = await provisionLocationUser(db, locationId, role, { name, email, password, phone });
     } else if (scope === "COLLEGE" && collegeId) {
       // PRINCIPAL / VICE_PRINCIPAL: college subcollection.
-      await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
-        uid, collegeId,
-        ...(collegeLocationId ? { locationId: collegeLocationId } : {}),
-        name, email, role,
-        department: department ?? "",
-        ...(academicProfile ? { academicProfile } : {}),
-        ...buildPersonalDetailsUpdate(body),
-        isActive: true, createdAt: now, updatedAt: now,
-      });
-      await db.collection("systemUsers").doc(uid).set({
-        uid, role, collegeId,
-        ...(collegeLocationId ? { locationId: collegeLocationId } : {}),
-        email, name,
-      });
-      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
-        collegeId, action: "USER_CREATED",
-        performedBy: session.uid, performedByName: session.role,
-        targetId: uid, details: { email, role, name }, timestamp: now,
-      });
+      uid = await provisionCollegeUser(
+        db, collegeId, role,
+        { ...body, name, email, password, phone, department, academicProfile },
+        { locationId: collegeLocationId, performedBy: session.uid, performedByRole: session.role }
+      );
+    } else {
+      return NextResponse.json({ error: "Invalid role scope" }, { status: 400 });
     }
 
     return NextResponse.json({ uid }, { status: 201 });

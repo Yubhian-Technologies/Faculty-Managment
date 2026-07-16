@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { budgetRequestTotal, NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type BudgetRequest } from "@/types";
 
@@ -26,7 +27,7 @@ export function IncomingBudgetRequests() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/budget-requests?status=L1_FROZEN")
+    collegeFetch("/api/college/budget-requests?status=L1_FROZEN")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load incoming budget requests" }))
@@ -52,7 +53,7 @@ export function IncomingBudgetRequests() {
     }
     setActingId(request.id);
     try {
-      const res = await fetch(`/api/college/budget-requests/${request.id}`, {
+      const res = await collegeFetch(`/api/college/budget-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

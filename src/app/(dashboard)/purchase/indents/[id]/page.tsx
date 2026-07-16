@@ -14,6 +14,7 @@ import { IndentStatusBadge } from "@/components/shared/indent/IndentStatusBadge"
 import { IndentItemsTable } from "@/components/shared/indent/IndentItemsTable";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { indentItemsTotal, type IndentQuotation, type IndentRequest } from "@/types";
 
@@ -34,7 +35,7 @@ export default function PurchaseIndentDetailPage() {
 
   function load() {
     setIsLoading(true);
-    fetch(`/api/college/indent-requests/${params.id}`)
+    collegeFetch(`/api/college/indent-requests/${params.id}`)
       .then((r) => r.json() as Promise<{ request?: IndentRequest; error?: string }>)
       .then((d) => {
         if (!d.request) throw new Error(d.error ?? "Not found");
@@ -56,7 +57,7 @@ export default function PurchaseIndentDetailPage() {
     if (!request) return;
     setIsActing(true);
     try {
-      const res = await fetch(`/api/college/indent-requests/${request.id}`, {
+      const res = await collegeFetch(`/api/college/indent-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
@@ -95,7 +96,7 @@ export default function PurchaseIndentDetailPage() {
       const uploadData = (await uploadRes.json()) as { url?: string; filename?: string; error?: string };
       if (!uploadRes.ok) throw new Error(uploadData.error ?? "Upload failed");
 
-      const res = await fetch(`/api/college/indent-requests/${request.id}`, {
+      const res = await collegeFetch(`/api/college/indent-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

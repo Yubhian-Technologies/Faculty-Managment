@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { FinanceBudget, FinanceExpenseRequest } from "@/types";
 
@@ -31,8 +32,8 @@ export default function FinanceExpenseRequestsPage() {
   function load() {
     setIsLoading(true);
     Promise.all([
-      fetch("/api/college/finance-expense-requests").then((r) => r.json() as Promise<{ requests: Row[] }>).then((d) => d.requests ?? []),
-      fetch("/api/college/finance-budgets?status=ACTIVE").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
+      collegeFetch("/api/college/finance-expense-requests").then((r) => r.json() as Promise<{ requests: Row[] }>).then((d) => d.requests ?? []),
+      collegeFetch("/api/college/finance-budgets?status=ACTIVE").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
     ]).then(([r, b]) => { setRequests(r); setBudgets(b); })
       .catch(() => toast({ variant: "destructive", title: "Failed to load expense requests" }))
       .finally(() => setIsLoading(false));
@@ -48,7 +49,7 @@ export default function FinanceExpenseRequestsPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/finance-expense-requests", {
+      const res = await collegeFetch("/api/college/finance-expense-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ department, budgetId, amount: Number(amount), purpose, justification }),

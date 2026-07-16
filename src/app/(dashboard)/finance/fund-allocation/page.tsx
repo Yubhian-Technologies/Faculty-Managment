@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency } from "@/lib/utils";
 import type { FinanceBudget, FinanceFundAllocation, FinanceAllocationTargetType } from "@/types";
 
@@ -43,8 +44,8 @@ export default function FinanceFundAllocationPage() {
   function load() {
     setIsLoading(true);
     Promise.all([
-      fetch("/api/college/finance-fund-allocations").then((r) => r.json() as Promise<{ allocations: Row[] }>).then((d) => d.allocations ?? []),
-      fetch("/api/college/finance-budgets?status=ACTIVE").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
+      collegeFetch("/api/college/finance-fund-allocations").then((r) => r.json() as Promise<{ allocations: Row[] }>).then((d) => d.allocations ?? []),
+      collegeFetch("/api/college/finance-budgets?status=ACTIVE").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
     ]).then(([a, b]) => { setAllocations(a); setBudgets(b); })
       .catch(() => toast({ variant: "destructive", title: "Failed to load allocations" }))
       .finally(() => setIsLoading(false));
@@ -60,7 +61,7 @@ export default function FinanceFundAllocationPage() {
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/finance-fund-allocations", {
+      const res = await collegeFetch("/api/college/finance-fund-allocations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ budgetId, targetType, targetName, amount: Number(amount) }),
@@ -89,7 +90,7 @@ export default function FinanceFundAllocationPage() {
     }
     setIsModifying(true);
     try {
-      const res = await fetch(`/api/college/finance-fund-allocations/${modifyTarget.id}`, {
+      const res = await collegeFetch(`/api/college/finance-fund-allocations/${modifyTarget.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ remainingAmount: Number(remainingAmount), reason }),

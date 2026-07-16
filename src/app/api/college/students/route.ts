@@ -28,7 +28,7 @@ async function getHodDept(db: FirebaseFirestore.Firestore, collegeId: string, ui
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const sectionFilter = searchParams.get("section");
     const yearFilter = searchParams.get("year");
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       rollNumber: string;
       name: string;

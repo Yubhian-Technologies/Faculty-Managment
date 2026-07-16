@@ -18,7 +18,9 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   ADMIN_OFFICE: ["/admin-office"],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
   PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH],
-  VICE_PRINCIPAL: ["/vice-principal", "/principal/budget", PANEL_INTERVIEWS_PATH],
+  // Vice Principal mirrors Principal's authority (see AGENTS.md) — full access
+  // to /principal/* alongside its own /vice-principal home.
+  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH],
   HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH],
   COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH],
   COLLEGE_STAFF: ["/college-staff"],
