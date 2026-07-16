@@ -375,7 +375,10 @@ export type Designation =
   | "LECTURER"
   | "VISITING_FACULTY"
   | "ADJUNCT_FACULTY"
-  | "LAB_ASSISTANT";
+  | "LAB_ASSISTANT"
+  | "TECHNICAL"
+  | "NON_TECHNICAL"
+  | "OTHER";
 
 export const DESIGNATION_LABELS: Record<Designation, string> = {
   PROFESSOR: "Professor",
@@ -385,7 +388,16 @@ export const DESIGNATION_LABELS: Record<Designation, string> = {
   VISITING_FACULTY: "Visiting Faculty",
   ADJUNCT_FACULTY: "Adjunct Faculty",
   LAB_ASSISTANT: "Lab Assistant",
+  TECHNICAL: "Technical",
+  NON_TECHNICAL: "Non-Technical",
+  OTHER: "Other",
 };
+
+// Which Designation options the "Staff Type" picker (Teaching / Supporting) offers.
+export const TEACHING_DESIGNATIONS: Designation[] = [
+  "PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY", "LAB_ASSISTANT",
+];
+export const SUPPORTING_STAFF_DESIGNATIONS: Designation[] = ["TECHNICAL", "NON_TECHNICAL", "OTHER"];
 
 export type EmploymentType = "PERMANENT" | "CONTRACT" | "VISITING" | "PART_TIME";
 
@@ -585,7 +597,13 @@ export interface FacultyProfileFields {
   authoredBooks: AuthoredBook[];
   notableAwards?: string;
 
-  // Module 6 — Others
+  // Module 6 — Financial Standing & Budgetary Impact
+  presentSalary?: number;              // Current Financial Standing — present salary drawn by the faculty member
+  grossAnnualCTC?: number;             // Budgetary Impact
+  incrementsAwarded?: number;
+  fundingConsultancyRevenue?: number;  // offsets salary cost against research/consultancy grants brought into the institution
+
+  // Module 7 — Others
   otherInformation?: string;
 }
 

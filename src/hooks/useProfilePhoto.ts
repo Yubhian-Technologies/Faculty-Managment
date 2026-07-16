@@ -21,6 +21,16 @@ async function uploadProfilePhoto(file: File): Promise<string> {
   return saveData.photoUrl;
 }
 
+async function deleteProfilePhoto(): Promise<void> {
+  const res = await fetch("/api/college/users/me/photo", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ photoUrl: "" }),
+  });
+  const data = (await res.json()) as { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "Failed to remove photo");
+}
+
 export function useUpdateProfilePhoto() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
@@ -30,6 +40,20 @@ export function useUpdateProfilePhoto() {
     mutationFn: uploadProfilePhoto,
     onSuccess: (photoUrl) => {
       if (user) setUser({ ...user, profilePhotoUrl: photoUrl });
+      qc.invalidateQueries({ queryKey: ["collegeUser", user?.uid] });
+    },
+  });
+}
+
+export function useDeleteProfilePhoto() {
+  const qc = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+
+  return useMutation({
+    mutationFn: deleteProfilePhoto,
+    onSuccess: () => {
+      if (user) setUser({ ...user, profilePhotoUrl: undefined });
       qc.invalidateQueries({ queryKey: ["collegeUser", user?.uid] });
     },
   });

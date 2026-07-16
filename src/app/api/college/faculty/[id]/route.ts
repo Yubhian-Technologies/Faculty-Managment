@@ -98,8 +98,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // Empty string clears the photo — everything else must be a real upload of ours.
     if (
       body.profilePhotoUrl !== undefined &&
+      body.profilePhotoUrl !== "" &&
       (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
         !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${id}_`)))
     ) {

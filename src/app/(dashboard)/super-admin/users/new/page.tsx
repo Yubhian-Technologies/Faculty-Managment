@@ -107,19 +107,23 @@ export default function NewUserPage() {
         <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2 pb-3 border-b">
-              <Label>Profile Photo</Label>
-              <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} />
+            <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
+              <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
+                <Label>Profile Photo</Label>
+                <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl(undefined)} />
+              </div>
+              <div className="grid flex-1 grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label>Full Name <span className="text-destructive">*</span></Label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email <span className="text-destructive">*</span></Label>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Full Name <span className="text-destructive">*</span></Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
-            </div>
-            <div className="space-y-2">
-              <Label>Email <span className="text-destructive">*</span></Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
-            </div>
             <div className="space-y-2">
               <Label>Temporary Password <span className="text-destructive">*</span></Label>
               <Input value={password} onChange={(e) => setPassword(e.target.value)} />

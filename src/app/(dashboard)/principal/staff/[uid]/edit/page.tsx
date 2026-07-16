@@ -137,19 +137,22 @@ export default function EditStaffPage() {
         <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2 pb-3 border-b">
-              <Label>Profile Photo</Label>
-              <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={setPhotoUrl} />
-            </div>
+            <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
+              <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
+                <Label>Profile Photo</Label>
+                <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
+              </div>
+              <div className="grid flex-1 grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label>Full Name *</Label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. Ramesh Kumar" />
+                </div>
 
-            <div className="space-y-2">
-              <Label>Full Name *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. Ramesh Kumar" />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" />
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" />
+                </div>
+              </div>
             </div>
 
             {role === "HOD" && (

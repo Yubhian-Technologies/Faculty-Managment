@@ -20,6 +20,8 @@ import { toast } from "@/hooks/useToast";
 import {
   DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS,
+  TEACHING_DESIGNATIONS,
+  SUPPORTING_STAFF_DESIGNATIONS,
 } from "@/types";
 import type { Designation, EmploymentType, FacultyProfileFields } from "@/types";
 
@@ -114,22 +116,23 @@ export default function NewFacultyPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="space-y-2 pb-3 border-b">
-              <Label>Profile Photo</Label>
-              <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} />
-            </div>
-
             {/* Identity */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="employeeId">Employee ID *</Label>
-                <Input id="employeeId" {...register("employeeId")} placeholder="EMP-001" />
-                {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
+            <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
+              <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
+                <Label>Profile Photo</Label>
+                <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl(undefined)} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name *</Label>
-                <Input id="name" {...register("name")} placeholder="Dr. Priya Nair" />
-                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+              <div className="grid flex-1 grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="employeeId">Employee ID *</Label>
+                  <Input id="employeeId" {...register("employeeId")} placeholder="EMP-001" />
+                  {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name *</Label>
+                  <Input id="name" {...register("name")} placeholder="Dr. Priya Nair" />
+                  {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                </div>
               </div>
             </div>
 
@@ -162,7 +165,10 @@ export default function NewFacultyPage() {
                   <button
                     key={t}
                     type="button"
-                    onClick={() => setValue("staffType", t, { shouldValidate: true })}
+                    onClick={() => {
+                      setValue("staffType", t, { shouldValidate: true });
+                      setValue("designation", t === "teaching" ? "ASSISTANT_PROFESSOR" : "TECHNICAL");
+                    }}
                     className={`flex-1 rounded-lg border-2 py-3 text-sm font-medium transition-all capitalize ${
                       staffType === t
                         ? "border-primary bg-primary/5 text-primary"
@@ -197,8 +203,8 @@ export default function NewFacultyPage() {
                     <SelectValue placeholder="Select designation" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(DESIGNATION_LABELS).map(([v, l]) => (
-                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    {(staffType === "teaching" ? TEACHING_DESIGNATIONS : SUPPORTING_STAFF_DESIGNATIONS).map((v) => (
+                      <SelectItem key={v} value={v}>{DESIGNATION_LABELS[v]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

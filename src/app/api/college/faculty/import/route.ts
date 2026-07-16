@@ -19,6 +19,10 @@ const DESIGNATION_MAP: Record<string, Designation> = {
   "visiting faculty": "VISITING_FACULTY",
   "adjunct faculty": "ADJUNCT_FACULTY",
   "lab assistant": "LAB_ASSISTANT",
+  "technical": "TECHNICAL",
+  "non-technical": "NON_TECHNICAL",
+  "non technical": "NON_TECHNICAL",
+  "other": "OTHER",
 };
 
 const EMPLOYMENT_MAP: Record<string, EmploymentType> = {

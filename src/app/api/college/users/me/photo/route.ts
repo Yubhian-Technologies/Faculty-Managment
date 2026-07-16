@@ -22,12 +22,18 @@ export async function PATCH(request: Request) {
     const body = (await request.json()) as { photoUrl?: string };
     const photoUrl = body.photoUrl;
 
-    if (!photoUrl || !photoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+    if (photoUrl === undefined) {
+      return NextResponse.json({ error: "photoUrl is required" }, { status: 400 });
     }
-    // Must point at a photo this session uploaded for itself.
-    if (!photoUrl.includes(encodeURIComponent(`profile-photos/${session.uid}_`))) {
-      return NextResponse.json({ error: "Photo does not belong to this user" }, { status: 403 });
+    // Empty string clears the photo — everything else must be a real upload of ours.
+    if (photoUrl !== "") {
+      if (!photoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
+        return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      }
+      // Must point at a photo this session uploaded for itself.
+      if (!photoUrl.includes(encodeURIComponent(`profile-photos/${session.uid}_`))) {
+        return NextResponse.json({ error: "Photo does not belong to this user" }, { status: 403 });
+      }
     }
 
     const db = getAdminDb();
