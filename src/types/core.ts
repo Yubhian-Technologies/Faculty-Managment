@@ -16,6 +16,7 @@ export type UserRole =
   | "VICE_PRINCIPAL"
   | "HOD"
   | "COLLEGE_OFFICE"
+  | "COLLEGE_STAFF"
   | "PANEL_MEMBER"
   | "ACCOUNTS"
   | "FINANCE"
@@ -33,6 +34,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   VICE_PRINCIPAL: "Vice Principal",
   HOD: "Head of Department",
   COLLEGE_OFFICE: "College Office",
+  COLLEGE_STAFF: "College Staff",
   PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
@@ -51,6 +53,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   VICE_PRINCIPAL: "/vice-principal",
   HOD: "/hod",
   COLLEGE_OFFICE: "/college-office",
+  COLLEGE_STAFF: "/college-staff",
   PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
@@ -58,13 +61,97 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   STUDENT: "/feedback",
 };
 
-// Roles that are scoped to a Location (not a specific college)
-export const LOCATION_SCOPED_ROLES: UserRole[] = [
-  "ADMINISTRATION",
-  "HR_ADMIN",
-  "ADMIN_OFFICE",
-  "LOCATION_DEPT_HEAD",
-];
+// ─── Role Level & Scope hierarchy (L0–L6) ────────────────────────────────────
+// Level is the seniority rank; Scope is the tenancy tier. Level is monotonic with
+// scope (L0–L1 GLOBAL, L2 LOCATION, L3–L6 COLLEGE), which is what makes clean
+// scope-bounded inheritance possible. See docs/AGENTS.md "Level-wise login flow".
+
+export type RoleScope = "GLOBAL" | "LOCATION" | "COLLEGE";
+
+export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
+  SUPER_ADMIN: 0,
+  MANAGEMENT: 1,
+  FINANCE: 1,
+  PURCHASE_DEPT: 1,
+  ADMINISTRATION: 2,
+  HR_ADMIN: 2,
+  ADMIN_OFFICE: 2,
+  LOCATION_DEPT_HEAD: 2,
+  ACCOUNTS: 2,
+  PRINCIPAL: 3,
+  VICE_PRINCIPAL: 3,
+  HOD: 4,
+  COLLEGE_OFFICE: 4,
+  COLLEGE_STAFF: 4,
+  PANEL_MEMBER: 5,
+  STUDENT: 6,
+};
+
+// Human-readable header for each level, used to group role pickers (Add User).
+export const LEVEL_LABELS: Record<0 | 1 | 2 | 3 | 4 | 5 | 6, string> = {
+  0: "L0 · System Administration",
+  1: "L1 · Global (Management / Finance / Purchase)",
+  2: "L2 · Location",
+  3: "L3 · College Leadership",
+  4: "L4 · Departments & Offices",
+  5: "L5 · Faculty & Staff",
+  6: "L6 · Students",
+};
+
+// Tenancy tier a role belongs to. FINANCE/PURCHASE_DEPT are GLOBAL (profiles in
+// systemUsers, act on any college via an explicit collegeId context); ACCOUNTS is
+// LOCATION-scoped (profiles in locations/{id}/locationUsers). Keep this in lockstep
+// with where the profile docs actually live, or the session/login profile-fetch
+// branch (which keys off LOCATION_SCOPED_ROLES / this map) looks in the wrong place.
+export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
+  SUPER_ADMIN: "GLOBAL",
+  MANAGEMENT: "GLOBAL",
+  FINANCE: "GLOBAL",
+  PURCHASE_DEPT: "GLOBAL",
+  ADMINISTRATION: "LOCATION",
+  HR_ADMIN: "LOCATION",
+  ADMIN_OFFICE: "LOCATION",
+  LOCATION_DEPT_HEAD: "LOCATION",
+  ACCOUNTS: "LOCATION",
+  PRINCIPAL: "COLLEGE",
+  VICE_PRINCIPAL: "COLLEGE",
+  HOD: "COLLEGE",
+  COLLEGE_OFFICE: "COLLEGE",
+  COLLEGE_STAFF: "COLLEGE",
+  PANEL_MEMBER: "COLLEGE",
+  STUDENT: "COLLEGE",
+};
+
+function scopeRank(scope: RoleScope): 0 | 1 | 2 {
+  return scope === "GLOBAL" ? 0 : scope === "LOCATION" ? 1 : 2;
+}
+
+// Roles a given role inherits access to: strictly lower in level (higher number)
+// AND same-or-narrower tenancy scope. A GLOBAL role inherits everything below it;
+// a LOCATION role inherits lower LOCATION/COLLEGE roles; a COLLEGE role inherits
+// only lower COLLEGE roles. Real tenant/data isolation is still enforced by the
+// API guards — this drives coarse path/nav access only.
+export function rolesInheritedBy(role: UserRole): UserRole[] {
+  const selfLevel = ROLE_LEVEL[role];
+  const selfScopeRank = scopeRank(ROLE_SCOPE[role]);
+  return (Object.keys(ROLE_LEVEL) as UserRole[]).filter(
+    (r) =>
+      ROLE_LEVEL[r] > selfLevel &&
+      scopeRank(ROLE_SCOPE[r]) >= selfScopeRank
+  );
+}
+
+// True if `actor` may access resources belonging to `target` (self, or an
+// inherited lower-level role within scope).
+export function canRoleAccessRole(actor: UserRole, target: UserRole): boolean {
+  return actor === target || rolesInheritedBy(actor).includes(target);
+}
+
+// Roles that are scoped to a Location (not a specific college).
+// Derived from ROLE_SCOPE so there is a single source of truth.
+export const LOCATION_SCOPED_ROLES: UserRole[] = (
+  Object.keys(ROLE_SCOPE) as UserRole[]
+).filter((r) => ROLE_SCOPE[r] === "LOCATION");
 
 // ─── Workflow Status ──────────────────────────────────────────────────────────
 
@@ -235,9 +322,11 @@ export interface CourseYearTiming {
   updatedAt?: Timestamp;
 }
 
-// ─── Academic Year (per course, per year — advancing it bumps active faculty experience) ──
+// ─── Course Academic Year (per course, per year — advancing it bumps active faculty
+// experience). Distinct from AcademicYear below (a college-wide 1-4 year open/close
+// gate) — the two are unrelated features that happen to share a similar name.
 
-export interface AcademicYear {
+export interface CourseAcademicYear {
   id: string;                // `${courseId}_year${year}`
   collegeId: string;
   departmentId: string;
@@ -503,6 +592,22 @@ export interface FacultyProfileFields {
 // PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object
 export type PrincipalAcademicProfile = Omit<FacultyProfileFields, "teachingAssignment">;
 
+// ─── Academic Year ──────────────────────────────────────────────────────────
+// Which of the 1st–4th year slots are currently open for a college. Section.year
+// stays a plain 1|2|3|4 union (unchanged) — this entity is what Location Admin /
+// Principal configure to control which of those year numbers are actually in use,
+// validated against on Section creation.
+
+export interface AcademicYear {
+  id: string;
+  collegeId: string;
+  yearNumber: 1 | 2 | 3 | 4;
+  label: string;   // e.g. "1st Year"
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 // ─── Section ──────────────────────────────────────────────────────────────────
 
 export interface Section {
@@ -517,6 +622,29 @@ export interface Section {
   facultyInchargeUid?: string;
   facultyInchargeName?: string;
   studentCount: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── Student Record ─────────────────────────────────────────────────────────
+// Enrolled-student roster row, independent of any login account. Faculty manage
+// this for the sections they're in charge of (Section.facultyInchargeUid).
+
+export type StudentStatus = "REGULAR" | "DETAINED";
+
+export interface StudentRecord {
+  id: string;
+  collegeId: string;
+  department: string;
+  section: string;      // Section.name — "A", "B", etc.
+  year: 1 | 2 | 3 | 4;
+  rollNumber: string;
+  name: string;
+  status: StudentStatus;
+  gender?: string;
+  dateOfBirth?: string;        // yyyy-mm-dd, kept as string (no statutory-date math needed)
+  guardianContact?: string;
+  email?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -558,6 +686,7 @@ export type NotificationType =
   | "BUDGET_REQUEST_RETURNED"
   | "BUDGET_REQUEST_REJECTED"
   | "BUDGET_REQUEST_APPROVED"
+  | "BUDGET_REQUEST_REPORT_UPLOADED"
   // Indent (HOD → Purchase → Finance)
   | "INDENT_SUBMITTED"
   | "INDENT_SENT_TO_FINANCE"
@@ -566,6 +695,13 @@ export type NotificationType =
   | "INDENT_APPROVED"
   | "INDENT_RECEIPT_UPLOADED"
   // Purchase Finance Clearance
+  | "PURCHASE_CLEARANCE_SUBMITTED"
+  | "PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE"
+  | "PURCHASE_CLEARANCE_RETURNED_TO_HOD"
+  | "PURCHASE_CLEARANCE_SENT_TO_FINANCE"
+  | "PURCHASE_CLEARANCE_RETURNED_TO_PURCHASE"
+  | "PURCHASE_CLEARANCE_FINANCE_APPROVED"
+  | "PURCHASE_CLEARANCE_FINANCE_REJECTED"
   | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
   | "PURCHASE_CLEARANCE_GRN_UPLOADED"
   | "GENERAL";
@@ -648,6 +784,9 @@ export type AuditAction =
   | "BUDGET_REQUEST_REJECTED"
   | "BUDGET_REQUEST_FINANCE_APPROVED"
   | "BUDGET_REQUEST_FINANCE_REJECTED"
+  | "BUDGET_REQUEST_MANAGEMENT_APPROVED"
+  | "BUDGET_REQUEST_MANAGEMENT_REJECTED"
+  | "BUDGET_REQUEST_REPORT_UPLOADED"
   // Indent module
   | "INDENT_SUBMITTED"
   | "INDENT_RETURNED_TO_HOD"
@@ -658,6 +797,13 @@ export type AuditAction =
   | "INDENT_FINANCE_REJECTED"
   | "INDENT_RECEIPT_UPLOADED"
   // Purchase Finance Clearance module
+  | "PURCHASE_CLEARANCE_SUBMITTED"
+  | "PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE"
+  | "PURCHASE_CLEARANCE_RETURNED_TO_HOD"
+  | "PURCHASE_CLEARANCE_SENT_TO_FINANCE"
+  | "PURCHASE_CLEARANCE_RETURNED_TO_PURCHASE"
+  | "PURCHASE_CLEARANCE_FINANCE_APPROVED"
+  | "PURCHASE_CLEARANCE_FINANCE_REJECTED"
   | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
   | "PURCHASE_CLEARANCE_GRN_UPLOADED"
   // Academic Year module

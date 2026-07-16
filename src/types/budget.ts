@@ -9,7 +9,11 @@ export type BudgetRequestStatus =
   | "L1_FROZEN"                      // Principal verified & locked; queued for Finance
   | "PRINCIPAL_REJECTED"             // terminal
   | "FINANCE_APPROVED"               // terminal; FinanceBudget auto-created
-  | "FINANCE_REJECTED";              // terminal
+  | "FINANCE_REJECTED"               // terminal
+  // Emergency requests (Principal/VP → Management → Finance) — see isEmergency below
+  | "PENDING_MANAGEMENT_APPROVAL"    // Principal/VP submitted, awaiting Management
+  | "RETURNED_TO_PRINCIPAL"          // Management or Finance sent it back; owner can edit + resubmit
+  | "MANAGEMENT_REJECTED";           // terminal
 
 export const BUDGET_REQUEST_STATUS_LABELS: Record<BudgetRequestStatus, string> = {
   PENDING_PRINCIPAL_VERIFICATION: "Pending Principal Verification",
@@ -18,6 +22,9 @@ export const BUDGET_REQUEST_STATUS_LABELS: Record<BudgetRequestStatus, string> =
   PRINCIPAL_REJECTED: "Rejected by Principal",
   FINANCE_APPROVED: "Approved by Finance",
   FINANCE_REJECTED: "Rejected by Finance",
+  PENDING_MANAGEMENT_APPROVAL: "Pending Management Approval",
+  RETURNED_TO_PRINCIPAL: "Returned to Requester",
+  MANAGEMENT_REJECTED: "Rejected by Management",
 };
 
 export const NON_RECURRING_CATEGORIES = [
@@ -56,12 +63,16 @@ export interface BudgetCategoryGroup {
 
 export interface BudgetApprovalAction {
   action: BudgetRequestStatus;
-  byRole: "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "FINANCE";
+  byRole: "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "FINANCE" | "MANAGEMENT";
   byUid: string;
   byName: string;
   at: Timestamp;
   remarks?: string;
 }
+
+// Goods vs Non-Goods classification for emergency requests — derived server-side
+// from which section (Non-Recurring vs Recurring) the request's items live in.
+export type EmergencyRequestType = "GOODS" | "NON_GOODS";
 
 export interface BudgetRequest {
   id: string;
@@ -79,6 +90,17 @@ export interface BudgetRequest {
   financeBudgetId?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  // ─── Emergency request (Principal/VP → Management → Finance) ─────────────
+  isEmergency?: boolean;
+  emergencyReason?: string;
+  emergencyType?: EmergencyRequestType;
+  // Non-Goods emergency requests only: a report Finance attaches after approval,
+  // visible to the requesting Principal/VP for viewing only.
+  reportFileUrl?: string;
+  reportFileName?: string;
+  reportUploadedBy?: string;
+  reportUploadedByName?: string;
+  reportUploadedAt?: Timestamp;
 }
 
 export function categoryGroupTotal(group: BudgetCategoryGroup): number {

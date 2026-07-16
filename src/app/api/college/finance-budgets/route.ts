@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 
@@ -17,7 +17,7 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("FINANCE", "PURCHASE_DEPT", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "FINANCE", "PURCHASE_DEPT", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const department = searchParams.get("department");
     const status = searchParams.get("status");
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "FINANCE", "SUPER_ADMIN");
     const body = (await request.json()) as {
       department: string;
       purpose: string;

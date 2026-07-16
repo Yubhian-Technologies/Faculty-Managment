@@ -177,7 +177,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("ACCOUNTS", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("ACCOUNTS", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
       status?: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED";
@@ -235,7 +235,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("ACCOUNTS", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("ACCOUNTS", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
     const db = getAdminDb();
 

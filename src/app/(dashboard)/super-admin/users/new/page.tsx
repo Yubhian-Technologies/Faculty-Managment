@@ -7,19 +7,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { Textarea } from "@/components/ui/textarea";
-import { ROLE_LABELS } from "@/types";
+import { ROLE_LABELS, ROLE_LEVEL, ROLE_SCOPE, LEVEL_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
-import type { College, Location, FacultyProfileFields } from "@/types";
+import type { College, Location, FacultyProfileFields, UserRole } from "@/types";
 
-const COLLEGE_ROLES = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"] as const;
-const LOCATION_ROLES = ["ADMINISTRATION"] as const;
-const GLOBAL_ROLES = ["MANAGEMENT"] as const;
-const ALL_ROLES = [...COLLEGE_ROLES, ...LOCATION_ROLES, ...GLOBAL_ROLES] as const;
+// Roles a Super Admin creates — the level L1–L3 set. Scope (GLOBAL/LOCATION/COLLEGE)
+// is read from ROLE_SCOPE, which drives which tenant picker is shown and what the
+// provisioning route (api/admin/users) writes. Must match SUPER_ADMIN_CREATABLE there.
+const CREATABLE_ROLES: UserRole[] = [
+  "MANAGEMENT", "FINANCE", "PURCHASE_DEPT",   // L1 · GLOBAL
+  "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
+  "PRINCIPAL", "VICE_PRINCIPAL",              // L3 · COLLEGE
+];
+
+// Creatable roles grouped by their L0–L6 level, so the role picker is level-scoped.
+const ROLE_LEVELS_PRESENT = Array.from(
+  new Set(CREATABLE_ROLES.map((r) => ROLE_LEVEL[r]))
+).sort((a, b) => a - b);
 
 export default function NewUserPage() {
   const router = useRouter();
@@ -30,7 +39,7 @@ export default function NewUserPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("12345678");
-  const [role, setRole] = useState<typeof ALL_ROLES[number]>("PRINCIPAL");
+  const [role, setRole] = useState<UserRole>("PRINCIPAL");
   const [collegeId, setCollegeId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
@@ -51,10 +60,12 @@ export default function NewUserPage() {
       .catch(() => {});
   }, []);
 
-  const isLocationRole = LOCATION_ROLES.includes(role as typeof LOCATION_ROLES[number]);
-  const isGlobalRole = GLOBAL_ROLES.includes(role as typeof GLOBAL_ROLES[number]);
+  const scope = ROLE_SCOPE[role]; // GLOBAL | LOCATION | COLLEGE
+  // College picker cascades off the chosen location (multiple colleges per location).
+  const collegesForLocation = colleges.filter((c) => c.locationId === locationId);
+
   const isValid = !!name && !!email && !!password && !!role &&
-    (isGlobalRole ? true : isLocationRole ? !!locationId : !!collegeId);
+    (scope === "GLOBAL" ? true : scope === "LOCATION" ? !!locationId : !!locationId && !!collegeId);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -91,7 +102,7 @@ export default function NewUserPage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Add User" description="Create a staff account and assign role" />
+      <PageHeader title="Add User" description="Create a staff account by level and assign scope" />
       <Card>
         <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
         <CardContent>
@@ -101,69 +112,91 @@ export default function NewUserPage() {
               <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Full Name <span className="text-destructive">*</span></Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
-              </div>
-              <div className="space-y-2">
-                <Label>Email <span className="text-destructive">*</span></Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
-              </div>
+            <div className="space-y-2">
+              <Label>Full Name <span className="text-destructive">*</span></Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
+            </div>
+            <div className="space-y-2">
+              <Label>Temporary Password <span className="text-destructive">*</span></Label>
+              <Input value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Temporary Password <span className="text-destructive">*</span></Label>
-                <Input value={password} onChange={(e) => setPassword(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Role <span className="text-destructive">*</span></Label>
-                <Select value={role} onValueChange={(v) => { setRole(v as typeof ALL_ROLES[number]); setCollegeId(""); setLocationId(""); }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {ALL_ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {/* Role — grouped by level (L1–L3) */}
+            <div className="space-y-2">
+              <Label>Role <span className="text-destructive">*</span></Label>
+              <Select value={role} onValueChange={(v) => { setRole(v as UserRole); setCollegeId(""); setLocationId(""); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLE_LEVELS_PRESENT.map((lvl) => (
+                    <SelectGroup key={lvl}>
+                      <SelectLabel className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {LEVEL_LABELS[lvl]}
+                      </SelectLabel>
+                      {CREATABLE_ROLES.filter((r) => ROLE_LEVEL[r] === lvl).map((r) => (
+                        <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {scope === "GLOBAL"
+                  ? "Global role — not tied to any location or college."
+                  : scope === "LOCATION"
+                    ? "Location-scoped role — choose a location."
+                    : "College-scoped role — choose a location, then a college."}
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {isGlobalRole ? (
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
-                </div>
-              ) : isLocationRole ? (
+            {/* Scope pickers — driven by ROLE_SCOPE[role] */}
+            {scope === "GLOBAL" ? (
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Location <span className="text-destructive">*</span></Label>
-                  <Select value={locationId} onValueChange={setLocationId}>
+                  <Select value={locationId} onValueChange={(v) => { setLocationId(v); setCollegeId(""); }}>
                     <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
                     <SelectContent>
                       {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>College <span className="text-destructive">*</span></Label>
-                  <Select value={collegeId} onValueChange={setCollegeId}>
-                    <SelectTrigger><SelectValue placeholder="Select college" /></SelectTrigger>
-                    <SelectContent>
-                      {colleges.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {!isGlobalRole && (
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
-                </div>
-              )}
-            </div>
+
+                {scope === "COLLEGE" && (
+                  <div className="space-y-2">
+                    <Label>College <span className="text-destructive">*</span></Label>
+                    <Select value={collegeId} onValueChange={setCollegeId} disabled={!locationId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={locationId ? "Select college" : "Select a location first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {collegesForLocation.length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            No colleges in this location
+                          </div>
+                        ) : (
+                          collegesForLocation.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
+            {scope !== "GLOBAL" && (
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+              </div>
+            )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>

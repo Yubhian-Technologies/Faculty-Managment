@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 import type { BudgetCategoryGroup, BudgetRequest } from "@/types";
@@ -27,12 +27,19 @@ async function notify(
   }
 }
 
+async function notifyRole(db: Firestore, collegeId: string, role: string, type: string, title: string, message: string, link?: string) {
+  const snap = await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
+  for (const u of snap.docs) {
+    await notify(db, collegeId, u.id, type, title, message, link);
+  }
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
 
     const db = getAdminDb();
@@ -70,7 +77,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
       action?: "VERIFY" | "REJECT" | "RETURN" | "APPROVE";
@@ -81,6 +88,10 @@ export async function PATCH(
       requestDate?: string;
       nonRecurring?: BudgetCategoryGroup[];
       recurring?: BudgetCategoryGroup[];
+      department?: string;
+      emergencyReason?: string;
+      reportFileUrl?: string;
+      reportFileName?: string;
     };
 
     const db = getAdminDb();
@@ -149,6 +160,70 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    // ── Emergency request owner (Principal/VP) edits and resubmits a returned
+    // request. Checked before the reviewer branch below since both key off the
+    // same roles — req.hodUid === session.uid (the owner resubmitting their own
+    // emergency request) is what separates this from "I'm reviewing someone
+    // else's request" in that branch. A VICE_PRINCIPAL who raised the emergency
+    // request is never the same person reviewing a normal HOD request.
+
+    if (
+      (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") &&
+      req.isEmergency &&
+      req.hodUid === session.uid &&
+      req.status === "RETURNED_TO_PRINCIPAL"
+    ) {
+      const nonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
+      const recurring = Array.isArray(body.recurring) ? body.recurring : [];
+      const allGroups = [...nonRecurring, ...recurring];
+      if (allGroups.length === 0 || allGroups.some((g) => !g.category || !Array.isArray(g.items) || g.items.length === 0)) {
+        return NextResponse.json(
+          { error: "Every category must have a name and at least one item" },
+          { status: 400 }
+        );
+      }
+      if (nonRecurring.length > 0 && recurring.length > 0) {
+        return NextResponse.json(
+          { error: "An emergency request must use either Non-Recurring (Goods) or Recurring (Non-Goods) items, not both" },
+          { status: 400 }
+        );
+      }
+      const department = body.department?.trim();
+      const emergencyReason = body.emergencyReason?.trim();
+      if (!department || !emergencyReason) {
+        return NextResponse.json(
+          { error: "department and emergencyReason are required for an emergency budget request" },
+          { status: 400 }
+        );
+      }
+      const emergencyType = nonRecurring.length > 0 ? "GOODS" : "NON_GOODS";
+
+      const requesterName = await resolveUserName(db, session.collegeId, session.uid);
+      const historyEntry = {
+        action: "PENDING_MANAGEMENT_APPROVAL" as const,
+        byRole: session.role as "PRINCIPAL" | "VICE_PRINCIPAL",
+        byUid: session.uid,
+        byName: requesterName,
+        at: now,
+      };
+
+      await ref.update({
+        department,
+        emergencyReason,
+        emergencyType,
+        academicYear: (body.academicYear ?? req.academicYear).trim(),
+        title: (body.title ?? req.title).trim(),
+        requestDate: body.requestDate ?? req.requestDate ?? now.toISOString(),
+        nonRecurring,
+        recurring,
+        status: "PENDING_MANAGEMENT_APPROVAL",
+        history: [...(req.history ?? []), historyEntry],
+        updatedAt: now,
+      });
+
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Principal verifies (L1 freeze) / rejects / returns ──────────────────
 
     if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
@@ -198,9 +273,9 @@ export async function PATCH(
       });
 
       if (nextStatus === "L1_FROZEN") {
+        // FINANCE is a GLOBAL role (systemUsers), not in the college users subcollection.
         const financeSnap = await db
-          .collection("colleges").doc(session.collegeId)
-          .collection("users").where("role", "==", "FINANCE").get();
+          .collection("systemUsers").where("role", "==", "FINANCE").get();
         for (const f of financeSnap.docs) {
           await notify(
             db, session.collegeId, f.id,
@@ -222,6 +297,47 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    // ── Finance uploads a report for a completed Non-Goods emergency request ──
+    // View-only artifact for the requesting Principal/VP; no status change.
+
+    if (session.role === "FINANCE" && body.action === undefined && (body.reportFileUrl || body.reportFileName)) {
+      if (!req.isEmergency || req.emergencyType !== "NON_GOODS" || req.status !== "FINANCE_APPROVED") {
+        return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+      }
+      if (!body.reportFileUrl || !body.reportFileName) {
+        return NextResponse.json({ error: "reportFileUrl and reportFileName are required" }, { status: 400 });
+      }
+
+      const financeName = await resolveUserName(db, session.collegeId, session.uid);
+      await ref.update({
+        reportFileUrl: body.reportFileUrl,
+        reportFileName: body.reportFileName,
+        reportUploadedBy: session.uid,
+        reportUploadedByName: financeName,
+        reportUploadedAt: now,
+        updatedAt: now,
+      });
+
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "BUDGET_REQUEST_REPORT_UPLOADED",
+        performedBy: session.uid,
+        performedByName: financeName,
+        targetId: id,
+        details: { title: req.title, department: req.department },
+        timestamp: now,
+      });
+
+      await notify(
+        db, session.collegeId, req.hodUid,
+        "BUDGET_REQUEST_REPORT_UPLOADED", "Report Available",
+        `Finance uploaded a report for your emergency budget request "${req.title}".`,
+        "/principal/budget"
+      );
+
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Finance approves (auto-creates FinanceBudget) / rejects / returns ───
 
     if (session.role === "FINANCE") {
@@ -239,7 +355,7 @@ export async function PATCH(
       const nextStatus =
         body.action === "APPROVE" ? "FINANCE_APPROVED"
         : body.action === "REJECT" ? "FINANCE_REJECTED"
-        : body.action === "RETURN" ? "RETURNED_TO_HOD"
+        : body.action === "RETURN" ? (req.isEmergency ? "RETURNED_TO_PRINCIPAL" : "RETURNED_TO_HOD")
         : null;
 
       if (!nextStatus) {
@@ -261,7 +377,10 @@ export async function PATCH(
       const budgetRef = db.collection("colleges").doc(session.collegeId).collection("financeBudgets").doc();
       const financeAuditRef = db.collection("colleges").doc(session.collegeId).collection("financeAuditLogs").doc();
       const auditRef = db.collection("colleges").doc(session.collegeId).collection("auditLogs").doc();
+      const purchaseClearanceRef = db.collection("colleges").doc(session.collegeId).collection("financePurchaseClearance").doc();
+      const purchaseClearanceAuditRef = db.collection("colleges").doc(session.collegeId).collection("financeAuditLogs").doc();
       let financeBudgetId: string | undefined;
+      let purchaseClearanceId: string | undefined;
 
       await db.runTransaction(async (tx) => {
         const freshSnap = await tx.get(ref);
@@ -297,6 +416,46 @@ export async function PATCH(
             details: { department: req.department, fiscalYear: body.fiscalYear, sourceRequestId: id },
             timestamp: now,
           });
+
+          // Auto-create a linked Purchase Finance Clearance request so this
+          // budget's procurement can proceed through Purchase Dept — same
+          // record shape the HOD would raise manually, pre-filled and
+          // pre-linked via budgetId, attributed to the same HOD who raised
+          // the budget request (their uid/name are already on `req`). Starts
+          // at PENDING_PURCHASE_REVIEW so it goes through the normal
+          // quotation-sourcing → Finance-approval flow like any other request.
+          //
+          // Skipped for Non-Goods emergency requests: those have no further
+          // downstream step by design — Finance attaches a report instead
+          // (separate branch above), not a purchase clearance.
+          if (!(req.isEmergency && req.emergencyType === "NON_GOODS")) {
+            purchaseClearanceId = purchaseClearanceRef.id;
+            tx.set(purchaseClearanceRef, {
+              collegeId: session.collegeId,
+              hodUid: req.hodUid,
+              hodName: req.hodName,
+              department: req.department,
+              items: req.title,
+              estimatedAmount: budgetRequestTotal(req),
+              budgetId: budgetRef.id,
+              sourceRequestId: id,
+              status: "PENDING_PURCHASE_REVIEW",
+              quotations: [],
+              history: [],
+              createdAt: now,
+              updatedAt: now,
+            });
+
+            tx.set(purchaseClearanceAuditRef, {
+              collegeId: session.collegeId,
+              action: "PURCHASE_CLEARANCE_SUBMITTED",
+              performedBy: session.uid,
+              performedByName: financeName,
+              targetId: purchaseClearanceRef.id,
+              details: { department: req.department, estimatedAmount: budgetRequestTotal(req), sourceRequestId: id, autoCreated: true },
+              timestamp: now,
+            });
+          }
         }
 
         tx.update(ref, {
@@ -324,10 +483,19 @@ export async function PATCH(
         nextStatus === "FINANCE_APPROVED" ? "BUDGET_REQUEST_APPROVED" : nextStatus === "FINANCE_REJECTED" ? "BUDGET_REQUEST_REJECTED" : "BUDGET_REQUEST_RETURNED",
         nextStatus === "FINANCE_APPROVED" ? "Budget Request Approved" : nextStatus === "FINANCE_REJECTED" ? "Budget Request Rejected" : "Budget Request Returned",
         `Finance ${nextStatus === "FINANCE_APPROVED" ? "approved" : nextStatus === "FINANCE_REJECTED" ? "rejected" : "returned"} your budget request "${req.title}".${body.remarks ? " Remarks: " + body.remarks : ""}`,
-        "/hod/budget"
+        req.isEmergency ? "/principal/budget" : "/hod/budget"
       );
 
-      return NextResponse.json({ ok: true, financeBudgetId });
+      if (purchaseClearanceId) {
+        await notifyRole(
+          db, session.collegeId, "PURCHASE_DEPT",
+          "PURCHASE_CLEARANCE_SUBMITTED", "New Purchase Clearance Request",
+          `${req.hodName} raised a purchase clearance request for "${req.title}" (${req.department}).`,
+          "/purchase/indents"
+        );
+      }
+
+      return NextResponse.json({ ok: true, financeBudgetId, purchaseClearanceId });
     }
 
     return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });

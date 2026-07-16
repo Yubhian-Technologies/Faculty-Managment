@@ -194,7 +194,7 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {

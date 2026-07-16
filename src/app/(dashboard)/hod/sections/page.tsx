@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog } from "lucide-react";
+import Link from "next/link";
+import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -236,9 +237,14 @@ export default function HODSectionsPage() {
         title="Sections"
         description="Manage class sections, assign faculty incharge, and track student count"
         actions={
-          <Button onClick={openCreate} disabled={courses.length === 0}>
-            <Plus className="h-4 w-4 mr-2" />Add Section
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/hod/students/import"><Upload className="h-4 w-4 mr-2" />Import Students</Link>
+            </Button>
+            <Button onClick={openCreate} disabled={courses.length === 0}>
+              <Plus className="h-4 w-4 mr-2" />Add Section
+            </Button>
+          </div>
         }
       />
 

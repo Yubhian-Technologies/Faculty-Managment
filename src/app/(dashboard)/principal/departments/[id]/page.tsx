@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import type { Department, Course, CourseYearTiming, BreakConfig, AcademicYear } from "@/types";
+import type { Department, Course, CourseYearTiming, BreakConfig, CourseAcademicYear } from "@/types";
 
 // "2025-2026" -> "2026-2027"; falls back to blank if the label isn't in that shape.
 function suggestNextLabel(label: string): string {
@@ -49,7 +49,7 @@ export default function DepartmentDetailPage() {
   const [department, setDepartment] = useState<Department | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [academicYears, setAcademicYears] = useState<CourseAcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [courseDialogOpen, setCourseDialogOpen] = useState(false);
@@ -92,8 +92,8 @@ export default function DepartmentDetailPage() {
         ),
         Promise.all(
           sortedCourses.map((c) =>
-            fetch(`/api/college/academic-years?courseId=${encodeURIComponent(c.id)}`)
-              .then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>)
+            fetch(`/api/college/course-academic-years?courseId=${encodeURIComponent(c.id)}`)
+              .then((r) => r.json() as Promise<{ academicYears: CourseAcademicYear[] }>)
               .then((d) => d.academicYears ?? [])
           )
         ),
@@ -113,7 +113,7 @@ export default function DepartmentDetailPage() {
     return timings.find((t) => t.courseId === courseId && t.year === year);
   }
 
-  function getAcademicYear(courseId: string, year: number): AcademicYear | undefined {
+  function getAcademicYear(courseId: string, year: number): CourseAcademicYear | undefined {
     return academicYears.find((a) => a.courseId === courseId && a.year === year);
   }
 
@@ -264,7 +264,7 @@ export default function DepartmentDetailPage() {
     }
     setIsSavingAcademicYear(true);
     try {
-      const res = await fetch("/api/college/academic-years", {
+      const res = await fetch("/api/college/course-academic-years", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

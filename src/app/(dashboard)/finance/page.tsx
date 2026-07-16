@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency } from "@/lib/utils";
 import type { FinanceBudget, FinanceBudgetRequest, FinanceExpenseRequest, FinancePurchaseClearance } from "@/types";
 
@@ -21,10 +22,10 @@ export default function FinanceDashboard() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/college/finance-budgets").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
-      fetch("/api/college/finance-budget-requests?status=PENDING").then((r) => r.json() as Promise<{ requests: FinanceBudgetRequest[] }>).then((d) => d.requests ?? []),
-      fetch("/api/college/finance-expense-requests?status=PENDING").then((r) => r.json() as Promise<{ requests: FinanceExpenseRequest[] }>).then((d) => d.requests ?? []),
-      fetch("/api/college/finance-purchase-clearance?status=PENDING").then((r) => r.json() as Promise<{ requests: FinancePurchaseClearance[] }>).then((d) => d.requests ?? []),
+      collegeFetch("/api/college/finance-budgets").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
+      collegeFetch("/api/college/finance-budget-requests?status=PENDING").then((r) => r.json() as Promise<{ requests: FinanceBudgetRequest[] }>).then((d) => d.requests ?? []),
+      collegeFetch("/api/college/finance-expense-requests?status=PENDING").then((r) => r.json() as Promise<{ requests: FinanceExpenseRequest[] }>).then((d) => d.requests ?? []),
+      collegeFetch("/api/college/finance-purchase-clearance?status=PENDING").then((r) => r.json() as Promise<{ requests: FinancePurchaseClearance[] }>).then((d) => d.requests ?? []),
     ]).then(([budgets, budgetRequests, expenseRequests, clearances]) => {
       setStats({
         totalAllocated: budgets.reduce((s, b) => s + (b.allocatedAmount ?? 0), 0),

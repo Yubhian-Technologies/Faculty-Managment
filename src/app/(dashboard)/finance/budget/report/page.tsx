@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { BudgetDepartmentReport } from "@/components/shared/budget/BudgetDepartmentReport";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import type { BudgetRequest } from "@/types";
 
 export default function FinanceBudgetReportPage() {
@@ -14,7 +15,7 @@ export default function FinanceBudgetReportPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/budget-requests")
+    collegeFetch("/api/college/budget-requests")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))

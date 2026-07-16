@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle, XCircle, RotateCcw, Building2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle, XCircle, RotateCcw, Building2, RefreshCw, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { budgetRequestTotal, NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type BudgetRequest } from "@/types";
 
@@ -26,7 +27,7 @@ export function IncomingBudgetRequests() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/budget-requests?status=L1_FROZEN")
+    collegeFetch("/api/college/budget-requests?status=L1_FROZEN")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load incoming budget requests" }))
@@ -52,7 +53,7 @@ export function IncomingBudgetRequests() {
     }
     setActingId(request.id);
     try {
-      const res = await fetch(`/api/college/budget-requests/${request.id}`, {
+      const res = await collegeFetch(`/api/college/budget-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -128,10 +129,16 @@ export function IncomingBudgetRequests() {
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-semibold text-sm">{item.department}</span>
                     <Badge variant="secondary" className="text-xs">{formatCurrency(budgetRequestTotal(item))}</Badge>
+                    {item.isEmergency && (
+                      <Badge variant="destructive" className="text-xs gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Emergency · {item.emergencyType === "GOODS" ? "Goods" : "Non-Goods"}
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">{item.title}</p>
                 </div>

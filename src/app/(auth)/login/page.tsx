@@ -9,7 +9,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
 import { loginSchema, type LoginFormData } from "@/lib/validations";
-import { ROLE_DASHBOARD_PATHS } from "@/types";
+import { ROLE_DASHBOARD_PATHS, LOCATION_SCOPED_ROLES, ROLE_SCOPE } from "@/types";
 import type { FMSUser, UserRole } from "@/types";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
@@ -90,7 +90,7 @@ function LoginForm() {
         throw new Error("Account not configured. Contact your administrator.");
       }
 
-      const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD"];
+      const LOCATION_ROLES = LOCATION_SCOPED_ROLES as string[];
 
       if (role === "SUPER_ADMIN") {
         setUser({
@@ -103,17 +103,20 @@ function LoginForm() {
           createdAt: {} as never,
         });
         router.push(redirect ?? "/super-admin");
-      } else if (role === "MANAGEMENT") {
+      } else if (ROLE_SCOPE[role as UserRole] === "GLOBAL") {
+        // MANAGEMENT, FINANCE, PURCHASE_DEPT — global roles with no college/location
+        // scope. Their profile lives only in systemUsers; act on colleges via an
+        // explicit college context chosen inside the dashboard.
         setUser({
           uid: credential.user.uid,
           collegeId: "",
-          name: sessionData.name ?? credential.user.displayName ?? "Management",
+          name: sessionData.name ?? credential.user.displayName ?? "User",
           email: sessionData.email ?? credential.user.email ?? "",
-          role: "MANAGEMENT",
+          role: role as UserRole,
           isActive: true,
           createdAt: {} as never,
         });
-        router.push(redirect ?? ROLE_DASHBOARD_PATHS.MANAGEMENT);
+        router.push(redirect ?? ROLE_DASHBOARD_PATHS[role as UserRole] ?? "/login");
       } else if (LOCATION_ROLES.includes(role) && locationId) {
         // Location-scoped role — profile comes from locations/{id}/locationUsers/{uid}
         const profile: FMSUser = sessionData.profile ?? {

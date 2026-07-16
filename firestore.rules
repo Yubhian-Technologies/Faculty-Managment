@@ -57,6 +57,12 @@ service cloud.firestore {
       return isCollegeMember(collegeId) && hasAnyRole(['PURCHASE_DEPT', 'SUPER_ADMIN']);
     }
 
+    // MANAGEMENT is global (no collegeId claim) — unlike the college-scoped roles
+    // above, this deliberately does not take a collegeId param.
+    function isManagement() {
+      return hasRole('MANAGEMENT');
+    }
+
     function isStaff(collegeId) {
       return isCollegeMember(collegeId) && hasAnyRole([
         'PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'FINANCE', 'PURCHASE_DEPT', 'SUPER_ADMIN'
@@ -151,8 +157,8 @@ service cloud.firestore {
 
       match /budgetRequests/{requestId} {
         allow read: if isStaff(collegeId);
-        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHOD(collegeId) || isPrincipal(collegeId) || isFinance(collegeId);
+        allow create: if (isHOD(collegeId) || isPrincipal(collegeId)) && hasCollegeId(collegeId);
+        allow update: if isHOD(collegeId) || isPrincipal(collegeId) || isFinance(collegeId) || isManagement();
         allow delete: if isSuperAdmin();
       }
 

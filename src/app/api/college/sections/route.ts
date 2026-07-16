@@ -11,7 +11,7 @@ async function getHodDept(db: FirebaseFirestore.Firestore, collegeId: string, ui
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER");
     const { searchParams } = new URL(request.url);
     const yearFilter = searchParams.get("year");
     const courseFilter = searchParams.get("courseId");
@@ -25,6 +25,8 @@ export async function GET(request: Request) {
     if (session.role === "HOD") {
       const dept = await getHodDept(db, session.collegeId, session.uid);
       if (dept) query = query.where("department", "==", dept);
+    } else if (session.role === "PANEL_MEMBER") {
+      query = query.where("facultyInchargeUid", "==", session.uid);
     }
 
     if (courseFilter) query = query.where("courseId", "==", courseFilter);
@@ -52,7 +54,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const body = (await request.json()) as {
       courseId: string;
       name: string;
@@ -75,6 +77,26 @@ export async function POST(request: Request) {
     const course = courseSnap.data() as { name: string; durationYears: number };
     if (Number(body.year) < 1 || Number(body.year) > course.durationYears) {
       return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
+    }
+
+    // Reject years the college hasn't opened via Academic Years. Colleges that have
+    // never configured any academic years yet are left unrestricted (no doc to check
+    // against), so this only enforces once someone has actually set the list up.
+    const academicYearsSnap = await db
+      .collection("colleges")
+      .doc(session.collegeId)
+      .collection("academicYears")
+      .get();
+    if (!academicYearsSnap.empty) {
+      const activeYears = new Set(
+        academicYearsSnap.docs
+          .map((d) => d.data() as { yearNumber: number; isActive: boolean })
+          .filter((y) => y.isActive)
+          .map((y) => y.yearNumber)
+      );
+      if (!activeYears.has(Number(body.year))) {
+        return NextResponse.json({ error: `Year ${body.year} is not open for this college` }, { status: 400 });
+      }
     }
 
     const dept = session.role === "HOD"
