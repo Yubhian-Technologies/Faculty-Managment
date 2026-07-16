@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, UserX, Pencil } from "lucide-react";
+import { UserPlus, UserX, Pencil, Download } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
+import { exportStaffCsv } from "@/lib/faculty/exportStaffCsv";
 import { ROLE_LABELS } from "@/types";
 import type { FMSUser } from "@/types";
 
@@ -29,6 +30,7 @@ export default function PrincipalStaffPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [deactivating, setDeactivating] = useState<string | null>(null);
   const [confirmUser, setConfirmUser] = useState<UserRow | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   async function load(role: string) {
     setIsLoading(true);
@@ -45,6 +47,15 @@ export default function PrincipalStaffPage() {
   }
 
   useEffect(() => { void load(roleFilter); }, [roleFilter]);
+
+  function handleExportAll() {
+    setIsExporting(true);
+    try {
+      exportStaffCsv(users);
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   async function handleDeactivate(user: UserRow) {
     setDeactivating(user.uid);
@@ -138,10 +149,15 @@ export default function PrincipalStaffPage() {
         title="Staff Management"
         description="Manage HODs and College Office staff"
         actions={
-          <Button onClick={() => router.push("/principal/staff/new")}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Add Staff
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleExportAll} loading={isExporting} disabled={isExporting || users.length === 0}>
+              <Download className="h-4 w-4 mr-2" />Export All Details
+            </Button>
+            <Button onClick={() => router.push("/principal/staff/new")}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add Staff
+            </Button>
+          </div>
         }
       />
 
@@ -176,7 +192,6 @@ export default function PrincipalStaffPage() {
             Add Staff
           </Button>
         }
-        csvFilename="staff"
       />
 
       <ConfirmDialog

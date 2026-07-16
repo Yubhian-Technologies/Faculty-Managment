@@ -306,7 +306,6 @@ export default function HODFacultyPage() {
         emptyTitle="No faculty records yet"
         emptyDescription="Add faculty members to build your department's staff register"
         emptyAction={<Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}
-        csvFilename="faculty"
       />
 
       {/* ── Create Login Dialog ── */}
