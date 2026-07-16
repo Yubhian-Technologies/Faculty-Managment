@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDateTime } from "@/lib/utils";
 import { FINANCE_AUDIT_ACTION_LABELS } from "@/types";
 import type { FinanceAuditLog } from "@/types";
@@ -16,7 +17,7 @@ export default function FinanceAuditPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/college/finance-audit-logs")
+    collegeFetch("/api/college/finance-audit-logs")
       .then((r) => r.json() as Promise<{ logs: Row[] }>)
       .then((d) => setLogs(d.logs ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load audit logs" }))

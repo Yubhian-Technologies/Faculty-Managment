@@ -53,28 +53,28 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Candidates", href: "/location-dept-head/candidates", iconName: "Users", roles: ["LOCATION_DEPT_HEAD"] },
   { label: "My Interviews", href: "/location-dept-head/interviews", iconName: "CalendarCheck", roles: ["LOCATION_DEPT_HEAD"] },
 
-  // Vice Principal
+  // Vice Principal — own dashboard + General Admin Vacancies; everything else
+  // is shared with Principal below (VICE_PRINCIPAL added to those roles arrays)
+  // since the two roles carry equal authority per AGENTS.md.
   { label: "Dashboard", href: "/vice-principal", iconName: "LayoutDashboard", roles: ["VICE_PRINCIPAL"] },
   { label: "General Admin Vacancies", href: "/vice-principal/vacancies", iconName: "ClipboardPlus", roles: ["VICE_PRINCIPAL"], section: "Hiring" },
-  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["VICE_PRINCIPAL"] },
-  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["VICE_PRINCIPAL"] },
 
-  // Principal
+  // Principal (shared with Vice Principal — see note above)
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-  { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL"], section: "Institution" },
-  { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL"] },
-  { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL"] },
-  { label: "Interview Plans", href: "/principal/interviews", iconName: "CalendarCheck", roles: ["PRINCIPAL"] },
-  { label: "Hiring Decisions", href: "/principal/decisions", iconName: "UserCheck", roles: ["PRINCIPAL"] },
-  { label: "Leave Approvals", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL"], section: "Administration" },
-  { label: "Attendance Report", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL"] },
-  { label: "Payroll", href: "/principal/payslips", iconName: "Wallet", roles: ["PRINCIPAL"] },
-  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL"] },
-  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL"] },
-  { label: "Training Approvals", href: "/principal/training", iconName: "GraduationCap", roles: ["PRINCIPAL"] },
-  { label: "Grievance Desk", href: "/principal/grievance", iconName: "AlertCircle", roles: ["PRINCIPAL"] },
-  { label: "Documents", href: "/principal/documents", iconName: "FolderOpen", roles: ["PRINCIPAL"] },
-  { label: "Reports", href: "/principal/reports", iconName: "BarChart2", roles: ["PRINCIPAL"] },
+  { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Institution" },
+  { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Interview Plans", href: "/principal/interviews", iconName: "CalendarCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Hiring Decisions", href: "/principal/decisions", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Leave Approvals", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration" },
+  { label: "Attendance Report", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Payroll", href: "/principal/payslips", iconName: "Wallet", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Training Approvals", href: "/principal/training", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Grievance Desk", href: "/principal/grievance", iconName: "AlertCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Documents", href: "/principal/documents", iconName: "FolderOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Reports", href: "/principal/reports", iconName: "BarChart2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
 
   // HOD
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
@@ -139,7 +139,10 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Purchase Department
   { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
-  { label: "Indent Requests", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
+  { label: "Pending Requests", href: "/purchase/pending", iconName: "Clock", roles: ["PURCHASE_DEPT"] },
+  { label: "Latest Requests", href: "/purchase/latest", iconName: "History", roles: ["PURCHASE_DEPT"] },
+  { label: "All Requests", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
+  { label: "Browse by Location", href: "/purchase/browse", iconName: "MapPin", roles: ["PURCHASE_DEPT"], section: "Organization" },
 ];
 
 export function getNavItemsForRole(role: UserRole): NavItem[] {
@@ -160,7 +163,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   VICE_PRINCIPAL: [
     { label: "Home", href: "/vice-principal", iconName: "LayoutDashboard", roles: ["VICE_PRINCIPAL"] },
-    { label: "Vacancies", href: "/vice-principal/vacancies", iconName: "ClipboardPlus", roles: ["VICE_PRINCIPAL"] },
+    { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["VICE_PRINCIPAL"] },
+    { label: "Leaves", href: "/principal/leave", iconName: "CalendarClock", roles: ["VICE_PRINCIPAL"] },
     { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["VICE_PRINCIPAL"] },
   ],
   ADMINISTRATION: [
@@ -227,6 +231,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   PURCHASE_DEPT: [
     { label: "Home", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
+    { label: "Pending", href: "/purchase/pending", iconName: "Clock", roles: ["PURCHASE_DEPT"] },
+    { label: "Browse", href: "/purchase/browse", iconName: "MapPin", roles: ["PURCHASE_DEPT"] },
     { label: "Indents", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
   ],
   STUDENT: [],

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate } from "@/lib/utils";
 import type { BudgetRequest } from "@/types";
 
@@ -22,7 +23,7 @@ export function EmergencyReportUpload() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/budget-requests?status=FINANCE_APPROVED")
+    collegeFetch("/api/college/budget-requests?status=FINANCE_APPROVED")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests((d.requests ?? []).filter((r) => r.isEmergency && r.emergencyType === "NON_GOODS")))
       .catch(() => toast({ variant: "destructive", title: "Failed to load emergency requests" }))
@@ -44,7 +45,7 @@ export function EmergencyReportUpload() {
       }
       const { url, fileName } = (await uploadRes.json()) as { url: string; fileName: string };
 
-      const patchRes = await fetch(`/api/college/budget-requests/${request.id}`, {
+      const patchRes = await collegeFetch(`/api/college/budget-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reportFileUrl: url, reportFileName: fileName }),

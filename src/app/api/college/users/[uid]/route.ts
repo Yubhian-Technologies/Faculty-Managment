@@ -21,7 +21,7 @@ async function loadTargetInScope(
 
   const target = targetSnap.data() as { role: string; department?: string };
 
-  if (session.role === "PRINCIPAL") {
+  if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
     if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"].includes(target.role)) {
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
@@ -49,7 +49,7 @@ export async function GET(
   { params }: { params: Promise<{ uid: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
     const { uid } = await params;
     const db = getAdminDb();
 
@@ -71,7 +71,7 @@ export async function PATCH(
   { params }: { params: Promise<{ uid: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
     const { uid } = await params;
     const body = (await request.json()) as Partial<{
       isActive: boolean;

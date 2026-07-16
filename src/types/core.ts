@@ -552,6 +552,10 @@ export interface StudentRecord {
   rollNumber: string;
   name: string;
   status: StudentStatus;
+  gender?: string;
+  dateOfBirth?: string;        // yyyy-mm-dd, kept as string (no statutory-date math needed)
+  guardianContact?: string;
+  email?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

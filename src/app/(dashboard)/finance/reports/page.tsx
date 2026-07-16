@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency } from "@/lib/utils";
 import { auth } from "@/lib/firebase/client";
 import { exportFinanceReportExcel } from "@/lib/finance/exportExcel";
@@ -40,7 +41,7 @@ export default function FinanceReportsPage() {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   useEffect(() => {
-    fetch("/api/college/info").then((r) => r.json() as Promise<{ name: string }>).then((d) => setCollegeName(d.name)).catch(() => {});
+    collegeFetch("/api/college/info").then((r) => r.json() as Promise<{ name: string }>).then((d) => setCollegeName(d.name)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function FinanceReportsPage() {
     const params = new URLSearchParams({
       period, periodLabel: label, from: from.toISOString(), to: to.toISOString(),
     });
-    fetch(`/api/college/finance-reports?${params.toString()}`)
+    collegeFetch(`/api/college/finance-reports?${params.toString()}`)
       .then((r) => r.json() as Promise<FinanceReportSummary>)
       .then(setReport)
       .catch(() => toast({ variant: "destructive", title: "Failed to load report" }))

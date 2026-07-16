@@ -30,7 +30,7 @@ export async function GET() {
 // POST — Vice Principal (PRINCIPAL role) submits a General Admin vacancy request
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       position: string;
       requiredCount: number;

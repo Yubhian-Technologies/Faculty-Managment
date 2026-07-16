@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, ShoppingCart } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Building2, ShoppingCart, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { IndentStatusBadge } from "@/components/shared/indent/IndentStatusBadge";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import {
   PURCHASE_CLEARANCE_STATUS_LABELS,
@@ -36,6 +39,8 @@ const CLEARANCE_STATUS_STYLES: Record<string, string> = {
 };
 
 export default function PurchaseIndentsPage() {
+  const searchParams = useSearchParams();
+  const departmentFilter = searchParams.get("department");
   const [requests, setRequests] = useState<IndentRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [clearanceRequests, setClearanceRequests] = useState<ClearanceRow[]>([]);
@@ -43,22 +48,25 @@ export default function PurchaseIndentsPage() {
 
   useEffect(() => {
     setIsLoading(true);
-    fetch("/api/college/indent-requests")
+    collegeFetch("/api/college/indent-requests")
       .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
       .finally(() => setIsLoading(false));
 
     setIsLoadingClearance(true);
-    fetch("/api/college/finance-purchase-clearance")
+    collegeFetch("/api/college/finance-purchase-clearance")
       .then((r) => r.json() as Promise<{ requests: ClearanceRow[] }>)
       .then((d) => setClearanceRequests(d.requests ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load purchase clearance requests" }))
       .finally(() => setIsLoadingClearance(false));
   }, []);
 
+  const filteredRequests = departmentFilter ? requests.filter((r) => r.department === departmentFilter) : requests;
+  const filteredClearanceRequests = departmentFilter ? clearanceRequests.filter((r) => r.department === departmentFilter) : clearanceRequests;
+
   const grouped: Record<string, IndentRequest[]> = {};
-  for (const r of requests) {
+  for (const r of filteredRequests) {
     (grouped[r.department] ??= []).push(r);
   }
   const departments = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
@@ -70,13 +78,23 @@ export default function PurchaseIndentsPage() {
         description="Indents raised by departments, grouped for sourcing quotations"
       />
 
+      {departmentFilter && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Filtered to department:</span>
+          <Badge variant="outline">{departmentFilter}</Badge>
+          <Button variant="ghost" size="sm" asChild className="h-7 px-2">
+            <Link href="/purchase/indents"><X className="h-3 w-3 mr-1" />Clear</Link>
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Purchase Clearance Requests</h2>
         {isLoadingClearance ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3].map((i) => <CardSkeleton key={i} />)}
           </div>
-        ) : clearanceRequests.length === 0 ? (
+        ) : filteredClearanceRequests.length === 0 ? (
           <EmptyState
             title="No purchase clearance requests"
             description="Requests raised by HODs will appear here for quotation sourcing and purchase."
@@ -84,7 +102,7 @@ export default function PurchaseIndentsPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {clearanceRequests.map((item) => (
+            {filteredClearanceRequests.map((item) => (
               <Link key={item.id} href={`/purchase/clearance/${item.id}`}>
                 <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                   <CardContent className="p-4 space-y-2">
@@ -113,7 +131,7 @@ export default function PurchaseIndentsPage() {
         </div>
       )}
 
-      {!isLoading && requests.length === 0 && (
+      {!isLoading && filteredRequests.length === 0 && (
         <EmptyState
           title="No indent requests"
           description="Indents raised by HODs against their department budgets will appear here."

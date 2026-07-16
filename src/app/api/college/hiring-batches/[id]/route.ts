@@ -21,7 +21,7 @@ export async function GET(
 ) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS"
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS"
     );
     const { id } = await params;
     const db = getAdminDb();
@@ -60,7 +60,7 @@ export async function PATCH(
 ) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER"
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER"
     );
     const { id } = await params;
     const body = (await request.json()) as {

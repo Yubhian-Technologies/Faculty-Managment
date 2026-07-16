@@ -3,8 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-
-const YEAR_LABELS: Record<number, string> = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
+import { ensureAcademicYear } from "@/lib/college/academicYears";
 
 // ADMINISTRATION (LOCATION-scoped) manages this for colleges in its own location;
 // PRINCIPAL manages it for their own college; SUPER_ADMIN for any college.
@@ -63,28 +62,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "College not in your location" }, { status: 403 });
     }
 
-    const collection = db.collection("colleges").doc(session.collegeId).collection("academicYears");
-
-    // One doc per yearNumber — reuse existing doc if it's already there.
-    const existing = await collection.where("yearNumber", "==", yearNumber).limit(1).get();
-    const now = new Date();
-
-    if (!existing.empty) {
-      const ref = existing.docs[0].ref;
-      await ref.update({ isActive: body.isActive ?? true, updatedAt: now });
-      return NextResponse.json({ id: ref.id }, { status: 200 });
-    }
-
-    const ref = await collection.add({
-      collegeId: session.collegeId,
-      yearNumber,
-      label: YEAR_LABELS[yearNumber],
-      isActive: body.isActive ?? true,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return NextResponse.json({ id: ref.id }, { status: 201 });
+    const id = await ensureAcademicYear(db, session.collegeId, yearNumber, body.isActive ?? true);
+    return NextResponse.json({ id }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

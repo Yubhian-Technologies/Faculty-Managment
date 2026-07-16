@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
 import { toast } from "@/hooks/useToast";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PURCHASE_CLEARANCE_STATUS_LABELS, type FinancePurchaseClearance, type PurchaseQuotation } from "@/types";
 
@@ -42,7 +43,7 @@ export default function PurchaseClearanceDetailPage() {
 
   function load() {
     setIsLoading(true);
-    fetch("/api/college/finance-purchase-clearance")
+    collegeFetch("/api/college/finance-purchase-clearance")
       .then((r) => r.json() as Promise<{ requests: FinancePurchaseClearance[] }>)
       .then((d) => {
         const found = (d.requests ?? []).find((r) => r.id === params.id) ?? null;
@@ -60,7 +61,7 @@ export default function PurchaseClearanceDetailPage() {
     if (!item) return;
     setIsActing(true);
     try {
-      const res = await fetch(`/api/college/finance-purchase-clearance/${item.id}`, {
+      const res = await collegeFetch(`/api/college/finance-purchase-clearance/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, remarks }),
@@ -83,7 +84,7 @@ export default function PurchaseClearanceDetailPage() {
     if (!item) return;
     setIsSending(true);
     try {
-      const res = await fetch(`/api/college/finance-purchase-clearance/${item.id}`, {
+      const res = await collegeFetch(`/api/college/finance-purchase-clearance/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "SEND_TO_FINANCE", quotations, selectedQuotationId }),
@@ -105,7 +106,7 @@ export default function PurchaseClearanceDetailPage() {
     if (!item) return;
     setIsMarking(true);
     try {
-      const res = await fetch(`/api/college/finance-purchase-clearance/${item.id}`, {
+      const res = await collegeFetch(`/api/college/finance-purchase-clearance/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "GOODS_PURCHASED" }),

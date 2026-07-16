@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER");
 
     const db = getAdminDb();
     const snap = await db
@@ -29,7 +29,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
 
     const body = (await request.json()) as {
       name: string;
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const deptId = searchParams.get("deptId");
     if (!deptId) {
@@ -116,7 +116,7 @@ export async function DELETE(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
 
     const body = (await request.json()) as {
       deptId: string;

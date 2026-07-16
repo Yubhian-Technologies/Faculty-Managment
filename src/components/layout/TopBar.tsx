@@ -5,6 +5,7 @@ import { useUIStore } from "@/store/uiStore";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
+import { CollegeSwitcher } from "@/components/layout/CollegeSwitcher";
 
 interface TopBarProps {
   title?: string;
@@ -30,6 +31,7 @@ export function TopBar({ title }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-2">
+        <CollegeSwitcher />
         <Button
           variant="ghost"
           size="icon"

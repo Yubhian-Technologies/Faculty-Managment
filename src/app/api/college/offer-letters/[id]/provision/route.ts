@@ -26,7 +26,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("ACCOUNTS", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("ACCOUNTS", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
     const db = getAdminDb();
 
