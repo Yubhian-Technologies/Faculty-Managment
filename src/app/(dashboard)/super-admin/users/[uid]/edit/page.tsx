@@ -10,12 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS } from "@/types";
 import type { FacultyProfileFields, UserRole } from "@/types";
 
 const ASSIGNABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"];
+const COLLEGE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT"];
 
 export default function EditUserPage() {
   const router = useRouter();
@@ -23,55 +26,159 @@ export default function EditUserPage() {
   const searchParams = useSearchParams();
   const uid = params.uid;
   const collegeId = searchParams.get("collegeId") ?? "";
+  const locationId = searchParams.get("locationId") ?? "";
+  const roleParam = (searchParams.get("role") ?? "") as UserRole | "";
+
+  // College-scoped roles have a full edit form; Administration/Management only get
+  // the photo and Module 6 — Others (no PATCH route exists for their other fields).
+  const isCollegeScoped = (roleParam !== "" && COLLEGE_ROLES.includes(roleParam)) || (!roleParam && !!collegeId);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<UserRole>("PRINCIPAL");
+  const [role, setRole] = useState<UserRole>(roleParam || "PRINCIPAL");
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
 
   useEffect(() => {
-    if (!collegeId) {
-      toast({ variant: "destructive", title: "Missing college context" });
+    if (isCollegeScoped) {
+      if (!collegeId) {
+        toast({ variant: "destructive", title: "Missing college context" });
+        router.push("/super-admin/users");
+        return;
+      }
+      fetch(`/api/admin/users/${uid}?collegeId=${collegeId}`)
+        .then((r) => r.json() as Promise<{ user?: Record<string, unknown>; error?: string }>)
+        .then((data) => {
+          if (!data.user) {
+            toast({ variant: "destructive", title: data.error ?? "User not found" });
+            router.push("/super-admin/users");
+            return;
+          }
+          const u = data.user;
+          setEmail((u.email as string) ?? "");
+          setName((u.name as string) ?? "");
+          setPhone((u.phone as string) ?? "");
+          setRole((u.role as UserRole) ?? "PRINCIPAL");
+          setPhotoUrl((u.profilePhotoUrl as string) || undefined);
+          setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
+          setPersonalDetails({
+            gender: (u.gender as string) ?? "",
+            dateOfBirth: toDateInputValue(u.dateOfBirth as never),
+            legalName: (u.legalName as string) ?? "",
+            fatherName: (u.fatherName as string) ?? "",
+            motherName: (u.motherName as string) ?? "",
+            religion: (u.religion as string) ?? "",
+            caste: (u.caste as string) ?? "",
+            aadharNo: (u.aadharNo as string) ?? "",
+            panNo: (u.panNo as string) ?? "",
+            ratificationStatus: (u.ratificationStatus as string) ?? "",
+            ratificationDate: toDateInputValue(u.ratificationDate as never),
+            maritalStatus: (u.maritalStatus as string) ?? "",
+            spouseName: (u.spouseName as string) ?? "",
+            numberOfChildren: u.numberOfChildren as number | undefined,
+            referral: (u.referral as string) ?? "",
+            nativePlace: (u.nativePlace as string) ?? "",
+            temporaryAddress: (u.temporaryAddress as string) ?? "",
+            permanentSameAsTemporary: (u.permanentSameAsTemporary as boolean) ?? false,
+            permanentAddress: (u.permanentAddress as string) ?? "",
+            bloodGroup: (u.bloodGroup as string) ?? "",
+          });
+        })
+        .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+        .finally(() => setLoading(false));
+    } else if (roleParam === "ADMINISTRATION") {
+      if (!locationId) {
+        toast({ variant: "destructive", title: "Missing location context" });
+        router.push("/super-admin/users");
+        return;
+      }
+      fetch(`/api/location/users?locationId=${locationId}`)
+        .then((r) => r.json() as Promise<{ users?: Record<string, unknown>[] }>)
+        .then((data) => {
+          const u = (data.users ?? []).find((x) => x.uid === uid);
+          if (!u) {
+            toast({ variant: "destructive", title: "User not found" });
+            router.push("/super-admin/users");
+            return;
+          }
+          setEmail((u.email as string) ?? "");
+          setName((u.name as string) ?? "");
+          setRole("ADMINISTRATION");
+          setPhotoUrl((u.profilePhotoUrl as string) || undefined);
+          setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
+        })
+        .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+        .finally(() => setLoading(false));
+    } else if (roleParam === "MANAGEMENT") {
+      fetch("/api/admin/users?scope=global")
+        .then((r) => r.json() as Promise<{ users?: Record<string, unknown>[] }>)
+        .then((data) => {
+          const u = (data.users ?? []).find((x) => x.uid === uid);
+          if (!u) {
+            toast({ variant: "destructive", title: "User not found" });
+            router.push("/super-admin/users");
+            return;
+          }
+          setEmail((u.email as string) ?? "");
+          setName((u.name as string) ?? "");
+          setRole("MANAGEMENT");
+          setPhotoUrl((u.profilePhotoUrl as string) || undefined);
+          setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
+        })
+        .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+        .finally(() => setLoading(false));
+    } else {
+      toast({ variant: "destructive", title: "Unknown role context" });
       router.push("/super-admin/users");
-      return;
     }
-    fetch(`/api/admin/users/${uid}?collegeId=${collegeId}`)
-      .then((r) => r.json() as Promise<{ user?: Record<string, unknown>; error?: string }>)
-      .then((data) => {
-        if (!data.user) {
-          toast({ variant: "destructive", title: data.error ?? "User not found" });
-          router.push("/super-admin/users");
-          return;
-        }
-        const u = data.user;
-        setEmail((u.email as string) ?? "");
-        setName((u.name as string) ?? "");
-        setPhone((u.phone as string) ?? "");
-        setRole((u.role as UserRole) ?? "PRINCIPAL");
-        setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
-        setPersonalDetails({
-          gender: (u.gender as string) ?? "",
-          dateOfBirth: toDateInputValue(u.dateOfBirth as never),
-          legalName: (u.legalName as string) ?? "",
-          fatherName: (u.fatherName as string) ?? "",
-          motherName: (u.motherName as string) ?? "",
-          religion: (u.religion as string) ?? "",
-          caste: (u.caste as string) ?? "",
-          aadharNo: (u.aadharNo as string) ?? "",
-          panNo: (u.panNo as string) ?? "",
-          ratificationStatus: (u.ratificationStatus as string) ?? "",
-          ratificationDate: toDateInputValue(u.ratificationDate as never),
-        });
-      })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
-      .finally(() => setLoading(false));
-  }, [uid, collegeId, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, collegeId, locationId, roleParam]);
 
-  const showAcademicProfile = role === "PRINCIPAL";
+  async function handlePhotoUploaded(url: string) {
+    try {
+      const res = await fetch(`/api/admin/users/${uid}/photo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoUrl: url,
+          role,
+          collegeId: collegeId || undefined,
+          locationId: locationId || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setPhotoUrl(url);
+      toast({ variant: "success", title: "Photo updated" });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save photo" });
+    }
+  }
+
+  async function handleOtherInfoSaved() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${uid}/photo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          otherInformation: academicProfile.otherInformation ?? "",
+          role,
+          collegeId: collegeId || undefined,
+          locationId: locationId || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Saved" });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save" });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -90,7 +197,7 @@ export default function EditUserPage() {
           phone,
           role,
           ...personalDetails,
-          ...(showAcademicProfile ? { academicProfile } : {}),
+          academicProfile,
         }),
       });
       if (!res.ok) throw new Error();
@@ -116,52 +223,105 @@ export default function EditUserPage() {
       <PageHeader title="Edit User" description={email} />
 
       <Card>
-        <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Profile Photo</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label>Full Name *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {ASSIGNABLE_ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
-              </div>
-            </div>
-
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={saving}>Save Changes</Button>
-            </div>
-          </form>
+          <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={handlePhotoUploaded} />
         </CardContent>
       </Card>
 
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
-        <CardContent>
-          <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-        </CardContent>
-      </Card>
+      {isCollegeScoped ? (
+        <>
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Full Name *</Label>
+                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+                  </div>
+                </div>
 
-      {showAcademicProfile && (
-        <Card className="mt-6">
-          <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-          <CardContent>
-            <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} />
-          </CardContent>
-        </Card>
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ASSIGNABLE_ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
+                  <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+                  <Button type="submit" loading={saving}>Save Changes</Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
+            <CardContent>
+              <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
+            </CardContent>
+          </Card>
+
+          {role === "PRINCIPAL" ? (
+            <Card className="mt-6">
+              <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
+              <CardContent>
+                <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="mt-6">
+              <CardHeader><CardTitle className="text-base">Module 6 — Others</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label>Other Information</Label>
+                  <Textarea
+                    value={academicProfile.otherInformation ?? ""}
+                    onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
+                    placeholder="Anything not covered above — add it here"
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground">Saved together with &quot;Save Changes&quot; above.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      ) : (
+        <>
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">Module 6 — Others</CardTitle></CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <Textarea
+                  value={academicProfile.otherInformation ?? ""}
+                  onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
+                  placeholder="Anything not covered above — add it here"
+                  rows={4}
+                />
+                <div className="flex justify-end">
+                  <Button type="button" loading={saving} onClick={() => void handleOtherInfoSaved()}>Save</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="mt-6">
+            <CardContent className="py-4">
+              <p className="text-sm text-muted-foreground">
+                {ROLE_LABELS[role]} accounts only support editing the profile photo and Module 6 — Others from Super Admin. Name: <strong className="text-foreground">{name}</strong>
+              </p>
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   );

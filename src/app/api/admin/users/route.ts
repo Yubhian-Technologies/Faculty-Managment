@@ -82,12 +82,18 @@ export async function POST(request: Request) {
       department?: string;
       phone?: string;
       academicProfile?: Record<string, unknown>;
+      profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, collegeId, locationId, department, phone, academicProfile } = body;
+    const { name, email, password, role, collegeId, locationId, department, phone, academicProfile, profilePhotoUrl } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Uploaded before the account exists (under a temp id), so we can only check
+    // it came from our own upload endpoint, not that it names this specific uid.
+    if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
+      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
     if (!creatableRoles.includes(role)) {
@@ -130,16 +136,19 @@ export async function POST(request: Request) {
       // MANAGEMENT / FINANCE / PURCHASE_DEPT: no college/location scope — systemUsers only.
       uid = await createFirebaseUser(email, password, name);
       await db.collection("systemUsers").doc(uid).set({
-        uid, role, email, name, phone: phone ?? "", collegeId: "", isActive: true, createdAt: new Date(),
+        uid, role, email, name, phone: phone ?? "", collegeId: "",
+        ...(academicProfile ? { academicProfile } : {}),
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+        isActive: true, createdAt: new Date(),
       });
     } else if (scope === "LOCATION" && locationId) {
       // ADMINISTRATION / ACCOUNTS: location subcollection.
-      uid = await provisionLocationUser(db, locationId, role, { name, email, password, phone });
+      uid = await provisionLocationUser(db, locationId, role, { name, email, password, phone, academicProfile, profilePhotoUrl });
     } else if (scope === "COLLEGE" && collegeId) {
       // PRINCIPAL / VICE_PRINCIPAL: college subcollection.
       uid = await provisionCollegeUser(
         db, collegeId, role,
-        { ...body, name, email, password, phone, department, academicProfile },
+        { ...body, name, email, password, phone, department, academicProfile, profilePhotoUrl },
         { locationId: collegeLocationId, performedBy: session.uid, performedByRole: session.role }
       );
     } else {

@@ -88,12 +88,18 @@ export async function POST(request: Request) {
       staffType?: "teaching" | "supporting";
       designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Dean - R&D")
       academicProfile?: Record<string, unknown>;
+      profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile, designation } = body;
+    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Uploaded before the account exists (under a temp id), so we can only check
+    // it came from our own upload endpoint, not that it names this specific uid.
+    if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
+      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
     // Enforce role-based creation rules — Vice Principal mirrors Principal's authority.
@@ -144,6 +150,7 @@ export async function POST(request: Request) {
         ...(body.staffType ? { staffType: body.staffType } : {}),
         ...(designation ? { designation } : {}),
         ...(academicProfile ? { academicProfile } : {}),
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         ...buildPersonalDetailsUpdate(body),
         isActive: true,
         createdAt: now,
@@ -151,7 +158,10 @@ export async function POST(request: Request) {
       });
 
     // Role mapping for Firestore-based session resolution
-    await db.collection("systemUsers").doc(uid).set({ uid, role, collegeId, email, name });
+    await db.collection("systemUsers").doc(uid).set({
+      uid, role, collegeId, email, name,
+      ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
+    });
 
     // Audit log
     let creatorName = "Unknown";

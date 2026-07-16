@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER");
     const { searchParams } = new URL(request.url);
     const yearFilter = searchParams.get("year");
+    const courseFilter = searchParams.get("courseId");
 
     const db = getAdminDb();
     let query = db
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
       query = query.where("facultyInchargeUid", "==", session.uid);
     }
 
+    if (courseFilter) query = query.where("courseId", "==", courseFilter);
     if (yearFilter) query = query.where("year", "==", Number(yearFilter));
 
     const snap = await query.get();
@@ -54,6 +56,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const body = (await request.json()) as {
+      courseId: string;
       name: string;
       year: number;
       batch: string;
@@ -62,11 +65,19 @@ export async function POST(request: Request) {
       facultyInchargeName?: string;
     };
 
-    if (!body.name?.trim() || !body.year || !body.batch?.trim()) {
-      return NextResponse.json({ error: "name, year, batch are required" }, { status: 400 });
+    if (!body.courseId || !body.name?.trim() || !body.year || !body.batch?.trim()) {
+      return NextResponse.json({ error: "courseId, name, year, batch are required" }, { status: 400 });
     }
 
     const db = getAdminDb();
+    const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(body.courseId).get();
+    if (!courseSnap.exists) {
+      return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+    const course = courseSnap.data() as { name: string; durationYears: number };
+    if (Number(body.year) < 1 || Number(body.year) > course.durationYears) {
+      return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
+    }
 
     // Reject years the college hasn't opened via Academic Years. Colleges that have
     // never configured any academic years yet are left unrestricted (no doc to check
@@ -98,6 +109,8 @@ export async function POST(request: Request) {
     await ref.set({
       collegeId: session.collegeId,
       department: dept,
+      courseId: body.courseId,
+      courseName: course.name,
       name: body.name.trim().toUpperCase(),
       year: Number(body.year),
       batch: body.batch.trim(),

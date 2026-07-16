@@ -201,6 +201,7 @@ export interface FMSUser {
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
+  profilePhotoUrl?: string; // Firebase Storage download URL, same field name as FacultyMember below
 
   // Personal / statutory details (same field names as FacultyMember below, for consistency)
   gender?: "Male" | "Female" | "Other";
@@ -213,6 +214,15 @@ export interface FMSUser {
   panNo?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationDate?: Timestamp;
+  maritalStatus?: "Single" | "Married";
+  spouseName?: string;
+  numberOfChildren?: number;
+  referral?: string;              // referral source/person, if any
+  nativePlace?: string;
+  temporaryAddress?: string;
+  permanentSameAsTemporary?: boolean;
+  permanentAddress?: string;      // ignored/blank when permanentSameAsTemporary is true
+  bloodGroup?: string;
 
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile; PRINCIPAL/VICE_PRINCIPAL omit teachingAssignment in the UI
   isActive: boolean;
@@ -271,6 +281,60 @@ export interface Department {
   hodUid?: string;
   hodName?: string;
   isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// ─── Course (a program offered by a Department — engineering, pharmacy, dental, etc.) ──
+
+export interface Course {
+  id: string;
+  collegeId: string;
+  departmentId: string;
+  name: string;          // "B.Tech", "B.Pharm", "BDS", "MBA", ...
+  code: string;           // "BTECH"
+  durationYears: number;  // e.g. 4, 2
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// ─── Course-Year Timing (college timings, periods, breaks — per course, per year) ──
+
+export interface BreakConfig {
+  afterPeriod: number;      // e.g. break happens after period 4
+  durationMinutes: number;
+}
+
+export interface CourseYearTiming {
+  id: string;                // `${courseId}_year${year}`
+  collegeId: string;
+  departmentId: string;
+  courseId: string;
+  year: number;
+  collegeStartTime: string;  // "HH:MM" 24h
+  collegeEndTime: string;    // "HH:MM" 24h
+  numberOfPeriods: number;
+  periodDurationMinutes: number;
+  lunchBreak: BreakConfig;
+  shortBreaks: BreakConfig[];
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// ─── Course Academic Year (per course, per year — advancing it bumps active faculty
+// experience). Distinct from AcademicYear below (a college-wide 1-4 year open/close
+// gate) — the two are unrelated features that happen to share a similar name.
+
+export interface CourseAcademicYear {
+  id: string;                // `${courseId}_year${year}`
+  collegeId: string;
+  departmentId: string;
+  courseId: string;
+  year: number;
+  label: string;              // "2025-2026"
+  advancedAt?: Timestamp;     // set on every advance (not on first creation)
+  advancedByName?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -359,6 +423,17 @@ export interface FacultyMember {
   userUid?: string;            // links to users/{uid} if they have a system login
   profilePhotoUrl?: string;
 
+  // Carried over from the hiring pipeline when a candidate had a course/subject preference set —
+  // consumed once by the faculty edit page to pre-fill TeachingAssignmentsEditor rows (course/year/subject
+  // known, section left for the HOD to pick). Not cleared automatically; harmless to leave once assignments exist.
+  pendingTeachingPreference?: {
+    courseId: string;
+    courseName: string;
+    year: number;
+    subjectIds: string[];
+    subjectNames: string[];
+  };
+
   // Extended profile fields (from institution records / bulk import)
   gender?: "Male" | "Female" | "Other";
   dateOfBirth?: Timestamp;
@@ -372,6 +447,15 @@ export interface FacultyMember {
   collegeEmail?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationDate?: Timestamp;
+  maritalStatus?: "Single" | "Married";
+  spouseName?: string;
+  numberOfChildren?: number;
+  referral?: string;              // referral source/person, if any
+  nativePlace?: string;
+  temporaryAddress?: string;
+  permanentSameAsTemporary?: boolean;
+  permanentAddress?: string;      // ignored/blank when permanentSameAsTemporary is true
+  bloodGroup?: string;
   hasPHD?: boolean;
   internalExperience?: number; // years of experience within the institution
   externalExperience?: number; // years of experience outside the institution
@@ -500,6 +584,9 @@ export interface FacultyProfileFields {
   professionalBodyMemberships?: string;
   authoredBooks: AuthoredBook[];
   notableAwards?: string;
+
+  // Module 6 — Others
+  otherInformation?: string;
 }
 
 // PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object
@@ -527,8 +614,10 @@ export interface Section {
   id: string;
   collegeId: string;
   department: string;
+  courseId: string;
+  courseName?: string;
   name: string;              // "A", "B", "C" etc.
-  year: 1 | 2 | 3 | 4;      // academic year (1st year = Basic Science)
+  year: number;              // academic year within the course (1..course.durationYears)
   batch: string;             // admission batch e.g. "2023-2027"
   facultyInchargeUid?: string;
   facultyInchargeName?: string;
@@ -653,6 +742,7 @@ export type AuditAction =
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_DEACTIVATED"
+  | "PROFILE_PHOTO_UPDATED"
   // Faculty module
   | "FACULTY_CREATED"
   | "FACULTY_UPDATED"
@@ -715,7 +805,9 @@ export type AuditAction =
   | "PURCHASE_CLEARANCE_FINANCE_APPROVED"
   | "PURCHASE_CLEARANCE_FINANCE_REJECTED"
   | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
-  | "PURCHASE_CLEARANCE_GRN_UPLOADED";
+  | "PURCHASE_CLEARANCE_GRN_UPLOADED"
+  // Academic Year module
+  | "ACADEMIC_YEAR_ADVANCED";
 
 export interface AuditLog {
   id: string;

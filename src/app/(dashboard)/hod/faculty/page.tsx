@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Pencil, Upload, Trash2, LogIn, Eye, EyeOff } from "lucide-react";
+import { UserPlus, Pencil, Upload, Download, Trash2, LogIn, Eye, EyeOff } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
+import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { FacultyMember, Designation, EmploymentType, FacultyStatus } from "@/types";
+import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment } from "@/types";
 
 function fmtDate(val: unknown): string {
   if (!val) return "—";
@@ -58,6 +60,7 @@ export default function HODFacultyPage() {
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [isCreatingLogin, setIsCreatingLogin] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   async function load(status: string) {
     setIsLoading(true);
@@ -131,6 +134,25 @@ export default function HODFacultyPage() {
     }
   }
 
+  async function handleExportAll() {
+    setIsExporting(true);
+    try {
+      const teachingSummaries: Record<string, string> = {};
+      try {
+        const res = await fetch("/api/college/teaching-assignments?dept=true");
+        const data = await res.json() as { assignments?: TeachingAssignment[] };
+        for (const a of data.assignments ?? []) {
+          const entry = `${a.courseName} Y${a.year}-${a.sectionName}: ${a.subjectName}`;
+          teachingSummaries[a.facultyId] = teachingSummaries[a.facultyId] ? `${teachingSummaries[a.facultyId]}; ${entry}` : entry;
+        }
+      } catch { /* export still proceeds without the teaching summary column */ }
+
+      exportFacultyCsv(faculty, teachingSummaries);
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   const STATUS_TABS = [
     { key: "", label: "All" },
     { key: "ACTIVE", label: "Active" },
@@ -144,14 +166,17 @@ export default function HODFacultyPage() {
       key: "name",
       header: "Faculty Member",
       render: (row) => (
-        <div className="space-y-0.5 min-w-0">
-          <p className="font-medium leading-tight">{row.name as string}</p>
-          {(row.collegeEmail as string) && (
-            <p className="text-xs text-muted-foreground">{row.collegeEmail as string}</p>
-          )}
-          <p className="text-xs text-muted-foreground">{row.email as string}</p>
-          <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
-          <p className="text-xs text-muted-foreground">Joined: {fmtDate(row.joiningDate)}</p>
+        <div className="flex items-start gap-3 min-w-0">
+          <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
+          <div className="space-y-0.5 min-w-0">
+            <p className="font-medium leading-tight">{row.name as string}</p>
+            {(row.collegeEmail as string) && (
+              <p className="text-xs text-muted-foreground">{row.collegeEmail as string}</p>
+            )}
+            <p className="text-xs text-muted-foreground">{row.email as string}</p>
+            <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
+            <p className="text-xs text-muted-foreground">Joined: {fmtDate(row.joiningDate)}</p>
+          </div>
         </div>
       ),
     },
@@ -252,6 +277,9 @@ export default function HODFacultyPage() {
             <Button variant="outline" onClick={() => router.push("/hod/faculty/import")}>
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>
+            <Button variant="outline" onClick={() => void handleExportAll()} loading={isExporting} disabled={isExporting || faculty.length === 0}>
+              <Download className="h-4 w-4 mr-2" />Export All Details
+            </Button>
             <Button onClick={() => router.push("/hod/faculty/new")}>
               <UserPlus className="h-4 w-4 mr-2" />Add Faculty
             </Button>
@@ -278,7 +306,6 @@ export default function HODFacultyPage() {
         emptyTitle="No faculty records yet"
         emptyDescription="Add faculty members to build your department's staff register"
         emptyAction={<Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}
-        csvFilename="faculty"
       />
 
       {/* ── Create Login Dialog ── */}

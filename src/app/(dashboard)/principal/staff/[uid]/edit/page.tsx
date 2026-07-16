@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS } from "@/types";
@@ -28,6 +29,7 @@ export default function EditStaffPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
@@ -54,6 +56,7 @@ export default function EditStaffPage() {
         setName((u.name as string) ?? "");
         setPhone((u.phone as string) ?? "");
         setDepartment((u.department as string) ?? "");
+        setPhotoUrl((u.profilePhotoUrl as string) || undefined);
         setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
         setPersonalDetails({
           gender: (u.gender as string) ?? "",
@@ -67,6 +70,15 @@ export default function EditStaffPage() {
           panNo: (u.panNo as string) ?? "",
           ratificationStatus: (u.ratificationStatus as string) ?? "",
           ratificationDate: toDateInputValue(u.ratificationDate as never),
+          maritalStatus: (u.maritalStatus as string) ?? "",
+          spouseName: (u.spouseName as string) ?? "",
+          numberOfChildren: u.numberOfChildren as number | undefined,
+          referral: (u.referral as string) ?? "",
+          nativePlace: (u.nativePlace as string) ?? "",
+          temporaryAddress: (u.temporaryAddress as string) ?? "",
+          permanentSameAsTemporary: (u.permanentSameAsTemporary as boolean) ?? false,
+          permanentAddress: (u.permanentAddress as string) ?? "",
+          bloodGroup: (u.bloodGroup as string) ?? "",
         });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff member" }))
@@ -92,6 +104,7 @@ export default function EditStaffPage() {
           department,
           ...personalDetails,
           ...(showAcademicProfile ? { academicProfile } : {}),
+          ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
       if (!res.ok) throw new Error();
@@ -124,6 +137,11 @@ export default function EditStaffPage() {
         <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2 pb-3 border-b">
+              <Label>Profile Photo</Label>
+              <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={setPhotoUrl} />
+            </div>
+
             <div className="space-y-2">
               <Label>Full Name *</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. Ramesh Kumar" />

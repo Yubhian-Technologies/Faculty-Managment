@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
-import { SUBJECT_TYPE_LABELS, DAY_LABELS } from "@/types";
+import { DAY_LABELS } from "@/types";
 
 export default function HODTeachingPage() {
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
@@ -106,14 +106,14 @@ export default function HODTeachingPage() {
               (s) => s.assignmentId === assignment.id
             );
 
-            // Sort slots by day order then start time
+            // Sort slots by day order then period number
             const DAY_ORDER: Record<string, number> = {
               MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5,
             };
             const sortedSlots = [...slots].sort((a, b) => {
               const dayDiff = (DAY_ORDER[a.day] ?? 99) - (DAY_ORDER[b.day] ?? 99);
               if (dayDiff !== 0) return dayDiff;
-              return a.startTime.localeCompare(b.startTime);
+              return a.periodNumber - b.periodNumber;
             });
 
             return (
@@ -137,29 +137,21 @@ export default function HODTeachingPage() {
                   {/* Metadata row */}
                   <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
                     <span>
-                      <span className="font-medium text-foreground">Academic Year:</span>{" "}
-                      {assignment.academicYear}
+                      <span className="font-medium text-foreground">Course:</span>{" "}
+                      {assignment.courseName}
                     </span>
                     <span>
-                      <span className="font-medium text-foreground">Semester:</span>{" "}
-                      {assignment.semester}
+                      <span className="font-medium text-foreground">Year:</span>{" "}
+                      {assignment.year}
                     </span>
-                    {assignment.section && (
-                      <span>
-                        <span className="font-medium text-foreground">Section:</span>{" "}
-                        {assignment.section}
-                      </span>
-                    )}
+                    <span>
+                      <span className="font-medium text-foreground">Section:</span>{" "}
+                      {assignment.sectionName}
+                    </span>
                     <span>
                       <span className="font-medium text-foreground">Hours/Week:</span>{" "}
                       {assignment.hoursPerWeek}
                     </span>
-                    {assignment.totalHoursAllotted != null && (
-                      <span>
-                        <span className="font-medium text-foreground">Total Allotted:</span>{" "}
-                        {assignment.totalHoursAllotted}
-                      </span>
-                    )}
                   </div>
 
                   {/* Timetable slots */}
@@ -178,7 +170,7 @@ export default function HODTeachingPage() {
                               {DAY_LABELS[slot.day] ?? slot.day}
                             </span>
                             <span className="text-muted-foreground">
-                              {" "}· {slot.startTime}–{slot.endTime}
+                              {" "}· Period {slot.periodNumber}
                             </span>
                             {slot.classroom && (
                               <span className="text-muted-foreground">

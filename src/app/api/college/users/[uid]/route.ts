@@ -79,6 +79,7 @@ export async function PATCH(
       department: string;
       phone: string;
       academicProfile: Record<string, unknown>;
+      profilePhotoUrl: string;
     }> & PersonalDetailsInput;
 
     const db = getAdminDb();
@@ -86,6 +87,14 @@ export async function PATCH(
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
     const target = targetSnap.data() as { role: string };
+
+    if (
+      body.profilePhotoUrl !== undefined &&
+      (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
+        !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${uid}_`)))
+    ) {
+      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+    }
 
     const now = new Date();
     const updates: Record<string, unknown> = { updatedAt: now, ...buildPersonalDetailsUpdate(body) };
@@ -95,6 +104,7 @@ export async function PATCH(
     if (body.department !== undefined) updates.department = body.department;
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
+    if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
     await db
       .collection("colleges")
@@ -103,9 +113,15 @@ export async function PATCH(
       .doc(uid)
       .update(updates);
 
-    // Keep systemUsers in sync (name is the only field mirrored there)
-    if (body.name !== undefined && body.name.trim()) {
-      await db.collection("systemUsers").doc(uid).set({ name: body.name.trim() }, { merge: true });
+    // Keep systemUsers in sync (name/photo are the only fields mirrored there)
+    if ((body.name !== undefined && body.name.trim()) || body.profilePhotoUrl !== undefined) {
+      await db.collection("systemUsers").doc(uid).set(
+        {
+          ...(body.name !== undefined && body.name.trim() ? { name: body.name.trim() } : {}),
+          ...(body.profilePhotoUrl !== undefined ? { profilePhotoUrl: body.profilePhotoUrl } : {}),
+        },
+        { merge: true }
+      );
     }
 
     const action = body.isActive === false ? "USER_DEACTIVATED" : body.isActive === true ? "USER_REACTIVATED" : "USER_UPDATED";

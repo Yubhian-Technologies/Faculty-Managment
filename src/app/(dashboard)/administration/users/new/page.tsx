@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { LEVEL_LABELS } from "@/types";
@@ -34,6 +35,8 @@ export default function NewLocationUserPage() {
   const [existingUsers, setExistingUsers] = useState<FMSUser[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  const [tempPhotoId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     Promise.all([
@@ -80,6 +83,7 @@ export default function NewLocationUserPage() {
           name, email, password, role,
           locationId: user?.locationId ?? "",
           locationDeptId: role === "LOCATION_DEPT_HEAD" ? locationDeptId : undefined,
+          ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
       const json = await res.json() as { uid?: string; error?: string };
@@ -103,6 +107,11 @@ export default function NewLocationUserPage() {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Staff Details</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2 pb-3 border-b">
+              <Label>Profile Photo</Label>
+              <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} />
+            </div>
+
             <div className="space-y-2">
               <Label>Full Name <span className="text-destructive">*</span></Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />

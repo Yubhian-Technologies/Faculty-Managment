@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Avatar } from "@/components/shared/Avatar";
 import {
   Dialog,
   DialogContent,
@@ -19,16 +20,23 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS } from "@/types";
-import type { FMSUser } from "@/types";
-import type { College } from "@/types";
+import type { FMSUser, UserRole } from "@/types";
+import type { College, Location } from "@/types";
 
 type UserRow = Record<string, unknown> & FMSUser;
 
 const GLOBAL_SCOPE = "__system__";
+const LOCATION_PREFIX = "loc:";
+
+// Super Admin only edits the photo for the roles it directly administers — everyone
+// else's photo is edited from their own manager's dashboard (Principal for HOD/VP,
+// HOD for faculty) and is still visible here, just not editable.
+const PHOTO_EDITABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "ADMINISTRATION", "MANAGEMENT"];
 
 export default function UsersPage() {
   const router = useRouter();
   const [colleges, setColleges] = useState<College[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [selectedCollegeId, setSelectedCollegeId] = useState("");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,12 +55,19 @@ export default function UsersPage() {
         if (c.length > 0) setSelectedCollegeId(c[0].id);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
+
+    fetch("/api/admin/locations")
+      .then((r) => r.json() as Promise<{ locations: Location[] }>)
+      .then((data) => setLocations(data.locations ?? []))
+      .catch(() => {});
   }, []);
 
   function usersUrl() {
-    return selectedCollegeId === GLOBAL_SCOPE
-      ? "/api/admin/users?scope=global"
-      : `/api/admin/users?collegeId=${selectedCollegeId}`;
+    if (selectedCollegeId === GLOBAL_SCOPE) return "/api/admin/users?scope=global";
+    if (selectedCollegeId.startsWith(LOCATION_PREFIX)) {
+      return `/api/location/users?locationId=${selectedCollegeId.slice(LOCATION_PREFIX.length)}`;
+    }
+    return `/api/admin/users?collegeId=${selectedCollegeId}`;
   }
 
   useEffect(() => {
@@ -129,9 +144,12 @@ export default function UsersPage() {
       key: "name",
       header: "Name",
       render: (row) => (
-        <div>
-          <p className="font-medium">{row.name as string}</p>
-          <p className="text-xs text-muted-foreground">{row.email as string}</p>
+        <div className="flex items-center gap-3">
+          <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" />
+          <div>
+            <p className="font-medium">{row.name as string}</p>
+            <p className="text-xs text-muted-foreground">{row.email as string}</p>
+          </div>
         </div>
       ),
     },
@@ -149,7 +167,7 @@ export default function UsersPage() {
       header: "Department",
       hideOnMobile: true,
       render: (row) =>
-        !(row.collegeId as string) ? (
+        !(row.collegeId as string) && !(row.locationId as string) ? (
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <Globe className="h-3 w-3" />System-Wide
           </span>
@@ -170,15 +188,27 @@ export default function UsersPage() {
       key: "actions",
       header: "",
       render: (row) => {
-        const isSystemWide = !(row.collegeId as string);
+        // Edit (including the photo) is available for the 6 roles Super Admin
+        // administers. Reset/Activate/Deactivate only exist for college-scoped
+        // users today. Delete also works for global (Management) users — but not
+        // location-scoped (Administration) ones, since the delete route doesn't
+        // know how to clean up a locationUsers doc yet.
+        const isCollegeScoped = !!(row.collegeId as string);
+        const isLocationScoped = !isCollegeScoped && !!(row.locationId as string);
+        const canEdit = PHOTO_EDITABLE_ROLES.includes(row.role);
+        const editHref = `/super-admin/users/${row.uid}/edit?role=${row.role}` +
+          (row.collegeId ? `&collegeId=${row.collegeId}` : "") +
+          (row.locationId ? `&locationId=${row.locationId}` : "");
         return (
           <div className="flex items-center gap-1 flex-wrap">
-            {!isSystemWide && (
+            {canEdit && (
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(editHref); }}>
+                <Pencil className="h-3.5 w-3.5" />
+                <span className="ml-1 hidden lg:inline">Edit</span>
+              </Button>
+            )}
+            {isCollegeScoped && (
               <>
-                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/super-admin/users/${row.uid}/edit?collegeId=${row.collegeId}`); }}>
-                  <Pencil className="h-3.5 w-3.5" />
-                  <span className="ml-1 hidden lg:inline">Edit</span>
-                </Button>
                 <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setResetUser(row); setNewPassword(""); }}>
                   <KeyRound className="h-3.5 w-3.5" />
                   <span className="ml-1 hidden lg:inline">Reset</span>
@@ -206,13 +236,15 @@ export default function UsersPage() {
                 )}
               </>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "delete" }); }}
-            >
-              <Trash2 className="h-3.5 w-3.5 text-destructive" />
-            </Button>
+            {!isLocationScoped && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); setConfirmUser({ user: row, action: "delete" }); }}
+              >
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              </Button>
+            )}
           </div>
         );
       },
@@ -221,6 +253,8 @@ export default function UsersPage() {
 
   const collegeLabel = selectedCollegeId === GLOBAL_SCOPE
     ? "System-Wide Users"
+    : selectedCollegeId.startsWith(LOCATION_PREFIX)
+    ? locations.find((l) => l.id === selectedCollegeId.slice(LOCATION_PREFIX.length))?.name ?? "Location"
     : colleges.find((c) => c.id === selectedCollegeId)?.name ?? "All Users";
 
   return (
@@ -263,6 +297,27 @@ export default function UsersPage() {
             >
               <Globe className="h-3.5 w-3.5" />System-Wide
             </button>
+          </div>
+        </div>
+      )}
+
+      {locations.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm text-muted-foreground font-medium">Location:</span>
+          <div className="flex gap-2 flex-wrap">
+            {locations.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => setSelectedCollegeId(`${LOCATION_PREFIX}${l.id}`)}
+                className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                  selectedCollegeId === `${LOCATION_PREFIX}${l.id}`
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {l.name}
+              </button>
+            ))}
           </div>
         </div>
       )}

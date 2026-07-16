@@ -59,12 +59,18 @@ export async function POST(request: Request) {
       locationId: string;
       department?: string;
       locationDeptId?: string;
+      profilePhotoUrl?: string;
     };
 
-    const { name, email, password, role, locationId, department, locationDeptId } = body;
+    const { name, email, password, role, locationId, department, locationDeptId, profilePhotoUrl } = body;
 
     if (!name || !email || !password || !role || !locationId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Uploaded before the account exists (under a temp id), so we can only check
+    // it came from our own upload endpoint, not that it names this specific uid.
+    if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
+      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
     // Administration can only create location-scoped non-admin roles
@@ -126,6 +132,7 @@ export async function POST(request: Request) {
         role,
         department: resolvedDepartment,
         locationDeptId: locationDeptId ?? "",
+        ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         isActive: true,
         createdAt: now,
         updatedAt: now,
@@ -133,6 +140,7 @@ export async function POST(request: Request) {
 
     await db.collection("systemUsers").doc(uid).set({
       uid, role, locationId, collegeId: "", email, name,
+      ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 
     // If LOCATION_DEPT_HEAD, link them as dept head in the dept document

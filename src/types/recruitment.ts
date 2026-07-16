@@ -103,6 +103,11 @@ export interface Candidate {
   phone: string;
   department: string;
   position: string;
+  courseId?: string;              // course the candidate is being hired to teach (if teaching faculty)
+  courseName?: string;
+  year?: number;                  // academic year within the course
+  preferredSubjectIds?: string[]; // subjects the candidate is expected to teach, if known at hiring time
+  preferredSubjectNames?: string[];
   resumeUrl: string;
   source: CandidateSource;
   currentStage: CandidateStage;

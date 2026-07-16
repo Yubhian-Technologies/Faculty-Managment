@@ -16,7 +16,7 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { FileText, MapPin, Monitor, UploadCloud, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import type { Department, VacancyRequest } from "@/types";
+import type { Department, VacancyRequest, Course, Subject } from "@/types";
 
 const ALL_DESIGNATIONS = [
   "Professor",
@@ -63,6 +63,13 @@ export default function NewCandidatePage() {
   const [customPosition, setCustomPosition] = useState("");
   const [sameAddress, setSameAddress] = useState(false);
 
+  // Teaching assignment preference (optional — for teaching faculty candidates)
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [teachCourseId, setTeachCourseId] = useState("");
+  const [teachYear, setTeachYear] = useState("");
+  const [teachSubjects, setTeachSubjects] = useState<Subject[]>([]);
+  const [teachSelectedSubjectIds, setTeachSelectedSubjectIds] = useState<string[]>([]);
+
   // Resume upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -77,6 +84,11 @@ export default function NewCandidatePage() {
       fetch("/api/college/departments")
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
         .then((d) => setDepartments(d.departments ?? []))
+        .catch(() => {}),
+
+      fetch("/api/college/courses")
+        .then((r) => r.json() as Promise<{ courses: Course[] }>)
+        .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
         .catch(() => {}),
 
       Promise.all([
@@ -173,6 +185,32 @@ export default function NewCandidatePage() {
     }
   }
 
+  const teachCourse = courses.find((c) => c.id === teachCourseId) ?? null;
+  const teachYearOptions = teachCourse ? Array.from({ length: teachCourse.durationYears }, (_, i) => i + 1) : [];
+
+  function handleTeachCourseChange(courseId: string) {
+    setTeachCourseId(courseId);
+    setTeachYear("");
+    setTeachSubjects([]);
+    setTeachSelectedSubjectIds([]);
+  }
+
+  function handleTeachYearChange(year: string) {
+    setTeachYear(year);
+    setTeachSelectedSubjectIds([]);
+    if (!teachCourseId || !year) { setTeachSubjects([]); return; }
+    fetch(`/api/college/subjects?courseId=${encodeURIComponent(teachCourseId)}&year=${encodeURIComponent(year)}`)
+      .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
+      .then((d) => setTeachSubjects(d.subjects ?? []))
+      .catch(() => setTeachSubjects([]));
+  }
+
+  function toggleTeachSubject(subjectId: string) {
+    setTeachSelectedSubjectIds((prev) =>
+      prev.includes(subjectId) ? prev.filter((id) => id !== subjectId) : [...prev, subjectId]
+    );
+  }
+
   function handleDesignationChange(val: string) {
     setSelectedDesignation(val);
     if (val !== "Others") {
@@ -211,10 +249,20 @@ export default function NewCandidatePage() {
     }
 
     try {
+      const selectedSubjects = teachSubjects.filter((s) => teachSelectedSubjectIds.includes(s.id));
       const res = await fetch("/api/college/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, resumeUrl: finalResumeUrl }),
+        body: JSON.stringify({
+          ...data,
+          resumeUrl: finalResumeUrl,
+          ...(teachCourseId ? { courseId: teachCourseId, courseName: teachCourse?.name ?? "" } : {}),
+          ...(teachYear ? { year: Number(teachYear) } : {}),
+          ...(selectedSubjects.length > 0 ? {
+            preferredSubjectIds: selectedSubjects.map((s) => s.id),
+            preferredSubjectNames: selectedSubjects.map((s) => s.name),
+          } : {}),
+        }),
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
@@ -328,6 +376,66 @@ export default function NewCandidatePage() {
                 {errors.position && <p className="text-sm text-destructive">{errors.position.message}</p>}
               </div>
             </div>
+
+            {courses.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold">Teaching Assignment (optional)</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    If this candidate is being hired to teach a specific course, set it here — it will carry over to their faculty profile once hired.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Course</Label>
+                    <Select value={teachCourseId} onValueChange={handleTeachCourseChange}>
+                      <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                      <SelectContent>
+                        {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Year</Label>
+                    <Select value={teachYear} onValueChange={handleTeachYearChange} disabled={!teachCourse}>
+                      <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+                      <SelectContent>
+                        {teachYearOptions.map((y) => <SelectItem key={y} value={String(y)}>Year {y}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {teachYear && (
+                  <div className="space-y-2">
+                    <Label>Preferred Subjects</Label>
+                    {teachSubjects.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No subjects set up for this year yet.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {teachSubjects.map((s) => {
+                          const selected = teachSelectedSubjectIds.includes(s.id);
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => toggleTeachSubject(s.id)}
+                              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                                selected
+                                  ? "border-primary bg-primary/10 text-primary font-medium"
+                                  : "border-border hover:bg-muted"
+                              }`}
+                            >
+                              {s.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Source *</Label>

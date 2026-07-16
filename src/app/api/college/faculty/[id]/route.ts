@@ -71,9 +71,19 @@ export async function PATCH(
       panNo: string;
       ratificationStatus: string;
       ratificationDate: string;
+      maritalStatus: string;
+      spouseName: string;
+      numberOfChildren: number;
+      referral: string;
+      nativePlace: string;
+      temporaryAddress: string;
+      permanentSameAsTemporary: boolean;
+      permanentAddress: string;
+      bloodGroup: string;
       hasPHD: boolean;
       userUid: string;
       academicProfile: Record<string, unknown>;
+      profilePhotoUrl: string;
     }>;
 
     const db = getAdminDb();
@@ -88,12 +98,21 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    if (
+      body.profilePhotoUrl !== undefined &&
+      (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
+        !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${id}_`)))
+    ) {
+      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
     const stringFields = [
       "name", "email", "phone", "collegeEmail", "designation", "qualification",
       "specialization", "employmentType", "status", "gender", "legalName",
       "fatherName", "motherName", "religion", "caste", "aadharNo", "ratificationStatus", "userUid",
+      "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
     ] as const;
 
     for (const key of stringFields) {
@@ -106,7 +125,7 @@ export async function PATCH(
     // Numeric fields
     const numFields = [
       "experienceYears", "internalExperience", "externalExperience",
-      "inCampusExperience", "industryExperience", "researchExperience",
+      "inCampusExperience", "industryExperience", "researchExperience", "numberOfChildren",
     ] as const;
     for (const key of numFields) {
       if (body[key] !== undefined) updates[key] = Number(body[key]);
@@ -114,6 +133,7 @@ export async function PATCH(
 
     // Boolean
     if (body.hasPHD !== undefined) updates.hasPHD = body.hasPHD;
+    if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
 
     // Academic profile (Modules 1-5)
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
@@ -123,7 +143,24 @@ export async function PATCH(
     if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
     if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
 
+    if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
+
     await ref.update(updates);
+
+    // Best-effort: if this faculty record has a linked system login, keep their
+    // photo in sync there too so it shows up on their own dashboard/nav avatar.
+    if (body.profilePhotoUrl !== undefined) {
+      const linkedUid = (snap.data() as { userUid?: string }).userUid;
+      if (linkedUid) {
+        try {
+          await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid)
+            .set({ profilePhotoUrl: body.profilePhotoUrl }, { merge: true });
+          await db.collection("systemUsers").doc(linkedUid)
+            .set({ profilePhotoUrl: body.profilePhotoUrl }, { merge: true });
+        } catch { /* non-fatal */ }
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

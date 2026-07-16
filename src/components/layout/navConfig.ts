@@ -75,11 +75,14 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Grievance Desk", href: "/principal/grievance", iconName: "AlertCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Documents", href: "/principal/documents", iconName: "FolderOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Reports", href: "/principal/reports", iconName: "BarChart2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
 
   // HOD
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
+  { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
+  { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"], section: "My Work" },
@@ -96,6 +99,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Documents", href: "/hod/documents", iconName: "FolderOpen", roles: ["HOD"] },
   { label: "Hiring Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"], section: "Hiring" },
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
+  { label: "My Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"], section: "My Work" },
 
   // College Office
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
@@ -117,6 +121,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Training", href: "/panel/training", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
   { label: "Grievance", href: "/panel/grievance", iconName: "AlertCircle", roles: ["PANEL_MEMBER"] },
   { label: "My Documents", href: "/panel/documents", iconName: "FolderOpen", roles: ["PANEL_MEMBER"] },
+  { label: "My Profile", href: "/panel/profile", iconName: "UserCircle", roles: ["PANEL_MEMBER"] },
 
   // Accounts
   { label: "Dashboard", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },

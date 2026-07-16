@@ -67,6 +67,11 @@ async function createFacultyFromOffer(
     email?: string;
     phone?: string;
     department?: string;
+    courseId?: string;
+    courseName?: string;
+    year?: number;
+    preferredSubjectIds?: string[];
+    preferredSubjectNames?: string[];
   };
 
   const email = candidate.email ?? "";
@@ -147,6 +152,15 @@ async function createFacultyFromOffer(
     employmentType: "FULL_TIME",
     status: "ACTIVE",
     userUid: uid,
+    ...(candidate.courseId && candidate.preferredSubjectIds?.length ? {
+      pendingTeachingPreference: {
+        courseId: candidate.courseId,
+        courseName: candidate.courseName ?? "",
+        year: candidate.year ?? 1,
+        subjectIds: candidate.preferredSubjectIds,
+        subjectNames: candidate.preferredSubjectNames ?? [],
+      },
+    } : {}),
     createdAt: now,
     updatedAt: now,
   });

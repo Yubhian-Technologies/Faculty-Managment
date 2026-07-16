@@ -15,6 +15,7 @@ export interface NewUserInput extends PersonalDetailsInput {
   phone?: string;
   department?: string;
   academicProfile?: Record<string, unknown>;
+  profilePhotoUrl?: string;
 }
 
 // ADMINISTRATION / ACCOUNTS / HR_ADMIN / ADMIN_OFFICE / LOCATION_DEPT_HEAD — profile
@@ -30,10 +31,14 @@ export async function provisionLocationUser(
 
   await db.collection("locations").doc(locationId).collection("locationUsers").doc(uid).set({
     uid, locationId, name: input.name, email: input.email, role,
+    phone: input.phone ?? "",
+    ...(input.academicProfile ? { academicProfile: input.academicProfile } : {}),
+    ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
     isActive: true, createdAt: now, updatedAt: now,
   });
   await db.collection("systemUsers").doc(uid).set({
     uid, role, locationId, collegeId: "", email: input.email, name: input.name,
+    ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
   });
 
   return uid;
@@ -56,7 +61,9 @@ export async function provisionCollegeUser(
     ...(locationId ? { locationId } : {}),
     name: input.name, email: input.email, role,
     department: input.department ?? "",
+    phone: input.phone ?? "",
     ...(input.academicProfile ? { academicProfile: input.academicProfile } : {}),
+    ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
     ...buildPersonalDetailsUpdate(input),
     isActive: true, createdAt: now, updatedAt: now,
   });
@@ -64,6 +71,7 @@ export async function provisionCollegeUser(
     uid, role, collegeId,
     ...(locationId ? { locationId } : {}),
     email: input.email, name: input.name,
+    ...(input.profilePhotoUrl ? { profilePhotoUrl: input.profilePhotoUrl } : {}),
   });
 
   if (options?.performedBy) {
