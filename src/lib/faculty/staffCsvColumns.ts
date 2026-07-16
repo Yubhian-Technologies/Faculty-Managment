@@ -150,4 +150,13 @@ export const STAFF_COLUMNS: StaffCsvColumn[] = [
   { key: "book3_publisher",        label: "Authored Book 3 - Publisher" },
   { key: "book3_year",             label: "Authored Book 3 - Year" },
   { key: "notableAwards",          label: "Notable Awards" },
+
+  // ─── Financial Standing & Budgetary Impact (Module 6) ───────────────────
+  { key: "presentSalary",          label: "Present Salary (₹)" },
+  { key: "grossAnnualCTC",         label: "Gross Annual CTC (₹)" },
+  { key: "incrementsAwarded",      label: "Increments Awarded" },
+  { key: "fundingConsultancyRevenue", label: "Funding/Consultancy Revenue Generation (₹)" },
+
+  // ─── Others (Module 7) ───────────────────────────────────────────────────
+  { key: "otherInformation",       label: "Other Information" },
 ];

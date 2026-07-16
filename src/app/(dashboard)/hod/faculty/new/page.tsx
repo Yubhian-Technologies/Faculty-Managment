@@ -20,6 +20,8 @@ import { toast } from "@/hooks/useToast";
 import {
   DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS,
+  TEACHING_DESIGNATIONS,
+  SUPPORTING_STAFF_DESIGNATIONS,
 } from "@/types";
 import type { Designation, EmploymentType, FacultyProfileFields } from "@/types";
 
@@ -163,7 +165,10 @@ export default function NewFacultyPage() {
                   <button
                     key={t}
                     type="button"
-                    onClick={() => setValue("staffType", t, { shouldValidate: true })}
+                    onClick={() => {
+                      setValue("staffType", t, { shouldValidate: true });
+                      setValue("designation", t === "teaching" ? "ASSISTANT_PROFESSOR" : "TECHNICAL");
+                    }}
                     className={`flex-1 rounded-lg border-2 py-3 text-sm font-medium transition-all capitalize ${
                       staffType === t
                         ? "border-primary bg-primary/5 text-primary"
@@ -198,8 +203,8 @@ export default function NewFacultyPage() {
                     <SelectValue placeholder="Select designation" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(DESIGNATION_LABELS).map(([v, l]) => (
-                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    {(staffType === "teaching" ? TEACHING_DESIGNATIONS : SUPPORTING_STAFF_DESIGNATIONS).map((v) => (
+                      <SelectItem key={v} value={v}>{DESIGNATION_LABELS[v]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

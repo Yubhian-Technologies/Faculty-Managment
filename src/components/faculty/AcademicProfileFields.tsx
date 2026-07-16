@@ -307,7 +307,25 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       </div>
 
       {/* Module 6 */}
-      <SectionTitle>Module 6 — Others</SectionTitle>
+      <SectionTitle>Module 6 — Financial Standing &amp; Budgetary Impact</SectionTitle>
+      <div className="space-y-3 rounded-lg border p-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Financial Standing</p>
+        <NumInput label="Present Salary (₹)" value={value.presentSalary} onChange={(v) => set("presentSalary", v)} />
+      </div>
+      <div className="space-y-3 rounded-lg border p-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Budgetary Impact</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <NumInput label="Gross Annual CTC (₹)" value={value.grossAnnualCTC} onChange={(v) => set("grossAnnualCTC", v)} />
+          <NumInput label="Increments Awarded" value={value.incrementsAwarded} onChange={(v) => set("incrementsAwarded", v)} />
+          <NumInput label="Funding/Consultancy Revenue Generation (₹)" value={value.fundingConsultancyRevenue} onChange={(v) => set("fundingConsultancyRevenue", v)} />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Revenue brought in through research/consultancy grants, offsetting this faculty member&rsquo;s salary cost to the institution.
+        </p>
+      </div>
+
+      {/* Module 7 */}
+      <SectionTitle>Module 7 — Others</SectionTitle>
       <div className="space-y-2">
         <Label>Other Information</Label>
         <Textarea

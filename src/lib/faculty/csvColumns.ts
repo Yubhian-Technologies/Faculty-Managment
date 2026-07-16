@@ -161,10 +161,19 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "book3_publisher",        label: "Authored Book 3 - Publisher",        required: false, sample: "" },
   { key: "book3_year",             label: "Authored Book 3 - Year",             required: false, sample: "" },
   { key: "notableAwards",          label: "Notable Awards",                     required: false, sample: "" },
+
+  // ─── Financial Standing & Budgetary Impact (Module 6) ────────────────────────
+  { key: "presentSalary",          label: "Present Salary (₹)",                 required: false, sample: "" },
+  { key: "grossAnnualCTC",         label: "Gross Annual CTC (₹)",               required: false, sample: "" },
+  { key: "incrementsAwarded",      label: "Increments Awarded",                 required: false, sample: "" },
+  { key: "fundingConsultancyRevenue", label: "Funding/Consultancy Revenue Generation (₹)", required: false, sample: "" },
+
+  // ─── Others (Module 7) ────────────────────────────────────────────────────────
+  { key: "otherInformation",       label: "Other Information",                  required: false, sample: "" },
 ];
 
 export const HINTS = [
-  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Lab Assistant",
+  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty, Lab Assistant (teaching); Technical, Non-Technical, Other (supporting)",
   "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",
   "Status: Active, On Leave, Resigned, Retired (defaults to Active if left blank)",
   "Gender: Male, Female, Other",
