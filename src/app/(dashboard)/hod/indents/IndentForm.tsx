@@ -5,9 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { IndentItemsTable } from "@/components/shared/indent/IndentItemsTable";
-import type { IndentItem, IndentRequest } from "@/types";
+import {
+  defaultIndentRequestType,
+  INDENT_CATEGORIES,
+  INDENT_REQUEST_TYPE_LABELS,
+  type IndentItem,
+  type IndentRequest,
+  type IndentRequestType,
+} from "@/types";
 
 function emptyItem(): IndentItem {
   return { id: crypto.randomUUID(), description: "", quantity: 1, estimatedUnitPrice: 0 };
@@ -22,13 +30,22 @@ interface IndentFormProps {
 export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProps) {
   const lastRemarks = [...(editingRequest?.history ?? [])].reverse().find((h) => h.remarks)?.remarks;
   const [title, setTitle] = useState(editingRequest?.title ?? "");
+  const [category, setCategory] = useState(editingRequest?.category ?? "");
+  const [requestType, setRequestType] = useState<IndentRequestType | "">(editingRequest?.requestType ?? "");
   const [items, setItems] = useState<IndentItem[]>(
     editingRequest?.items?.length ? editingRequest.items : [emptyItem()]
   );
   const [isSaving, setIsSaving] = useState(false);
 
+  function handleCategoryChange(value: string) {
+    setCategory(value);
+    setRequestType(defaultIndentRequestType(value));
+  }
+
   function resetForm() {
     setTitle("");
+    setCategory("");
+    setRequestType("");
     setItems([emptyItem()]);
   }
 
@@ -41,8 +58,8 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
     e.preventDefault();
 
     const cleanedItems = items.filter((i) => i.description.trim());
-    if (!title.trim() || cleanedItems.length === 0) {
-      toast({ variant: "destructive", title: "Fill in all required fields", description: "Add at least one item with a description." });
+    if (!title.trim() || !category || !requestType || cleanedItems.length === 0) {
+      toast({ variant: "destructive", title: "Fill in all required fields", description: "Choose a category, Goods/Non-Goods, and add at least one item with a description." });
       return;
     }
     if (cleanedItems.some((i) => !(i.quantity > 0))) {
@@ -52,7 +69,7 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
 
     setIsSaving(true);
     try {
-      const payload = { title: title.trim(), items: cleanedItems };
+      const payload = { title: title.trim(), category, requestType, items: cleanedItems };
 
       const res = editingRequest
         ? await fetch(`/api/college/indent-requests/${editingRequest.id}`, {
@@ -98,6 +115,33 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
           <div className="space-y-2">
             <Label>Title / Purpose <span className="text-destructive">*</span></Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Lab consumables restock" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Budget Category <span className="text-destructive">*</span></Label>
+              <Select value={category} onValueChange={handleCategoryChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select the category this indent is raised against" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INDENT_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Goods / Non-Goods <span className="text-destructive">*</span></Label>
+              <Select value={requestType} onValueChange={(v) => setRequestType(v as IndentRequestType)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GOODS">{INDENT_REQUEST_TYPE_LABELS.GOODS} — sourced via Purchase Dept</SelectItem>
+                  <SelectItem value="NON_GOODS">{INDENT_REQUEST_TYPE_LABELS.NON_GOODS} — goes directly to Finance</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -128,8 +128,8 @@ export default function StudentsPage() {
                         <p className="text-sm font-medium">{s.name}</p>
                         <p className="text-xs text-muted-foreground">{s.rollNumber} · Section {s.section} · Year {s.year}</p>
                       </div>
-                      <Badge variant={s.status === "REGULAR" ? "default" : "destructive"} className="text-xs">
-                        {s.status === "REGULAR" ? "Regular" : "Detained"}
+                      <Badge variant={s.status === "REGULAR" ? "default" : s.status === "GRADUATED" ? "secondary" : "destructive"} className="text-xs">
+                        {s.status === "REGULAR" ? "Regular" : s.status === "GRADUATED" ? "Graduated" : "Detained"}
                       </Badge>
                     </div>
                   ))}

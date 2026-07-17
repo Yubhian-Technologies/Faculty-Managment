@@ -11,7 +11,16 @@ export function useAssignedInterviews() {
     const role = user?.role;
     // Panel membership is a college-scoped concept — Super Admin and
     // location-scoped roles never have a collegeId, so this call would 401.
-    if (!role || role === "SUPER_ADMIN" || LOCATION_SCOPED_ROLES.includes(role)) {
+    // FINANCE and PURCHASE_DEPT are GLOBAL roles with no fixed collegeId
+    // either, and /api/college/hiring-batches doesn't allow them at all
+    // (see requireCollegeMember's role list there), so this would also 401.
+    if (
+      !role ||
+      role === "SUPER_ADMIN" ||
+      role === "FINANCE" ||
+      role === "PURCHASE_DEPT" ||
+      LOCATION_SCOPED_ROLES.includes(role)
+    ) {
       setLoading(false);
       return;
     }

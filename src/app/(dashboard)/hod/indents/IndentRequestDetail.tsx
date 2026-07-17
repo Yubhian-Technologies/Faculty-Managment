@@ -5,12 +5,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { IndentStatusBadge } from "@/components/shared/indent/IndentStatusBadge";
 import { IndentItemsTable } from "@/components/shared/indent/IndentItemsTable";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { indentItemsTotal, type IndentRequest } from "@/types";
+import { indentItemsTotal, INDENT_REQUEST_TYPE_LABELS, type IndentRequest } from "@/types";
 
 interface ReadOnlyFieldProps {
   label: string;
@@ -39,9 +40,12 @@ export function IndentRequestDetail({ request, onClose, onEditRequest }: IndentR
     <Dialog open={!!request} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <DialogTitle>{request.title}</DialogTitle>
             <IndentStatusBadge status={request.status} />
+            {request.requestType && (
+              <Badge variant="outline" className="text-xs">{INDENT_REQUEST_TYPE_LABELS[request.requestType]}</Badge>
+            )}
           </div>
         </DialogHeader>
 
@@ -50,6 +54,7 @@ export function IndentRequestDetail({ request, onClose, onEditRequest }: IndentR
             <h3 className="text-sm font-semibold text-muted-foreground">Indent Information</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ReadOnlyField label="Department" value={request.department} />
+              <ReadOnlyField label="Category" value={request.category} />
               <ReadOnlyField label="Submitted" value={formatDate(request.createdAt)} />
             </div>
           </div>
@@ -69,7 +74,7 @@ export function IndentRequestDetail({ request, onClose, onEditRequest }: IndentR
             </div>
           )}
 
-          {request.status === "COMPLETED" && (
+          {request.status === "COMPLETED" && request.receiptUploadedByName && (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground">Purchase Receipt</h3>
               <div className="rounded-md border p-3 text-sm space-y-2">

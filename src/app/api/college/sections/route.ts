@@ -103,6 +103,29 @@ export async function POST(request: Request) {
       ? await getHodDept(db, session.collegeId, session.uid)
       : "";
 
+    // A department can only hold sections for years the Principal/VP has
+    // actually assigned it (see Department.assignedYears) — otherwise the
+    // year-allocation feature is purely decorative. Only enforced on the HOD
+    // path, where `dept` is actually resolved to a real department.
+    if (dept) {
+      const deptSnap = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("departments")
+        .where("name", "==", dept)
+        .limit(1)
+        .get();
+      if (!deptSnap.empty) {
+        const assignedYears = (deptSnap.docs[0].data() as { assignedYears?: number[] }).assignedYears ?? [];
+        if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
+          return NextResponse.json(
+            { error: `Your department is not assigned to teach Year ${body.year}` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const now = new Date();
     const ref = db.collection("colleges").doc(session.collegeId).collection("sections").doc();
 

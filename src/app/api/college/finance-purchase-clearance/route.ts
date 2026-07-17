@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
+import { notifyRole } from "@/lib/notify";
 
 async function getUserProfile(db: Firestore, collegeId: string, uid: string): Promise<{ name: string; department: string }> {
   try {
@@ -12,32 +13,6 @@ async function getUserProfile(db: Firestore, collegeId: string, uid: string): Pr
     return { name: data?.name ?? "Unknown", department: data?.department ?? "" };
   } catch {
     return { name: "Unknown", department: "" };
-  }
-}
-
-async function notify(
-  db: Firestore,
-  collegeId: string,
-  toUid: string,
-  type: string,
-  title: string,
-  message: string,
-  link?: string
-) {
-  try {
-    await db.collection("colleges").doc(collegeId).collection("notifications").add({
-      collegeId, toUid, type, title, message,
-      read: false, link: link ?? null, createdAt: new Date(),
-    });
-  } catch {
-    /* non-fatal */
-  }
-}
-
-async function notifyRole(db: Firestore, collegeId: string, role: string, type: string, title: string, message: string, link?: string) {
-  const snap = await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
-  for (const u of snap.docs) {
-    await notify(db, collegeId, u.id, type, title, message, link);
   }
 }
 

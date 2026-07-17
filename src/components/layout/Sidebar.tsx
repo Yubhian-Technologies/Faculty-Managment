@@ -12,6 +12,7 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { getNavItemsForRole, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
+import { OrgScopeTree } from "./OrgScopeTree";
 import { ROLE_LABELS } from "@/types";
 import { getInitials } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,24 @@ export function Sidebar() {
             </div>
           );
         })}
+
+        {user.role === "FINANCE" && (
+          <div className="border-t mt-2 pt-2">
+            <OrgScopeTree
+              collegeHref={(locationId, collegeId) => `/finance/browse/${locationId}/${collegeId}`}
+              departmentHref={(locationId, collegeId, department) => `/finance/browse/${locationId}/${collegeId}?department=${encodeURIComponent(department)}`}
+            />
+          </div>
+        )}
+
+        {user.role === "PURCHASE_DEPT" && (
+          <div className="border-t mt-2 pt-2">
+            <OrgScopeTree
+              collegeHref={(locationId, collegeId) => `/purchase/browse/${locationId}/${collegeId}`}
+              departmentHref={(_locationId, collegeId, department) => `/purchase/indents?collegeId=${collegeId}&department=${encodeURIComponent(department)}`}
+            />
+          </div>
+        )}
       </nav>
 
       {/* Bottom section */}

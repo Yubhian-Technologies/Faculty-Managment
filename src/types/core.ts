@@ -281,6 +281,11 @@ export interface Department {
   hodUid?: string;
   hodName?: string;
   isActive: boolean;
+  // Which of the college's open AcademicYears this department currently
+  // teaches — set by Principal/VP, dynamic per college (not hardcoded).
+  // e.g. a Basic Science dept holds [1] while core branch depts each hold
+  // [2, 3, 4] concurrently for their own batches.
+  assignedYears?: number[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -611,17 +616,34 @@ export interface FacultyProfileFields {
 export type PrincipalAcademicProfile = Omit<FacultyProfileFields, "teachingAssignment">;
 
 // ─── Academic Year ──────────────────────────────────────────────────────────
-// Which of the 1st–4th year slots are currently open for a college. Section.year
-// stays a plain 1|2|3|4 union (unchanged) — this entity is what Location Admin /
-// Principal configure to control which of those year numbers are actually in use,
-// validated against on Section creation.
+// Which years of study exist for a college — added sequentially (1, 2, 3, …)
+// by Location Admin / Principal, not toggled from a fixed set. A program can
+// have any number of years (3-year diploma, 4-year B.Tech, 5-year, etc.), so
+// `yearNumber` is a plain positive integer, not a fixed 1|2|3|4 union.
+// Section.year / StudentRecord.year / Department.assignedYears follow the
+// same convention for the same reason.
 
 export interface AcademicYear {
   id: string;
   collegeId: string;
-  yearNumber: 1 | 2 | 3 | 4;
+  yearNumber: number;
   label: string;   // e.g. "1st Year"
   isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── Academic Session ───────────────────────────────────────────────────────
+// A calendar academic session for a college (e.g. "2025-26"), distinct from
+// AcademicYear above (which models year-of-study 1st–4th, not a calendar
+// session). Location Admin (and Principal/Super Admin) create these per
+// college; at most one is marked current at a time.
+
+export interface AcademicSession {
+  id: string;
+  collegeId: string;
+  label: string;   // e.g. "2025-26"
+  isCurrent: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -648,14 +670,14 @@ export interface Section {
 // Enrolled-student roster row, independent of any login account. Faculty manage
 // this for the sections they're in charge of (Section.facultyInchargeUid).
 
-export type StudentStatus = "REGULAR" | "DETAINED";
+export type StudentStatus = "REGULAR" | "DETAINED" | "GRADUATED";
 
 export interface StudentRecord {
   id: string;
   collegeId: string;
   department: string;
   section: string;      // Section.name — "A", "B", etc.
-  year: 1 | 2 | 3 | 4;
+  year: number;
   rollNumber: string;
   name: string;
   status: StudentStatus;
@@ -816,6 +838,7 @@ export type AuditAction =
   | "INDENT_RECEIPT_UPLOADED"
   // Purchase Finance Clearance module
   | "PURCHASE_CLEARANCE_SUBMITTED"
+  | "PURCHASE_CLEARANCE_RESUBMITTED"
   | "PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE"
   | "PURCHASE_CLEARANCE_RETURNED_TO_HOD"
   | "PURCHASE_CLEARANCE_SENT_TO_FINANCE"
@@ -825,7 +848,10 @@ export type AuditAction =
   | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
   | "PURCHASE_CLEARANCE_GRN_UPLOADED"
   // Academic Year module
-  | "ACADEMIC_YEAR_ADVANCED";
+  | "ACADEMIC_YEAR_ADVANCED"
+  // Student promotion module
+  | "STUDENT_PROMOTED"
+  | "STUDENT_GRADUATED";
 
 export interface AuditLog {
   id: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RotateCcw, ShoppingCart, XCircle } from "lucide-react";
+import { ArrowRightLeft, Building2, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RotateCcw, ShoppingCart, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
@@ -10,13 +10,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
+import { useAuthStore } from "@/store/authStore";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
-import { PURCHASE_CLEARANCE_STATUS_LABELS, type FinancePurchaseClearance } from "@/types";
+import { PURCHASE_CLEARANCE_STATUS_LABELS, type College, type FinancePurchaseClearance } from "@/types";
 
-type Row = FinancePurchaseClearance & { id: string; status: string };
+type Row = FinancePurchaseClearance & { id: string; status: string; collegeId?: string; collegeName?: string; locationId?: string; locationName?: string };
+
+const SCOPES = ["COLLEGE", "LOCATION", "ALL"] as const;
+type ClearanceScope = (typeof SCOPES)[number];
+const SCOPE_LABELS: Record<ClearanceScope, string> = {
+  COLLEGE: "This College",
+  LOCATION: "This Location",
+  ALL: "All Locations",
+};
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING_PURCHASE_REVIEW: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -31,6 +41,9 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function FinancePurchaseClearancePage() {
+  const selectedCollegeId = useAuthStore((s) => s.selectedCollegeId);
+  const setSelectedCollegeId = useAuthStore((s) => s.setSelectedCollegeId);
+  const [scope, setScope] = useState<ClearanceScope>("COLLEGE");
   const [requests, setRequests] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -38,16 +51,48 @@ export default function FinancePurchaseClearancePage() {
   const [returnState, setReturnState] = useState<{ id: string; remarks: string } | null>(null);
   const [rejectState, setRejectState] = useState<{ id: string; remarks: string } | null>(null);
 
-  function load() {
+  // Actions mutate whichever college collegeFetch() currently targets
+  // (selectedCollegeId), so only the "This College" scope is safe to act on
+  // inline — an aggregated Location/All list must stay read-only to avoid
+  // ever approving/rejecting an item against the wrong college.
+  const actionable = scope === "COLLEGE";
+
+  async function load() {
     setIsLoading(true);
-    collegeFetch("/api/college/finance-purchase-clearance")
-      .then((r) => r.json() as Promise<{ requests: Row[] }>)
-      .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load purchase clearance requests" }))
-      .finally(() => setIsLoading(false));
+    try {
+      if (scope === "COLLEGE") {
+        const d = await collegeFetch("/api/college/finance-purchase-clearance")
+          .then((r) => r.json() as Promise<{ requests: Row[] }>);
+        setRequests(d.requests ?? []);
+      } else {
+        const params = new URLSearchParams();
+        if (scope === "LOCATION") {
+          if (!selectedCollegeId) { setRequests([]); return; }
+          const colleges = await fetch("/api/admin/colleges").then((r) => r.json() as Promise<{ colleges: College[] }>).then((d) => d.colleges ?? []);
+          const current = colleges.find((c) => c.id === selectedCollegeId);
+          if (!current?.locationId) { setRequests([]); return; }
+          params.set("locationId", current.locationId);
+        }
+        const d = await fetch(`/api/purchase/indents/overview?${params.toString()}`)
+          .then((r) => r.json() as Promise<{ clearances: Row[] }>);
+        setRequests(d.clearances ?? []);
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load purchase clearance requests" });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  useEffect(() => { load(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load() intentionally re-reads current scope/selectedCollegeId; only they should re-trigger the fetch
+  useEffect(() => { void load(); }, [scope, selectedCollegeId]);
+
+  function switchToCollege(item: Row) {
+    if (!item.collegeId) return;
+    setSelectedCollegeId(item.collegeId);
+    setScope("COLLEGE");
+    setExpandedId(item.id);
+  }
 
   async function act(item: Row, action: "APPROVE" | "REJECT" | "RETURN", remarks?: string) {
     setActingId(item.id);
@@ -64,7 +109,7 @@ export default function FinancePurchaseClearancePage() {
       toast({ variant: "success", title: action === "APPROVE" ? "Request approved" : action === "REJECT" ? "Request rejected" : "Request returned to Purchase Dept" });
       setReturnState(null);
       setRejectState(null);
-      load();
+      void load();
     } catch (err) {
       toast({ variant: "destructive", title: "Action failed", description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -78,7 +123,23 @@ export default function FinancePurchaseClearancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Purchase Finance Clearance"
-        description="Review vendor quotations and grant financial clearance"
+        description={
+          actionable
+            ? "Review vendor quotations and grant financial clearance"
+            : "Read-only view across the selected scope — switch to a specific college to act on a request"
+        }
+        actions={
+          <Select value={scope} onValueChange={(v) => setScope(v as ClearanceScope)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCOPES.map((s) => (
+                <SelectItem key={s} value={s}>{SCOPE_LABELS[s]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
       />
 
       <Card>
@@ -118,7 +179,7 @@ export default function FinancePurchaseClearancePage() {
                         <span className="font-semibold text-sm">{item.department}</span>
                         <Badge variant="secondary" className="text-xs">{formatCurrency(item.estimatedAmount)}</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">{item.items}</p>
+                      <p className="text-xs text-muted-foreground">{item.items}{!actionable && item.collegeName ? ` · ${item.collegeName}` : ""}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Badge variant="outline" className={cn("text-xs", STATUS_STYLES[item.status])}>
@@ -158,7 +219,16 @@ export default function FinancePurchaseClearancePage() {
                       </div>
                     )}
 
-                    {isPending && !isReturning && !isRejecting && (
+                    {isPending && !actionable && (
+                      <div className="pt-2 border-t">
+                        <Button size="sm" variant="outline" onClick={() => switchToCollege(item)}>
+                          <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />
+                          Switch to {item.collegeName} to act
+                        </Button>
+                      </div>
+                    )}
+
+                    {actionable && isPending && !isReturning && !isRejecting && (
                       <div className="flex flex-wrap gap-2 pt-2 border-t">
                         <Button
                           size="sm"

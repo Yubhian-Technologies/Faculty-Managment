@@ -4,8 +4,9 @@ import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
-import type { IndentItem, IndentQuotation, IndentRequest, UserRole } from "@/types";
-import { ROLE_SCOPE } from "@/types";
+import type { IndentItem, IndentQuotation, IndentRequest } from "@/types";
+import { indentItemsTotal } from "@/types";
+import { notify, notifyRole } from "@/lib/notify";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
   try {
@@ -13,38 +14,6 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
     return (snap.data() as { name?: string } | undefined)?.name ?? "Unknown";
   } catch {
     return "Unknown";
-  }
-}
-
-async function notify(
-  db: Firestore,
-  collegeId: string,
-  toUid: string,
-  type: string,
-  title: string,
-  message: string,
-  link?: string
-) {
-  try {
-    await db.collection("colleges").doc(collegeId).collection("notifications").add({
-      collegeId, toUid, type, title, message,
-      read: false, link: link ?? null, createdAt: new Date(),
-    });
-  } catch {
-    /* non-fatal */
-  }
-}
-
-async function notifyRole(db: Firestore, collegeId: string, role: string, type: string, title: string, message: string, link?: string) {
-  // GLOBAL roles (FINANCE, PURCHASE_DEPT) live in systemUsers, not the college
-  // users subcollection. The notification is still stored under this college so
-  // the recipient sees it when acting on this college.
-  const isGlobal = ROLE_SCOPE[role as UserRole] === "GLOBAL";
-  const snap = isGlobal
-    ? await db.collection("systemUsers").where("role", "==", role).get()
-    : await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
-  for (const u of snap.docs) {
-    await notify(db, collegeId, u.id, type, title, message, link);
   }
 }
 
@@ -122,8 +91,10 @@ export async function PATCH(
         );
       }
       const hodName = await getUserName(db, session.collegeId, session.uid);
+      const isGoods = req.requestType !== "NON_GOODS";
+      const nextStatus = isGoods ? "PENDING_PURCHASE_REVIEW" : "PENDING_FINANCE_REVIEW";
       const historyEntry = {
-        action: "PENDING_PURCHASE_REVIEW" as const,
+        action: nextStatus,
         byRole: "HOD" as const,
         byUid: session.uid,
         byName: hodName,
@@ -132,16 +103,16 @@ export async function PATCH(
 
       await ref.update({
         items,
-        status: "PENDING_PURCHASE_REVIEW",
+        status: nextStatus,
         history: [...(req.history ?? []), historyEntry],
         updatedAt: now,
       });
 
       await notifyRole(
-        db, session.collegeId, "PURCHASE_DEPT",
+        db, session.collegeId, isGoods ? "PURCHASE_DEPT" : "FINANCE",
         "INDENT_SUBMITTED", "Indent Resubmitted",
         `${hodName} resubmitted the indent "${req.title}" for ${req.department}.`,
-        "/purchase/indents"
+        isGoods ? "/purchase/indents" : "/finance/indent-approvals"
       );
 
       return NextResponse.json({ ok: true });
@@ -335,18 +306,25 @@ export async function PATCH(
         return NextResponse.json({ error: "remarks required" }, { status: 400 });
       }
 
+      // GOODS indents were sourced by Purchase Dept and return there / carry a
+      // vendor quotation. NON_GOODS indents came straight from the HOD (no
+      // Purchase Dept involvement), so approval completes the indent outright
+      // and returns go straight back to the HOD, not Purchase Dept.
+      const isGoods = req.requestType !== "NON_GOODS";
+      const isApproving = body.action === "APPROVE";
+
       const financeName = await getUserName(db, session.collegeId, session.uid);
       const nextStatus =
-        body.action === "APPROVE" ? "APPROVED"
+        isApproving ? (isGoods ? "APPROVED" : "COMPLETED")
         : body.action === "REJECT" ? "REJECTED"
-        : body.action === "RETURN" ? "RETURNED_TO_PURCHASE"
+        : body.action === "RETURN" ? (isGoods ? "RETURNED_TO_PURCHASE" : "RETURNED_TO_HOD")
         : null;
 
       if (!nextStatus) {
         return NextResponse.json({ error: "action must be APPROVE, REJECT, or RETURN" }, { status: 400 });
       }
 
-      if (nextStatus === "APPROVED") {
+      if (isApproving && isGoods) {
         const selected = (req.quotations ?? []).find((q) => q.id === req.selectedQuotationId);
         if (!selected) {
           return NextResponse.json({ error: "No selected quotation found on this indent" }, { status: 400 });
@@ -374,34 +352,62 @@ export async function PATCH(
           throw new Error("STALE_STATUS");
         }
 
-        if (nextStatus === "APPROVED") {
-          const selected = (freshReq.quotations ?? []).find((q) => q.id === freshReq.selectedQuotationId);
-          if (!selected) throw new Error("STALE_STATUS");
-
+        if (isApproving) {
           financePaymentId = paymentRef.id;
-          tx.set(paymentRef, {
-            collegeId: session.collegeId,
-            type: "VENDOR",
-            payeeName: selected.vendorName,
-            amount: selected.price,
-            purpose: req.title,
-            relatedIndentId: id,
-            status: "PENDING",
-            createdBy: session.uid,
-            createdByName: financeName,
-            createdAt: now,
-            updatedAt: now,
-          });
 
-          tx.set(financeAuditRef, {
-            collegeId: session.collegeId,
-            action: "PAYMENT_CREATED",
-            performedBy: session.uid,
-            performedByName: financeName,
-            targetId: paymentRef.id,
-            details: { department: req.department, relatedIndentId: id, vendorName: selected.vendorName, amount: selected.price },
-            timestamp: now,
-          });
+          if (isGoods) {
+            const selected = (freshReq.quotations ?? []).find((q) => q.id === freshReq.selectedQuotationId);
+            if (!selected) throw new Error("STALE_STATUS");
+
+            tx.set(paymentRef, {
+              collegeId: session.collegeId,
+              type: "VENDOR",
+              payeeName: selected.vendorName,
+              amount: selected.price,
+              purpose: req.title,
+              relatedIndentId: id,
+              status: "PENDING",
+              createdBy: session.uid,
+              createdByName: financeName,
+              createdAt: now,
+              updatedAt: now,
+            });
+
+            tx.set(financeAuditRef, {
+              collegeId: session.collegeId,
+              action: "PAYMENT_CREATED",
+              performedBy: session.uid,
+              performedByName: financeName,
+              targetId: paymentRef.id,
+              details: { department: req.department, relatedIndentId: id, vendorName: selected.vendorName, amount: selected.price },
+              timestamp: now,
+            });
+          } else {
+            const amount = indentItemsTotal(freshReq.items);
+            tx.set(paymentRef, {
+              collegeId: session.collegeId,
+              type: "STAFF_REIMBURSEMENT",
+              payeeName: freshReq.hodName,
+              amount,
+              purpose: req.title,
+              relatedIndentId: id,
+              status: "PENDING",
+              createdBy: session.uid,
+              createdByName: financeName,
+              createdAt: now,
+              updatedAt: now,
+            });
+
+            tx.set(financeAuditRef, {
+              collegeId: session.collegeId,
+              action: "PAYMENT_CREATED",
+              performedBy: session.uid,
+              performedByName: financeName,
+              targetId: paymentRef.id,
+              details: { department: req.department, relatedIndentId: id, amount },
+              timestamp: now,
+            });
+          }
         }
 
         tx.update(ref, {
@@ -413,7 +419,7 @@ export async function PATCH(
 
         tx.set(auditRef, {
           collegeId: session.collegeId,
-          action: nextStatus === "APPROVED" ? "INDENT_FINANCE_APPROVED" : "INDENT_FINANCE_REJECTED",
+          action: isApproving ? "INDENT_FINANCE_APPROVED" : "INDENT_FINANCE_REJECTED",
           performedBy: session.uid,
           performedByName: financeName,
           targetId: id,
@@ -422,13 +428,15 @@ export async function PATCH(
         });
       });
 
-      const notifType = nextStatus === "APPROVED" ? "INDENT_APPROVED" : nextStatus === "REJECTED" ? "INDENT_REJECTED" : "INDENT_RETURNED";
-      const notifTitle = nextStatus === "APPROVED" ? "Indent Approved" : nextStatus === "REJECTED" ? "Indent Rejected" : "Indent Returned";
-      const notifVerb = nextStatus === "APPROVED" ? "approved and disbursed" : nextStatus === "REJECTED" ? "rejected" : "returned";
+      const notifType = isApproving ? "INDENT_APPROVED" : nextStatus === "REJECTED" ? "INDENT_REJECTED" : "INDENT_RETURNED";
+      const notifTitle = isApproving ? "Indent Approved" : nextStatus === "REJECTED" ? "Indent Rejected" : "Indent Returned";
+      const notifVerb = isApproving ? "approved and disbursed" : nextStatus === "REJECTED" ? "rejected" : "returned";
       const notifMessage = `Finance ${notifVerb} the indent "${req.title}".${body.remarks ? " Remarks: " + body.remarks : ""}`;
 
       await notify(db, session.collegeId, req.hodUid, notifType, notifTitle, notifMessage, "/hod/indents");
-      await notifyRole(db, session.collegeId, "PURCHASE_DEPT", notifType, notifTitle, notifMessage, "/purchase/indents");
+      if (isGoods) {
+        await notifyRole(db, session.collegeId, "PURCHASE_DEPT", notifType, notifTitle, notifMessage, "/purchase/indents");
+      }
 
       return NextResponse.json({ ok: true, financePaymentId });
     }

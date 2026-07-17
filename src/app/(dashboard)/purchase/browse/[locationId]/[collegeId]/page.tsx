@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Building, ChevronRight, ArrowLeft } from "lucide-react";
+import { Building, ChevronRight, ArrowLeft, Tags, PackageCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import type { College, Department, FinancePurchaseClearance, IndentRequest } from "@/types";
+import { INDENT_REQUEST_TYPE_LABELS, type College, type Department, type FinancePurchaseClearance, type IndentRequest } from "@/types";
 
 const ACTIONABLE = new Set(["PENDING_PURCHASE_REVIEW", "RETURNED_TO_PURCHASE"]);
 
@@ -22,11 +22,19 @@ interface DeptRow extends Department {
   pendingCount: number;
 }
 
+interface BreakdownRow {
+  key: string;
+  label: string;
+  count: number;
+}
+
 export default function PurchaseBrowseDepartmentsPage() {
   const params = useParams<{ locationId: string; collegeId: string }>();
   const setSelectedCollegeId = useAuthStore((s) => s.setSelectedCollegeId);
   const [college, setCollege] = useState<College | null>(null);
   const [rows, setRows] = useState<DeptRow[]>([]);
+  const [categoryRows, setCategoryRows] = useState<BreakdownRow[]>([]);
+  const [typeRows, setTypeRows] = useState<BreakdownRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -53,6 +61,22 @@ export default function PurchaseBrowseDepartmentsPage() {
               clearances.filter((r) => r.department === dept.name && ACTIONABLE.has(r.status)).length,
           }))
         );
+
+        const categoryCounts = new Map<string, number>();
+        for (const r of indents) categoryCounts.set(r.category, (categoryCounts.get(r.category) ?? 0) + 1);
+        setCategoryRows(
+          Array.from(categoryCounts.entries())
+            .map(([key, count]) => ({ key, label: key, count }))
+            .sort((a, b) => a.label.localeCompare(b.label))
+        );
+
+        const typeCounts = new Map<string, number>();
+        for (const r of indents) typeCounts.set(r.requestType, (typeCounts.get(r.requestType) ?? 0) + 1);
+        setTypeRows(
+          Array.from(typeCounts.entries())
+            .map(([key, count]) => ({ key, label: INDENT_REQUEST_TYPE_LABELS[key as keyof typeof INDENT_REQUEST_TYPE_LABELS] ?? key, count }))
+            .sort((a, b) => a.label.localeCompare(b.label))
+        );
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
       .finally(() => setIsLoading(false));
@@ -76,7 +100,7 @@ export default function PurchaseBrowseDepartmentsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((dept) => (
-            <Link key={dept.id} href={`/purchase/indents?department=${encodeURIComponent(dept.name)}`}>
+            <Link key={dept.id} href={`/purchase/indents?collegeId=${params.collegeId}&department=${encodeURIComponent(dept.name)}`}>
               <Card className="cursor-pointer hover:border-primary hover:shadow-md transition-all h-full">
                 <CardContent className="p-5 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -99,6 +123,45 @@ export default function PurchaseBrowseDepartmentsPage() {
               </Card>
             </Link>
           ))}
+        </div>
+      )}
+
+      {!isLoading && (categoryRows.length > 0 || typeRows.length > 0) && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {typeRows.length > 0 && (
+            <Card>
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <PackageCheck className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-semibold">Indents by Goods / Non-Goods</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {typeRows.map((row) => (
+                    <Link key={row.key} href={`/purchase/indents?collegeId=${params.collegeId}&requestType=${row.key}`}>
+                      <Badge variant="outline" className="text-xs cursor-pointer hover:border-primary">{row.label} ({row.count})</Badge>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {categoryRows.length > 0 && (
+            <Card>
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tags className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-semibold">Indents by Category</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {categoryRows.map((row) => (
+                    <Link key={row.key} href={`/purchase/by-category?collegeId=${params.collegeId}&category=${encodeURIComponent(row.key)}`}>
+                      <Badge variant="outline" className="text-xs cursor-pointer hover:border-primary">{row.label} ({row.count})</Badge>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
     </div>

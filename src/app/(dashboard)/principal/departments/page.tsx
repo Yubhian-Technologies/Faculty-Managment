@@ -11,37 +11,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { Department, FMSUser } from "@/types";
+import { yearOrdinalLabel } from "@/lib/college/academicYears";
+import type { AcademicYear, Department, FMSUser } from "@/types";
 
 export default function DepartmentsPage() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [hods, setHods] = useState<FMSUser[]>([]);
+  const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [deletingDept, setDeletingDept] = useState<Department | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [assignedYears, setAssignedYears] = useState<number[]>([]);
 
   async function loadDepts() {
     setIsLoading(true);
     try {
-      const [deptRes, hodRes] = await Promise.all([
+      const [deptRes, hodRes, yearsRes] = await Promise.all([
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/users?role=HOD").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
+        fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>),
       ]);
       setDepartments(deptRes.departments ?? []);
       setHods(hodRes.users ?? []);
+      setOpenYears((yearsRes.academicYears ?? []).filter((y) => y.isActive));
     } catch {
       toast({ variant: "destructive", title: "Failed to load departments" });
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function toggleAssignedYear(year: number, checked: boolean) {
+    setAssignedYears((prev) => (checked ? [...prev, year].sort() : prev.filter((y) => y !== year)));
   }
 
   useEffect(() => { void loadDepts(); }, []);
@@ -58,12 +68,14 @@ export default function DepartmentsPage() {
 
   function openAdd() {
     reset({ name: "", code: "", hodUid: "" });
+    setAssignedYears([]);
     setEditingDept(null);
     setShowForm(true);
   }
 
   function openEdit(dept: Department) {
     reset({ name: dept.name, code: dept.code, hodUid: dept.hodUid ?? "" });
+    setAssignedYears(dept.assignedYears ?? []);
     setEditingDept(dept);
     setShowForm(true);
   }
@@ -83,7 +95,7 @@ export default function DepartmentsPage() {
         const res = await fetch("/api/college/departments", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deptId: editingDept.id, ...payload }),
+          body: JSON.stringify({ deptId: editingDept.id, ...payload, assignedYears }),
         });
         if (!res.ok) {
           const json = await res.json() as { error?: string };
@@ -186,6 +198,15 @@ export default function DepartmentsPage() {
                     ) : (
                       <p className="text-xs text-orange-500 mt-1.5">No HOD assigned</p>
                     )}
+                    {dept.assignedYears && dept.assignedYears.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {dept.assignedYears.map((y) => (
+                          <Badge key={y} variant="outline" className="text-xs">{yearOrdinalLabel(y)}</Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-1.5">No years assigned yet</p>
+                    )}
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <Button
@@ -268,6 +289,30 @@ export default function DepartmentsPage() {
                 </p>
               )}
             </div>
+
+            {editingDept && (
+              <div className="space-y-2">
+                <Label>Years Taught</Label>
+                {openYears.length === 0 ? (
+                  <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                    No academic years are added for this college yet — ask your Location Admin to add years first.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+                    {openYears.map((y) => (
+                      <label key={y.yearNumber} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox
+                          checked={assignedYears.includes(y.yearNumber)}
+                          onCheckedChange={(checked) => toggleAssignedYear(y.yearNumber, !!checked)}
+                        />
+                        {yearOrdinalLabel(y.yearNumber)}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Which years of study this department currently teaches. HODs can only create sections for these years.</p>
+              </div>
+            )}
 
             <DialogFooter className="gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
