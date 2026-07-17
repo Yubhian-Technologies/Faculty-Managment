@@ -125,9 +125,21 @@ export function DataTable<T extends Record<string, unknown>>({
                   <tr
                     key={keyExtractor(row)}
                     onClick={() => onRowClick?.(row)}
+                    onKeyDown={
+                      onRowClick
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onRowClick(row);
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={onRowClick ? 0 : undefined}
+                    role={onRowClick ? "button" : undefined}
                     className={cn(
                       "bg-background hover:bg-muted/30 transition-colors",
-                      onRowClick && "cursor-pointer"
+                      onRowClick && "cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
                     )}
                   >
                     {columns.map((col) => (

@@ -3,36 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Firestore } from "firebase-admin/firestore";
 import type { BudgetCategoryGroup, BudgetRequest } from "@/types";
 import { budgetRequestTotal, normalizeBudgetRequest } from "@/types";
 import { resolveUserName } from "@/lib/budget/departmentScope";
-
-async function notify(
-  db: Firestore,
-  collegeId: string,
-  toUid: string,
-  type: string,
-  title: string,
-  message: string,
-  link?: string
-) {
-  try {
-    await db.collection("colleges").doc(collegeId).collection("notifications").add({
-      collegeId, toUid, type, title, message,
-      read: false, link: link ?? null, createdAt: new Date(),
-    });
-  } catch {
-    /* non-fatal */
-  }
-}
-
-async function notifyRole(db: Firestore, collegeId: string, role: string, type: string, title: string, message: string, link?: string) {
-  const snap = await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
-  for (const u of snap.docs) {
-    await notify(db, collegeId, u.id, type, title, message, link);
-  }
-}
+import { notify, notifyRole } from "@/lib/notify";
 
 export async function GET(
   request: Request,

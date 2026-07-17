@@ -125,6 +125,7 @@ export async function PATCH(request: Request) {
       isActive?: boolean;
       name?: string;
       code?: string;
+      assignedYears?: number[];
     };
 
     const { deptId, ...updates } = body;
@@ -133,6 +134,31 @@ export async function PATCH(request: Request) {
     }
 
     const db = getAdminDb();
+
+    // Assigned years must be a subset of the years this college has actually
+    // opened (Location Admin's Academic Years toggle) — mirrors the same
+    // check already done for Section creation in college/sections/route.ts.
+    if (updates.assignedYears) {
+      const academicYearsSnap = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("academicYears")
+        .get();
+      const openYears = new Set(
+        academicYearsSnap.docs
+          .map((d) => d.data() as { yearNumber: number; isActive: boolean })
+          .filter((y) => y.isActive)
+          .map((y) => y.yearNumber)
+      );
+      const invalid = updates.assignedYears.filter((y) => !openYears.has(Number(y)));
+      if (invalid.length > 0) {
+        return NextResponse.json(
+          { error: `Year(s) ${invalid.join(", ")} are not open for this college` },
+          { status: 400 }
+        );
+      }
+    }
+
     await db
       .collection("colleges")
       .doc(session.collegeId)

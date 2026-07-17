@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, ChevronDown, ChevronUp, Plus, CalendarRange } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus, CalendarRange, CalendarDays, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import type { College, AcademicYear } from "@/types";
-
-const YEAR_NUMBERS = [1, 2, 3, 4] as const;
-const YEAR_LABELS: Record<number, string> = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
+import { yearOrdinalLabel } from "@/lib/college/academicYears";
+import type { College, AcademicYear, AcademicSession } from "@/types";
 
 type PrincipalRow = { uid: string; name: string; email: string; role: string; isActive: boolean };
 
@@ -44,7 +42,15 @@ export default function AdministrationCollegesPage() {
   const [yearsCollege, setYearsCollege] = useState<College | null>(null);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [loadingYears, setLoadingYears] = useState(false);
-  const [savingYear, setSavingYear] = useState<number | null>(null);
+  const [savingYear, setSavingYear] = useState(false);
+
+  // Academic sessions dialog (calendar sessions, e.g. "2025-26")
+  const [sessionsCollege, setSessionsCollege] = useState<College | null>(null);
+  const [academicSessions, setAcademicSessions] = useState<AcademicSession[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [newSessionLabel, setNewSessionLabel] = useState("");
+  const [savingSession, setSavingSession] = useState(false);
+  const [sessionActionId, setSessionActionId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -123,24 +129,124 @@ export default function AdministrationCollegesPage() {
     }
   }
 
-  async function toggleYear(yearNumber: number, isActive: boolean) {
+  async function addNextYear() {
     if (!yearsCollege) return;
-    setSavingYear(yearNumber);
+    setSavingYear(true);
     try {
       const res = await fetch(`/api/college/academic-years?collegeId=${yearsCollege.id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ yearNumber, isActive }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const json = await res.json() as { error?: string };
+        throw new Error(json.error ?? "Failed to add year");
+      }
       const refreshed = await fetch(`/api/college/academic-years?collegeId=${yearsCollege.id}`)
         .then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>)
         .then((d) => d.academicYears ?? []);
       setAcademicYears(refreshed);
-    } catch {
-      toast({ variant: "destructive", title: "Failed to update academic year" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add year" });
     } finally {
-      setSavingYear(null);
+      setSavingYear(false);
+    }
+  }
+
+  async function removeLastYear() {
+    if (!yearsCollege) return;
+    setSavingYear(true);
+    try {
+      const res = await fetch(`/api/college/academic-years?collegeId=${yearsCollege.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const json = await res.json() as { error?: string };
+        throw new Error(json.error ?? "Failed to remove year");
+      }
+      const refreshed = await fetch(`/api/college/academic-years?collegeId=${yearsCollege.id}`)
+        .then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>)
+        .then((d) => d.academicYears ?? []);
+      setAcademicYears(refreshed);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove year" });
+    } finally {
+      setSavingYear(false);
+    }
+  }
+
+  async function refreshSessions(collegeId: string) {
+    const data = await fetch(`/api/college/academic-sessions?collegeId=${collegeId}`)
+      .then((r) => r.json() as Promise<{ academicSessions: AcademicSession[] }>);
+    setAcademicSessions(data.academicSessions ?? []);
+  }
+
+  async function openSessionsDialog(college: College) {
+    setSessionsCollege(college);
+    setNewSessionLabel("");
+    setLoadingSessions(true);
+    try {
+      await refreshSessions(college.id);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load academic sessions" });
+    } finally {
+      setLoadingSessions(false);
+    }
+  }
+
+  async function handleAddSession(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sessionsCollege || !newSessionLabel.trim()) return;
+    setSavingSession(true);
+    try {
+      const res = await fetch(`/api/college/academic-sessions?collegeId=${sessionsCollege.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: newSessionLabel.trim() }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Failed to add session", description: json.error });
+        return;
+      }
+      setNewSessionLabel("");
+      await refreshSessions(sessionsCollege.id);
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setSavingSession(false);
+    }
+  }
+
+  async function setCurrentSession(id: string) {
+    if (!sessionsCollege) return;
+    setSessionActionId(id);
+    try {
+      const res = await fetch(`/api/college/academic-sessions?collegeId=${sessionsCollege.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, isCurrent: true }),
+      });
+      if (!res.ok) throw new Error();
+      await refreshSessions(sessionsCollege.id);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update session" });
+    } finally {
+      setSessionActionId(null);
+    }
+  }
+
+  async function deleteSession(id: string) {
+    if (!sessionsCollege) return;
+    setSessionActionId(id);
+    try {
+      const res = await fetch(`/api/college/academic-sessions?collegeId=${sessionsCollege.id}&id=${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error();
+      await refreshSessions(sessionsCollege.id);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to delete session" });
+    } finally {
+      setSessionActionId(null);
     }
   }
 
@@ -233,6 +339,14 @@ export default function AdministrationCollegesPage() {
                   >
                     <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
                     Academic Years
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openSessionsDialog(college)}
+                  >
+                    <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                    Academic Sessions
                   </Button>
                   {showAddBtn && (
                     <Button
@@ -401,36 +515,114 @@ export default function AdministrationCollegesPage() {
           </DialogHeader>
           <div className="space-y-3 py-1">
             <p className="text-sm text-muted-foreground">
-              Toggle which years are open for this college. Sections can only be created for an open year.
+              Add years of study for this college, one at a time — sections can only be created for a year that&apos;s been added here.
             </p>
             {loadingYears ? (
               <div className="space-y-2">
-                {YEAR_NUMBERS.map((y) => <div key={y} className="h-12 bg-muted animate-pulse rounded-lg" />)}
+                {[1, 2, 3].map((i) => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}
               </div>
             ) : (
               <div className="space-y-2">
-                {YEAR_NUMBERS.map((y) => {
-                  const existing = academicYears.find((ay) => ay.yearNumber === y);
-                  const isActive = existing?.isActive ?? false;
-                  return (
-                    <div key={y} className="flex items-center justify-between rounded-lg border p-3">
-                      <span className="text-sm font-medium">{YEAR_LABELS[y]}</span>
+                {academicYears.length === 0 && (
+                  <p className="text-sm text-muted-foreground border rounded-lg p-3">No years added yet.</p>
+                )}
+                {academicYears
+                  .slice()
+                  .sort((a, b) => a.yearNumber - b.yearNumber)
+                  .map((ay, i, arr) => {
+                    const isLast = i === arr.length - 1;
+                    return (
+                      <div key={ay.id} className="flex items-center justify-between rounded-lg border p-3">
+                        <span className="text-sm font-medium">{ay.label ?? yearOrdinalLabel(ay.yearNumber)}</span>
+                        {isLast && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            loading={savingYear}
+                            onClick={() => void removeLastYear()}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+            <Button type="button" variant="outline" className="w-full" loading={savingYear} onClick={() => void addNextYear()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add {yearOrdinalLabel(Math.max(0, ...academicYears.map((ay) => ay.yearNumber)) + 1)}
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setYearsCollege(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Academic Sessions Dialog */}
+      <Dialog open={!!sessionsCollege} onOpenChange={(open) => !open && setSessionsCollege(null)}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Academic Sessions — {sessionsCollege?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-sm text-muted-foreground">
+              Add calendar academic sessions for this college (e.g. &quot;2025-26&quot;) and mark the one currently in effect.
+            </p>
+            <form onSubmit={handleAddSession} className="flex items-center gap-2">
+              <Input
+                value={newSessionLabel}
+                onChange={(e) => setNewSessionLabel(e.target.value)}
+                placeholder="e.g. 2025-26"
+                className="flex-1"
+              />
+              <Button type="submit" size="sm" loading={savingSession} disabled={!newSessionLabel.trim()}>
+                Add
+              </Button>
+            </form>
+            {loadingSessions ? (
+              <div className="space-y-2">
+                {[1, 2].map((i) => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}
+              </div>
+            ) : academicSessions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No academic sessions added yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {academicSessions.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{s.label}</span>
+                      {s.isCurrent && <Badge className="text-xs">Current</Badge>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!s.isCurrent && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={sessionActionId === s.id}
+                          onClick={() => void setCurrentSession(s.id)}
+                        >
+                          Set Current
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        variant={isActive ? "default" : "outline"}
-                        loading={savingYear === y}
-                        onClick={() => void toggleYear(y, !isActive)}
+                        variant="ghost"
+                        loading={sessionActionId === s.id}
+                        onClick={() => void deleteSession(s.id)}
                       >
-                        {isActive ? "Open" : "Closed"}
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setYearsCollege(null)}>Close</Button>
+            <Button type="button" variant="outline" onClick={() => setSessionsCollege(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

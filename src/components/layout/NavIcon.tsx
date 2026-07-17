@@ -41,6 +41,8 @@ import {
   UserPlus,
   Clock,
   History,
+  Tags,
+  PackageCheck,
   type LucideProps,
 } from "lucide-react";
 
@@ -87,6 +89,8 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   UserPlus,
   Clock,
   History,
+  Tags,
+  PackageCheck,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

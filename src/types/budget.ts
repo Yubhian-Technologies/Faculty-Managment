@@ -147,12 +147,6 @@ export const CATEGORY_FIELD_CONFIG: Record<string, BudgetCategoryFieldConfig> = 
   "Printing & Stationery": { extraFields: [QUANTITY_FIELD] },
   "Guest Faculty/Guest Lectures": { extraFields: [{ ...QUANTITY_FIELD, label: "Number of Lectures" }] },
   "Inhouse R&D Activities": { extraFields: [QUANTITY_FIELD] },
-  "Staff Salaries": {
-    extraFields: [{ key: "numberOfStaff", label: "Number of Staff", type: "NUMBER" }], // informational only, doesn't multiply
-    fixedTotalMultiplier: 12,
-    priceLabel: "Gross Salary Per Month",
-    totalLabel: "Gross Salary Per Year",
-  },
   "Workshops/Seminars/Paper Presentations": { extraFields: [] },
   "Department Forum's Activities": { extraFields: [] },
   "Equipment Maintenance & Consumables": { extraFields: [] },

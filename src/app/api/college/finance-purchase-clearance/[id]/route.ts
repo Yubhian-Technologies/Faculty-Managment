@@ -5,6 +5,7 @@ import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
 import type { FinancePurchaseClearance, PurchaseQuotation } from "@/types";
+import { notify, notifyRole } from "@/lib/notify";
 
 const MIN_QUOTATIONS = 3;
 
@@ -15,32 +16,6 @@ async function getUserProfile(db: Firestore, collegeId: string, uid: string): Pr
     return { name: data?.name ?? "Unknown", department: data?.department ?? "" };
   } catch {
     return { name: "Unknown", department: "" };
-  }
-}
-
-async function notify(
-  db: Firestore,
-  collegeId: string,
-  toUid: string,
-  type: string,
-  title: string,
-  message: string,
-  link?: string
-) {
-  try {
-    await db.collection("colleges").doc(collegeId).collection("notifications").add({
-      collegeId, toUid, type, title, message,
-      read: false, link: link ?? null, createdAt: new Date(),
-    });
-  } catch {
-    /* non-fatal */
-  }
-}
-
-async function notifyRole(db: Firestore, collegeId: string, role: string, type: string, title: string, message: string, link?: string) {
-  const snap = await db.collection("colleges").doc(collegeId).collection("users").where("role", "==", role).get();
-  for (const u of snap.docs) {
-    await notify(db, collegeId, u.id, type, title, message, link);
   }
 }
 
@@ -108,6 +83,16 @@ export async function PATCH(
           status: "PENDING_PURCHASE_REVIEW",
           history: [...(existing.history ?? []), historyEntry],
           updatedAt: now,
+        });
+
+        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+          collegeId: session.collegeId,
+          action: "PURCHASE_CLEARANCE_RESUBMITTED",
+          performedBy: session.uid,
+          performedByName: hodName,
+          targetId: id,
+          details: { department: existing.department, items: body.items },
+          timestamp: now,
         });
 
         await notifyRole(

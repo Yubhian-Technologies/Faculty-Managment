@@ -12,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { IndentStatusBadge } from "@/components/shared/indent/IndentStatusBadge";
 import { toast } from "@/hooks/useToast";
-import { collegeFetch } from "@/lib/api/collegeFetch";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import {
   PURCHASE_CLEARANCE_STATUS_LABELS,
@@ -21,7 +20,8 @@ import {
   type IndentRequest,
 } from "@/types";
 
-type ClearanceRow = FinancePurchaseClearance & { id: string; status: string };
+type OverviewIndent = IndentRequest & { collegeName: string; locationId: string; locationName: string };
+type ClearanceRow = FinancePurchaseClearance & { id: string; status: string; collegeName: string; locationId: string; locationName: string };
 
 // Purchase Dept reviews and acts on every stage of these requests here —
 // from initial quotation-sourcing through to purchase — instead of on a
@@ -41,47 +41,77 @@ const CLEARANCE_STATUS_STYLES: Record<string, string> = {
 export default function PurchaseIndentsPage() {
   const searchParams = useSearchParams();
   const departmentFilter = searchParams.get("department");
-  const [requests, setRequests] = useState<IndentRequest[]>([]);
+  const locationId = searchParams.get("locationId");
+  const collegeId = searchParams.get("collegeId");
+  const requestType = searchParams.get("requestType");
+  const [requests, setRequests] = useState<OverviewIndent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [clearanceRequests, setClearanceRequests] = useState<ClearanceRow[]>([]);
   const [isLoadingClearance, setIsLoadingClearance] = useState(true);
 
   useEffect(() => {
-    setIsLoading(true);
-    collegeFetch("/api/college/indent-requests")
-      .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>)
-      .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
-      .finally(() => setIsLoading(false));
+    const params = new URLSearchParams();
+    if (locationId) params.set("locationId", locationId);
+    if (collegeId) params.set("collegeId", collegeId);
+    if (requestType) params.set("requestType", requestType);
+    const query = params.toString();
 
+    setIsLoading(true);
     setIsLoadingClearance(true);
-    collegeFetch("/api/college/finance-purchase-clearance")
-      .then((r) => r.json() as Promise<{ requests: ClearanceRow[] }>)
-      .then((d) => setClearanceRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load purchase clearance requests" }))
-      .finally(() => setIsLoadingClearance(false));
-  }, []);
+    fetch(`/api/purchase/indents/overview?${query}`)
+      .then((r) => r.json() as Promise<{ indents: OverviewIndent[]; clearances: ClearanceRow[] }>)
+      .then((d) => {
+        setRequests(d.indents ?? []);
+        setClearanceRequests(d.clearances ?? []);
+      })
+      .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
+      .finally(() => {
+        setIsLoading(false);
+        setIsLoadingClearance(false);
+      });
+  }, [locationId, collegeId, requestType]);
 
   const filteredRequests = departmentFilter ? requests.filter((r) => r.department === departmentFilter) : requests;
   const filteredClearanceRequests = departmentFilter ? clearanceRequests.filter((r) => r.department === departmentFilter) : clearanceRequests;
 
-  const grouped: Record<string, IndentRequest[]> = {};
+  const grouped: Record<string, OverviewIndent[]> = {};
   for (const r of filteredRequests) {
     (grouped[r.department] ??= []).push(r);
   }
   const departments = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
 
+  const hasScope = !!(departmentFilter || locationId || collegeId || requestType);
+  const scopeLabel = collegeId
+    ? filteredRequests[0]?.collegeName ?? filteredClearanceRequests[0]?.collegeName
+    : locationId
+      ? filteredRequests[0]?.locationName ?? filteredClearanceRequests[0]?.locationName
+      : null;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Indent Requests"
-        description="Indents raised by departments, grouped for sourcing quotations"
+        description={
+          hasScope
+            ? "Indents raised by departments, grouped for sourcing quotations"
+            : "Org-wide — indents across every location and college, grouped by department"
+        }
       />
 
-      {departmentFilter && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Filtered to department:</span>
-          <Badge variant="outline">{departmentFilter}</Badge>
+      {hasScope && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {scopeLabel && (
+            <>
+              <span className="text-muted-foreground">Scope:</span>
+              <Badge variant="outline">{scopeLabel}</Badge>
+            </>
+          )}
+          {departmentFilter && (
+            <>
+              <span className="text-muted-foreground">Department:</span>
+              <Badge variant="outline">{departmentFilter}</Badge>
+            </>
+          )}
           <Button variant="ghost" size="sm" asChild className="h-7 px-2">
             <Link href="/purchase/indents"><X className="h-3 w-3 mr-1" />Clear</Link>
           </Button>
@@ -113,7 +143,7 @@ export default function PurchaseIndentsPage() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">{item.items}</p>
-                    <p className="text-xs text-muted-foreground">Raised by {item.hodName} on {formatDate(item.createdAt)}</p>
+                    <p className="text-xs text-muted-foreground">{item.collegeName} · Raised by {item.hodName} on {formatDate(item.createdAt)}</p>
                     <p className="text-sm font-medium">{formatCurrency(item.estimatedAmount)}</p>
                   </CardContent>
                 </Card>
@@ -159,6 +189,7 @@ export default function PurchaseIndentsPage() {
                             <span className="font-semibold text-sm">{item.title}</span>
                             <IndentStatusBadge status={item.status} />
                           </div>
+                          {!collegeId && <p className="text-xs text-muted-foreground">{item.collegeName}</p>}
                           <p className="text-xs text-muted-foreground">Raised by {item.hodName} on {formatDate(item.createdAt)}</p>
                           <p className="text-sm font-medium">{formatCurrency(indentItemsTotal(item.items))}</p>
                         </CardContent>

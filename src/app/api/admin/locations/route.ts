@@ -16,11 +16,11 @@ const OPTIONAL_L2_ROLES: UserRole[] = ["ACCOUNTS"];
 // SUPER_ADMIN (L0) and MANAGEMENT (L1, global) can both view/create locations —
 // Management gained location-creation rights so it can act as a real L1 role
 // per the org hierarchy (creates locations, assigns Administrators to them).
-// PURCHASE_DEPT is read-only here — it only needs the list to populate its
-// Location → College → Department browse view.
+// PURCHASE_DEPT and FINANCE are read-only here — they only need the list to
+// populate their Location → College → Department browse views.
 export async function GET() {
   try {
-    await requireRole("SUPER_ADMIN", "MANAGEMENT", "PURCHASE_DEPT");
+    await requireRole("SUPER_ADMIN", "MANAGEMENT", "PURCHASE_DEPT", "FINANCE");
     const db = getAdminDb();
     const snap = await db.collection("locations").orderBy("name").get();
     const locations = snap.docs.map((d) => ({ id: d.id, ...d.data() }));

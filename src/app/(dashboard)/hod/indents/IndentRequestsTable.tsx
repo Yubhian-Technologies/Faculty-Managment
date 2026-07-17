@@ -3,10 +3,11 @@
 import { Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { IndentStatusBadge } from "@/components/shared/indent/IndentStatusBadge";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { indentItemsTotal, type IndentRequest } from "@/types";
+import { indentItemsTotal, INDENT_REQUEST_TYPE_LABELS, type IndentRequest } from "@/types";
 
 interface IndentRequestsTableProps {
   requests: IndentRequest[];
@@ -19,6 +20,12 @@ export function IndentRequestsTable({ requests, isLoading, onEditRequest, onView
   const columns: Column<IndentRequest & Record<string, unknown>>[] = [
     { key: "title", header: "Title" },
     { key: "department", header: "Department", hideOnMobile: true },
+    {
+      key: "requestType",
+      header: "Type",
+      hideOnMobile: true,
+      render: (row) => row.requestType ? <Badge variant="outline" className="text-xs">{INDENT_REQUEST_TYPE_LABELS[row.requestType]}</Badge> : null,
+    },
     { key: "amount", header: "Est. Amount", render: (row) => formatCurrency(indentItemsTotal(row.items)) },
     { key: "createdAt", header: "Submitted", hideOnMobile: true, render: (row) => formatDate(row.createdAt) },
     { key: "status", header: "Status", render: (row) => <IndentStatusBadge status={row.status} /> },

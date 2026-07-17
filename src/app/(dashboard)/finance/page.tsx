@@ -25,7 +25,9 @@ export default function FinanceDashboard() {
       collegeFetch("/api/college/finance-budgets").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
       collegeFetch("/api/college/finance-budget-requests?status=PENDING").then((r) => r.json() as Promise<{ requests: FinanceBudgetRequest[] }>).then((d) => d.requests ?? []),
       collegeFetch("/api/college/finance-expense-requests?status=PENDING").then((r) => r.json() as Promise<{ requests: FinanceExpenseRequest[] }>).then((d) => d.requests ?? []),
-      collegeFetch("/api/college/finance-purchase-clearance?status=PENDING").then((r) => r.json() as Promise<{ requests: FinancePurchaseClearance[] }>).then((d) => d.requests ?? []),
+      // Org-wide (every location/college Finance serves), unlike the three
+      // college-scoped fetches above which have no overview route yet.
+      fetch("/api/purchase/indents/overview?status=PENDING_FINANCE_REVIEW").then((r) => r.json() as Promise<{ clearances: FinancePurchaseClearance[] }>).then((d) => d.clearances ?? []),
     ]).then(([budgets, budgetRequests, expenseRequests, clearances]) => {
       setStats({
         totalAllocated: budgets.reduce((s, b) => s + (b.allocatedAmount ?? 0), 0),

@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
-import { collegeFetch } from "@/lib/api/collegeFetch";
 import type { IndentRequest } from "@/types";
 
 export default function PurchaseDashboard() {
@@ -20,9 +19,9 @@ export default function PurchaseDashboard() {
   });
 
   useEffect(() => {
-    collegeFetch("/api/college/indent-requests")
-      .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>)
-      .then((d) => d.requests ?? [])
+    fetch("/api/purchase/indents/overview")
+      .then((r) => r.json() as Promise<{ indents: IndentRequest[] }>)
+      .then((d) => d.indents ?? [])
       .then((requests) => {
         setStats({
           pendingReview: requests.filter((r) => r.status === "PENDING_PURCHASE_REVIEW" || r.status === "RETURNED_TO_PURCHASE").length,

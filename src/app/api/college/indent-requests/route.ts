@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
-import type { IndentItem, IndentRequest } from "@/types";
+import type { IndentItem, IndentRequest, IndentRequestType } from "@/types";
 
 async function getUser(db: Firestore, collegeId: string, uid: string): Promise<{ name: string; department: string }> {
   try {
@@ -54,15 +54,23 @@ export async function POST(request: Request) {
     const session = await requireCollegeContext(request, "HOD", "SUPER_ADMIN");
     const body = (await request.json()) as {
       title: string;
+      category: string;
+      requestType: IndentRequestType;
       items: IndentItem[];
     };
 
-    const { title } = body;
+    const { title, category, requestType } = body;
     const items = Array.isArray(body.items) ? body.items : [];
 
-    if (!title || items.length === 0) {
+    if (!title || !category || items.length === 0) {
       return NextResponse.json(
-        { error: "title and at least one item are required" },
+        { error: "title, category, and at least one item are required" },
+        { status: 400 }
+      );
+    }
+    if (requestType !== "GOODS" && requestType !== "NON_GOODS") {
+      return NextResponse.json(
+        { error: "requestType must be GOODS or NON_GOODS" },
         { status: 400 }
       );
     }
@@ -83,6 +91,10 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
+    // GOODS indents go to Purchase Dept for quotation sourcing; NON_GOODS skip
+    // straight to Finance for direct approval (see IndentStatus in src/types/indent.ts).
+    const isGoods = requestType === "GOODS";
+    const initialStatus = isGoods ? "PENDING_PURCHASE_REVIEW" : "PENDING_FINANCE_REVIEW";
 
     const ref = await db
       .collection("colleges")
@@ -94,8 +106,10 @@ export async function POST(request: Request) {
         hodName,
         department,
         title: title.trim(),
+        category,
+        requestType,
         items,
-        status: "PENDING_PURCHASE_REVIEW",
+        status: initialStatus,
         quotations: [],
         history: [],
         createdAt: now,
@@ -108,18 +122,20 @@ export async function POST(request: Request) {
       performedBy: session.uid,
       performedByName: hodName,
       targetId: ref.id,
-      details: { title, department },
+      details: { title, department, requestType },
       timestamp: now,
     });
 
-    // PURCHASE_DEPT is a GLOBAL role (systemUsers), not in the college users subcollection.
-    const purchaseSnap = await db
+    // PURCHASE_DEPT and FINANCE are GLOBAL roles (systemUsers), not in the college users subcollection.
+    const notifyRoleName = isGoods ? "PURCHASE_DEPT" : "FINANCE";
+    const notifyLink = isGoods ? "/purchase/indents" : "/finance/indent-approvals";
+    const recipientSnap = await db
       .collection("systemUsers")
-      .where("role", "==", "PURCHASE_DEPT")
+      .where("role", "==", notifyRoleName)
       .get();
 
     const batch = db.batch();
-    for (const p of purchaseSnap.docs) {
+    for (const p of recipientSnap.docs) {
       const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
       batch.set(notifRef, {
         collegeId: session.collegeId,
@@ -127,7 +143,7 @@ export async function POST(request: Request) {
         type: "INDENT_SUBMITTED",
         title: "New Indent Request",
         message: `${hodName} raised an indent "${title}" for ${department}.`,
-        link: "/purchase/indents",
+        link: notifyLink,
         read: false,
         createdAt: now,
       });
