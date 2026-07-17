@@ -17,7 +17,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { Plus, IndianRupee, Sparkles } from "lucide-react";
 import type { HiringSalaryAgreement, HiringBatch, Candidate, HRFeedback } from "@/types";
 
@@ -363,7 +363,7 @@ export default function AccountsSalaryPage() {
                       type="number"
                       min="0"
                       value={form[key]}
-                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, [key]: stripLeadingZeros(e.target.value) }))}
                       placeholder="0"
                     />
                   </div>
@@ -385,7 +385,7 @@ export default function AccountsSalaryPage() {
                       type="number"
                       min="0"
                       value={form[key]}
-                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, [key]: stripLeadingZeros(e.target.value) }))}
                       placeholder="0"
                     />
                   </div>

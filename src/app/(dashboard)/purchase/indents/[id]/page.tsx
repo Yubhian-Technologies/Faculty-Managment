@@ -15,7 +15,7 @@ import { IndentItemsTable } from "@/components/shared/indent/IndentItemsTable";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, stripLeadingZeros } from "@/lib/utils";
 import { indentItemsTotal, type IndentQuotation, type IndentRequest } from "@/types";
 
 const MIN_QUOTATIONS = 3;
@@ -204,7 +204,7 @@ export default function PurchaseIndentDetailPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Amount Paid</Label>
-                <Input type="number" min={0} value={receiptAmount} onChange={(e) => setReceiptAmount(e.target.value)} />
+                <Input type="number" min={0} value={receiptAmount} onChange={(e) => setReceiptAmount(stripLeadingZeros(e.target.value))} />
               </div>
             </div>
             <div className="space-y-2">

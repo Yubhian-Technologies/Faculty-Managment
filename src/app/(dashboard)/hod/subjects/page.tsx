@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
+import { stripLeadingZeros } from "@/lib/utils";
 import type { Course, Subject, SubjectType } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 
@@ -299,7 +300,7 @@ export default function HODSubjectsPage() {
                   type="number"
                   min={0}
                   value={form.hoursPerWeek}
-                  onChange={(e) => setForm((f) => ({ ...f, hoursPerWeek: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, hoursPerWeek: stripLeadingZeros(e.target.value) }))}
                 />
               </div>
               <div className="space-y-1.5">
@@ -308,7 +309,7 @@ export default function HODSubjectsPage() {
                   type="number"
                   min={0}
                   value={form.totalHoursPerSemester}
-                  onChange={(e) => setForm((f) => ({ ...f, totalHoursPerSemester: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, totalHoursPerSemester: stripLeadingZeros(e.target.value) }))}
                   placeholder="Optional"
                 />
               </div>
@@ -319,7 +320,7 @@ export default function HODSubjectsPage() {
                 type="number"
                 min={0}
                 value={form.credits}
-                onChange={(e) => setForm((f) => ({ ...f, credits: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, credits: stripLeadingZeros(e.target.value) }))}
               />
             </div>
           </div>

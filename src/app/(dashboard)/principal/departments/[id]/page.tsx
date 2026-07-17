@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
+import { stripLeadingZeros } from "@/lib/utils";
 import type { Department, Course, CourseYearTiming, BreakConfig, CourseAcademicYear } from "@/types";
 
 // "2025-2026" -> "2026-2027"; falls back to blank if the label isn't in that shape.
@@ -440,7 +441,7 @@ export default function DepartmentDetailPage() {
                 min={1}
                 max={10}
                 value={courseForm.durationYears}
-                onChange={(e) => setCourseForm((f) => ({ ...f, durationYears: e.target.value }))}
+                onChange={(e) => setCourseForm((f) => ({ ...f, durationYears: stripLeadingZeros(e.target.value) }))}
               />
             </div>
           </div>
@@ -489,7 +490,7 @@ export default function DepartmentDetailPage() {
                   type="number"
                   min={1}
                   value={timingForm.numberOfPeriods}
-                  onChange={(e) => setTimingForm((f) => ({ ...f, numberOfPeriods: e.target.value }))}
+                  onChange={(e) => setTimingForm((f) => ({ ...f, numberOfPeriods: stripLeadingZeros(e.target.value) }))}
                 />
               </div>
               <div className="space-y-1.5">
@@ -498,7 +499,7 @@ export default function DepartmentDetailPage() {
                   type="number"
                   min={1}
                   value={timingForm.periodDurationMinutes}
-                  onChange={(e) => setTimingForm((f) => ({ ...f, periodDurationMinutes: e.target.value }))}
+                  onChange={(e) => setTimingForm((f) => ({ ...f, periodDurationMinutes: stripLeadingZeros(e.target.value) }))}
                 />
               </div>
             </div>

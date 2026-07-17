@@ -19,7 +19,7 @@ import {
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
+import { formatDate, formatDateTime, formatCurrency, stripLeadingZeros } from "@/lib/utils";
 import { NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type FinanceBudget, type BudgetRequest } from "@/types";
 
 type BudgetRow = FinanceBudget & Record<string, unknown>;
@@ -182,7 +182,7 @@ export default function FinanceBudgetPage() {
 
   const budgetColumns: Column<BudgetRow>[] = [
     { key: "purpose", header: "Purpose" },
-    { key: "fiscalYear", header: "Fiscal Year" },
+    { key: "fiscalYear", header: "Financial Year" },
     { key: "allocatedAmount", header: "Allocated", render: (row) => formatCurrency(row.allocatedAmount) },
     { key: "utilizedAmount", header: "Utilized", render: (row) => formatCurrency(row.utilizedAmount) },
     {
@@ -308,12 +308,12 @@ export default function FinanceBudgetPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Fiscal Year *</Label>
+                <Label>Financial Year *</Label>
                 <Input value={createForm.fiscalYear} onChange={(e) => setCreateForm((f) => ({ ...f, fiscalYear: e.target.value }))} placeholder="2026-27" />
               </div>
               <div className="space-y-2">
                 <Label>Allocated Amount *</Label>
-                <Input type="number" value={createForm.allocatedAmount} onChange={(e) => setCreateForm((f) => ({ ...f, allocatedAmount: e.target.value }))} placeholder="500000" />
+                <Input type="number" value={createForm.allocatedAmount} onChange={(e) => setCreateForm((f) => ({ ...f, allocatedAmount: stripLeadingZeros(e.target.value) }))} placeholder="500000" />
               </div>
             </div>
           </div>
@@ -334,7 +334,7 @@ export default function FinanceBudgetPage() {
             </p>
             <div className="space-y-2">
               <Label>Revised Amount *</Label>
-              <Input type="number" value={reviseForm.revisedAmount} onChange={(e) => setReviseForm((f) => ({ ...f, revisedAmount: e.target.value }))} />
+              <Input type="number" value={reviseForm.revisedAmount} onChange={(e) => setReviseForm((f) => ({ ...f, revisedAmount: stripLeadingZeros(e.target.value) }))} />
             </div>
             <div className="space-y-2">
               <Label>Reason *</Label>

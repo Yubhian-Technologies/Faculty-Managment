@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 
 type FirestoreTimestampLike = { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
 
-function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): Date | null {
+export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): Date | null {
   if (!timestamp) return null;
   if (timestamp instanceof Date) return timestamp;
   if (typeof (timestamp as Timestamp).toDate === "function") return (timestamp as Timestamp).toDate();
@@ -117,6 +117,19 @@ export function exportToCSV<T extends Record<string, unknown>>(
 export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.slice(0, length) + "…";
+}
+
+// Strips leading zeros from a numeric <input> string as the user types
+// (e.g. "05" -> "5", "00" -> "0", "0.5" untouched) — for number inputs whose
+// value is kept as a raw string (custom per-item "extra fields", etc.)
+// rather than parsed through Number() on every keystroke, native browser
+// number inputs don't self-correct this, so it has to be done explicitly.
+export function stripLeadingZeros(value: string): string {
+  if (value === "") return value;
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const stripped = unsigned.replace(/^0+(?=\d)/, "");
+  return negative ? `-${stripped}` : stripped;
 }
 
 export function debounce<T extends (...args: unknown[]) => unknown>(

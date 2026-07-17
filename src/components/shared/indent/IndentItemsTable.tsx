@@ -64,7 +64,15 @@ export function IndentItemsTable({ items, onChange, readOnly = false }: IndentIt
                         <Input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(item.id, { quantity: Math.max(0, Number(e.target.value)) })} />
                       </td>
                       <td className="px-3 py-2">
-                        <Input type="number" min={0} value={item.estimatedUnitPrice} onChange={(e) => updateItem(item.id, { estimatedUnitPrice: Math.max(0, Number(e.target.value)) })} />
+                        <Input
+                          type="number"
+                          min={0}
+                          value={item.estimatedUnitPrice === 0 ? "" : item.estimatedUnitPrice}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            updateItem(item.id, { estimatedUnitPrice: raw === "" ? 0 : Math.max(0, Number(raw)) });
+                          }}
+                        />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap font-medium">{formatCurrency(indentItemTotal(item))}</td>
                       <td className="px-3 py-2">

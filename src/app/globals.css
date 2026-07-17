@@ -76,6 +76,17 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 
+/* Hide native number-input spin buttons (up/down arrows) across the app —
+   they conflict with mouse-wheel scrolling over a focused numeric field. */
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* Shimmer animation */
 @keyframes shimmer {
   0% { background-position: -200% 0; }

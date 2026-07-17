@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
-import { fieldConfigForCategory, itemTotal, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetRequestItem } from "@/types";
+import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
+import { fieldConfigForCategory, itemTotal, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem } from "@/types";
 
 function emptyItem(category: string): BudgetRequestItem {
   const cfg = fieldConfigForCategory(category);
@@ -123,8 +123,9 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, onUpdate
 
   const customFields = item.customFields ?? [];
 
-  function updateExtra(key: string, value: string) {
-    onUpdate({ extras: { ...item.extras, [key]: value } });
+  function updateExtra(key: string, value: string, type: BudgetExtraFieldType = "TEXT") {
+    const normalized = type === "NUMBER" ? stripLeadingZeros(value) : value;
+    onUpdate({ extras: { ...item.extras, [key]: normalized } });
   }
 
   function resetDraft() {
@@ -184,7 +185,7 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, onUpdate
                 type={f.type === "NUMBER" ? "number" : "text"}
                 min={f.type === "NUMBER" ? 0 : undefined}
                 value={item.extras[f.key] ?? ""}
-                onChange={(e) => updateExtra(f.key, e.target.value)}
+                onChange={(e) => updateExtra(f.key, e.target.value, f.type)}
                 placeholder={f.placeholder}
               />
             </td>
@@ -193,8 +194,11 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, onUpdate
             <Input
               type="number"
               min={0}
-              value={item.price}
-              onChange={(e) => onUpdate({ price: Math.max(0, Number(e.target.value)) })}
+              value={item.price === 0 ? "" : item.price}
+              onChange={(e) => {
+                const raw = e.target.value;
+                onUpdate({ price: raw === "" ? 0 : Math.max(0, Number(raw)) });
+              }}
             />
           </td>
           <td className="px-3 py-2 whitespace-nowrap font-medium">
@@ -222,7 +226,7 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, onUpdate
                       <Input
                         type={f.type === "NUMBER" ? "number" : "text"}
                         value={item.extras[f.key] ?? ""}
-                        onChange={(e) => updateExtra(f.key, e.target.value)}
+                        onChange={(e) => updateExtra(f.key, e.target.value, f.type)}
                         className="h-7 w-28 text-xs"
                       />
                       <button type="button" onClick={() => removeCustomField(f.key)} aria-label={`Remove ${f.label}`}>

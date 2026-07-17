@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, toDate, stripLeadingZeros } from "@/lib/utils";
 import type { FinanceBudgetRequest } from "@/types";
 
 type Row = FinanceBudgetRequest & { id: string; status: string };
@@ -33,7 +33,12 @@ export default function FinanceBudgetApprovalsPage() {
     setIsLoading(true);
     collegeFetch("/api/college/finance-budget-requests")
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
-      .then((d) => setRequests(d.requests ?? []))
+      .then((d) => {
+        const sorted = [...(d.requests ?? [])].sort(
+          (a, b) => (toDate(a.createdAt)?.getTime() ?? 0) - (toDate(b.createdAt)?.getTime() ?? 0)
+        );
+        setRequests(sorted);
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
       .finally(() => setIsLoading(false));
   }
@@ -153,7 +158,7 @@ export default function FinanceBudgetApprovalsPage() {
             </div>
             <div className="space-y-2">
               <Label>Requested Amount *</Label>
-              <Input type="number" value={form.requestedAmount} onChange={(e) => setForm((f) => ({ ...f, requestedAmount: e.target.value }))} />
+              <Input type="number" value={form.requestedAmount} onChange={(e) => setForm((f) => ({ ...f, requestedAmount: stripLeadingZeros(e.target.value) }))} />
             </div>
             <div className="space-y-2">
               <Label>Purpose *</Label>

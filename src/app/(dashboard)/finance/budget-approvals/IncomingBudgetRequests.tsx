@@ -29,7 +29,12 @@ export function IncomingBudgetRequests() {
     setIsLoading(true);
     collegeFetch("/api/college/budget-requests?status=L1_FROZEN")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
-      .then((d) => setRequests(d.requests ?? []))
+      .then((d) => {
+        const sorted = [...(d.requests ?? [])].sort(
+          (a, b) => new Date(a.requestDate).getTime() - new Date(b.requestDate).getTime()
+        );
+        setRequests(sorted);
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load incoming budget requests" }))
       .finally(() => setIsLoading(false));
   }
@@ -44,7 +49,7 @@ export function IncomingBudgetRequests() {
 
   async function act(request: BudgetRequest, action: "APPROVE" | "REJECT" | "RETURN") {
     if (action === "APPROVE" && !fiscalYear.trim()) {
-      toast({ variant: "destructive", title: "Fiscal year is required" });
+      toast({ variant: "destructive", title: "Financial year is required" });
       return;
     }
     if ((action === "REJECT" || action === "RETURN") && !remarks.trim()) {
@@ -194,7 +199,7 @@ export function IncomingBudgetRequests() {
 
                 {mode === "approve" && (
                   <div className="space-y-2 rounded-md border border-green-300/60 bg-green-50 p-3 pt-2 border-t">
-                    <Label className="text-sm font-medium">Fiscal Year</Label>
+                    <Label className="text-sm font-medium">Financial Year</Label>
                     <Input
                       value={fiscalYear}
                       onChange={(e) => setFiscalYear(e.target.value)}
