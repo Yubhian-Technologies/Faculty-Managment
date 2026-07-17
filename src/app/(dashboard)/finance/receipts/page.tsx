@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { FileUpload } from "@/components/shared/FileUpload";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
 import type { FinanceReceipt, FinanceReceiptRelatedType } from "@/types";
 
 type Row = FinanceReceipt & Record<string, unknown>;
@@ -165,7 +165,7 @@ export default function FinanceReceiptsPage() {
             </div>
             <div className="space-y-2">
               <Label>Amount *</Label>
-              <Input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+              <Input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: stripLeadingZeros(e.target.value) }))} />
             </div>
             <div className="space-y-2">
               <Label>Description *</Label>

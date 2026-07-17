@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
 import type { FinancePayment, FinancePaymentType } from "@/types";
 
 type Row = FinancePayment & Record<string, unknown>;
@@ -166,7 +166,7 @@ export default function FinancePaymentsPage() {
             </div>
             <div className="space-y-2">
               <Label>Amount *</Label>
-              <Input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+              <Input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: stripLeadingZeros(e.target.value) }))} />
             </div>
             <div className="space-y-2">
               <Label>Purpose *</Label>

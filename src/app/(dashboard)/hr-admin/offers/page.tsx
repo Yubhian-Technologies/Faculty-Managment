@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
 
 interface LocationOffer {
@@ -207,7 +207,7 @@ export default function HROffersPage() {
               </div>
               <div className="space-y-2">
                 <Label>Monthly Salary (₹) <span className="text-destructive">*</span></Label>
-                <Input type="number" value={form.salary} onChange={(e) => setForm((f) => ({ ...f, salary: e.target.value }))} placeholder="45000" />
+                <Input type="number" value={form.salary} onChange={(e) => setForm((f) => ({ ...f, salary: stripLeadingZeros(e.target.value) }))} placeholder="45000" />
               </div>
             </div>
             <div className="space-y-2">

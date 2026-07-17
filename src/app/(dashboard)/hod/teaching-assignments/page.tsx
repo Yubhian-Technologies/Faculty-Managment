@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { stripLeadingZeros } from "@/lib/utils";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import type { Subject, SubjectType, TeachingAssignment, FMSUser, Section } from "@/types";
 
@@ -122,17 +123,17 @@ export default function TeachingAssignmentsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Semester</Label>
-                  <Input type="number" min={1} max={8} value={subjectForm.semester} onChange={(e) => setSubjectForm((f) => ({ ...f, semester: e.target.value }))} />
+                  <Input type="number" min={1} max={8} value={subjectForm.semester} onChange={(e) => setSubjectForm((f) => ({ ...f, semester: stripLeadingZeros(e.target.value) }))} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-2">
                   <Label>Hours/Week</Label>
-                  <Input type="number" min={0} value={subjectForm.hoursPerWeek} onChange={(e) => setSubjectForm((f) => ({ ...f, hoursPerWeek: e.target.value }))} />
+                  <Input type="number" min={0} value={subjectForm.hoursPerWeek} onChange={(e) => setSubjectForm((f) => ({ ...f, hoursPerWeek: stripLeadingZeros(e.target.value) }))} />
                 </div>
                 <div className="space-y-2">
                   <Label>Credits</Label>
-                  <Input type="number" min={0} value={subjectForm.credits} onChange={(e) => setSubjectForm((f) => ({ ...f, credits: e.target.value }))} />
+                  <Input type="number" min={0} value={subjectForm.credits} onChange={(e) => setSubjectForm((f) => ({ ...f, credits: stripLeadingZeros(e.target.value) }))} />
                 </div>
                 <div className="space-y-2">
                   <Label>Type</Label>
@@ -182,7 +183,7 @@ export default function TeachingAssignmentsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Semester</Label>
-                  <Input type="number" min={1} max={8} value={assignForm.semester} onChange={(e) => setAssignForm((f) => ({ ...f, semester: e.target.value }))} />
+                  <Input type="number" min={1} max={8} value={assignForm.semester} onChange={(e) => setAssignForm((f) => ({ ...f, semester: stripLeadingZeros(e.target.value) }))} />
                 </div>
               </div>
               <div className="space-y-2">

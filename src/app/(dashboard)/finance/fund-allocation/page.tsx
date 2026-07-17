@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
 import type { FinanceBudget, FinanceFundAllocation, FinanceAllocationTargetType } from "@/types";
 
 type Row = FinanceFundAllocation & Record<string, unknown>;
@@ -178,7 +178,7 @@ export default function FinanceFundAllocationPage() {
             </div>
             <div className="space-y-2">
               <Label>Amount *</Label>
-              <Input type="number" value={createForm.amount} onChange={(e) => setCreateForm((f) => ({ ...f, amount: e.target.value }))} />
+              <Input type="number" value={createForm.amount} onChange={(e) => setCreateForm((f) => ({ ...f, amount: stripLeadingZeros(e.target.value) }))} />
             </div>
           </div>
           <DialogFooter>
@@ -194,7 +194,7 @@ export default function FinanceFundAllocationPage() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>New Remaining Amount *</Label>
-              <Input type="number" value={modifyForm.remainingAmount} onChange={(e) => setModifyForm((f) => ({ ...f, remainingAmount: e.target.value }))} />
+              <Input type="number" value={modifyForm.remainingAmount} onChange={(e) => setModifyForm((f) => ({ ...f, remainingAmount: stripLeadingZeros(e.target.value) }))} />
             </div>
             <div className="space-y-2">
               <Label>Reason *</Label>

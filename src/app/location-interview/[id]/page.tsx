@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { stripLeadingZeros } from "@/lib/utils";
 
 interface Candidate {
   name: string;
@@ -177,15 +178,15 @@ export default function CandidateBioDataPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-2">
                   <Label>Total Experience (years)</Label>
-                  <Input type="number" min={0} value={form.totalExperience} onChange={(e) => setForm((f) => ({ ...f, totalExperience: e.target.value }))} placeholder="3" />
+                  <Input type="number" min={0} value={form.totalExperience} onChange={(e) => setForm((f) => ({ ...f, totalExperience: stripLeadingZeros(e.target.value) }))} placeholder="3" />
                 </div>
                 <div className="space-y-2">
                   <Label>Current CTC (₹/annum)</Label>
-                  <Input type="number" value={form.currentCTC} onChange={(e) => setForm((f) => ({ ...f, currentCTC: e.target.value }))} placeholder="600000" />
+                  <Input type="number" value={form.currentCTC} onChange={(e) => setForm((f) => ({ ...f, currentCTC: stripLeadingZeros(e.target.value) }))} placeholder="600000" />
                 </div>
                 <div className="space-y-2">
                   <Label>Expected CTC (₹/annum)</Label>
-                  <Input type="number" value={form.expectedCTC} onChange={(e) => setForm((f) => ({ ...f, expectedCTC: e.target.value }))} placeholder="700000" />
+                  <Input type="number" value={form.expectedCTC} onChange={(e) => setForm((f) => ({ ...f, expectedCTC: stripLeadingZeros(e.target.value) }))} placeholder="700000" />
                 </div>
               </div>
               <div className="space-y-2">

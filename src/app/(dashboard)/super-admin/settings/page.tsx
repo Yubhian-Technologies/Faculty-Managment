@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { Plus, Trash2, Info } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import type { FacultyNorms, PositionNorm, RegulatoryBody } from "@/types";
 
 const REGULATORY_BODIES: { value: RegulatoryBody; label: string }[] = [
@@ -191,7 +191,7 @@ export default function SuperAdminSettingsPage() {
                   min={1}
                   max={100}
                   value={studentFacultyRatio}
-                  onChange={(e) => setStudentFacultyRatio(e.target.value)}
+                  onChange={(e) => setStudentFacultyRatio(stripLeadingZeros(e.target.value))}
                   className="w-24"
                 />
                 <span className="text-sm text-muted-foreground">: 1</span>
@@ -208,7 +208,7 @@ export default function SuperAdminSettingsPage() {
                   min={1}
                   max={40}
                   value={teachingHoursPerWeek}
-                  onChange={(e) => setTeachingHoursPerWeek(e.target.value)}
+                  onChange={(e) => setTeachingHoursPerWeek(stripLeadingZeros(e.target.value))}
                   className="w-24"
                 />
                 <span className="text-sm text-muted-foreground">hrs</span>
@@ -224,7 +224,7 @@ export default function SuperAdminSettingsPage() {
                 min={1}
                 max={50}
                 value={defaultMinFacultyPerDept}
-                onChange={(e) => setDefaultMinFacultyPerDept(e.target.value)}
+                onChange={(e) => setDefaultMinFacultyPerDept(stripLeadingZeros(e.target.value))}
                 className="w-24"
               />
               <p className="text-xs text-muted-foreground">Default minimum headcount</p>

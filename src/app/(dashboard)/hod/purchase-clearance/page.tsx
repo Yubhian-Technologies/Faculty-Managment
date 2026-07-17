@@ -13,7 +13,7 @@ import { FileUpload } from "@/components/shared/FileUpload";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, stripLeadingZeros } from "@/lib/utils";
 import { PURCHASE_CLEARANCE_STATUS_LABELS, type FinancePurchaseClearance } from "@/types";
 
 type Row = FinancePurchaseClearance & Record<string, unknown>;
@@ -213,7 +213,7 @@ export default function HODPurchaseClearancePage() {
             </div>
             <div className="space-y-2">
               <Label>Estimated Amount *</Label>
-              <Input type="number" value={createForm.estimatedAmount} onChange={(e) => setCreateForm((f) => ({ ...f, estimatedAmount: e.target.value }))} />
+              <Input type="number" value={createForm.estimatedAmount} onChange={(e) => setCreateForm((f) => ({ ...f, estimatedAmount: stripLeadingZeros(e.target.value) }))} />
             </div>
           </div>
           <DialogFooter>
@@ -262,7 +262,7 @@ export default function HODPurchaseClearancePage() {
                     <Input
                       type="number"
                       value={resubmitForm.estimatedAmount || String(selected.estimatedAmount)}
-                      onChange={(e) => setResubmitForm((f) => ({ ...f, estimatedAmount: e.target.value }))}
+                      onChange={(e) => setResubmitForm((f) => ({ ...f, estimatedAmount: stripLeadingZeros(e.target.value) }))}
                     />
                   </div>
                   <Button loading={isResubmitting} onClick={() => void handleResubmit()}>Resubmit</Button>
