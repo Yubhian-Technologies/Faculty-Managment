@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import type { BudgetCategoryGroup, BudgetRequest } from "@/types";
 import { budgetRequestTotal, normalizeBudgetRequest } from "@/types";
 import { resolveUserName } from "@/lib/budget/departmentScope";
+import { applySalaryStructurePricing } from "@/lib/budget/applySalaryStructurePricing";
 import { notify, notifyRole } from "@/lib/notify";
 
 export async function GET(
@@ -89,15 +90,17 @@ export async function PATCH(
       if (req.status !== "RETURNED_TO_HOD") {
         return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
       }
-      const nonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
-      const recurring = Array.isArray(body.recurring) ? body.recurring : [];
-      const allGroups = [...nonRecurring, ...recurring];
+      const submittedNonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
+      const submittedRecurring = Array.isArray(body.recurring) ? body.recurring : [];
+      const allGroups = [...submittedNonRecurring, ...submittedRecurring];
       if (allGroups.length === 0 || allGroups.some((g) => !g.category || !Array.isArray(g.items) || g.items.length === 0)) {
         return NextResponse.json(
           { error: "Every category must have a name and at least one item" },
           { status: 400 }
         );
       }
+      const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring);
+      const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring);
 
       const hodName = await resolveUserName(db, session.collegeId, session.uid);
       const historyEntry = {
@@ -147,16 +150,16 @@ export async function PATCH(
       req.hodUid === session.uid &&
       req.status === "RETURNED_TO_PRINCIPAL"
     ) {
-      const nonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
-      const recurring = Array.isArray(body.recurring) ? body.recurring : [];
-      const allGroups = [...nonRecurring, ...recurring];
+      const submittedNonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
+      const submittedRecurring = Array.isArray(body.recurring) ? body.recurring : [];
+      const allGroups = [...submittedNonRecurring, ...submittedRecurring];
       if (allGroups.length === 0 || allGroups.some((g) => !g.category || !Array.isArray(g.items) || g.items.length === 0)) {
         return NextResponse.json(
           { error: "Every category must have a name and at least one item" },
           { status: 400 }
         );
       }
-      if (nonRecurring.length > 0 && recurring.length > 0) {
+      if (submittedNonRecurring.length > 0 && submittedRecurring.length > 0) {
         return NextResponse.json(
           { error: "An emergency request must use either Non-Recurring (Goods) or Recurring (Non-Goods) items, not both" },
           { status: 400 }
@@ -170,7 +173,9 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      const emergencyType = nonRecurring.length > 0 ? "GOODS" : "NON_GOODS";
+      const emergencyType = submittedNonRecurring.length > 0 ? "GOODS" : "NON_GOODS";
+      const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring);
+      const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring);
 
       const requesterName = await resolveUserName(db, session.collegeId, session.uid);
       const historyEntry = {
