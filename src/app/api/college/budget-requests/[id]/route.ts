@@ -99,8 +99,8 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring);
-      const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring);
+      const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring, req.department);
+      const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring, req.department);
 
       const hodName = await resolveUserName(db, session.collegeId, session.uid);
       const historyEntry = {
@@ -174,8 +174,8 @@ export async function PATCH(
         );
       }
       const emergencyType = submittedNonRecurring.length > 0 ? "GOODS" : "NON_GOODS";
-      const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring);
-      const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring);
+      const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring, department);
+      const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring, department);
 
       const requesterName = await resolveUserName(db, session.collegeId, session.uid);
       const historyEntry = {

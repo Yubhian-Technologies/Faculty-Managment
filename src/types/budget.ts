@@ -144,11 +144,14 @@ const QUANTITY_FIELD: BudgetExtraFieldDef = { key: "quantity", label: "Quantity"
 export const CATEGORY_FIELD_CONFIG: Record<string, BudgetCategoryFieldConfig> = {
   // Options for the "salaryStructureId" SELECT are injected dynamically by
   // BudgetItemsTable (fetched from /api/college/salary-structures), not here.
+  // Picking a designation also auto-fills extras.headcount (see itemTotal
+  // below) with how many active faculty in the department hold it, so one
+  // line item covers every staff member at that designation, not just one.
   "Staff Salaries": {
     extraFields: [{ key: "salaryStructureId", label: "Designation", type: "SELECT", options: [] }],
     fixedTotalMultiplier: 12,
-    priceLabel: "Monthly Salary",
-    totalLabel: "Annual Cost",
+    priceLabel: "Monthly Salary (per staff)",
+    totalLabel: "Annual Cost (all staff)",
   },
   "Lab Equipment": { extraFields: [QUANTITY_FIELD, { key: "specification", label: "Specification", type: "TEXT", placeholder: "e.g. 100MHz, 4-channel" }] },
   "Other Equipment": { extraFields: [QUANTITY_FIELD, { key: "justification", label: "Justification", type: "TEXT", placeholder: "e.g. For new staff room" }] },
@@ -167,9 +170,18 @@ export function fieldConfigForCategory(category: string): BudgetCategoryFieldCon
   return CATEGORY_FIELD_CONFIG[category] ?? { extraFields: [] };
 }
 
+// How many staff a Staff Salaries line item covers. Unset/empty means the
+// item predates this field (or used "Custom" pricing) — treated as 1 so old
+// requests keep totalling the same way they always did.
+function itemHeadcount(item: BudgetRequestItem): number {
+  const raw = item.extras.headcount;
+  if (raw === undefined || raw === "") return 1;
+  return Math.max(Number(raw) || 0, 0);
+}
+
 export function itemTotal(item: BudgetRequestItem, category: string): number {
   const cfg = fieldConfigForCategory(category);
-  if (cfg.fixedTotalMultiplier) return item.price * cfg.fixedTotalMultiplier;
+  if (cfg.fixedTotalMultiplier) return item.price * cfg.fixedTotalMultiplier * itemHeadcount(item);
 
   // A per-item ad-hoc field marked "use for total" takes precedence over the
   // category's own multiplier field (e.g. Quantity) when the HOD opts into one.
