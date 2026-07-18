@@ -183,9 +183,9 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
       <Card>
         <CardContent className="pt-6">
           {emergencyType === "GOODS" ? (
-            <BudgetCategorySection label="Non Recurring (Goods)" categories={NON_RECURRING_CATEGORIES} groups={goodsGroups} onChange={setGoodsGroups} />
+            <BudgetCategorySection label="Non Recurring (Goods)" categories={NON_RECURRING_CATEGORIES} groups={goodsGroups} onChange={setGoodsGroups} department={department} />
           ) : (
-            <BudgetCategorySection label="Recurring (Non-Goods)" categories={RECURRING_CATEGORIES} groups={nonGoodsGroups} onChange={setNonGoodsGroups} />
+            <BudgetCategorySection label="Recurring (Non-Goods)" categories={RECURRING_CATEGORIES} groups={nonGoodsGroups} onChange={setNonGoodsGroups} department={department} />
           )}
         </CardContent>
       </Card>

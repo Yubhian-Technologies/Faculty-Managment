@@ -23,13 +23,14 @@ export async function GET(request: Request) {
     const activeOnly = searchParams.get("activeOnly") === "true";
 
     const db = getAdminDb();
-    let query = db.collection("colleges").doc(session.collegeId).collection("salaryStructures").orderBy("designation");
-    if (activeOnly) {
-      query = query.where("isActive", "==", true) as typeof query;
-    }
-    const snap = await query.get();
+    // isActive is filtered in memory: combining where("isActive") with
+    // orderBy("designation") needs a composite index, and the per-college
+    // structure count is small enough that the index isn't worth deploying.
+    const snap = await db.collection("colleges").doc(session.collegeId).collection("salaryStructures").orderBy("designation").get();
 
-    const salaryStructures = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const salaryStructures = snap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as { isActive?: boolean }) }))
+      .filter((s) => !activeOnly || s.isActive);
     return NextResponse.json({ salaryStructures });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

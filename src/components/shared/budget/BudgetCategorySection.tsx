@@ -24,9 +24,10 @@ interface CategoryGroupCardProps {
   onChange: (group: BudgetCategoryGroup) => void;
   onRemove: () => void;
   removable: boolean;
+  department?: string;
 }
 
-function CategoryGroupCard({ group, categories, onChange, onRemove, removable }: CategoryGroupCardProps) {
+function CategoryGroupCard({ group, categories, onChange, onRemove, removable, department }: CategoryGroupCardProps) {
   const isCustom = !!group.category && !(categories as readonly string[]).includes(group.category);
   const [selectValue, setSelectValue] = useState(isCustom ? "Other" : group.category);
   const [customCategory, setCustomCategory] = useState(isCustom ? group.category : "");
@@ -84,6 +85,7 @@ function CategoryGroupCard({ group, categories, onChange, onRemove, removable }:
         items={group.items}
         onChange={(items) => onChange({ ...group, items })}
         category={group.category}
+        department={department}
       />
     </div>
   );
@@ -104,9 +106,10 @@ interface BudgetCategorySectionProps {
   groups: BudgetCategoryGroup[];
   onChange?: (groups: BudgetCategoryGroup[]) => void;
   readOnly?: boolean;
+  department?: string;
 }
 
-export function BudgetCategorySection({ label, categories, groups, onChange, readOnly = false }: BudgetCategorySectionProps) {
+export function BudgetCategorySection({ label, categories, groups, onChange, readOnly = false, department }: BudgetCategorySectionProps) {
   function updateGroup(id: string, updated: BudgetCategoryGroup) {
     onChange?.(groups.map((g) => (g.id === id ? updated : g)));
   }
@@ -144,6 +147,7 @@ export function BudgetCategorySection({ label, categories, groups, onChange, rea
               onChange={(updated) => updateGroup(group.id, updated)}
               onRemove={() => removeGroup(group.id)}
               removable={groups.length > 1}
+              department={department}
             />
           )
         )}
