@@ -5,6 +5,7 @@ import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { normalizeBudgetRequest, type BudgetCategoryGroup, type BudgetRequest } from "@/types";
 import { resolveUserProfile, scopeBudgetQueryByDepartment } from "@/lib/budget/departmentScope";
+import { applySalaryStructurePricing } from "@/lib/budget/applySalaryStructurePricing";
 
 function toMillis(value: unknown): number {
   if (value && typeof (value as { toMillis?: () => number }).toMillis === "function") {
@@ -73,9 +74,9 @@ export async function POST(request: Request) {
     }
 
     const { academicYear, title } = body;
-    const nonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
-    const recurring = Array.isArray(body.recurring) ? body.recurring : [];
-    const allGroups = [...nonRecurring, ...recurring];
+    const submittedNonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
+    const submittedRecurring = Array.isArray(body.recurring) ? body.recurring : [];
+    const allGroups = [...submittedNonRecurring, ...submittedRecurring];
 
     if (!academicYear || !title || allGroups.length === 0) {
       return NextResponse.json(
@@ -92,6 +93,11 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const now = new Date();
+
+    // Staff-salary items are re-priced from the server-side SalaryStructure
+    // record — see applySalaryStructurePricing for why the client price isn't trusted.
+    const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring);
+    const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring);
 
     if (isEmergencyRequester) {
       const department = body.department?.trim();

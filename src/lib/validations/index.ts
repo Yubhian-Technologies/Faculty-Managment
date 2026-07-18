@@ -43,6 +43,26 @@ export const departmentSchema = z.object({
 
 export type DepartmentFormData = z.infer<typeof departmentSchema>;
 
+// ─── Salary Structure ──────────────────────────────────────────────────────────
+
+export const salaryStructureSchema = z.object({
+  name: z.string().min(2, "Name is required"),
+  designation: z.string().min(1, "Designation is required"),
+  employmentType: z.string().min(1, "Employment type is required"),
+  basic: z.coerce.number().min(0, "Basic must be 0 or more"),
+  hraPercent: z.coerce.number().min(0).max(100),
+  daPercent: z.coerce.number().min(0).max(100),
+  ta: z.coerce.number().min(0),
+  medicalAllowance: z.coerce.number().min(0),
+  otherAllowances: z.coerce.number().min(0),
+  employeePfPercent: z.coerce.number().min(0).max(100),
+  employerPfPercent: z.coerce.number().min(0).max(100),
+  professionalTax: z.coerce.number().min(0),
+  effectiveFrom: z.string().min(1, "Effective date is required"),
+});
+
+export type SalaryStructureFormData = z.infer<typeof salaryStructureSchema>;
+
 // ─── College ─────────────────────────────────────────────────────────────────
 
 export const createCollegeSchema = z.object({

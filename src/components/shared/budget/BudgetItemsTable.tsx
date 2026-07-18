@@ -1,13 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
-import { fieldConfigForCategory, itemTotal, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem } from "@/types";
+import { fieldConfigForCategory, itemTotal, DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem, type SalaryStructure } from "@/types";
+
+// Radix Select disallows an empty-string item value, so "none" is the sentinel
+// for "no salary structure selected / enter price manually" and is translated
+// to/from "" (the actual stored extras value) at the read/write boundary.
+const CUSTOM_SALARY_OPTION = "none";
+
+function salaryStructureLabel(s: SalaryStructure): string {
+  return `${DESIGNATION_LABELS[s.designation]} · ${EMPLOYMENT_TYPE_LABELS[s.employmentType]}`;
+}
 
 function emptyItem(category: string): BudgetRequestItem {
   const cfg = fieldConfigForCategory(category);
@@ -34,6 +43,17 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category }
   const priceLabel = cfg.priceLabel ?? (hasMultiplier ? "Unit Price" : "Amount");
   const totalLabel = cfg.totalLabel ?? "Total";
   const colCount = 4 + cfg.extraFields.length + (readOnly ? 0 : 1); // Title, Description, extraFields, Price, Total, (+ delete)
+
+  const [salaryStructures, setSalaryStructures] = useState<SalaryStructure[]>([]);
+  useEffect(() => {
+    if (category !== "Staff Salaries") return;
+    let cancelled = false;
+    fetch("/api/college/salary-structures?activeOnly=true")
+      .then((r) => r.json() as Promise<{ salaryStructures: SalaryStructure[] }>)
+      .then((data) => { if (!cancelled) setSalaryStructures(data.salaryStructures ?? []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [category]);
 
   function updateItem(id: string, patch: Partial<BudgetRequestItem>) {
     onChange?.(items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -76,6 +96,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category }
                   readOnly={readOnly}
                   colCount={colCount}
                   removable={items.length > 1}
+                  salaryStructures={salaryStructures}
                   onUpdate={(patch) => updateItem(item.id, patch)}
                   onRemove={() => removeItem(item.id)}
                 />
@@ -111,11 +132,12 @@ interface ItemRowsProps {
   readOnly: boolean;
   colCount: number;
   removable: boolean;
+  salaryStructures: SalaryStructure[];
   onUpdate: (patch: Partial<BudgetRequestItem>) => void;
   onRemove: () => void;
 }
 
-function ItemRows({ item, cfg, category, readOnly, colCount, removable, onUpdate, onRemove }: ItemRowsProps) {
+function ItemRows({ item, cfg, category, readOnly, colCount, removable, salaryStructures, onUpdate, onRemove }: ItemRowsProps) {
   const [adding, setAdding] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
   const [draftType, setDraftType] = useState<"TEXT" | "NUMBER">("TEXT");
@@ -127,6 +149,21 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, onUpdate
     const normalized = type === "NUMBER" ? stripLeadingZeros(value) : value;
     onUpdate({ extras: { ...item.extras, [key]: normalized } });
   }
+
+  function selectSalaryStructure(structureId: string) {
+    if (!structureId) {
+      onUpdate({ extras: { ...item.extras, salaryStructureId: "" } });
+      return;
+    }
+    const structure = salaryStructures.find((s) => s.id === structureId);
+    onUpdate({
+      extras: { ...item.extras, salaryStructureId: structureId },
+      price: structure?.grossSalary ?? item.price,
+    });
+  }
+
+  const selectedSalaryStructure = salaryStructures.find((s) => s.id === item.extras.salaryStructureId);
+  const priceLocked = category === "Staff Salaries" && !!item.extras.salaryStructureId;
 
   function resetDraft() {
     setAdding(false);
@@ -166,7 +203,11 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, onUpdate
           <td className="px-3 py-2">{item.title}</td>
           <td className="px-3 py-2">{item.description}</td>
           {cfg.extraFields.map((f) => (
-            <td key={f.key} className="px-3 py-2">{item.extras[f.key]}</td>
+            <td key={f.key} className="px-3 py-2">
+              {f.key === "salaryStructureId"
+                ? (selectedSalaryStructure ? salaryStructureLabel(selectedSalaryStructure) : item.extras[f.key] || "—")
+                : item.extras[f.key]}
+            </td>
           ))}
           <td className="px-3 py-2">{formatCurrency(item.price)}</td>
           <td className="px-3 py-2 font-medium">{formatCurrency(itemTotal(item, category))}</td>
@@ -181,19 +222,44 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, onUpdate
           </td>
           {cfg.extraFields.map((f) => (
             <td key={f.key} className="px-3 py-2">
-              <Input
-                type={f.type === "NUMBER" ? "number" : "text"}
-                min={f.type === "NUMBER" ? 0 : undefined}
-                value={item.extras[f.key] ?? ""}
-                onChange={(e) => updateExtra(f.key, e.target.value, f.type)}
-                placeholder={f.placeholder}
-              />
+              {f.type === "SELECT" ? (
+                <Select
+                  value={item.extras[f.key] || CUSTOM_SALARY_OPTION}
+                  onValueChange={(v) => {
+                    const stored = v === CUSTOM_SALARY_OPTION ? "" : v;
+                    if (f.key === "salaryStructureId") selectSalaryStructure(stored);
+                    else updateExtra(f.key, stored);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={`Select ${f.label.toLowerCase()}`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={CUSTOM_SALARY_OPTION}>— Custom (enter manually) —</SelectItem>
+                    {(f.key === "salaryStructureId" ? salaryStructures : []).map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{salaryStructureLabel(s)}</SelectItem>
+                    ))}
+                    {(f.options ?? []).map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  type={f.type === "NUMBER" ? "number" : "text"}
+                  min={f.type === "NUMBER" ? 0 : undefined}
+                  value={item.extras[f.key] ?? ""}
+                  onChange={(e) => updateExtra(f.key, e.target.value, f.type)}
+                  placeholder={f.placeholder}
+                />
+              )}
             </td>
           ))}
           <td className="px-3 py-2">
             <Input
               type="number"
               min={0}
+              disabled={priceLocked}
               value={item.price === 0 ? "" : item.price}
               onChange={(e) => {
                 const raw = e.target.value;

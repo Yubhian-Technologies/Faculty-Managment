@@ -118,17 +118,18 @@ export function budgetRequestTotal(req: Pick<BudgetRequest, "nonRecurring" | "re
 // ─── Category-driven dynamic item fields ───────────────────────────────────
 // Every item always carries a base set (title, description, price); each
 // category can additionally declare its own extra fields (e.g. Quantity +
-// Specification for Lab Equipment, Number of Staff for Staff Salaries), so
+// Specification for Lab Equipment, Designation for Staff Salaries), so
 // the item-entry form adapts to whatever a given category actually needs.
 
-export type BudgetExtraFieldType = "TEXT" | "NUMBER";
+export type BudgetExtraFieldType = "TEXT" | "NUMBER" | "SELECT";
 
 export interface BudgetExtraFieldDef {
-  key: string; // e.g. "quantity", "specification", "numberOfStaff"
+  key: string; // e.g. "quantity", "specification", "salaryStructureId"
   label: string;
   type: BudgetExtraFieldType;
   placeholder?: string;
   isMultiplier?: boolean; // numeric extra field that multiplies with price for the item total
+  options?: { value: string; label: string }[]; // SELECT fields; may be populated dynamically at render time instead
 }
 
 export interface BudgetCategoryFieldConfig {
@@ -141,6 +142,14 @@ export interface BudgetCategoryFieldConfig {
 const QUANTITY_FIELD: BudgetExtraFieldDef = { key: "quantity", label: "Quantity", type: "NUMBER", isMultiplier: true, placeholder: "1" };
 
 export const CATEGORY_FIELD_CONFIG: Record<string, BudgetCategoryFieldConfig> = {
+  // Options for the "salaryStructureId" SELECT are injected dynamically by
+  // BudgetItemsTable (fetched from /api/college/salary-structures), not here.
+  "Staff Salaries": {
+    extraFields: [{ key: "salaryStructureId", label: "Designation", type: "SELECT", options: [] }],
+    fixedTotalMultiplier: 12,
+    priceLabel: "Monthly Salary",
+    totalLabel: "Annual Cost",
+  },
   "Lab Equipment": { extraFields: [QUANTITY_FIELD, { key: "specification", label: "Specification", type: "TEXT", placeholder: "e.g. 100MHz, 4-channel" }] },
   "Other Equipment": { extraFields: [QUANTITY_FIELD, { key: "justification", label: "Justification", type: "TEXT", placeholder: "e.g. For new staff room" }] },
   "Furniture": { extraFields: [QUANTITY_FIELD, { key: "justification", label: "Justification", type: "TEXT" }] },

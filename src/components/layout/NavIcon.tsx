@@ -43,6 +43,7 @@ import {
   History,
   Tags,
   PackageCheck,
+  Landmark,
   type LucideProps,
 } from "lucide-react";
 
@@ -91,6 +92,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   History,
   Tags,
   PackageCheck,
+  Landmark,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {
