@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
-import { fieldConfigForCategory, itemTotal, DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem, type SalaryStructure } from "@/types";
+import { fieldConfigForCategory, itemTotal, DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem, type SalaryStructure, type FacultyMember } from "@/types";
 
 // Radix Select disallows an empty-string item value, so "none" is the sentinel
 // for "no salary structure selected / enter price manually" and is translated
@@ -16,6 +16,10 @@ const CUSTOM_SALARY_OPTION = "none";
 
 function salaryStructureLabel(s: SalaryStructure): string {
   return `${DESIGNATION_LABELS[s.designation]} · ${EMPLOYMENT_TYPE_LABELS[s.employmentType]}`;
+}
+
+function headcountKey(designation: string, employmentType: string): string {
+  return `${designation}|${employmentType}`;
 }
 
 function emptyItem(category: string): BudgetRequestItem {
@@ -35,14 +39,18 @@ interface BudgetItemsTableProps {
   onChange?: (items: BudgetRequestItem[]) => void;
   readOnly?: boolean;
   category: string;
+  // HOD's own department is resolved server-side, so this is only needed for
+  // the Principal/VP emergency-request form where department is free text.
+  department?: string;
 }
 
-export function BudgetItemsTable({ items, onChange, readOnly = false, category }: BudgetItemsTableProps) {
+export function BudgetItemsTable({ items, onChange, readOnly = false, category, department }: BudgetItemsTableProps) {
   const cfg = fieldConfigForCategory(category);
   const hasMultiplier = cfg.extraFields.some((f) => f.isMultiplier) || !!cfg.fixedTotalMultiplier;
   const priceLabel = cfg.priceLabel ?? (hasMultiplier ? "Unit Price" : "Amount");
   const totalLabel = cfg.totalLabel ?? "Total";
-  const colCount = 4 + cfg.extraFields.length + (readOnly ? 0 : 1); // Title, Description, extraFields, Price, Total, (+ delete)
+  const isStaffSalaries = category === "Staff Salaries";
+  const colCount = 4 + cfg.extraFields.length + (isStaffSalaries ? 1 : 0) + (readOnly ? 0 : 1); // Title, Description, extraFields, [Staff Count], Price, Total, (+ delete)
 
   const [salaryStructures, setSalaryStructures] = useState<SalaryStructure[]>([]);
   useEffect(() => {
@@ -54,6 +62,31 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category }
       .catch(() => {});
     return () => { cancelled = true; };
   }, [category]);
+
+  // Headcount per designation+employmentType, used to auto-total a Staff
+  // Salaries line item across every active faculty member at that designation
+  // rather than just one — only needed while editing (read-only views render
+  // the count already frozen into extras.headcount by the server).
+  const [headcountByKey, setHeadcountByKey] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!isStaffSalaries || readOnly) return;
+    let cancelled = false;
+    const params = new URLSearchParams({ status: "ACTIVE" });
+    if (department) params.set("department", department);
+    fetch(`/api/college/faculty?${params.toString()}`)
+      .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)
+      .then((data) => {
+        if (cancelled) return;
+        const map = new Map<string, number>();
+        for (const f of data.faculty ?? []) {
+          const key = headcountKey(f.designation, f.employmentType);
+          map.set(key, (map.get(key) ?? 0) + 1);
+        }
+        setHeadcountByKey(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isStaffSalaries, readOnly, department]);
 
   function updateItem(id: string, patch: Partial<BudgetRequestItem>) {
     onChange?.(items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -81,6 +114,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category }
                 {cfg.extraFields.map((f) => (
                   <th key={f.key} className="px-3 py-2 text-left font-medium text-muted-foreground w-32">{f.label}</th>
                 ))}
+                {isStaffSalaries && <th className="px-3 py-2 text-left font-medium text-muted-foreground w-24">Staff Count</th>}
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground w-36">{priceLabel}</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground w-36">{totalLabel}</th>
                 {!readOnly && <th className="px-3 py-2 w-10" />}
@@ -97,6 +131,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category }
                   colCount={colCount}
                   removable={items.length > 1}
                   salaryStructures={salaryStructures}
+                  headcountByKey={headcountByKey}
                   onUpdate={(patch) => updateItem(item.id, patch)}
                   onRemove={() => removeItem(item.id)}
                 />
@@ -133,17 +168,19 @@ interface ItemRowsProps {
   colCount: number;
   removable: boolean;
   salaryStructures: SalaryStructure[];
+  headcountByKey: Map<string, number>;
   onUpdate: (patch: Partial<BudgetRequestItem>) => void;
   onRemove: () => void;
 }
 
-function ItemRows({ item, cfg, category, readOnly, colCount, removable, salaryStructures, onUpdate, onRemove }: ItemRowsProps) {
+function ItemRows({ item, cfg, category, readOnly, colCount, removable, salaryStructures, headcountByKey, onUpdate, onRemove }: ItemRowsProps) {
   const [adding, setAdding] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
   const [draftType, setDraftType] = useState<"TEXT" | "NUMBER">("TEXT");
   const [draftMultiplier, setDraftMultiplier] = useState(false);
 
   const customFields = item.customFields ?? [];
+  const isStaffSalaries = category === "Staff Salaries";
 
   function updateExtra(key: string, value: string, type: BudgetExtraFieldType = "TEXT") {
     const normalized = type === "NUMBER" ? stripLeadingZeros(value) : value;
@@ -152,18 +189,20 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
 
   function selectSalaryStructure(structureId: string) {
     if (!structureId) {
-      onUpdate({ extras: { ...item.extras, salaryStructureId: "" } });
+      onUpdate({ extras: { ...item.extras, salaryStructureId: "", headcount: "" } });
       return;
     }
     const structure = salaryStructures.find((s) => s.id === structureId);
+    const headcount = structure ? headcountByKey.get(headcountKey(structure.designation, structure.employmentType)) ?? 0 : 0;
     onUpdate({
-      extras: { ...item.extras, salaryStructureId: structureId },
+      extras: { ...item.extras, salaryStructureId: structureId, headcount: String(headcount) },
       price: structure?.grossSalary ?? item.price,
     });
   }
 
   const selectedSalaryStructure = salaryStructures.find((s) => s.id === item.extras.salaryStructureId);
   const priceLocked = category === "Staff Salaries" && !!item.extras.salaryStructureId;
+  const staffCount = item.extras.headcount;
 
   function resetDraft() {
     setAdding(false);
@@ -209,6 +248,7 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
                 : item.extras[f.key]}
             </td>
           ))}
+          {isStaffSalaries && <td className="px-3 py-2">{staffCount || "—"}</td>}
           <td className="px-3 py-2">{formatCurrency(item.price)}</td>
           <td className="px-3 py-2 font-medium">{formatCurrency(itemTotal(item, category))}</td>
         </tr>
@@ -255,6 +295,11 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
               )}
             </td>
           ))}
+          {isStaffSalaries && (
+            <td className="px-3 py-2 text-muted-foreground">
+              {staffCount ? `${staffCount} active` : selectedSalaryStructure ? "0 active" : "—"}
+            </td>
+          )}
           <td className="px-3 py-2">
             <Input
               type="number"

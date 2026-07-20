@@ -117,6 +117,110 @@ export default function SalaryStructuresPage() {
         </div>
       )}
 
+      {/* Add / Edit Dialog */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Salary Structure" : "Add Salary Structure"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ss-name">Name *</Label>
+              <Input id="ss-name" {...register("name")} placeholder="e.g. Assistant Professor – Permanent 2026" />
+              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Designation *</Label>
+                <Select defaultValue={editing?.designation ?? ""} onValueChange={(v) => setValue("designation", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select designation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DESIGNATION_OPTIONS.map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Employment Type *</Label>
+                <Select defaultValue={editing?.employmentType ?? ""} onValueChange={(v) => setValue("employmentType", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMPLOYMENT_TYPE_OPTIONS.map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="ss-basic">Basic *</Label>
+                <Input id="ss-basic" type="number" min={0} {...register("basic", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-ta">Transport Allowance</Label>
+                <Input id="ss-ta" type="number" min={0} {...register("ta", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-hra">HRA %</Label>
+                <Input id="ss-hra" type="number" min={0} max={100} {...register("hraPercent", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-da">DA %</Label>
+                <Input id="ss-da" type="number" min={0} max={100} {...register("daPercent", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-medical">Medical Allowance</Label>
+                <Input id="ss-medical" type="number" min={0} {...register("medicalAllowance", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-other">Other Allowances</Label>
+                <Input id="ss-other" type="number" min={0} {...register("otherAllowances", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-epf">Employee PF %</Label>
+                <Input id="ss-epf" type="number" min={0} max={100} {...register("employeePfPercent", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-erpf">Employer PF %</Label>
+                <Input id="ss-erpf" type="number" min={0} max={100} {...register("employerPfPercent", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-ptax">Professional Tax</Label>
+                <Input id="ss-ptax" type="number" min={0} {...register("professionalTax", { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ss-effective">Effective From *</Label>
+                <Input id="ss-effective" type="date" {...register("effectiveFrom")} />
+              </div>
+            </div>
+
+            <div className="rounded-md border bg-muted/30 px-3 py-2 flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Monthly Gross Salary (preview)</span>
+              <span className="font-semibold">{formatCurrency(grossPreview)}</span>
+            </div>
+
+            <DialogFooter className="gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={isSubmitting}>
+                {editing ? "Save Changes" : "Add Salary Structure"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(open) => !open && setDeleting(null)}

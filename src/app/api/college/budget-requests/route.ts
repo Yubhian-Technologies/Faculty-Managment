@@ -94,11 +94,6 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const now = new Date();
 
-    // Staff-salary items are re-priced from the server-side SalaryStructure
-    // record — see applySalaryStructurePricing for why the client price isn't trusted.
-    const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring);
-    const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring);
-
     if (isEmergencyRequester) {
       const department = body.department?.trim();
       const emergencyReason = body.emergencyReason?.trim();
@@ -108,6 +103,12 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+
+      // Staff-salary items are re-priced/re-counted from server-side records —
+      // see applySalaryStructurePricing for why the client values aren't trusted.
+      const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring, department);
+      const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring, department);
+
       if (nonRecurring.length > 0 && recurring.length > 0) {
         return NextResponse.json(
           { error: "An emergency request must use either Non-Recurring (Goods) or Recurring (Non-Goods) items, not both" },
@@ -164,6 +165,11 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Staff-salary items are re-priced/re-counted from server-side records —
+    // see applySalaryStructurePricing for why the client values aren't trusted.
+    const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring, department);
+    const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring, department);
 
     const ref = await db
       .collection("colleges")
