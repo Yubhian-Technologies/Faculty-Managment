@@ -1,20 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { Section, Course } from "@/types";
 
 type SectionRow = Section & { id: string };
-type FacultyOption = { id: string; name: string; designation: string };
 
 const YEAR_PALETTE = [
   "bg-purple-50 border-purple-200 text-purple-800",
@@ -41,39 +37,13 @@ function ordinalYear(year: number) {
 
 const STUDENT_FACULTY_RATIO = 15;
 
-type SectionForm = {
-  courseId: string;
-  name: string;
-  year: string;
-  batch: string;
-  studentCount: number | "";
-  facultyInchargeUid: string;
-  facultyInchargeName: string;
-};
-
-const EMPTY_FORM: SectionForm = {
-  courseId: "",
-  name: "",
-  year: "",
-  batch: "",
-  studentCount: "",
-  facultyInchargeUid: "",
-  facultyInchargeName: "",
-};
-
 export default function HODSectionsPage() {
+  const router = useRouter();
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeCourseId, setActiveCourseId] = useState<string>("all");
   const [activeYear, setActiveYear] = useState<number | "all">("all");
-
-  const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
-
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<SectionRow | null>(null);
-  const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
-  const [isSaving, setIsSaving] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<SectionRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -96,96 +66,8 @@ export default function HODSectionsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Fetch faculty for incharge picker (once)
-  useEffect(() => {
-    fetch("/api/college/faculty?status=ACTIVE")
-      .then((r) => r.json())
-      .then((d: { faculty?: { id: string; name: string; designation: string }[] }) => {
-        setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: f.name, designation: f.designation })));
-      })
-      .catch(() => { /* non-critical */ });
-  }, []);
-
-  function setF(patch: Partial<SectionForm>) {
-    setForm((f) => ({ ...f, ...patch }));
-  }
-
   function openCreate() {
-    setEditTarget(null);
-    setForm(activeCourseId !== "all" ? { ...EMPTY_FORM, courseId: activeCourseId } : EMPTY_FORM);
-    setDialogOpen(true);
-  }
-
-  function openEdit(s: SectionRow) {
-    setEditTarget(s);
-    setForm({
-      courseId: s.courseId ?? "",
-      name: s.name,
-      year: String(s.year),
-      batch: s.batch,
-      studentCount: s.studentCount ?? "",
-      facultyInchargeUid: s.facultyInchargeUid ?? "",
-      facultyInchargeName: s.facultyInchargeName ?? "",
-    });
-    setDialogOpen(true);
-  }
-
-  function handleFacultySelect(facultyId: string) {
-    if (!facultyId) {
-      setF({ facultyInchargeUid: "", facultyInchargeName: "" });
-      return;
-    }
-    const f = facultyList.find((x) => x.id === facultyId);
-    setF({ facultyInchargeUid: facultyId, facultyInchargeName: f?.name ?? "" });
-  }
-
-  const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
-  const formYearOptions = useMemo(
-    () => (formCourse ? Array.from({ length: formCourse.durationYears }, (_, i) => i + 1) : []),
-    [formCourse]
-  );
-
-  async function handleSave() {
-    if (!form.courseId) { toast({ variant: "destructive", title: "Course is required" }); return; }
-    if (!form.name.trim()) { toast({ variant: "destructive", title: "Section name is required" }); return; }
-    if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
-    if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
-
-    setIsSaving(true);
-    try {
-      const payload = {
-        courseId: form.courseId,
-        name: form.name,
-        year: Number(form.year),
-        batch: form.batch,
-        studentCount: form.studentCount === "" ? 0 : Number(form.studentCount),
-        facultyInchargeUid: form.facultyInchargeUid || null,
-        facultyInchargeName: form.facultyInchargeName,
-      };
-
-      const url = editTarget ? `/api/college/sections/${editTarget.id}` : "/api/college/sections";
-      const method = editTarget ? "PATCH" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to save" });
-        return;
-      }
-
-      toast({ variant: "success", title: editTarget ? "Section updated" : "Section created" });
-      setDialogOpen(false);
-      void load();
-    } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
-    } finally {
-      setIsSaving(false);
-    }
+    router.push(activeCourseId !== "all" ? `/hod/sections/new?courseId=${activeCourseId}` : "/hod/sections/new");
   }
 
   async function handleDelete() {
@@ -374,7 +256,7 @@ export default function HODSectionsPage() {
                         </div>
                         <div className="flex gap-1">
                           <button
-                            onClick={() => openEdit(sec)}
+                            onClick={() => router.push(`/hod/sections/${sec.id}/edit`)}
                             className="p-1.5 rounded-md hover:bg-black/10 transition-colors"
                             title="Edit section"
                           >
@@ -425,106 +307,6 @@ export default function HODSectionsPage() {
           })}
         </div>
       )}
-
-      {/* ── Add / Edit Dialog ── */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) setDialogOpen(false); }}>
-        <DialogContent aria-describedby={undefined} className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editTarget ? `Edit Section ${editTarget.name}` : "Add New Section"}</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-1">
-            <div className="space-y-1.5">
-              <Label>Course *</Label>
-              <Select value={form.courseId} onValueChange={(v) => setF({ courseId: v, year: "" })}>
-                <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                <SelectContent>
-                  {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Section Name *</Label>
-                <Input
-                  value={form.name}
-                  onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
-                  placeholder="A, B, C…"
-                  maxLength={5}
-                  className="uppercase"
-                />
-                <p className="text-xs text-muted-foreground">e.g. A, B, C or CS-A</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Year *</Label>
-                <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
-                  <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-                  <SelectContent>
-                    {formYearOptions.map((y) => (
-                      <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Batch *</Label>
-              <Input
-                value={form.batch}
-                onChange={(e) => setF({ batch: e.target.value })}
-                placeholder="e.g. 2023-2027"
-              />
-              <p className="text-xs text-muted-foreground">Admission year to passout year</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Student Intake</Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.studentCount}
-                onChange={(e) => setF({ studentCount: e.target.value === "" ? "" : Number(e.target.value) })}
-                placeholder="e.g. 60"
-              />
-              {form.studentCount !== "" && Number(form.studentCount) > 0 && (
-                <p className="text-xs text-blue-600 font-medium">
-                  Faculty required (1:{STUDENT_FACULTY_RATIO} ratio): {Math.ceil(Number(form.studentCount) / STUDENT_FACULTY_RATIO)}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Faculty Incharge</Label>
-              <Select
-                value={form.facultyInchargeUid || "none"}
-                onValueChange={(v) => handleFacultySelect(v === "none" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select faculty incharge" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Not assigned —</SelectItem>
-                  {facultyList.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {facultyList.length === 0 && (
-                <p className="text-xs text-muted-foreground">No active faculty found in your department.</p>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>Cancel</Button>
-            <Button onClick={() => void handleSave()} loading={isSaving}>
-              {editTarget ? "Save Changes" : "Create Section"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* ── Delete Confirm ── */}
       <ConfirmDialog

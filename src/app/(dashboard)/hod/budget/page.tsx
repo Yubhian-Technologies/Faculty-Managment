@@ -1,22 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { BudgetSummaryCards } from "./BudgetSummaryCards";
 import { BudgetForm } from "./BudgetForm";
 import { BudgetRequestsTable } from "./BudgetRequestsTable";
-import { BudgetRequestDetail } from "./BudgetRequestDetail";
 import { toast } from "@/hooks/useToast";
 import type { BudgetRequest } from "@/types";
 
 export default function HODBudgetPage() {
+  const router = useRouter();
   const [requests, setRequests] = useState<BudgetRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editingRequest, setEditingRequest] = useState<BudgetRequest | null>(null);
-  const [viewingRequest, setViewingRequest] = useState<BudgetRequest | null>(null);
   const isFirstRender = useRef(true);
   const dashboardRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
@@ -53,18 +52,10 @@ export default function HODBudgetPage() {
   }, [showForm]);
 
   function openNewRequest() {
-    setEditingRequest(null);
-    setShowForm(true);
-  }
-
-  function openEditRequest(request: BudgetRequest) {
-    setViewingRequest(null);
-    setEditingRequest(request);
     setShowForm(true);
   }
 
   function closeForm() {
-    setEditingRequest(null);
     setShowForm(false);
   }
 
@@ -97,22 +88,14 @@ export default function HODBudgetPage() {
       <BudgetRequestsTable
         requests={requests}
         isLoading={isLoading}
-        onEditRequest={openEditRequest}
-        onViewRequest={setViewingRequest}
-      />
-
-      <BudgetRequestDetail
-        request={viewingRequest}
-        onClose={() => setViewingRequest(null)}
-        onEditRequest={openEditRequest}
+        onEditRequest={(request) => router.push(`/hod/budget/${request.id}`)}
+        onViewRequest={(request) => router.push(`/hod/budget/${request.id}`)}
       />
 
       {showForm && (
         <div ref={formRef} className="space-y-4">
-          <h2 className="text-lg font-semibold">
-            {editingRequest ? "Edit & Resubmit Budget Request" : "Create Budget Request"}
-          </h2>
-          <BudgetForm editingRequest={editingRequest} onCancel={closeForm} onSaved={handleSaved} />
+          <h2 className="text-lg font-semibold">Create Budget Request</h2>
+          <BudgetForm editingRequest={null} onCancel={closeForm} onSaved={handleSaved} />
         </div>
       )}
     </div>

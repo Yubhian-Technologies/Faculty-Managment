@@ -1,21 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { MobileCard } from "@/components/shared/MobileCard";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
@@ -35,13 +27,12 @@ interface GeneralAdminVacancy {
 }
 
 export default function SuperAdminVacanciesPage() {
+  const router = useRouter();
   const isMobile = useMobile();
   const [vacancies, setVacancies] = useState<GeneralAdminVacancy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<GeneralAdminVacancy | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
   function loadVacancies() {
@@ -67,28 +58,6 @@ export default function SuperAdminVacanciesPage() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Approved", description: "Vice Principal has been notified." });
       setApproveOpen(false);
-      setSelected(null);
-      loadVacancies();
-    } catch {
-      toast({ variant: "destructive", title: "Action failed" });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleReject() {
-    if (!selected) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/general-admin-vacancies/${selected.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "REJECTED", reason }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ title: "Rejected", description: "Vice Principal has been notified." });
-      setRejectOpen(false);
-      setReason("");
       setSelected(null);
       loadVacancies();
     } catch {
@@ -127,7 +96,7 @@ export default function SuperAdminVacanciesPage() {
                 v.status === "PENDING" ? (
                   <>
                     <Button size="sm" className="flex-1" onClick={() => { setSelected(v); setApproveOpen(true); }}>Approve</Button>
-                    <Button size="sm" variant="destructive" className="flex-1" onClick={() => { setSelected(v); setRejectOpen(true); }}>Reject</Button>
+                    <Button size="sm" variant="destructive" className="flex-1" onClick={() => router.push(`/super-admin/vacancies/${v.id}/reject`)}>Reject</Button>
                   </>
                 ) : undefined
               }
@@ -176,7 +145,7 @@ export default function SuperAdminVacanciesPage() {
                 return v.status === "PENDING" ? (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => { setSelected(v); setApproveOpen(true); }}>Approve</Button>
-                    <Button size="sm" variant="destructive" onClick={() => { setSelected(v); setRejectOpen(true); }}>Reject</Button>
+                    <Button size="sm" variant="destructive" onClick={() => router.push(`/super-admin/vacancies/${v.id}/reject`)}>Reject</Button>
                   </div>
                 ) : null;
               },
@@ -194,33 +163,6 @@ export default function SuperAdminVacanciesPage() {
         onConfirm={handleApprove}
         loading={loading}
       />
-
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>Reject General Admin Vacancy</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Rejecting <strong>{selected?.position}</strong> from {selected?.collegeName}.
-            </p>
-            <div className="space-y-2">
-              <Label htmlFor="reason">Reason (optional)</Label>
-              <Textarea
-                id="reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Provide a reason for rejection..."
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={loading}>Cancel</Button>
-            <Button variant="destructive" onClick={handleReject} loading={loading}>Reject</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

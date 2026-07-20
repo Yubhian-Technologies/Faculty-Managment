@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, UserX, UserCheck, Pencil, KeyRound, Trash2, Globe } from "lucide-react";
+import { UserPlus, UserX, UserCheck, Pencil, KeyRound, Trash2, Globe, FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { downloadResumePdf } from "@/lib/pdf/downloadResume";
 import { ROLE_LABELS } from "@/types";
 import type { FMSUser, UserRole } from "@/types";
 import type { College, Location } from "@/types";
@@ -45,6 +46,7 @@ export default function UsersPage() {
   const [resetUser, setResetUser] = useState<UserRow | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [resetSaving, setResetSaving] = useState(false);
+  const [downloadingResumeUid, setDownloadingResumeUid] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -139,6 +141,17 @@ export default function UsersPage() {
     }
   }
 
+  async function handleDownloadResume(user: UserRow) {
+    setDownloadingResumeUid(user.uid);
+    try {
+      await downloadResumePdf(user, (user.employeeId as string) || (user.name as string));
+    } catch {
+      toast({ variant: "destructive", title: "Failed to generate resume" });
+    } finally {
+      setDownloadingResumeUid(null);
+    }
+  }
+
   const columns: Column<UserRow>[] = [
     {
       key: "name",
@@ -207,6 +220,16 @@ export default function UsersPage() {
                 <span className="ml-1 hidden lg:inline">Edit</span>
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Download resume PDF"
+              loading={downloadingResumeUid === (row.uid as string)}
+              onClick={(e) => { e.stopPropagation(); void handleDownloadResume(row); }}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              <span className="ml-1 hidden lg:inline">Download</span>
+            </Button>
             {isCollegeScoped && (
               <>
                 <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setResetUser(row); setNewPassword(""); }}>

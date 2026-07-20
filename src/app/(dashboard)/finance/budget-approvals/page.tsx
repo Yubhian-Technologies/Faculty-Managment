@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, ClipboardCheck, Building2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ApprovalWorkflowList } from "@/components/finance/ApprovalWorkflowList";
@@ -9,25 +10,17 @@ import { EmergencyReportUpload } from "./EmergencyReportUpload";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { formatCurrency, formatDate, toDate, stripLeadingZeros } from "@/lib/utils";
+import { formatCurrency, formatDate, toDate } from "@/lib/utils";
 import type { FinanceBudgetRequest } from "@/types";
 
 type Row = FinanceBudgetRequest & { id: string; status: string };
 
-const emptyForm = () => ({ department: "", requestedAmount: "", purpose: "", justification: "" });
-
 export default function FinanceBudgetApprovalsPage() {
+  const router = useRouter();
   const [requests, setRequests] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm());
-  const [isSaving, setIsSaving] = useState(false);
 
   function load() {
     setIsLoading(true);
@@ -45,31 +38,6 @@ export default function FinanceBudgetApprovalsPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function handleCreate() {
-    const { department, requestedAmount, purpose, justification } = form;
-    if (!department || !requestedAmount || !purpose) {
-      toast({ variant: "destructive", title: "Fill in all required fields" });
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const res = await collegeFetch("/api/college/finance-budget-requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ department, requestedAmount: Number(requestedAmount), purpose, justification }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Budget request logged" });
-      setDialogOpen(false);
-      setForm(emptyForm());
-      load();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to log request" });
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
   const pending = requests.filter((r) => r.status === "PENDING");
 
   return (
@@ -78,7 +46,7 @@ export default function FinanceBudgetApprovalsPage() {
         title="Budget Approvals"
         description="Review, approve, reject, or return department budget requests"
         actions={
-          <Button onClick={() => setDialogOpen(true)}>
+          <Button onClick={() => router.push("/finance/budget-approvals/new")}>
             <Plus className="h-4 w-4 mr-1" />
             Log Request
           </Button>
@@ -147,34 +115,6 @@ export default function FinanceBudgetApprovalsPage() {
           )}
         />
       </div>
-
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) setForm(emptyForm()); setDialogOpen(o); }}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Log Budget Request</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Department *</Label>
-              <Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} placeholder="e.g. Mechanical Engineering" />
-            </div>
-            <div className="space-y-2">
-              <Label>Requested Amount *</Label>
-              <Input type="number" value={form.requestedAmount} onChange={(e) => setForm((f) => ({ ...f, requestedAmount: stripLeadingZeros(e.target.value) }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Purpose *</Label>
-              <Input value={form.purpose} onChange={(e) => setForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="e.g. New lab equipment" />
-            </div>
-            <div className="space-y-2">
-              <Label>Justification</Label>
-              <Textarea value={form.justification} onChange={(e) => setForm((f) => ({ ...f, justification: e.target.value }))} rows={2} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>Cancel</Button>
-            <Button onClick={() => void handleCreate()} loading={isSaving}>Log Request</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, UserX, Pencil, Download } from "lucide-react";
+import { UserPlus, UserX, Pencil, Download, FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
 import { exportStaffCsv } from "@/lib/faculty/exportStaffCsv";
+import { downloadResumePdf } from "@/lib/pdf/downloadResume";
 import { ROLE_LABELS } from "@/types";
 import type { FMSUser } from "@/types";
 
@@ -31,6 +32,7 @@ export default function PrincipalStaffPage() {
   const [deactivating, setDeactivating] = useState<string | null>(null);
   const [confirmUser, setConfirmUser] = useState<UserRow | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [downloadingResumeUid, setDownloadingResumeUid] = useState<string | null>(null);
 
   async function load(role: string) {
     setIsLoading(true);
@@ -54,6 +56,17 @@ export default function PrincipalStaffPage() {
       exportStaffCsv(users);
     } finally {
       setIsExporting(false);
+    }
+  }
+
+  async function handleDownloadResume(user: UserRow) {
+    setDownloadingResumeUid(user.uid);
+    try {
+      await downloadResumePdf(user, (user.employeeId as string) || user.name);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to generate resume" });
+    } finally {
+      setDownloadingResumeUid(null);
     }
   }
 
@@ -126,6 +139,16 @@ export default function PrincipalStaffPage() {
           >
             <Pencil className="h-3.5 w-3.5" />
             <span className="ml-1 hidden sm:inline">Edit</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            title="Download resume PDF"
+            loading={downloadingResumeUid === (row.uid as string)}
+            onClick={(e) => { e.stopPropagation(); void handleDownloadResume(row); }}
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            <span className="ml-1 hidden sm:inline">Download</span>
           </Button>
           {(row.isActive as boolean) && (
             <Button

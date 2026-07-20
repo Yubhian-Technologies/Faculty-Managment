@@ -1,55 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { salaryStructureSchema, type SalaryStructureFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { formatCurrency } from "@/lib/utils";
-import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type Designation, type EmploymentType, type SalaryStructure } from "@/types";
-
-const DESIGNATION_OPTIONS = Object.entries(DESIGNATION_LABELS) as [Designation, string][];
-const EMPLOYMENT_TYPE_OPTIONS = Object.entries(EMPLOYMENT_TYPE_LABELS) as [EmploymentType, string][];
-
-function toDateInputValue(val: unknown): string {
-  const ts = val as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
-  const d = typeof ts?.toDate === "function"
-    ? ts.toDate()
-    : ts?._seconds != null
-      ? new Date(ts._seconds * 1000)
-      : ts?.seconds != null
-        ? new Date(ts.seconds * 1000)
-        : new Date();
-  return isNaN(d.getTime()) ? new Date().toISOString().slice(0, 10) : d.toISOString().slice(0, 10);
-}
-
-function computeGrossSalary(data: Partial<SalaryStructureFormData>): number {
-  const basic = Number(data.basic) || 0;
-  const hraPercent = Number(data.hraPercent) || 0;
-  const daPercent = Number(data.daPercent) || 0;
-  const ta = Number(data.ta) || 0;
-  const medicalAllowance = Number(data.medicalAllowance) || 0;
-  const otherAllowances = Number(data.otherAllowances) || 0;
-  return basic + (basic * hraPercent) / 100 + (basic * daPercent) / 100 + ta + medicalAllowance + otherAllowances;
-}
+import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type SalaryStructure } from "@/types";
 
 export default function SalaryStructuresPage() {
+  const router = useRouter();
   const [structures, setStructures] = useState<SalaryStructure[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<SalaryStructure | null>(null);
   const [deleting, setDeleting] = useState<SalaryStructure | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function loadStructures() {
     setIsLoading(true);
@@ -66,96 +33,6 @@ export default function SalaryStructuresPage() {
   }
 
   useEffect(() => { void loadStructures(); }, []);
-
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors },
-  } = useForm<SalaryStructureFormData>({
-    resolver: zodResolver(salaryStructureSchema),
-  });
-
-  const watched = watch();
-  const grossPreview = computeGrossSalary(watched);
-
-  function openAdd() {
-    reset({
-      name: "",
-      designation: "",
-      employmentType: "",
-      basic: 0,
-      hraPercent: 0,
-      daPercent: 0,
-      ta: 0,
-      medicalAllowance: 0,
-      otherAllowances: 0,
-      employeePfPercent: 0,
-      employerPfPercent: 0,
-      professionalTax: 0,
-      effectiveFrom: new Date().toISOString().slice(0, 10),
-    });
-    setEditing(null);
-    setShowForm(true);
-  }
-
-  function openEdit(s: SalaryStructure) {
-    reset({
-      name: s.name,
-      designation: s.designation,
-      employmentType: s.employmentType,
-      basic: s.basic,
-      hraPercent: s.hraPercent,
-      daPercent: s.daPercent,
-      ta: s.ta,
-      medicalAllowance: s.medicalAllowance,
-      otherAllowances: s.otherAllowances,
-      employeePfPercent: s.employeePfPercent,
-      employerPfPercent: s.employerPfPercent,
-      professionalTax: s.professionalTax,
-      effectiveFrom: toDateInputValue(s.effectiveFrom),
-    });
-    setEditing(s);
-    setShowForm(true);
-  }
-
-  const onSubmit = async (data: SalaryStructureFormData) => {
-    setIsSubmitting(true);
-    try {
-      if (editing) {
-        const res = await fetch("/api/college/salary-structures", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editing.id, ...data }),
-        });
-        if (!res.ok) {
-          const json = (await res.json()) as { error?: string };
-          throw new Error(json.error ?? "Failed");
-        }
-        toast({ variant: "success", title: "Salary structure updated" });
-      } else {
-        const res = await fetch("/api/college/salary-structures", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        });
-        if (!res.ok) {
-          const json = (await res.json()) as { error?: string };
-          throw new Error(json.error ?? "Failed");
-        }
-        toast({ variant: "success", title: "Salary structure added" });
-      }
-
-      setShowForm(false);
-      await loadStructures();
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   async function handleDelete(s: SalaryStructure) {
     try {
@@ -181,7 +58,7 @@ export default function SalaryStructuresPage() {
         title="Salary Structures"
         description="Define one pay template per designation & employment type. HODs use these to auto-fill Staff Salaries in budget requests."
         actions={
-          <Button onClick={openAdd}>
+          <Button onClick={() => router.push("/accounts/salary-structures/new")}>
             <Plus className="h-4 w-4 mr-2" />
             Add Salary Structure
           </Button>
@@ -198,7 +75,7 @@ export default function SalaryStructuresPage() {
         <Card>
           <CardContent className="py-16 text-center">
             <p className="text-muted-foreground mb-4">No salary structures yet. Add one for each designation to enable auto-fill in budget requests.</p>
-            <Button onClick={openAdd}>
+            <Button onClick={() => router.push("/accounts/salary-structures/new")}>
               <Plus className="h-4 w-4 mr-2" />
               Add Salary Structure
             </Button>
@@ -220,7 +97,7 @@ export default function SalaryStructuresPage() {
                     <p className="text-xs text-muted-foreground mt-1.5">Monthly Gross: {formatCurrency(s.grossSalary)}</p>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/accounts/salary-structures/${s.id}/edit`)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     <Button

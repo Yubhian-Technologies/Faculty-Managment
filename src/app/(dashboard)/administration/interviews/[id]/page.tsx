@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { InterviewScoringFields, ScoreFormValues, EMPTY_SCORES, ScoringKey, calcPanelScore, calcStudentScore, isPanelFilled, isStudentFilled } from "@/components/shared/InterviewScoringFields";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
@@ -79,6 +78,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function AdminInterviewDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const myUid = useAuthStore((s) => s.user?.uid ?? "");
 
   const [interview, setInterview] = useState<LocationInterview | null>(null);
@@ -86,8 +86,6 @@ export default function AdminInterviewDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [approveOpen, setApproveOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
   const [scoreForms, setScoreForms] = useState<Record<string, ScoreForm>>({});
@@ -131,23 +129,21 @@ export default function AdminInterviewDetailPage() {
     setScoreForms((prev) => ({ ...prev, [candidateId]: { ...EMPTY_FORM, ...prev[candidateId], ...patch } }));
   }
 
-  async function handleApproveReject(action: "APPROVE" | "REJECT") {
+  async function handleApproveReject(action: "APPROVE") {
     setActionLoading(true);
     try {
       const res = await fetch(`/api/location/interviews/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, reason: rejectReason }),
+        body: JSON.stringify({ action }),
       });
       if (!res.ok) throw new Error();
       toast({
         variant: "success",
-        title: action === "APPROVE" ? "Interview Plan Approved" : "Interview Plan Rejected",
+        title: "Interview Plan Approved",
         description: "HR Admin has been notified.",
       });
       setApproveOpen(false);
-      setRejectOpen(false);
-      setRejectReason("");
       load();
     } catch {
       toast({ variant: "destructive", title: "Action failed" });
@@ -221,7 +217,7 @@ export default function AdminInterviewDetailPage() {
           isPending ? (
             <div className="flex gap-2">
               <Button onClick={() => setApproveOpen(true)}>Approve</Button>
-              <Button variant="destructive" onClick={() => setRejectOpen(true)}>Reject</Button>
+              <Button variant="destructive" onClick={() => router.push(`/administration/interviews/${id}/reject`)}>Reject</Button>
             </div>
           ) : undefined
         }
@@ -422,24 +418,6 @@ export default function AdminInterviewDetailPage() {
         onConfirm={() => void handleApproveReject("APPROVE")}
         loading={actionLoading}
       />
-
-      {/* Reject dialog */}
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Reject Interview Plan</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Rejecting <strong>{interview.title}</strong>. HR Admin will be notified.</p>
-            <div className="space-y-2">
-              <Label>Reason (optional)</Label>
-              <Textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={3} placeholder="Reason for rejection..." />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={actionLoading}>Cancel</Button>
-            <Button variant="destructive" onClick={() => void handleApproveReject("REJECT")} loading={actionLoading}>Reject</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

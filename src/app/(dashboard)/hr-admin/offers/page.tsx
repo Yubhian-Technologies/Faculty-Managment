@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { MobileCard } from "@/components/shared/MobileCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatDate, stripLeadingZeros } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
 
 interface LocationOffer {
@@ -36,16 +33,11 @@ interface LocationCandidate {
 }
 
 export default function HROffersPage() {
+  const router = useRouter();
   const isMobile = useMobile();
   const [offers, setOffers] = useState<LocationOffer[]>([]);
   const [selectedCandidates, setSelectedCandidates] = useState<LocationCandidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    candidateId: "", candidateName: "", candidateEmail: "", department: "",
-    joiningDate: "", salary: "", remarks: "",
-  });
 
   function load() {
     setIsLoading(true);
@@ -67,64 +59,13 @@ export default function HROffersPage() {
       .catch(() => {});
   }, []);
 
-  function openCreate() {
-    setForm({ candidateId: "", candidateName: "", candidateEmail: "", department: "", joiningDate: "", salary: "", remarks: "" });
-    setCreateOpen(true);
-  }
-
-  function onCandidateSelect(candidateId: string) {
-    const candidate = selectedCandidates.find((c) => c.id === candidateId);
-    if (candidate) {
-      setForm((f) => ({
-        ...f,
-        candidateId,
-        candidateName: candidate.name,
-        candidateEmail: candidate.email ?? "",
-        department: candidate.department,
-      }));
-    }
-  }
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.candidateId || !form.joiningDate || !form.salary) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/location/offers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          candidateId: form.candidateId,
-          candidateName: form.candidateName,
-          candidateEmail: form.candidateEmail,
-          department: form.department,
-          joiningDate: form.joiningDate,
-          salary: Number(form.salary),
-          remarks: form.remarks,
-        }),
-      });
-      const json = await res.json() as { id?: string; error?: string };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed", description: json.error });
-        return;
-      }
-      toast({ variant: "success", title: "Offer letter submitted", description: "Administration will review and approve." });
-      setCreateOpen(false);
-      load();
-    } catch {
-      toast({ variant: "destructive", title: "Network error" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Offer Letters"
         description="Prepare offer letters for selected candidates — Administration approval required"
         actions={
-          <Button onClick={openCreate} disabled={selectedCandidates.length === 0}>
+          <Button onClick={() => router.push("/hr-admin/offers/new")} disabled={selectedCandidates.length === 0}>
             + Create Offer Letter
           </Button>
         }
@@ -174,55 +115,6 @@ export default function HROffersPage() {
           ]}
         />
       )}
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Create Offer Letter</DialogTitle></DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4 py-1">
-            <div className="space-y-2">
-              <Label>Candidate <span className="text-destructive">*</span></Label>
-              <Select value={form.candidateId} onValueChange={onCandidateSelect}>
-                <SelectTrigger><SelectValue placeholder="Select selected candidate..." /></SelectTrigger>
-                <SelectContent>
-                  {selectedCandidates.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name} — {c.department}
-                      {c.status === "SELECTED" ? " ✓" : " (shortlisted)"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {form.candidateName && (
-              <div className="rounded bg-muted/50 p-3 text-sm space-y-1">
-                <p><span className="text-muted-foreground">Email:</span> {form.candidateEmail}</p>
-                <p><span className="text-muted-foreground">Department:</span> {form.department}</p>
-                <p><span className="text-muted-foreground">Position:</span> Faculty</p>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Joining Date <span className="text-destructive">*</span></Label>
-                <Input type="date" value={form.joiningDate} onChange={(e) => setForm((f) => ({ ...f, joiningDate: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Monthly Salary (₹) <span className="text-destructive">*</span></Label>
-                <Input type="number" value={form.salary} onChange={(e) => setForm((f) => ({ ...f, salary: stripLeadingZeros(e.target.value) }))} placeholder="45000" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Remarks</Label>
-              <Input value={form.remarks} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} placeholder="Probation period, conditions, etc." />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={saving}>Cancel</Button>
-              <Button type="submit" loading={saving} disabled={!form.candidateId || !form.joiningDate || !form.salary}>
-                Submit for Approval
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
