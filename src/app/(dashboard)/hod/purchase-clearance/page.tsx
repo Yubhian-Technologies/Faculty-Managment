@@ -1,19 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, RefreshCw, ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { FileUpload } from "@/components/shared/FileUpload";
-import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatCurrency, formatDate, stripLeadingZeros } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import { PURCHASE_CLEARANCE_STATUS_LABELS, type FinancePurchaseClearance } from "@/types";
 
 type Row = FinancePurchaseClearance & Record<string, unknown>;
@@ -30,24 +25,10 @@ const STATUS_COLOR: Record<string, string> = {
   COMPLETED: "bg-emerald-100 text-emerald-800 border-emerald-200",
 };
 
-const emptyGrnForm = () => ({ grnNumber: "", grnMessage: "" });
-const emptyCreateForm = () => ({ items: "", estimatedAmount: "" });
-
 export default function HODPurchaseClearancePage() {
+  const router = useRouter();
   const [requests, setRequests] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [grnForm, setGrnForm] = useState(emptyGrnForm());
-  const [grnFile, setGrnFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState(emptyCreateForm());
-  const [isCreating, setIsCreating] = useState(false);
-  const [resubmitForm, setResubmitForm] = useState(emptyCreateForm());
-  const [isResubmitting, setIsResubmitting] = useState(false);
-
-  const selected = requests.find((r) => r.id === selectedId) ?? null;
-  const latestRemarks = selected ? [...(selected.history ?? [])].reverse().find((h) => h.remarks)?.remarks : undefined;
 
   function load() {
     setIsLoading(true);
@@ -59,103 +40,6 @@ export default function HODPurchaseClearancePage() {
   }
 
   useEffect(() => { load(); }, []);
-
-  async function handleCreate() {
-    const { items, estimatedAmount } = createForm;
-    if (!items || !estimatedAmount) {
-      toast({ variant: "destructive", title: "Fill in all required fields" });
-      return;
-    }
-    setIsCreating(true);
-    try {
-      const res = await fetch("/api/college/finance-purchase-clearance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, estimatedAmount: Number(estimatedAmount) }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to raise request");
-      }
-      toast({ variant: "success", title: "Purchase clearance request raised" });
-      setCreateOpen(false);
-      setCreateForm(emptyCreateForm());
-      load();
-    } catch (err) {
-      toast({ variant: "destructive", title: "Failed to raise request", description: err instanceof Error ? err.message : undefined });
-    } finally {
-      setIsCreating(false);
-    }
-  }
-
-  async function handleResubmit() {
-    if (!selected) return;
-    const { items, estimatedAmount } = resubmitForm;
-    if (!items || !estimatedAmount) {
-      toast({ variant: "destructive", title: "Fill in all required fields" });
-      return;
-    }
-    setIsResubmitting(true);
-    try {
-      const res = await fetch(`/api/college/finance-purchase-clearance/${selected.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "RESUBMIT", items, estimatedAmount: Number(estimatedAmount) }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to resubmit");
-      }
-      toast({ variant: "success", title: "Request resubmitted" });
-      load();
-    } catch (err) {
-      toast({ variant: "destructive", title: "Failed to resubmit", description: err instanceof Error ? err.message : undefined });
-    } finally {
-      setIsResubmitting(false);
-    }
-  }
-
-  async function handleUploadGrn() {
-    if (!selected) return;
-    const { grnNumber, grnMessage } = grnForm;
-    if (!grnFile || !grnNumber || !grnMessage) {
-      toast({ variant: "destructive", title: "GRN file, GRN number, and a confirmation message are all required" });
-      return;
-    }
-    setIsUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", grnFile);
-      const uploadRes = await fetch("/api/upload/purchase-grn", { method: "POST", body: fd });
-      const uploadData = (await uploadRes.json()) as { url?: string; filename?: string; error?: string };
-      if (!uploadRes.ok) throw new Error(uploadData.error ?? "Upload failed");
-
-      const res = await fetch(`/api/college/finance-purchase-clearance/${selected.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "UPLOAD_GRN",
-          grnUrl: uploadData.url,
-          grnFileName: uploadData.filename,
-          grnNumber,
-          grnMessage,
-        }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to save GRN");
-      }
-
-      toast({ variant: "success", title: "GRN uploaded — goods receipt confirmed" });
-      setGrnForm(emptyGrnForm());
-      setGrnFile(null);
-      load();
-    } catch (err) {
-      toast({ variant: "destructive", title: "Failed to upload GRN", description: err instanceof Error ? err.message : undefined });
-    } finally {
-      setIsUploading(false);
-    }
-  }
 
   const columns: Column<Row>[] = [
     { key: "items", header: "Items" },
@@ -182,7 +66,7 @@ export default function HODPurchaseClearancePage() {
               <RefreshCw className="h-4 w-4 mr-1" />
               Refresh
             </Button>
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" onClick={() => router.push("/hod/purchase-clearance/new")}>
               <Plus className="h-4 w-4 mr-1" />
               Raise Request
             </Button>
@@ -199,149 +83,8 @@ export default function HODPurchaseClearancePage() {
         emptyTitle="No purchase clearance requests"
         emptyDescription="Requests you raise will appear here."
         keyExtractor={(row) => row.id}
-        onRowClick={(row) => setSelectedId(row.id)}
+        onRowClick={(row) => router.push(`/hod/purchase-clearance/${row.id}`)}
       />
-
-      {/* Raise request dialog */}
-      <Dialog open={createOpen} onOpenChange={(o) => { if (!o) setCreateForm(emptyCreateForm()); setCreateOpen(o); }}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Raise Purchase Clearance Request</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Items / Purpose *</Label>
-              <Textarea value={createForm.items} onChange={(e) => setCreateForm((f) => ({ ...f, items: e.target.value }))} rows={2} />
-            </div>
-            <div className="space-y-2">
-              <Label>Estimated Amount *</Label>
-              <Input type="number" value={createForm.estimatedAmount} onChange={(e) => setCreateForm((f) => ({ ...f, estimatedAmount: stripLeadingZeros(e.target.value) }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isCreating}>Cancel</Button>
-            <Button onClick={() => void handleCreate()} loading={isCreating}>Raise Request</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Detail dialog */}
-      <Dialog open={!!selectedId} onOpenChange={(o) => { if (!o) { setSelectedId(null); setGrnForm(emptyGrnForm()); setGrnFile(null); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>{selected?.items}</DialogTitle></DialogHeader>
-          {selected && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Estimated Amount</span>
-                <span className="font-medium">{formatCurrency(selected.estimatedAmount)}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <Badge variant="outline" className={STATUS_COLOR[selected.status]}>
-                  {PURCHASE_CLEARANCE_STATUS_LABELS[selected.status as keyof typeof PURCHASE_CLEARANCE_STATUS_LABELS] ?? selected.status}
-                </Badge>
-              </div>
-              {latestRemarks && (
-                <div className="text-sm">
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Remarks</span>
-                  <p className="mt-1 rounded bg-muted/40 p-2">{latestRemarks}</p>
-                </div>
-              )}
-
-              {selected.status === "RETURNED_TO_HOD" && (
-                <div className="space-y-4 border-t pt-4">
-                  <p className="text-sm text-muted-foreground">Edit and resubmit this request for Purchase Dept review.</p>
-                  <div className="space-y-2">
-                    <Label>Items / Purpose *</Label>
-                    <Textarea
-                      value={resubmitForm.items || selected.items}
-                      onChange={(e) => setResubmitForm((f) => ({ ...f, items: e.target.value }))}
-                      rows={2}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Estimated Amount *</Label>
-                    <Input
-                      type="number"
-                      value={resubmitForm.estimatedAmount || String(selected.estimatedAmount)}
-                      onChange={(e) => setResubmitForm((f) => ({ ...f, estimatedAmount: stripLeadingZeros(e.target.value) }))}
-                    />
-                  </div>
-                  <Button loading={isResubmitting} onClick={() => void handleResubmit()}>Resubmit</Button>
-                </div>
-              )}
-
-              {(selected.quotations ?? []).length > 0 && (
-                <div className="space-y-2 border-t pt-4">
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Vendor Quotations</span>
-                  <QuotationsForm quotations={selected.quotations ?? []} selectedQuotationId={selected.selectedQuotationId} readOnly />
-                </div>
-              )}
-
-              {selected.status === "GOODS_PURCHASED" && (
-                <div className="space-y-4 border-t pt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Purchase Dept has bought these goods. Upload the GRN to confirm they were received and close out this request.
-                  </p>
-                  <div className="space-y-2">
-                    <Label>GRN Number *</Label>
-                    <Input value={grnForm.grnNumber} onChange={(e) => setGrnForm((f) => ({ ...f, grnNumber: e.target.value }))} placeholder="e.g. GRN-2026-0142" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Confirmation Message *</Label>
-                    <Textarea
-                      value={grnForm.grnMessage}
-                      onChange={(e) => setGrnForm((f) => ({ ...f, grnMessage: e.target.value }))}
-                      placeholder="e.g. All items received in good condition on 14 Jul 2026."
-                      rows={2}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>GRN Document *</Label>
-                    <FileUpload onFileSelect={setGrnFile} accept=".pdf,.jpg,.jpeg,.png" label="Upload GRN" />
-                  </div>
-                  <Button
-                    disabled={!grnFile || !grnForm.grnNumber || !grnForm.grnMessage || isUploading}
-                    loading={isUploading}
-                    onClick={() => void handleUploadGrn()}
-                  >
-                    Confirm Goods Received
-                  </Button>
-                </div>
-              )}
-
-              {selected.status === "COMPLETED" && (
-                <div className="space-y-2 border-t pt-4 text-sm">
-                  <p className="font-medium">GRN #{selected.grnNumber}</p>
-                  <p className="text-muted-foreground">{selected.grnMessage}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Uploaded by {selected.grnUploadedByName}{selected.grnUploadedAt ? ` on ${formatDate(selected.grnUploadedAt)}` : ""}
-                  </p>
-                  {selected.grnUrl && (
-                    <a href={selected.grnUrl} target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-1 text-xs">
-                      {selected.grnFileName ?? "View GRN"} <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {(selected.history ?? []).length > 0 && (
-                <div className="space-y-2 border-t pt-4">
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">History</span>
-                  {selected.history.map((h, i) => (
-                    <div key={i} className="rounded-md border p-3 text-sm space-y-1">
-                      <div className="flex justify-between font-medium">
-                        <span>{PURCHASE_CLEARANCE_STATUS_LABELS[h.action as keyof typeof PURCHASE_CLEARANCE_STATUS_LABELS] ?? h.action}</span>
-                        <span className="text-xs text-muted-foreground">{formatDate(h.at)}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">by {h.byName} ({h.byRole})</p>
-                      {h.remarks && <p className="text-muted-foreground">{h.remarks}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

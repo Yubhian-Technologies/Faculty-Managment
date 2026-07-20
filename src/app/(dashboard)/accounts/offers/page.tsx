@@ -1,41 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { Plus, FileText, Send, CheckCircle2, XCircle, Clock, Trash2, ChevronDown, ChevronUp, UserPlus } from "lucide-react";
-import type { OfferLetter, HiringBatch, Candidate, HiringSalaryAgreement } from "@/types";
+import type { OfferLetter, HiringSalaryAgreement } from "@/types";
 
 type OfferRow = OfferLetter & { id: string };
-
-type CreateForm = {
-  batchId: string;
-  candidateId: string;
-  designation: string;
-  department: string;
-  joiningDate: string;
-  subjects: string;
-};
-
-const emptyForm = (): CreateForm => ({
-  batchId: "", candidateId: "", designation: "", department: "", joiningDate: "", subjects: "",
-});
 
 const STATUS_CONFIG: Record<string, { label: string; color: "default" | "secondary" | "outline" | "destructive"; icon: typeof Clock }> = {
   DRAFT: { label: "Draft", color: "secondary", icon: Clock },
@@ -50,16 +28,11 @@ function rupees(n: number) {
 }
 
 export default function AccountsOffersPage() {
+  const router = useRouter();
   const [letters, setLetters] = useState<OfferRow[]>([]);
-  const [batches, setBatches] = useState<HiringBatch[]>([]);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [salaryMap, setSalaryMap] = useState<Record<string, HiringSalaryAgreement>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState<CreateForm>(emptyForm());
-  const [isSaving, setIsSaving] = useState(false);
-  const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [actionTarget, setActionTarget] = useState<{ id: string; action: "SENT" | "ACCEPTED" | "REJECTED" | "DELETE" } | null>(null);
   const [isActing, setIsActing] = useState(false);
   const [provisioning, setProvisioning] = useState<string | null>(null);
@@ -67,14 +40,12 @@ export default function AccountsOffersPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const [lettersRes, batchRes, salaryRes] = await Promise.all([
+      const [lettersRes, salaryRes] = await Promise.all([
         fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferRow[] }>).then((d) => d.letters ?? []),
-        fetch("/api/college/hiring-batches").then((r) => r.json() as Promise<{ batches: HiringBatch[] }>).then((d) => (d.batches ?? []).filter((b) => b.currentPhase === "COMPLETED" || b.currentPhase === "PRINCIPAL_FINAL_REVIEW")),
         fetch("/api/college/salary-records").then((r) => r.json() as Promise<{ records: HiringSalaryAgreement[] }>).then((d) => d.records ?? []),
       ]);
 
       setLetters(lettersRes);
-      setBatches(batchRes);
       const map: Record<string, HiringSalaryAgreement> = {};
       for (const s of salaryRes) map[s.candidateId] = s;
       setSalaryMap(map);
@@ -86,73 +57,6 @@ export default function AccountsOffersPage() {
   }
 
   useEffect(() => { void load(); }, []);
-
-  async function loadCandidatesForBatch(batchId: string) {
-    setLoadingCandidates(true);
-    try {
-      const data = await fetch(`/api/college/candidates?batchId=${batchId}&stage=DECISION`)
-        .then((r) => r.json() as Promise<{ candidates: Candidate[] }>);
-      const cands = data.candidates ?? [];
-      // filter out candidates already with letters
-      const existingCandIds = new Set(letters.map((l) => l.candidateId));
-      setCandidates(cands.filter((c) => !existingCandIds.has(c.id)));
-    } catch {
-      setCandidates([]);
-    } finally {
-      setLoadingCandidates(false);
-    }
-  }
-
-  function handleBatchChange(batchId: string) {
-    const batch = batches.find((b) => b.id === batchId);
-    setForm((f) => ({
-      ...f,
-      batchId,
-      candidateId: "",
-      designation: batch?.position ?? f.designation,
-      department: batch?.department ?? f.department,
-    }));
-    void loadCandidatesForBatch(batchId);
-  }
-
-  async function handleCreate() {
-    if (!form.batchId || !form.candidateId || !form.designation || !form.department || !form.joiningDate) {
-      toast({ variant: "destructive", title: "Fill in all required fields" });
-      return;
-    }
-    const salary = salaryMap[form.candidateId];
-    if (!salary) {
-      toast({ variant: "destructive", title: "No salary agreement found for this candidate", description: "Create one in Salary Records first." });
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const selectedCandidate = candidates.find((c) => c.id === form.candidateId);
-      const res = await fetch("/api/college/offer-letters", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          candidateId: form.candidateId,
-          batchId: form.batchId,
-          candidateName: selectedCandidate?.name ?? "",
-          designation: form.designation,
-          department: form.department,
-          joiningDate: form.joiningDate,
-          ctcAnnual: salary.agreedAnnual,
-          subjects: form.subjects.split(",").map((s) => s.trim()).filter(Boolean),
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Offer letter created" });
-      setDialogOpen(false);
-      setForm(emptyForm());
-      void load();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to create" });
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   async function provisionFaculty(letterId: string) {
     setProvisioning(letterId);
@@ -210,7 +114,7 @@ export default function AccountsOffersPage() {
         title="Offer Letters"
         description="Generate and manage offer letters for selected candidates"
         actions={
-          <Button onClick={() => setDialogOpen(true)}>
+          <Button onClick={() => router.push("/accounts/offers/new")}>
             <Plus className="h-4 w-4 mr-1" />
             New Offer Letter
           </Button>
@@ -349,91 +253,6 @@ export default function AccountsOffersPage() {
           })}
         </div>
       )}
-
-      {/* Create Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) setForm(emptyForm()); setDialogOpen(o); }}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>New Offer Letter</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Finalized Batch *</Label>
-              <Select value={form.batchId} onValueChange={handleBatchChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder={batches.length === 0 ? "No eligible batches" : "Select batch..."} />
-                </SelectTrigger>
-                <SelectContent>
-                  {batches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.position} — {b.department}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {form.batchId && (
-              <div className="space-y-2">
-                <Label>Candidate *</Label>
-                <Select value={form.candidateId} onValueChange={(v) => setForm((f) => ({ ...f, candidateId: v }))} disabled={loadingCandidates}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingCandidates ? "Loading..." : candidates.length === 0 ? "No eligible candidates" : "Select candidate..."} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {candidates.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} — {c.email}
-                        {!salaryMap[c.id] && " ⚠ No salary agreement"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Designation *</Label>
-                <Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} placeholder="e.g. Assistant Professor" />
-              </div>
-              <div className="space-y-2">
-                <Label>Department *</Label>
-                <Input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} placeholder="e.g. Computer Science" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Joining Date *</Label>
-              <Input type="date" value={form.joiningDate} onChange={(e) => setForm((f) => ({ ...f, joiningDate: e.target.value }))} />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Subjects (comma-separated)</Label>
-              <Input value={form.subjects} onChange={(e) => setForm((f) => ({ ...f, subjects: e.target.value }))} placeholder="e.g. Data Structures, Algorithms" />
-            </div>
-
-            {form.candidateId && salaryMap[form.candidateId] && (
-              <Card className="bg-primary/5 border-primary/20">
-                <CardContent className="p-3 text-sm">
-                  <p className="text-xs text-muted-foreground mb-1">CTC from salary agreement</p>
-                  <p className="font-bold">{rupees(salaryMap[form.candidateId].agreedAnnual)} / year</p>
-                  <p className="text-muted-foreground">{rupees(salaryMap[form.candidateId].agreedMonthly)} / month</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setDialogOpen(false); setForm(emptyForm()); }} disabled={isSaving}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreate} loading={isSaving}>
-              Create Offer Letter
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Action confirm */}
       <ConfirmDialog

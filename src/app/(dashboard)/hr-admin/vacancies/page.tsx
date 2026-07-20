@@ -1,15 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { MobileCard } from "@/components/shared/MobileCard";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
@@ -27,13 +25,12 @@ interface DeptVacancyRequest {
 }
 
 export default function HRAdminVacanciesPage() {
+  const router = useRouter();
   const isMobile = useMobile();
   const [vacancies, setVacancies] = useState<DeptVacancyRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<DeptVacancyRequest | null>(null);
   const [forwardOpen, setForwardOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
   function load() {
@@ -47,14 +44,14 @@ export default function HRAdminVacanciesPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function action(actionType: "FORWARD" | "REJECT", rej_reason?: string) {
+  async function action(actionType: "FORWARD") {
     if (!selected) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/location/vacancy-requests/${selected.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: actionType, reason: rej_reason }),
+        body: JSON.stringify({ action: actionType }),
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
@@ -62,13 +59,11 @@ export default function HRAdminVacanciesPage() {
       }
       toast({
         variant: "success",
-        title: actionType === "FORWARD" ? "Forwarded to Administration" : "Request Rejected",
-        description: actionType === "FORWARD" ? "Administration will review and approve." : "Dept Head has been notified.",
+        title: "Forwarded to Administration",
+        description: "Administration will review and approve.",
       });
       setForwardOpen(false);
-      setRejectOpen(false);
       setSelected(null);
-      setReason("");
       load();
     } catch (err) {
       toast({ variant: "destructive", title: "Action failed", description: err instanceof Error ? err.message : undefined });
@@ -103,7 +98,7 @@ export default function HRAdminVacanciesPage() {
                   <Button size="sm" className="flex-1" onClick={() => { setSelected(v); setForwardOpen(true); }}>
                     Forward to Admin
                   </Button>
-                  <Button size="sm" variant="destructive" className="flex-1" onClick={() => { setSelected(v); setRejectOpen(true); }}>
+                  <Button size="sm" variant="destructive" className="flex-1" onClick={() => router.push(`/hr-admin/vacancies/${v.id}/reject`)}>
                     Reject
                   </Button>
                 </>
@@ -147,7 +142,7 @@ export default function HRAdminVacanciesPage() {
                     <Button size="sm" onClick={() => { setSelected(v); setForwardOpen(true); }}>
                       Forward to Admin
                     </Button>
-                    <Button size="sm" variant="destructive" onClick={() => { setSelected(v); setRejectOpen(true); }}>
+                    <Button size="sm" variant="destructive" onClick={() => router.push(`/hr-admin/vacancies/${v.id}/reject`)}>
                       Reject
                     </Button>
                   </div>
@@ -167,25 +162,6 @@ export default function HRAdminVacanciesPage() {
         onConfirm={() => void action("FORWARD")}
         loading={loading}
       />
-
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Reject Hiring Request</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Rejecting faculty hiring request for <strong>{selected?.department}</strong> by {selected?.deptHeadName}.
-            </p>
-            <div className="space-y-2">
-              <Label>Reason (optional)</Label>
-              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Explain why..." />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={loading}>Cancel</Button>
-            <Button variant="destructive" onClick={() => void action("REJECT", reason)} loading={loading}>Reject</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

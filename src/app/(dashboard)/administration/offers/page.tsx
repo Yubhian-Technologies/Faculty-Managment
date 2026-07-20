@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { MobileCard } from "@/components/shared/MobileCard";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
@@ -29,13 +27,12 @@ interface LocationOffer {
 }
 
 export default function AdminOffersPage() {
+  const router = useRouter();
   const isMobile = useMobile();
   const [offers, setOffers] = useState<LocationOffer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<LocationOffer | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
   function load() {
@@ -49,27 +46,23 @@ export default function AdminOffersPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function handleAction(action: "APPROVE" | "REJECT") {
+  async function handleAction(action: "APPROVE") {
     if (!selected) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/location/offers/${selected.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, reason }),
+        body: JSON.stringify({ action }),
       });
       if (!res.ok) throw new Error();
       toast({
         variant: "success",
-        title: action === "APPROVE" ? "Offer Letter Approved" : "Offer Letter Rejected",
-        description: action === "APPROVE"
-          ? `Offer letter for ${selected.candidateName} approved. HR Admin will share it.`
-          : "HR Admin has been notified.",
+        title: "Offer Letter Approved",
+        description: `Offer letter for ${selected.candidateName} approved. HR Admin will share it.`,
       });
       setApproveOpen(false);
-      setRejectOpen(false);
       setSelected(null);
-      setReason("");
       load();
     } catch {
       toast({ variant: "destructive", title: "Action failed" });
@@ -102,7 +95,7 @@ export default function AdminOffersPage() {
               actions={
                 <>
                   <Button size="sm" className="flex-1" onClick={() => { setSelected(o); setApproveOpen(true); }}>Approve</Button>
-                  <Button size="sm" variant="destructive" className="flex-1" onClick={() => { setSelected(o); setRejectOpen(true); }}>Reject</Button>
+                  <Button size="sm" variant="destructive" className="flex-1" onClick={() => router.push(`/administration/offers/${o.id}/reject`)}>Reject</Button>
                 </>
               }
             />
@@ -135,7 +128,7 @@ export default function AdminOffersPage() {
                 return (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => { setSelected(o); setApproveOpen(true); }}>Approve</Button>
-                    <Button size="sm" variant="destructive" onClick={() => { setSelected(o); setRejectOpen(true); }}>Reject</Button>
+                    <Button size="sm" variant="destructive" onClick={() => router.push(`/administration/offers/${o.id}/reject`)}>Reject</Button>
                   </div>
                 );
               },
@@ -153,26 +146,6 @@ export default function AdminOffersPage() {
         onConfirm={() => void handleAction("APPROVE")}
         loading={loading}
       />
-
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Reject Offer Letter</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Rejecting offer letter for <strong>{selected?.candidateName}</strong> ({selected?.department}).
-              HR Admin will be notified to revise.
-            </p>
-            <div className="space-y-2">
-              <Label>Reason (optional)</Label>
-              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Reason for rejection..." />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={loading}>Cancel</Button>
-            <Button variant="destructive" onClick={() => void handleAction("REJECT")} loading={loading}>Reject</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

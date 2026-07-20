@@ -1,22 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { IndentSummaryCards } from "./IndentSummaryCards";
 import { IndentForm } from "./IndentForm";
 import { IndentRequestsTable } from "./IndentRequestsTable";
-import { IndentRequestDetail } from "./IndentRequestDetail";
 import { toast } from "@/hooks/useToast";
 import type { IndentRequest } from "@/types";
 
 export default function HODIndentsPage() {
+  const router = useRouter();
   const [requests, setRequests] = useState<IndentRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editingRequest, setEditingRequest] = useState<IndentRequest | null>(null);
-  const [viewingRequest, setViewingRequest] = useState<IndentRequest | null>(null);
   const isFirstRender = useRef(true);
   const dashboardRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
@@ -52,18 +51,10 @@ export default function HODIndentsPage() {
   }, [showForm]);
 
   function openNewRequest() {
-    setEditingRequest(null);
-    setShowForm(true);
-  }
-
-  function openEditRequest(request: IndentRequest) {
-    setViewingRequest(null);
-    setEditingRequest(request);
     setShowForm(true);
   }
 
   function closeForm() {
-    setEditingRequest(null);
     setShowForm(false);
   }
 
@@ -92,22 +83,14 @@ export default function HODIndentsPage() {
       <IndentRequestsTable
         requests={requests}
         isLoading={isLoading}
-        onEditRequest={openEditRequest}
-        onViewRequest={setViewingRequest}
-      />
-
-      <IndentRequestDetail
-        request={viewingRequest}
-        onClose={() => setViewingRequest(null)}
-        onEditRequest={openEditRequest}
+        onEditRequest={(request) => router.push(`/hod/indents/${request.id}`)}
+        onViewRequest={(request) => router.push(`/hod/indents/${request.id}`)}
       />
 
       {showForm && (
         <div ref={formRef} className="space-y-4">
-          <h2 className="text-lg font-semibold">
-            {editingRequest ? "Edit & Resubmit Indent" : "Raise Indent Request"}
-          </h2>
-          <IndentForm editingRequest={editingRequest} onCancel={closeForm} onSaved={handleSaved} />
+          <h2 className="text-lg font-semibold">Raise Indent Request</h2>
+          <IndentForm editingRequest={null} onCancel={closeForm} onSaved={handleSaved} />
         </div>
       )}
     </div>

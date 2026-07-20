@@ -1,20 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { MobileCard } from "@/components/shared/MobileCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
-import type { LocationDepartment } from "@/types";
 
 interface LocationCandidate {
   id: string;
@@ -30,20 +26,15 @@ interface LocationCandidate {
 }
 
 export default function HRCandidatesPage() {
+  const router = useRouter();
   const isMobile = useMobile();
   const [candidates, setCandidates] = useState<LocationCandidate[]>([]);
-  const [depts, setDepts] = useState<LocationDepartment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [addOpen, setAddOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [shortlistTarget, setShortlistTarget] = useState<LocationCandidate | null>(null);
   const [rejectTarget, setRejectTarget] = useState<LocationCandidate | null>(null);
   const [selectTarget, setSelectTarget] = useState<LocationCandidate | null>(null);
   const [postInterviewRejectTarget, setPostInterviewRejectTarget] = useState<LocationCandidate | null>(null);
-  const [form, setForm] = useState({
-    name: "", email: "", phone: "", department: "", qualification: "", notes: "",
-  });
 
   function load() {
     setIsLoading(true);
@@ -56,37 +47,7 @@ export default function HRCandidatesPage() {
 
   useEffect(() => {
     load();
-    fetch("/api/location/departments")
-      .then((r) => r.json() as Promise<{ departments: LocationDepartment[] }>)
-      .then((d) => setDepts(d.departments ?? []))
-      .catch(() => {});
   }, []);
-
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.name || !form.email || !form.phone || !form.department) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/location/candidates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const json = await res.json() as { id?: string; error?: string };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to add candidate", description: json.error });
-        return;
-      }
-      toast({ variant: "success", title: "Candidate added" });
-      setAddOpen(false);
-      setForm({ name: "", email: "", phone: "", department: "", qualification: "", notes: "" });
-      load();
-    } catch {
-      toast({ variant: "destructive", title: "Network error" });
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleAction(candidateId: string, action: "SHORTLIST" | "REJECT_CANDIDATE") {
     setActionLoading(true);
@@ -162,7 +123,7 @@ export default function HRCandidatesPage() {
       <PageHeader
         title="Faculty Candidates"
         description="Review candidates — shortlist for interview or reject"
-        actions={<Button onClick={() => setAddOpen(true)}>+ Add Candidate</Button>}
+        actions={<Button onClick={() => router.push("/hr-admin/candidates/new")}>+ Add Candidate</Button>}
       />
 
       {isMobile ? (
@@ -215,50 +176,6 @@ export default function HRCandidatesPage() {
           ]}
         />
       )}
-
-      {/* Add Candidate Dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Add Faculty Candidate</DialogTitle></DialogHeader>
-          <form onSubmit={handleAdd} className="space-y-4 py-1">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2 col-span-2">
-                <Label>Full Name <span className="text-destructive">*</span></Label>
-                <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Dr. Full Name" />
-              </div>
-              <div className="space-y-2">
-                <Label>Email <span className="text-destructive">*</span></Label>
-                <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="candidate@email.com" />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone <span className="text-destructive">*</span></Label>
-                <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="9876543210" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Department <span className="text-destructive">*</span></Label>
-              <Select value={form.department} onValueChange={(v) => setForm((f) => ({ ...f, department: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select department..." /></SelectTrigger>
-                <SelectContent>
-                  {depts.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Qualification</Label>
-              <Input value={form.qualification} onChange={(e) => setForm((f) => ({ ...f, qualification: e.target.value }))} placeholder="e.g. M.Tech, Ph.D" />
-            </div>
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Source, referral, etc." />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>Cancel</Button>
-              <Button type="submit" loading={saving} disabled={!form.name || !form.email || !form.phone || !form.department}>Add Candidate</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <ConfirmDialog
         open={!!shortlistTarget}

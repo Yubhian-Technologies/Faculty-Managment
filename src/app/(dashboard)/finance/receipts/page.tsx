@@ -1,35 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, CheckCircle2, ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { FileUpload } from "@/components/shared/FileUpload";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
-import type { FinanceReceipt, FinanceReceiptRelatedType } from "@/types";
+import { formatCurrency } from "@/lib/utils";
+import type { FinanceReceipt } from "@/types";
 
 type Row = FinanceReceipt & Record<string, unknown>;
 
-const RELATED_TYPES: FinanceReceiptRelatedType[] = ["BUDGET", "EXPENSE", "PAYMENT", "ALLOCATION", "INDENT"];
-
-const emptyForm = () => ({ relatedType: "EXPENSE" as FinanceReceiptRelatedType, relatedId: "", amount: "", description: "" });
-
 export default function FinanceReceiptsPage() {
+  const router = useRouter();
   const [receipts, setReceipts] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm());
-  const [file, setFile] = useState<File | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   function load() {
@@ -42,41 +30,6 @@ export default function FinanceReceiptsPage() {
   }
 
   useEffect(() => { load(); }, []);
-
-  async function handleCreate() {
-    const { relatedType, relatedId, amount, description } = form;
-    if (!relatedId || !amount || !description) {
-      toast({ variant: "destructive", title: "Fill in all required fields" });
-      return;
-    }
-    setIsSaving(true);
-    try {
-      let fileUrl: string | undefined;
-      if (file) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const uploadRes = await fetch("/api/upload/finance-receipt", { method: "POST", body: fd });
-        const uploadData = (await uploadRes.json()) as { url?: string; error?: string };
-        if (!uploadRes.ok) throw new Error(uploadData.error ?? "Upload failed");
-        fileUrl = uploadData.url;
-      }
-      const res = await collegeFetch("/api/college/finance-receipts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ relatedType, relatedId, amount: Number(amount), description, fileUrl }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Receipt recorded" });
-      setDialogOpen(false);
-      setForm(emptyForm());
-      setFile(null);
-      load();
-    } catch (err) {
-      toast({ variant: "destructive", title: "Failed to record receipt", description: err instanceof Error ? err.message : undefined });
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   async function handleVerify(row: Row) {
     setVerifyingId(row.id);
@@ -127,7 +80,7 @@ export default function FinanceReceiptsPage() {
         title="Receipts"
         description="Record and verify receipts for budgets, expenses, payments, and allocations"
         actions={
-          <Button onClick={() => setDialogOpen(true)}>
+          <Button onClick={() => router.push("/finance/receipts/new")}>
             <Plus className="h-4 w-4 mr-1" />
             New Receipt
           </Button>
@@ -145,43 +98,6 @@ export default function FinanceReceiptsPage() {
         emptyDescription="Record a receipt for a budget, expense, payment, or allocation for audit documentation."
         keyExtractor={(row) => row.id}
       />
-
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setForm(emptyForm()); setFile(null); } setDialogOpen(o); }}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>New Receipt</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Related To *</Label>
-              <Select value={form.relatedType} onValueChange={(v) => setForm((f) => ({ ...f, relatedType: v as FinanceReceiptRelatedType }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {RELATED_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Related Record ID *</Label>
-              <Input value={form.relatedId} onChange={(e) => setForm((f) => ({ ...f, relatedId: e.target.value }))} placeholder="Budget / expense / payment / allocation ID" />
-            </div>
-            <div className="space-y-2">
-              <Label>Amount *</Label>
-              <Input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: stripLeadingZeros(e.target.value) }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Description *</Label>
-              <Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} />
-            </div>
-            <div className="space-y-2">
-              <Label>Receipt File (optional)</Label>
-              <FileUpload onFileSelect={setFile} accept=".pdf,.jpg,.jpeg,.png" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>Cancel</Button>
-            <Button onClick={() => void handleCreate()} loading={isSaving}>Record Receipt</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
