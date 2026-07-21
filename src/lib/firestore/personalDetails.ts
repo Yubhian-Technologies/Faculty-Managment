@@ -11,6 +11,9 @@ export interface PersonalDetailsInput {
   caste?: string;
   aadharNo?: string;
   panNo?: string;
+  passportNumber?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
   ratificationStatus?: string;
   ratificationDate?: string;   // yyyy-mm-dd
   maritalStatus?: string;
@@ -26,6 +29,7 @@ export interface PersonalDetailsInput {
 
 const STRING_FIELDS = [
   "gender", "legalName", "fatherName", "motherName", "religion", "caste", "aadharNo", "ratificationStatus",
+  "passportNumber", "emergencyContactName", "emergencyContactPhone",
   "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
 ] as const;
 

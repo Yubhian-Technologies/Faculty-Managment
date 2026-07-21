@@ -117,6 +117,16 @@ export default function NewStaffPage() {
                   <Input id="email" type="email" {...register("email")} placeholder="staff@college.edu" />
                   {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="collegeEmail">College Email</Label>
+                  <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@vishnu.edu.in" />
+                  {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="employeeId">Employee ID</Label>
+                  <Input id="employeeId" {...register("employeeId")} placeholder="EMP-001" />
+                  {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
+                </div>
               </div>
             </div>
 

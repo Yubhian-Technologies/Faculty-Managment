@@ -26,6 +26,8 @@ export default function EditStaffPage() {
   const [saving, setSaving] = useState(false);
   const [role, setRole] = useState<UserRole | "">("");
   const [email, setEmail] = useState("");
+  const [collegeEmail, setCollegeEmail] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
@@ -53,6 +55,8 @@ export default function EditStaffPage() {
         const u = data.user;
         setRole((u.role as UserRole) ?? "");
         setEmail((u.email as string) ?? "");
+        setCollegeEmail((u.collegeEmail as string) ?? "");
+        setEmployeeId((u.employeeId as string) ?? "");
         setName((u.name as string) ?? "");
         setPhone((u.phone as string) ?? "");
         setDepartment((u.department as string) ?? "");
@@ -68,6 +72,9 @@ export default function EditStaffPage() {
           caste: (u.caste as string) ?? "",
           aadharNo: (u.aadharNo as string) ?? "",
           panNo: (u.panNo as string) ?? "",
+          passportNumber: (u.passportNumber as string) ?? "",
+          emergencyContactName: (u.emergencyContactName as string) ?? "",
+          emergencyContactPhone: (u.emergencyContactPhone as string) ?? "",
           ratificationStatus: (u.ratificationStatus as string) ?? "",
           ratificationDate: toDateInputValue(u.ratificationDate as never),
           maritalStatus: (u.maritalStatus as string) ?? "",
@@ -100,6 +107,9 @@ export default function EditStaffPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
+          email,
+          collegeEmail,
+          employeeId,
           phone,
           department,
           ...personalDetails,
@@ -152,6 +162,21 @@ export default function EditStaffPage() {
                   <Label>Phone</Label>
                   <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" />
                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="staff@personal.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>College Email</Label>
+                <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@vishnu.edu.in" />
+              </div>
+              <div className="space-y-2">
+                <Label>Employee ID</Label>
+                <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
               </div>
             </div>
 

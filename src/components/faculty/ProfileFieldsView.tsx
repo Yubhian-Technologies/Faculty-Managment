@@ -80,6 +80,20 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true }:
           <Field label="Weekly Teaching Load (Hrs)" value={p.totalWeeklyTeachingLoadHours} />
           <Field label="Avg Student Feedback Score" value={p.averageStudentFeedbackScore} />
         </div>
+        <div className="space-y-2">
+          <SubLabel>Previous Institutions Worked At</SubLabel>
+          {(p.previousInstitutions ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            <div className="space-y-2">
+              {p.previousInstitutions?.map((inst, i) => (
+                <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <Field label="Institution" value={inst.institutionName} />
+                  <Field label="Designation" value={inst.designation} />
+                  <Field label="Years Worked" value={inst.yearsWorked} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         {includeTeachingAssignment && (
           <div className="rounded-lg border bg-muted/20 shadow-sm p-3 space-y-2">
             <SubLabel>Current Teaching Assignment</SubLabel>
@@ -101,6 +115,22 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true }:
       </Section>
 
       <Section number={3} title="Research Publications">
+        <div className="space-y-2">
+          <SubLabel>Publications</SubLabel>
+          {(p.publications ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            <div className="space-y-2">
+              {p.publications?.map((pub, i) => (
+                <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <Field label="Title" value={pub.title} />
+                  <Field label="Co-Authors" value={pub.coAuthors} />
+                  <Field label="Journal / Conference" value={pub.journalOrConference} />
+                  <Field label="Year" value={pub.publicationYear} />
+                  <Field label="Indexing" value={pub.indexing} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="First/Corresponding Author" value={p.publicationsFirstOrCorrespondingAuthor} />
           <Field label="Q1 / IF>4.0" value={p.publicationsQ1OrHighImpact} />

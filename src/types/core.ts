@@ -194,6 +194,7 @@ export interface FMSUser {
   locationId?: string;      // set for location-scoped roles; also present on college roles
   name: string;
   email: string;
+  collegeEmail?: string;    // same field name as FacultyMember below, for consistency
   phone?: string;
   role: UserRole;
   department?: string;      // for HOD / LOCATION_DEPT_HEAD
@@ -212,6 +213,9 @@ export interface FMSUser {
   caste?: string;
   aadharNo?: string;
   panNo?: string;
+  passportNumber?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationDate?: Timestamp;
   maritalStatus?: "Single" | "Married";
@@ -461,6 +465,9 @@ export interface FacultyMember {
   caste?: string;
   aadharNo?: string;
   panNo?: string;
+  passportNumber?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
   collegeEmail?: string;
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationDate?: Timestamp;
@@ -510,6 +517,20 @@ export interface CourseAssignment {
 export interface TeachingAssignmentSummary {
   primaryTeachingRole: string;
   courses: CourseAssignment[]; // up to 3
+}
+
+export interface PreviousInstitution {
+  institutionName: string;
+  designation?: string;
+  yearsWorked: number;
+}
+
+export interface Publication {
+  title: string;
+  coAuthors: string;
+  journalOrConference: string;
+  publicationYear: number;
+  indexing?: string; // e.g. SCI, Scopus, WoS, UGC-CARE
 }
 
 export interface FundedProject {
@@ -571,8 +592,10 @@ export interface FacultyProfileFields {
   totalWeeklyTeachingLoadHours: number;
   averageStudentFeedbackScore?: number;
   teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL
+  previousInstitutions: PreviousInstitution[]; // prior institutions worked at, before this one
 
   // Module 3 — Research Publications
+  publications: Publication[]; // individual publication records — title/co-authors/journal/year
   publicationsFirstOrCorrespondingAuthor: number;
   publicationsQ1OrHighImpact: number;
   sciScopusCount: number;

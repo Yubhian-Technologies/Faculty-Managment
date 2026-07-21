@@ -33,6 +33,14 @@ export default function PrincipalStaffPage() {
   const [confirmUser, setConfirmUser] = useState<UserRow | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [downloadingResumeUid, setDownloadingResumeUid] = useState<string | null>(null);
+  const [collegeName, setCollegeName] = useState("");
+
+  useEffect(() => {
+    fetch("/api/college/info")
+      .then((r) => r.json() as Promise<{ name?: string }>)
+      .then((d) => setCollegeName(d.name ?? ""))
+      .catch(() => {});
+  }, []);
 
   async function load(role: string) {
     setIsLoading(true);
@@ -62,7 +70,7 @@ export default function PrincipalStaffPage() {
   async function handleDownloadResume(user: UserRow) {
     setDownloadingResumeUid(user.uid);
     try {
-      await downloadResumePdf(user, (user.employeeId as string) || user.name);
+      await downloadResumePdf({ ...user, collegeName }, (user.employeeId as string) || user.name);
     } catch {
       toast({ variant: "destructive", title: "Failed to generate resume" });
     } finally {

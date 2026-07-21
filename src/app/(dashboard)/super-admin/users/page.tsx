@@ -144,7 +144,8 @@ export default function UsersPage() {
   async function handleDownloadResume(user: UserRow) {
     setDownloadingResumeUid(user.uid);
     try {
-      await downloadResumePdf(user, (user.employeeId as string) || (user.name as string));
+      const collegeName = colleges.find((c) => c.id === user.collegeId)?.name ?? "";
+      await downloadResumePdf({ ...user, collegeName }, (user.employeeId as string) || (user.name as string));
     } catch {
       toast({ variant: "destructive", title: "Failed to generate resume" });
     } finally {

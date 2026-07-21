@@ -123,6 +123,9 @@ export default function EditFacultyPage() {
           caste: (m.caste as string) ?? "",
           aadharNo: (m.aadharNo as string) ?? "",
           panNo: (m.panNo as string) ?? "",
+          passportNumber: (m.passportNumber as string) ?? "",
+          emergencyContactName: (m.emergencyContactName as string) ?? "",
+          emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
           ratificationDate: toDateInputValue(m.ratificationDate as never),
           maritalStatus: (m.maritalStatus as string) ?? "",
@@ -209,6 +212,14 @@ export default function EditFacultyPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!employeeId.trim()) {
+      toast({ variant: "destructive", title: "Employee ID is required" });
+      return;
+    }
+    if (!email.trim()) {
+      toast({ variant: "destructive", title: "Email is required" });
+      return;
+    }
     if (!form.collegeEmail.trim()) {
       toast({ variant: "destructive", title: "College email is required" });
       return;
@@ -220,11 +231,19 @@ export default function EditFacultyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          email,
+          employeeId,
           ...personalDetails,
           academicProfile,
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
+      if (res.status === 409) {
+        const json = await res.json() as { error?: string };
+        toast({ variant: "destructive", title: json.error ?? "Employee ID already exists" });
+        setSaving(false);
+        return;
+      }
       if (!res.ok) throw new Error();
 
       const errors = await syncTeachingAssignments(facultyId, form.name, originalTeachingRows, teachingRows);
@@ -264,6 +283,10 @@ export default function EditFacultyPage() {
               </div>
               <div className="grid flex-1 grid-cols-1 gap-4">
                 <div className="space-y-2">
+                  <Label>Employee ID *</Label>
+                  <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
+                </div>
+                <div className="space-y-2">
                   <Label>Full Name *</Label>
                   <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
                 </div>
@@ -274,9 +297,15 @@ export default function EditFacultyPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>College Email *</Label>
-              <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@vishnu.edu.in" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Email *</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="faculty@personal.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>College Email *</Label>
+                <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@vishnu.edu.in" />
+              </div>
             </div>
 
             <div className="pt-2 pb-1 border-t">

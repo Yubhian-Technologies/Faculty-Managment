@@ -29,6 +29,7 @@ const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
+  collegeEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().optional(),
   staffType: z.enum(["teaching", "supporting"]),
@@ -141,6 +142,11 @@ export default function NewFacultyPage() {
                 <Label htmlFor="email">Email *</Label>
                 <Input id="email" type="email" {...register("email")} placeholder="faculty@college.edu" />
                 {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="collegeEmail">College Email</Label>
+                <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@vishnu.edu.in" />
+                {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>

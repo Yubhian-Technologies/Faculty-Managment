@@ -66,6 +66,7 @@ export async function POST(request: Request) {
       employeeId: string;
       name: string;
       email: string;
+      collegeEmail?: string;
       password: string;
       phone?: string;
       designation: Designation;
@@ -166,6 +167,7 @@ export async function POST(request: Request) {
       employeeId,
       name,
       email,
+      ...(body.collegeEmail ? { collegeEmail: body.collegeEmail } : {}),
       phone: body.phone ?? "",
       designation,
       qualification,

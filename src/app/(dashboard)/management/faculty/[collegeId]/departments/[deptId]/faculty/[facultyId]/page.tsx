@@ -11,6 +11,7 @@ import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import { Avatar } from "@/components/shared/Avatar";
 import { DESIGNATION_LABELS } from "@/types";
 import type { FacultyMember } from "@/types";
+import { formatDate } from "@/lib/utils";
 
 export default function ManagementFacultyDetailPage() {
   const router = useRouter();
@@ -52,6 +53,7 @@ export default function ManagementFacultyDetailPage() {
               <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{faculty.phone || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{faculty.department}</p></div>
               <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{DESIGNATION_LABELS[faculty.designation]}</p></div>
+              <div><p className="text-xs text-muted-foreground">Date of Joining</p><p className="text-sm font-medium">{faculty.joiningDate ? formatDate(faculty.joiningDate) : "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Qualification</p><p className="text-sm font-medium">{faculty.qualification || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Specialization</p><p className="text-sm font-medium">{faculty.specialization || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Experience (yrs)</p><p className="text-sm font-medium">{faculty.experienceYears}</p></div>

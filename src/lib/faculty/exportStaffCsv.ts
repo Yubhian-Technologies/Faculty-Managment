@@ -6,7 +6,7 @@ import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
 import { STAFF_COLUMNS } from "@/lib/faculty/staffCsvColumns";
 import { ROLE_LABELS } from "@/types";
-import type { FMSUser, FacultyProfileFields, DegreeDetail, CourseAssignment, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import type { FMSUser, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -24,6 +24,18 @@ function degreeCells(d: DegreeDetail | undefined): [string, string, string, stri
 function courseCells(courses: CourseAssignment[] | undefined, i: number): [string, string, string] {
   const c = courses?.[i];
   return c ? [c.code ?? "", c.name ?? "", c.weeklyCreditHours ? String(c.weeklyCreditHours) : ""] : ["", "", ""];
+}
+
+function previousInstitutionCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string] {
+  const p = items?.[i];
+  return p ? [p.institutionName ?? "", p.designation ?? "", p.yearsWorked ? String(p.yearsWorked) : ""] : ["", "", ""];
+}
+
+function publicationCells(items: Publication[] | undefined, i: number): [string, string, string, string, string] {
+  const p = items?.[i];
+  return p
+    ? [p.title ?? "", p.coAuthors ?? "", p.journalOrConference ?? "", p.publicationYear ? String(p.publicationYear) : "", p.indexing ?? ""]
+    : ["", "", "", "", ""];
 }
 
 function projectCells(projects: FundedProject[] | undefined, i: number): [string, string, string, string, string] {
@@ -60,6 +72,7 @@ function buildRow(user: FMSUser): Record<string, string> {
     role: ROLE_LABELS[user.role] ?? s(user.role),
     name: s(user.name),
     email: s(user.email),
+    collegeEmail: s(user.collegeEmail),
     phone: s(user.phone),
     employeeId: s(user.employeeId),
     designation: s(user.designation),
@@ -74,6 +87,9 @@ function buildRow(user: FMSUser): Record<string, string> {
     caste: s(user.caste),
     aadharNo: s(user.aadharNo),
     panNo: s(user.panNo),
+    passportNumber: s(user.passportNumber),
+    emergencyContactName: s(user.emergencyContactName),
+    emergencyContactPhone: s(user.emergencyContactPhone),
     ratificationStatus: s(user.ratificationStatus),
     ratificationDate: toDateInputValue(user.ratificationDate),
 
@@ -141,6 +157,13 @@ function buildRow(user: FMSUser): Record<string, string> {
   [1, 2, 3].forEach((n) => {
     const [code, name, hours] = courseCells(p.teachingAssignment?.courses, n - 1);
     row[`course${n}_code`] = code; row[`course${n}_name`] = name; row[`course${n}_hours`] = hours;
+
+    const [prevName, prevDesignation, prevYears] = previousInstitutionCells(p.previousInstitutions, n - 1);
+    row[`previousInstitution${n}_name`] = prevName; row[`previousInstitution${n}_designation`] = prevDesignation; row[`previousInstitution${n}_years`] = prevYears;
+
+    const [pubTitle, pubCoAuthors, pubJournal, pubYear, pubIndexing] = publicationCells(p.publications, n - 1);
+    row[`publication${n}_title`] = pubTitle; row[`publication${n}_coAuthors`] = pubCoAuthors; row[`publication${n}_journal`] = pubJournal;
+    row[`publication${n}_year`] = pubYear; row[`publication${n}_indexing`] = pubIndexing;
 
     const [pTitle, pAgency, pAmount, pYear, pStatus] = projectCells(p.fundedProjects, n - 1);
     row[`project${n}_title`] = pTitle; row[`project${n}_agency`] = pAgency; row[`project${n}_amount`] = pAmount;

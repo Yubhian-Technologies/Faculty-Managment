@@ -18,6 +18,9 @@ export interface PersonalDetailsValue {
   caste?: string;
   aadharNo?: string;
   panNo?: string;
+  passportNumber?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
   ratificationStatus?: string;
   ratificationDate?: string;   // yyyy-mm-dd
   maritalStatus?: string;
@@ -107,6 +110,19 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
             className="uppercase"
           />
         </div>
+        <div className="space-y-2">
+          <Label>Passport No</Label>
+          <Input
+            value={value.passportNumber ?? ""}
+            onChange={(e) => set("passportNumber", e.target.value.toUpperCase())}
+            placeholder="N1234567"
+            className="uppercase"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Referral (if any)</Label>
+          <Input value={value.referral ?? ""} onChange={(e) => set("referral", e.target.value)} placeholder="Name of referring person/source" />
+        </div>
       </div>
 
       <div className="pt-2 pb-1 border-t">
@@ -150,10 +166,6 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           </>
         )}
         <div className="space-y-2">
-          <Label>Referral (if any)</Label>
-          <Input value={value.referral ?? ""} onChange={(e) => set("referral", e.target.value)} placeholder="Name of referring person/source" />
-        </div>
-        <div className="space-y-2">
           <Label>Native Place</Label>
           <Input value={value.nativePlace ?? ""} onChange={(e) => set("nativePlace", e.target.value)} />
         </div>
@@ -179,6 +191,20 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           <Textarea value={value.permanentAddress ?? ""} onChange={(e) => set("permanentAddress", e.target.value)} />
         </div>
       )}
+
+      <div className="pt-2 pb-1 border-t">
+        <p className="text-sm font-medium text-muted-foreground">Emergency Contact</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Emergency Contact Name</Label>
+          <Input value={value.emergencyContactName ?? ""} onChange={(e) => set("emergencyContactName", e.target.value)} placeholder="Name of contact person" />
+        </div>
+        <div className="space-y-2">
+          <Label>Emergency Contact Phone</Label>
+          <Input value={value.emergencyContactPhone ?? ""} onChange={(e) => set("emergencyContactPhone", e.target.value)} placeholder="+91 98765 43210" />
+        </div>
+      </div>
 
       <div className="pt-2 pb-1 border-t">
         <p className="text-sm font-medium text-muted-foreground">Ratification</p>

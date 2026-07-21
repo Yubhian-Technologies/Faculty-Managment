@@ -37,6 +37,8 @@ export default function NewUserPage() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [collegeEmail, setCollegeEmail] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState<UserRole>("PRINCIPAL");
@@ -78,7 +80,7 @@ export default function NewUserPage() {
         body: JSON.stringify({
           name, email, password, role, collegeId, locationId, phone,
           academicProfile,
-          ...(role === "PRINCIPAL" ? personalDetails : {}),
+          ...(role === "PRINCIPAL" ? { ...personalDetails, collegeEmail, employeeId } : {}),
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -121,6 +123,18 @@ export default function NewUserPage() {
                   <Label>Email <span className="text-destructive">*</span></Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
                 </div>
+                {role === "PRINCIPAL" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>College Email</Label>
+                      <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="name@vishnu.edu.in" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Employee ID</Label>
+                      <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

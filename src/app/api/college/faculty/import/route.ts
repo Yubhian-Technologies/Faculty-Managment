@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -59,6 +59,9 @@ type ImportRow = {
   motherName?: string;
   aadharNo?: string;
   panNo?: string;
+  passportNumber?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
   religion?: string;
   caste?: string;
   legalName?: string;
@@ -107,6 +110,18 @@ function courses(row: ImportRow): CourseAssignment[] {
     .filter((c) => c.code || c.name || c.weeklyCreditHours);
 }
 
+function previousInstitutions(row: ImportRow): PreviousInstitution[] {
+  return [1, 2, 3]
+    .map((i) => ({ institutionName: row[`previousInstitution${i}_name`]?.trim() ?? "", designation: row[`previousInstitution${i}_designation`]?.trim() ?? "", yearsWorked: num(row[`previousInstitution${i}_years`]) ?? 0 }))
+    .filter((p) => p.institutionName || p.designation);
+}
+
+function publications(row: ImportRow): Publication[] {
+  return [1, 2, 3]
+    .map((i) => ({ title: row[`publication${i}_title`]?.trim() ?? "", coAuthors: row[`publication${i}_coAuthors`]?.trim() ?? "", journalOrConference: row[`publication${i}_journal`]?.trim() ?? "", publicationYear: num(row[`publication${i}_year`]) ?? 0, indexing: row[`publication${i}_indexing`]?.trim() ?? "" }))
+    .filter((p) => p.title || p.journalOrConference);
+}
+
 function fundedProjects(row: ImportRow): FundedProject[] {
   return [1, 2, 3]
     .map((i) => ({ title: row[`project${i}_title`]?.trim() ?? "", fundingAgency: row[`project${i}_agency`]?.trim() ?? "", grantAmountLakhs: num(row[`project${i}_amount`]) ?? 0, year: num(row[`project${i}_year`]) ?? 0, status: row[`project${i}_status`]?.trim() ?? "" }))
@@ -153,6 +168,8 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     teachingAssignment: row.primaryTeachingRole?.trim() || courses(row).length > 0
       ? { primaryTeachingRole: row.primaryTeachingRole?.trim() ?? "", courses: courses(row) }
       : undefined,
+    previousInstitutions: previousInstitutions(row),
+    publications: publications(row),
     publicationsFirstOrCorrespondingAuthor: num(row.publicationsFirstOrCorrespondingAuthor) ?? 0,
     publicationsQ1OrHighImpact: num(row.publicationsQ1OrHighImpact) ?? 0,
     sciScopusCount: num(row.sciScopusCount) ?? 0,
@@ -290,6 +307,9 @@ export async function POST(request: Request) {
         motherName: row.motherName?.trim() || undefined,
         aadharNo: row.aadharNo?.trim() || undefined,
         panNo: row.panNo?.trim().toUpperCase() || undefined,
+        passportNumber: row.passportNumber?.trim() || undefined,
+        emergencyContactName: row.emergencyContactName?.trim() || undefined,
+        emergencyContactPhone: row.emergencyContactPhone?.trim() || undefined,
         religion: row.religion?.trim() || undefined,
         caste: row.caste?.trim() || undefined,
         collegeEmail: row.collegeEmail?.trim().toLowerCase() || undefined,

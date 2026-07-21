@@ -76,6 +76,9 @@ export async function PATCH(
     const body = (await request.json()) as Partial<{
       isActive: boolean;
       name: string;
+      email: string;
+      collegeEmail: string;
+      employeeId: string;
       department: string;
       phone: string;
       academicProfile: Record<string, unknown>;
@@ -103,6 +106,9 @@ export async function PATCH(
 
     if (body.isActive !== undefined) updates.isActive = body.isActive;
     if (body.name !== undefined && body.name.trim()) updates.name = body.name.trim();
+    if (body.email !== undefined && body.email.trim()) updates.email = body.email.trim();
+    if (body.collegeEmail !== undefined) updates.collegeEmail = body.collegeEmail;
+    if (body.employeeId !== undefined) updates.employeeId = body.employeeId;
     if (body.department !== undefined) updates.department = body.department;
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
