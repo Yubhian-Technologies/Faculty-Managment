@@ -82,6 +82,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       name: string;
       email: string;
+      collegeEmail?: string;
+      employeeId?: string;
       password: string;
       role: UserRole;
       department?: string;
@@ -145,6 +147,8 @@ export async function POST(request: Request) {
         collegeId,
         name,
         email,
+        ...(body.collegeEmail ? { collegeEmail: body.collegeEmail } : {}),
+        ...(body.employeeId ? { employeeId: body.employeeId } : {}),
         role,
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),

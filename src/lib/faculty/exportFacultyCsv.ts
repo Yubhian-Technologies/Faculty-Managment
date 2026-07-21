@@ -6,7 +6,7 @@
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
 import { COLUMNS, TEACHING_SUMMARY_COLUMN } from "@/lib/faculty/csvColumns";
-import type { FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import type { FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -24,6 +24,18 @@ function degreeCells(d: DegreeDetail | undefined): [string, string, string, stri
 function courseCells(courses: CourseAssignment[] | undefined, i: number): [string, string, string] {
   const c = courses?.[i];
   return c ? [c.code ?? "", c.name ?? "", c.weeklyCreditHours ? String(c.weeklyCreditHours) : ""] : ["", "", ""];
+}
+
+function previousInstitutionCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string] {
+  const p = items?.[i];
+  return p ? [p.institutionName ?? "", p.designation ?? "", p.yearsWorked ? String(p.yearsWorked) : ""] : ["", "", ""];
+}
+
+function publicationCells(items: Publication[] | undefined, i: number): [string, string, string, string, string] {
+  const p = items?.[i];
+  return p
+    ? [p.title ?? "", p.coAuthors ?? "", p.journalOrConference ?? "", p.publicationYear ? String(p.publicationYear) : "", p.indexing ?? ""]
+    : ["", "", "", "", ""];
 }
 
 function projectCells(projects: FundedProject[] | undefined, i: number): [string, string, string, string, string] {
@@ -80,6 +92,9 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     motherName: s(faculty.motherName),
     aadharNo: s(faculty.aadharNo),
     panNo: s(faculty.panNo),
+    passportNumber: s(faculty.passportNumber),
+    emergencyContactName: s(faculty.emergencyContactName),
+    emergencyContactPhone: s(faculty.emergencyContactPhone),
     religion: s(faculty.religion),
     caste: s(faculty.caste),
     collegeEmail: s(faculty.collegeEmail),
@@ -153,6 +168,13 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
   [1, 2, 3].forEach((n) => {
     const [code, name, hours] = courseCells(p.teachingAssignment?.courses, n - 1);
     row[`course${n}_code`] = code; row[`course${n}_name`] = name; row[`course${n}_hours`] = hours;
+
+    const [prevName, prevDesignation, prevYears] = previousInstitutionCells(p.previousInstitutions, n - 1);
+    row[`previousInstitution${n}_name`] = prevName; row[`previousInstitution${n}_designation`] = prevDesignation; row[`previousInstitution${n}_years`] = prevYears;
+
+    const [pubTitle, pubCoAuthors, pubJournal, pubYear, pubIndexing] = publicationCells(p.publications, n - 1);
+    row[`publication${n}_title`] = pubTitle; row[`publication${n}_coAuthors`] = pubCoAuthors; row[`publication${n}_journal`] = pubJournal;
+    row[`publication${n}_year`] = pubYear; row[`publication${n}_indexing`] = pubIndexing;
 
     const [pTitle, pAgency, pAmount, pYear, pStatus] = projectCells(p.fundedProjects, n - 1);
     row[`project${n}_title`] = pTitle; row[`project${n}_agency`] = pAgency; row[`project${n}_amount`] = pAmount;

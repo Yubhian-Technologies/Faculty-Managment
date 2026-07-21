@@ -50,11 +50,14 @@ export async function PATCH(
       isActive?: boolean;
       department?: string;
       name?: string;
+      email?: string;
+      collegeEmail?: string;
+      employeeId?: string;
       phone?: string;
       academicProfile?: Record<string, unknown>;
     } & PersonalDetailsInput;
 
-    const { collegeId, role, isActive, department, name, phone, academicProfile } = body;
+    const { collegeId, role, isActive, department, name, email, collegeEmail, employeeId, phone, academicProfile } = body;
 
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
@@ -67,6 +70,9 @@ export async function PATCH(
     if (isActive !== undefined) updates.isActive = isActive;
     if (department !== undefined) updates.department = department;
     if (name !== undefined && name.trim()) updates.name = name.trim();
+    if (email !== undefined && email.trim()) updates.email = email.trim();
+    if (collegeEmail !== undefined) updates.collegeEmail = collegeEmail;
+    if (employeeId !== undefined) updates.employeeId = employeeId;
     if (phone !== undefined) updates.phone = phone;
     if (academicProfile !== undefined) updates.academicProfile = academicProfile;
 

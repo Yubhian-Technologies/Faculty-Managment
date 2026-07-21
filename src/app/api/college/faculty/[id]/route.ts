@@ -45,6 +45,7 @@ export async function PATCH(
 
     const body = (await request.json()) as Partial<{
       name: string;
+      employeeId: string;
       email: string;
       phone: string;
       collegeEmail: string;
@@ -69,6 +70,9 @@ export async function PATCH(
       caste: string;
       aadharNo: string;
       panNo: string;
+      passportNumber: string;
+      emergencyContactName: string;
+      emergencyContactPhone: string;
       ratificationStatus: string;
       ratificationDate: string;
       maritalStatus: string;
@@ -110,10 +114,32 @@ export async function PATCH(
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
+    // Employee ID must stay unique within the college — checked separately from
+    // the other string fields since it needs a duplicate lookup (mirrors the
+    // check on creation in POST /api/college/faculty).
+    if (body.employeeId !== undefined && body.employeeId.trim()) {
+      const newEmployeeId = body.employeeId.trim();
+      const currentEmployeeId = (snap.data() as { employeeId?: string }).employeeId;
+      if (newEmployeeId !== currentEmployeeId) {
+        const dupSnap = await db
+          .collection("colleges")
+          .doc(session.collegeId)
+          .collection("facultyMembers")
+          .where("employeeId", "==", newEmployeeId)
+          .limit(1)
+          .get();
+        if (!dupSnap.empty) {
+          return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+        }
+      }
+      updates.employeeId = newEmployeeId;
+    }
+
     const stringFields = [
       "name", "email", "phone", "collegeEmail", "designation", "qualification",
       "specialization", "employmentType", "status", "gender", "legalName",
-      "fatherName", "motherName", "religion", "caste", "aadharNo", "ratificationStatus", "userUid",
+      "fatherName", "motherName", "religion", "caste", "aadharNo", "passportNumber",
+      "emergencyContactName", "emergencyContactPhone", "ratificationStatus", "userUid",
       "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
     ] as const;
 

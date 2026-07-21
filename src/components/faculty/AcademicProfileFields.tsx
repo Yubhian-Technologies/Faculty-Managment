@@ -9,10 +9,12 @@ import { Plus, Trash2 } from "lucide-react";
 import type {
   FacultyProfileFields,
   DegreeDetail,
+  Publication,
   FundedProject,
   ConsultancyProject,
   LabEstablished,
   AuthoredBook,
+  PreviousInstitution,
 } from "@/types";
 
 interface Props {
@@ -22,10 +24,12 @@ interface Props {
 }
 
 const EMPTY_DEGREE: DegreeDetail = { degreeAndBranch: "", universityOrInstitute: "", percentageOrDivision: "", yearOfCompletion: new Date().getFullYear() };
+const EMPTY_PUBLICATION: Publication = { title: "", coAuthors: "", journalOrConference: "", publicationYear: new Date().getFullYear(), indexing: "" };
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
 const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
+const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "", yearsWorked: 0 };
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="pt-2 pb-1 border-t"><p className="text-sm font-medium text-muted-foreground">{children}</p></div>;
@@ -161,6 +165,19 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         <NumInput label="Total Weekly Teaching Load (Hours)" value={value.totalWeeklyTeachingLoadHours} onChange={(v) => set("totalWeeklyTeachingLoadHours", v)} />
         <NumInput label="Average Student Feedback Score" value={value.averageStudentFeedbackScore} onChange={(v) => set("averageStudentFeedbackScore", v)} />
       </div>
+      <RepeatingGroup
+        title="Previous Institutions Worked At"
+        items={value.previousInstitutions}
+        empty={EMPTY_PREVIOUS_INSTITUTION}
+        onChange={(v) => set("previousInstitutions", v)}
+        renderRow={(item, update) => (
+          <>
+            <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
+            <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
+            <NumInput label="Years Worked" value={item.yearsWorked} onChange={(v) => update({ yearsWorked: v })} />
+          </>
+        )}
+      />
 
       {includeTeachingAssignment && (
         <div className="space-y-3 rounded-lg border p-3">
@@ -178,6 +195,21 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
 
       {/* Module 3 */}
       <SectionTitle>Module 3 — Research Publications</SectionTitle>
+      <RepeatingGroup
+        title="Publications"
+        items={value.publications}
+        empty={EMPTY_PUBLICATION}
+        onChange={(v) => set("publications", v)}
+        renderRow={(item, update) => (
+          <>
+            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Co-Authors" value={item.coAuthors} onChange={(v) => update({ coAuthors: v })} placeholder="Comma-separated names" />
+            <TextInput label="Journal / Conference" value={item.journalOrConference} onChange={(v) => update({ journalOrConference: v })} />
+            <NumInput label="Year of Publication" value={item.publicationYear} onChange={(v) => update({ publicationYear: v })} />
+            <TextInput label="Indexing" value={item.indexing} onChange={(v) => update({ indexing: v })} placeholder="e.g. SCI, Scopus, WoS, UGC-CARE" />
+          </>
+        )}
+      />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <NumInput label="First/Corresponding Author Pubs" value={value.publicationsFirstOrCorrespondingAuthor} onChange={(v) => set("publicationsFirstOrCorrespondingAuthor", v)} />
         <NumInput label="Q1 / IF > 4.0 Pubs" value={value.publicationsQ1OrHighImpact} onChange={(v) => set("publicationsQ1OrHighImpact", v)} />

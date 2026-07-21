@@ -55,6 +55,14 @@ export default function HODFacultyPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
+  const [collegeName, setCollegeName] = useState("");
+
+  useEffect(() => {
+    fetch("/api/college/info")
+      .then((r) => r.json() as Promise<{ name?: string }>)
+      .then((d) => setCollegeName(d.name ?? ""))
+      .catch(() => {});
+  }, []);
 
   async function load(status: string) {
     setIsLoading(true);
@@ -96,7 +104,7 @@ export default function HODFacultyPage() {
         const taData = await taRes.json() as { assignments?: unknown[] };
         teachingAssignments = taData.assignments ?? [];
       } catch { /* non-critical — resume still generates without the live teaching-load table */ }
-      await downloadResumePdf({ ...row, teachingAssignments }, (row.employeeId as string) || (row.name as string));
+      await downloadResumePdf({ ...row, teachingAssignments, collegeName }, (row.employeeId as string) || (row.name as string));
     } catch {
       toast({ variant: "destructive", title: "Failed to generate resume" });
     } finally {

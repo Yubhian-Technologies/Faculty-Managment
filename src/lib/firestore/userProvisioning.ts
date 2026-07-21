@@ -11,6 +11,8 @@ import type { UserRole } from "@/types";
 export interface NewUserInput extends PersonalDetailsInput {
   name: string;
   email: string;
+  collegeEmail?: string;
+  employeeId?: string;
   password: string;
   phone?: string;
   department?: string;
@@ -60,6 +62,8 @@ export async function provisionCollegeUser(
     uid, collegeId,
     ...(locationId ? { locationId } : {}),
     name: input.name, email: input.email, role,
+    ...(input.collegeEmail ? { collegeEmail: input.collegeEmail } : {}),
+    ...(input.employeeId ? { employeeId: input.employeeId } : {}),
     department: input.department ?? "",
     phone: input.phone ?? "",
     ...(input.academicProfile ? { academicProfile: input.academicProfile } : {}),

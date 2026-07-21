@@ -21,6 +21,20 @@ interface TeachingAssignmentSummary {
   courses?: CourseAssignment[];
 }
 
+interface PreviousInstitution {
+  institutionName?: string;
+  designation?: string;
+  yearsWorked?: number;
+}
+
+interface Publication {
+  title?: string;
+  coAuthors?: string;
+  journalOrConference?: string;
+  publicationYear?: number;
+  indexing?: string;
+}
+
 interface FundedProject {
   title?: string;
   fundingAgency?: string;
@@ -78,7 +92,9 @@ interface FacultyProfileFieldsLike {
   totalWeeklyTeachingLoadHours?: number;
   averageStudentFeedbackScore?: number;
   teachingAssignment?: TeachingAssignmentSummary;
+  previousInstitutions?: PreviousInstitution[];
 
+  publications?: Publication[];
   publicationsFirstOrCorrespondingAuthor?: number;
   publicationsQ1OrHighImpact?: number;
   sciScopusCount?: number;
@@ -149,6 +165,9 @@ export interface ResumeData {
   caste?: string;
   aadharNo?: string;
   panNo?: string;
+  passportNumber?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
   ratificationStatus?: string;
   ratificationDate?: TimestampLike;
   maritalStatus?: string;
@@ -225,8 +244,11 @@ function detailTable(rows: string): string {
   return `<div class="fgrid">${rows}</div>`;
 }
 
-function emptyNote(): string {
-  return `<p class="empty-note">No information on record for this section.</p>`;
+/** Renders a section's heading + body together, or nothing at all when the
+ *  body is empty — a person's record with no data for a module simply
+ *  doesn't get a module in their resume, rather than a placeholder. */
+function renderSection(title: string, body: string): string {
+  return body.trim() ? `${sectionTitle(title)}${body}` : "";
 }
 
 function degreeEntry(label: string, d?: DegreeDetail): string {
@@ -272,7 +294,7 @@ export function getResumeHTML(data: ResumeData): string {
   // ── Header ───────────────────────────────────────────────────────────────
   const contactLines = [
     data.email ? `Email: ${esc(data.email)}` : "",
-    data.collegeEmail ? `College Email: ${esc(data.collegeEmail)}` : "",
+    data.collegeName ? `College: ${esc(data.collegeName)}` : "",
     data.phone ? `Mobile: ${esc(data.phone)}` : "",
     data.employeeId ? `Employee ID: ${esc(data.employeeId)}` : "",
   ].filter(Boolean);
@@ -314,7 +336,12 @@ export function getResumeHTML(data: ResumeData): string {
     data.specialization && `Specialization: ${esc(data.specialization)}`,
     data.qualification && `Qualification: ${esc(data.qualification)}`,
   ]);
-  const experienceBody = experienceEntry + experienceBullets;
+  const previousInstitutionEntries = ap?.previousInstitutions?.length
+    ? ap.previousInstitutions
+        .map((pi) => entry(pi.institutionName || "Previous Institution", pi.yearsWorked ? `${pi.yearsWorked} yrs` : "", pi.designation || ""))
+        .join("")
+    : "";
+  const experienceBody = experienceEntry + experienceBullets + previousInstitutionEntries;
 
   // ── Teaching load ────────────────────────────────────────────────────────
   const teachingLoadBullets = bullets([
@@ -396,7 +423,6 @@ export function getResumeHTML(data: ResumeData): string {
   const certificationsBody = bullets([
     ap?.certificationsAndFdps && esc(ap.certificationsAndFdps),
     ap?.professionalBodyMemberships && esc(ap.professionalBodyMemberships),
-    data.ratificationStatus && `Ratification: ${esc(data.ratificationStatus)}${data.ratificationDate ? ` (${formatDate(data.ratificationDate as Parameters<typeof formatDate>[0])})` : ""}`,
   ]);
 
   // ── Personal & contact details ──────────────────────────────────────────
@@ -418,6 +444,9 @@ export function getResumeHTML(data: ResumeData): string {
     detail("Native Place", data.nativePlace) +
     detail("Aadhar No.", data.aadharNo) +
     detail("PAN No.", data.panNo) +
+    detail("Passport No.", data.passportNumber) +
+    detail("Emergency Contact Name", data.emergencyContactName) +
+    detail("Emergency Contact Phone", data.emergencyContactPhone) +
     detail("Referral", data.referral) +
     addressFacts(data)
   );
@@ -506,35 +535,16 @@ export function getResumeHTML(data: ResumeData): string {
     </div>
   </div>
 
-  ${sectionTitle("Personal & Contact Details")}
-  ${personalBody || emptyNote()}
-
-  ${sectionTitle("Education")}
-  ${educationBody || emptyNote()}
-
-  ${sectionTitle("Teaching Load")}
-  ${teachingLoadBody || emptyNote()}
-
-  ${sectionTitle("Professional Experience")}
-  ${experienceBody || emptyNote()}
-
-  ${sectionTitle("Research Publications")}
-  ${publicationsBody || emptyNote()}
-
-  ${sectionTitle("Projects, Grants & Consultancy")}
-  ${grantsBody || emptyNote()}
-
-  ${sectionTitle("Mentorship & Institutional Contribution")}
-  ${mentorshipBody || emptyNote()}
-
-  ${sectionTitle("Certifications & Professional Memberships")}
-  ${certificationsBody || emptyNote()}
-
-  ${sectionTitle("Other Information")}
-  ${otherInfoBody || emptyNote()}
-
-  ${sectionTitle("Financial Standing & Budgetary Impact")}
-  ${financialBody || emptyNote()}
+  ${renderSection("Personal & Contact Details", personalBody)}
+  ${renderSection("Education", educationBody)}
+  ${renderSection("Teaching Load", teachingLoadBody)}
+  ${renderSection("Professional Experience", experienceBody)}
+  ${renderSection("Research Publications", publicationsBody)}
+  ${renderSection("Projects, Grants & Consultancy", grantsBody)}
+  ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
+  ${renderSection("Certifications & Professional Memberships", certificationsBody)}
+  ${renderSection("Other Information", otherInfoBody)}
+  ${renderSection("Financial Standing", financialBody)}
 
   <div class="footer">Generated on ${esc(formatDate(new Date()))} — Confidential, for internal institutional use only.</div>
 </div>
