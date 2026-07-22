@@ -21,7 +21,10 @@ export default function PrincipalDecisionsPage() {
       .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
       .then((d) => {
         const pending = (d.batches ?? []).filter(
-          (b) => b.currentPhase === "PRINCIPAL_FINAL_REVIEW" || b.currentPhase === "COMPLETED"
+          (b) =>
+            b.currentPhase === "PANEL_INTERVIEW" ||
+            b.currentPhase === "PRINCIPAL_FINAL_REVIEW" ||
+            b.currentPhase === "COMPLETED"
         );
         setBatches(pending);
       })
@@ -61,6 +64,7 @@ export default function PrincipalDecisionsPage() {
         <div className="space-y-3">
           {batches.map((b) => {
             const isDone = b.currentPhase === "COMPLETED";
+            const isScoring = b.currentPhase === "PANEL_INTERVIEW";
             return (
               <Card key={b.id} className={isDone ? "border-green-200 bg-green-50/30" : ""}>
                 <CardContent className="p-4 flex items-center justify-between gap-4">
@@ -69,6 +73,8 @@ export default function PrincipalDecisionsPage() {
                       <p className="font-semibold">{b.position}</p>
                       {isDone ? (
                         <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 text-xs">Decisions Made</Badge>
+                      ) : isScoring ? (
+                        <Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50 text-xs">Scoring in Progress</Badge>
                       ) : (
                         <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-xs">Awaiting Decision</Badge>
                       )}
@@ -79,9 +85,9 @@ export default function PrincipalDecisionsPage() {
                       <span>{formatDate(b.interviewDate)}</span>
                     </div>
                   </div>
-                  <Button asChild variant={isDone ? "outline" : "default"} size="sm">
+                  <Button asChild variant={isDone || isScoring ? "outline" : "default"} size="sm">
                     <Link href={`/principal/decisions/${b.id}`}>
-                      {isDone ? "Review" : "Decide"}
+                      {isDone ? "Review" : isScoring ? "Monitor" : "Decide"}
                       <ChevronRight className="h-4 w-4 ml-1" />
                     </Link>
                   </Button>

@@ -85,6 +85,21 @@ export async function PATCH(
       demoComplete?: boolean;
     };
 
+    // Guard against an arbitrary/typo'd phase string being persisted — keep in
+    // sync with the BatchPhase union in src/types/recruitment.ts.
+    const VALID_PHASES = [
+      "PRINCIPAL_REVIEW",
+      "HOD_FINAL_SETUP",
+      "INTERVIEW_READY",
+      "IN_PROGRESS",
+      "PANEL_INTERVIEW",
+      "PRINCIPAL_FINAL_REVIEW",
+      "COMPLETED",
+    ];
+    if (body.currentPhase !== undefined && !VALID_PHASES.includes(body.currentPhase)) {
+      return NextResponse.json({ error: "Invalid phase" }, { status: 400 });
+    }
+
     const db = getAdminDb();
     const actorName = await getUserName(db, session.collegeId, session.uid);
     const now = new Date();
@@ -113,9 +128,12 @@ export async function PATCH(
     // Principal: approve / reject / modify
     if (body.status !== undefined) updates.status = body.status;
     if (body.principalNotes !== undefined) updates.principalNotes = body.principalNotes;
-    if (body.currentPhase !== undefined) updates.currentPhase = body.currentPhase;
-    // When Principal approves, transition phase so HOD can set up logistics
-    if (body.status === "APPROVED") {
+    // An explicit currentPhase always wins; derived transitions below only
+    // apply when the caller didn't already specify one.
+    if (body.currentPhase !== undefined) {
+      updates.currentPhase = body.currentPhase;
+    } else if (body.status === "APPROVED") {
+      // When Principal approves, transition phase so HOD can set up logistics
       updates.currentPhase = "HOD_FINAL_SETUP";
     }
     // College Office: venue + docs
@@ -143,7 +161,9 @@ export async function PATCH(
     if (body.interviewTime !== undefined) updates.interviewTime = body.interviewTime;
     if (body.demoComplete === true) {
       updates.demoComplete = true;
-      updates.currentPhase = "IN_PROGRESS"; // demo day is done; HOD reviews before opening panel scoring
+      if (body.currentPhase === undefined) {
+        updates.currentPhase = "IN_PROGRESS"; // demo day is done; HOD reviews before opening panel scoring
+      }
     }
 
     await db

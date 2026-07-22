@@ -21,7 +21,6 @@ import type {
   PanelFeedback,
   StudentFeedback,
   HRFeedback,
-  HiringSalaryAgreement,
   HiringDocVerification,
   OfferLetter,
   AppointmentLetter,
@@ -296,33 +295,6 @@ export async function submitHRFeedback(
     submittedAt: Timestamp.now(),
   });
   return docRef.id;
-}
-
-// ─── Hiring Salary Agreements ─────────────────────────────────────────────────
-
-export async function createHiringSalaryAgreement(
-  collegeId: string,
-  data: Omit<HiringSalaryAgreement, "id" | "createdAt">
-): Promise<string> {
-  const ref = collection(db, "colleges", collegeId, "hiringSalaryAgreements");
-  const docRef = await addDoc(ref, {
-    ...data,
-    collegeId,
-    createdAt: Timestamp.now(),
-  });
-  return docRef.id;
-}
-
-export async function getHiringSalaryAgreement(
-  collegeId: string,
-  candidateId: string
-): Promise<HiringSalaryAgreement | null> {
-  const ref = collection(db, "colleges", collegeId, "hiringSalaryAgreements");
-  const q = query(ref, where("candidateId", "==", candidateId));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { id: d.id, ...d.data() } as HiringSalaryAgreement;
 }
 
 // ─── Hiring Document Verification ────────────────────────────────────────────

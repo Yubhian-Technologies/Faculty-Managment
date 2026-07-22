@@ -39,7 +39,8 @@ export function MobileDrawer() {
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];
-    if (hasInterviews) {
+    // Skip roles that already have a static "Panel Scoring" tab in navConfig
+    if (hasInterviews && !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)) {
       injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
     }
     if (coordinatorBatchId) {

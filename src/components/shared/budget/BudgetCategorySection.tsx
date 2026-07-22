@@ -91,11 +91,28 @@ function CategoryGroupCard({ group, categories, onChange, onRemove, removable, d
   );
 }
 
-function CategoryGroupReadOnly({ group }: { group: BudgetCategoryGroup }) {
+function CategoryGroupReadOnly({
+  group,
+  selectable,
+  selectedIds,
+  onToggleItem,
+}: {
+  group: BudgetCategoryGroup;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleItem?: (itemId: string, label: string) => void;
+}) {
   return (
     <div className="rounded-lg border p-4 space-y-3">
       <p className="text-sm font-semibold">{group.category}</p>
-      <BudgetItemsTable items={group.items} readOnly category={group.category} />
+      <BudgetItemsTable
+        items={group.items}
+        readOnly
+        category={group.category}
+        selectable={selectable}
+        selectedIds={selectedIds}
+        onToggleItem={onToggleItem}
+      />
     </div>
   );
 }
@@ -107,9 +124,13 @@ interface BudgetCategorySectionProps {
   onChange?: (groups: BudgetCategoryGroup[]) => void;
   readOnly?: boolean;
   department?: string;
+  // Finance's review view only — see BudgetItemsTable.
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleItem?: (itemId: string, label: string) => void;
 }
 
-export function BudgetCategorySection({ label, categories, groups, onChange, readOnly = false, department }: BudgetCategorySectionProps) {
+export function BudgetCategorySection({ label, categories, groups, onChange, readOnly = false, department, selectable, selectedIds, onToggleItem }: BudgetCategorySectionProps) {
   function updateGroup(id: string, updated: BudgetCategoryGroup) {
     onChange?.(groups.map((g) => (g.id === id ? updated : g)));
   }
@@ -138,7 +159,13 @@ export function BudgetCategorySection({ label, categories, groups, onChange, rea
       <div className="space-y-3">
         {groups.map((group) =>
           readOnly ? (
-            <CategoryGroupReadOnly key={group.id} group={group} />
+            <CategoryGroupReadOnly
+              key={group.id}
+              group={group}
+              selectable={selectable}
+              selectedIds={selectedIds}
+              onToggleItem={onToggleItem}
+            />
           ) : (
             <CategoryGroupCard
               key={group.id}
