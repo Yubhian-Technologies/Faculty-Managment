@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { FileCheck } from "lucide-react";
 import type { Candidate } from "@/types";
 
 type CandidateRow = Record<string, unknown> & Candidate;
@@ -23,8 +22,6 @@ function stageBadge(c: CandidateRow) {
 export default function CollegeOfficeCandidatesPage() {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [verifying, setVerifying] = useState<CandidateRow | null>(null);
-  const [loading, setLoading] = useState(false);
 
   function loadCandidates() {
     setIsLoading(true);
@@ -43,26 +40,6 @@ export default function CollegeOfficeCandidatesPage() {
   }
 
   useEffect(() => { loadCandidates(); }, []);
-
-  async function verifyDocuments() {
-    if (!verifying) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/college/candidates/${verifying.id as string}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: "DECISION" }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Documents verified", description: "Candidate sent to Accounts for salary processing." });
-      setVerifying(null);
-      loadCandidates();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const columns: Column<CandidateRow>[] = [
     {
@@ -104,9 +81,10 @@ export default function CollegeOfficeCandidatesPage() {
         const stage = (row as unknown as { currentStage?: string }).currentStage;
         if (stage === "DOCUMENT_VERIFICATION") {
           return (
-            <Button size="sm" variant="outline" className="text-blue-700 border-blue-300" onClick={(e) => { e.stopPropagation(); setVerifying(row); }}>
-              <FileCheck className="h-3.5 w-3.5 mr-1" />
-              Verify Docs
+            <Button asChild size="sm" variant="outline" className="text-blue-700 border-blue-300">
+              <Link href="/college-office/documents" onClick={(e) => e.stopPropagation()}>
+                Verify in Documents →
+              </Link>
             </Button>
           );
         }
@@ -119,7 +97,7 @@ export default function CollegeOfficeCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Verify documents for Principal-approved candidates and send to Accounts"
+        description="Status overview of Principal-approved candidates — verify documents from the Documents tab"
       />
 
       <DataTable
@@ -132,16 +110,6 @@ export default function CollegeOfficeCandidatesPage() {
         emptyTitle="No candidates yet"
         emptyDescription="Shortlisted and approved candidates will appear here"
         csvFilename="candidates"
-      />
-
-      <ConfirmDialog
-        open={!!verifying}
-        onOpenChange={(open) => { if (!open) setVerifying(null); }}
-        title="Verify Documents & Send to Accounts?"
-        description={`Mark ${verifying?.name as string}'s documents as verified. They will appear in the Accounts team's salary processing queue.`}
-        confirmLabel="Verify & Send to Accounts"
-        onConfirm={verifyDocuments}
-        loading={loading}
       />
     </div>
   );

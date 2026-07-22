@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
-import { fieldConfigForCategory, itemTotal, DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem, type SalaryStructure, type FacultyMember } from "@/types";
+import { fieldConfigForCategory, itemTitleOptionsForCategory, itemTotal, DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem, type SalaryStructure, type FacultyMember } from "@/types";
 
 // Radix Select disallows an empty-string item value, so "none" is the sentinel
 // for "no salary structure selected / enter price manually" and is translated
 // to/from "" (the actual stored extras value) at the read/write boundary.
 const CUSTOM_SALARY_OPTION = "none";
+const CUSTOM_TITLE_OPTION = "__custom__";
 
 function salaryStructureLabel(s: SalaryStructure): string {
   return `${DESIGNATION_LABELS[s.designation]} · ${EMPLOYMENT_TYPE_LABELS[s.employmentType]}`;
@@ -42,15 +43,20 @@ interface BudgetItemsTableProps {
   // HOD's own department is resolved server-side, so this is only needed for
   // the Principal/VP emergency-request form where department is free text.
   department?: string;
+  // Finance's read-only review view only: lets Finance tick specific items to
+  // flag as unjustifiable before returning the request to the HOD.
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleItem?: (itemId: string, label: string) => void;
 }
 
-export function BudgetItemsTable({ items, onChange, readOnly = false, category, department }: BudgetItemsTableProps) {
+export function BudgetItemsTable({ items, onChange, readOnly = false, category, department, selectable = false, selectedIds, onToggleItem }: BudgetItemsTableProps) {
   const cfg = fieldConfigForCategory(category);
   const hasMultiplier = cfg.extraFields.some((f) => f.isMultiplier) || !!cfg.fixedTotalMultiplier;
   const priceLabel = cfg.priceLabel ?? (hasMultiplier ? "Unit Price" : "Amount");
   const totalLabel = cfg.totalLabel ?? "Total";
   const isStaffSalaries = category === "Staff Salaries";
-  const colCount = 4 + cfg.extraFields.length + (isStaffSalaries ? 1 : 0) + (readOnly ? 0 : 1); // Title, Description, extraFields, [Staff Count], Price, Total, (+ delete)
+  const colCount = 4 + cfg.extraFields.length + (isStaffSalaries ? 1 : 0) + (readOnly ? 0 : 1) + (selectable ? 1 : 0); // Title, Description, extraFields, [Staff Count], Price, Total, (+ delete/flag)
 
   const [salaryStructures, setSalaryStructures] = useState<SalaryStructure[]>([]);
   useEffect(() => {
@@ -118,6 +124,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category, 
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground w-36">{priceLabel}</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground w-36">{totalLabel}</th>
                 {!readOnly && <th className="px-3 py-2 w-10" />}
+                {selectable && <th className="px-3 py-2 w-16 text-center font-medium text-muted-foreground">Flag</th>}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -134,6 +141,9 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category, 
                   headcountByKey={headcountByKey}
                   onUpdate={(patch) => updateItem(item.id, patch)}
                   onRemove={() => removeItem(item.id)}
+                  selectable={selectable}
+                  isFlagged={selectedIds?.has(item.id) ?? false}
+                  onToggleFlag={() => onToggleItem?.(item.id, `${item.title || "Untitled item"} (${category})`)}
                 />
               ))}
             </tbody>
@@ -171,9 +181,12 @@ interface ItemRowsProps {
   headcountByKey: Map<string, number>;
   onUpdate: (patch: Partial<BudgetRequestItem>) => void;
   onRemove: () => void;
+  selectable?: boolean;
+  isFlagged?: boolean;
+  onToggleFlag?: () => void;
 }
 
-function ItemRows({ item, cfg, category, readOnly, colCount, removable, salaryStructures, headcountByKey, onUpdate, onRemove }: ItemRowsProps) {
+function ItemRows({ item, cfg, category, readOnly, colCount, removable, salaryStructures, headcountByKey, onUpdate, onRemove, selectable = false, isFlagged = false, onToggleFlag }: ItemRowsProps) {
   const [adding, setAdding] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
   const [draftType, setDraftType] = useState<"TEXT" | "NUMBER">("TEXT");
@@ -181,6 +194,8 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
 
   const customFields = item.customFields ?? [];
   const isStaffSalaries = category === "Staff Salaries";
+  const titleOptions = itemTitleOptionsForCategory(category);
+  const isCustomTitle = !titleOptions.includes(item.title);
 
   function updateExtra(key: string, value: string, type: BudgetExtraFieldType = "TEXT") {
     const normalized = type === "NUMBER" ? stripLeadingZeros(value) : value;
@@ -251,11 +266,38 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
           {isStaffSalaries && <td className="px-3 py-2">{staffCount || "—"}</td>}
           <td className="px-3 py-2">{formatCurrency(item.price)}</td>
           <td className="px-3 py-2 font-medium">{formatCurrency(itemTotal(item, category))}</td>
+          {selectable && (
+            <td className="px-3 py-2 text-center">
+              <Checkbox checked={isFlagged} onCheckedChange={() => onToggleFlag?.()} aria-label={`Flag ${item.title || "item"} for reconsideration`} />
+            </td>
+          )}
         </tr>
       ) : (
         <tr className="bg-background">
           <td className="px-3 py-2">
-            <Input value={item.title} onChange={(e) => onUpdate({ title: e.target.value })} placeholder="e.g. Oscilloscope" />
+            {titleOptions.length > 0 ? (
+              <div className="space-y-1.5">
+                <Select
+                  value={isCustomTitle ? CUSTOM_TITLE_OPTION : item.title}
+                  onValueChange={(v) => onUpdate({ title: v === CUSTOM_TITLE_OPTION ? "" : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select item..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {titleOptions.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                    <SelectItem value={CUSTOM_TITLE_OPTION}>Other (specify)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {isCustomTitle && (
+                  <Input value={item.title} onChange={(e) => onUpdate({ title: e.target.value })} placeholder="Custom item name" />
+                )}
+              </div>
+            ) : (
+              <Input value={item.title} onChange={(e) => onUpdate({ title: e.target.value })} placeholder="e.g. Oscilloscope" />
+            )}
           </td>
           <td className="px-3 py-2">
             <Input value={item.description} onChange={(e) => onUpdate({ description: e.target.value })} placeholder="Brief description" />

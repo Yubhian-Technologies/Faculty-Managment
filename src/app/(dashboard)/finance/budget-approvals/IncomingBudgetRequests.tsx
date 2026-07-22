@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle, XCircle, RotateCcw, Building2, RefreshCw, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle, XCircle, RotateCcw, Building2, RefreshCw, AlertTriangle, Flag } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
@@ -21,9 +22,14 @@ export function IncomingBudgetRequests() {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
-  const [mode, setMode] = useState<"idle" | "approve" | "reject" | "return">("idle");
+  const [mode, setMode] = useState<"idle" | "approve" | "reject" | "return" | "reconsider">("idle");
   const [fiscalYear, setFiscalYear] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [reconsiderReason, setReconsiderReason] = useState("");
+  // itemId -> "title (category)", so Finance can tick specific line items that
+  // can't be justified before writing one reason and sending the whole request
+  // back to the HOD (there's no per-item status — this only shapes the remarks).
+  const [flaggedItems, setFlaggedItems] = useState<Record<string, string>>({});
 
   function load() {
     setIsLoading(true);
@@ -45,14 +51,31 @@ export function IncomingBudgetRequests() {
     setMode("idle");
     setFiscalYear("");
     setRemarks("");
+    setReconsiderReason("");
+    setFlaggedItems({});
   }
 
-  async function act(request: BudgetRequest, action: "APPROVE" | "REJECT" | "RETURN") {
+  function toggleFlag(itemId: string, label: string) {
+    setFlaggedItems((prev) => {
+      const next = { ...prev };
+      if (next[itemId]) delete next[itemId];
+      else next[itemId] = label;
+      return next;
+    });
+  }
+
+  function reconsiderRemarks(): string {
+    const labels = Object.values(flaggedItems);
+    return `Items to reconsider: ${labels.join(", ")}.\n\nReason: ${reconsiderReason.trim()}`;
+  }
+
+  async function act(request: BudgetRequest, action: "APPROVE" | "REJECT" | "RETURN", remarksOverride?: string) {
+    const effectiveRemarks = remarksOverride ?? remarks;
     if (action === "APPROVE" && !fiscalYear.trim()) {
       toast({ variant: "destructive", title: "Financial year is required" });
       return;
     }
-    if ((action === "REJECT" || action === "RETURN") && !remarks.trim()) {
+    if ((action === "REJECT" || action === "RETURN") && !effectiveRemarks.trim()) {
       toast({ variant: "destructive", title: "Remarks are required" });
       return;
     }
@@ -64,7 +87,7 @@ export function IncomingBudgetRequests() {
         body: JSON.stringify({
           action,
           fiscalYear: action === "APPROVE" ? fiscalYear.trim() : undefined,
-          remarks: remarks.trim() || undefined,
+          remarks: effectiveRemarks.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -161,8 +184,24 @@ export function IncomingBudgetRequests() {
                 <p className="text-xs text-muted-foreground">
                   Requested by {item.hodName}, verified by Principal on {formatDate(item.updatedAt)}
                 </p>
-                <BudgetCategorySection label="Non Recurring" categories={NON_RECURRING_CATEGORIES} groups={item.nonRecurring} readOnly />
-                <BudgetCategorySection label="Recurring" categories={RECURRING_CATEGORIES} groups={item.recurring} readOnly />
+                <BudgetCategorySection
+                  label="Non Recurring"
+                  categories={NON_RECURRING_CATEGORIES}
+                  groups={item.nonRecurring}
+                  readOnly
+                  selectable
+                  selectedIds={new Set(Object.keys(flaggedItems))}
+                  onToggleItem={toggleFlag}
+                />
+                <BudgetCategorySection
+                  label="Recurring"
+                  categories={RECURRING_CATEGORIES}
+                  groups={item.recurring}
+                  readOnly
+                  selectable
+                  selectedIds={new Set(Object.keys(flaggedItems))}
+                  onToggleItem={toggleFlag}
+                />
 
                 {mode === "idle" && (
                   <div className="flex flex-wrap gap-2 pt-2 border-t">
@@ -185,6 +224,18 @@ export function IncomingBudgetRequests() {
                       <RotateCcw className="h-3.5 w-3.5 mr-1" />
                       Return for Correction
                     </Button>
+                    {Object.keys(flaggedItems).length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-400 text-red-700 hover:bg-red-50"
+                        disabled={actingId !== null}
+                        onClick={() => setMode("reconsider")}
+                      >
+                        <Flag className="h-3.5 w-3.5 mr-1" />
+                        Reconsider Flagged Items ({Object.keys(flaggedItems).length})
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="destructive"
@@ -210,6 +261,49 @@ export function IncomingBudgetRequests() {
                     <div className="flex gap-2">
                       <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" loading={isActingThis} onClick={() => void act(item, "APPROVE")}>
                         Confirm Approve
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={resetAction} disabled={isActingThis}>Cancel</Button>
+                    </div>
+                  </div>
+                )}
+
+                {mode === "reconsider" && (
+                  <div className="space-y-3 rounded-md border border-red-300/60 bg-red-50 p-3 pt-2 border-t">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium text-red-800">Items flagged as unacceptable</Label>
+                      <div className="space-y-1.5 rounded-md border bg-background p-2">
+                        {Object.keys(flaggedItems).length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No items flagged — tick items above first.</p>
+                        ) : (
+                          Object.entries(flaggedItems).map(([itemId, label]) => (
+                            <label key={itemId} className="flex items-center gap-2 text-sm">
+                              <Checkbox checked onCheckedChange={() => toggleFlag(itemId, label)} />
+                              {label}
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium text-red-800">Reason Finance can&apos;t approve these</Label>
+                      <Textarea
+                        value={reconsiderReason}
+                        onChange={(e) => setReconsiderReason(e.target.value)}
+                        placeholder="Explain why these items can't be approved as-is..."
+                        rows={2}
+                        disabled={isActingThis}
+                        className="resize-none text-sm bg-background"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                        loading={isActingThis}
+                        disabled={Object.keys(flaggedItems).length === 0 || !reconsiderReason.trim()}
+                        onClick={() => void act(item, "RETURN", reconsiderRemarks())}
+                      >
+                        Send Back to HOD
                       </Button>
                       <Button size="sm" variant="ghost" onClick={resetAction} disabled={isActingThis}>Cancel</Button>
                     </div>

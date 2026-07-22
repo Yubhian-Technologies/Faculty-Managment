@@ -203,6 +203,19 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
 
   useEffect(() => { void load(); }, [id]);
 
+  // Panel members submit from their own tabs while this page sits open —
+  // refetch on refocus so submitted/pending status doesn't go stale.
+  useEffect(() => {
+    function onFocus() { void load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   async function saveDetails() {
     if (!coordinatorFacultyId) {
       toast({ variant: "destructive", title: "Please assign a coordinator" });
@@ -1019,17 +1032,35 @@ ${institution}`;
                 const rejects = feedbacks.filter((f) => f.recommendation === "REJECT").length;
                 const maybes = feedbacks.filter((f) => f.recommendation === "MAYBE").length;
                 const total = batch.panelMemberUids.length;
+                const submittedUids = new Set(feedbacks.map((f) => f.panelUid));
+                const pendingUids = batch.panelMemberUids.filter((uid) => !submittedUids.has(uid));
                 return (
-                  <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div>
-                      <p className="font-medium text-sm">{c.name}</p>
-                      <div className="flex gap-3 text-xs mt-1">
-                        <span className="flex items-center gap-1 text-green-600"><ThumbsUp className="h-3 w-3" />{accepts} Accept</span>
-                        <span className="flex items-center gap-1 text-amber-600"><Minus className="h-3 w-3" />{maybes} Maybe</span>
-                        <span className="flex items-center gap-1 text-red-600"><ThumbsDown className="h-3 w-3" />{rejects} Reject</span>
+                  <div key={c.id} className="p-3 rounded-lg border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm">{c.name}</p>
+                        <div className="flex gap-3 text-xs mt-1">
+                          <span className="flex items-center gap-1 text-green-600"><ThumbsUp className="h-3 w-3" />{accepts} Accept</span>
+                          <span className="flex items-center gap-1 text-amber-600"><Minus className="h-3 w-3" />{maybes} Maybe</span>
+                          <span className="flex items-center gap-1 text-red-600"><ThumbsDown className="h-3 w-3" />{rejects} Reject</span>
+                        </div>
                       </div>
+                      <span className="text-xs text-muted-foreground">{feedbacks.length}/{total} submitted</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">{feedbacks.length}/{total} submitted</span>
+                    <div className="flex flex-wrap gap-1.5 pt-1 border-t">
+                      {feedbacks.map((f) => (
+                        <Badge key={f.panelUid} variant="outline" className="text-[11px] gap-1 text-green-700 border-green-300 bg-green-50">
+                          <CheckCircle2 className="h-3 w-3" />
+                          {userMap[f.panelUid]?.name ?? f.panelName}
+                        </Badge>
+                      ))}
+                      {pendingUids.map((uid) => (
+                        <Badge key={uid} variant="outline" className="text-[11px] gap-1 text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {userMap[uid]?.name ?? "Unknown"}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 );
               })}

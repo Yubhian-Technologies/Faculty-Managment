@@ -170,6 +170,36 @@ export function fieldConfigForCategory(category: string): BudgetCategoryFieldCon
   return CATEGORY_FIELD_CONFIG[category] ?? { extraFields: [] };
 }
 
+// Preset item names per category, so the HOD picks from a standard list instead
+// of retyping common line items every year (e.g. "Computers", "UPS AMC").
+// Categories not listed here (or "Other") keep the free-text Title input.
+export const CATEGORY_ITEM_OPTIONS: Record<string, string[]> = {
+  "Lab Equipment": [
+    "Computers", "Keyboard", "Mouse", "Hard Disk", "SMPS", "Monitor",
+    "CISCO L2 Switch", "Patch Cables (2m)", "Patch Cables (3m)", "LCD VGA Cable (15m)",
+    "HDMI Cable (15m)", "HDMI to VGA Converter", "LCD Projector", "LCD Projector Screen",
+    "LCD Power Cable (15m)", "Keyboard Channel", "Indoor WiFi Access Point", "CC Camera", "NVR for CC Cameras",
+  ],
+  "Other Equipment": ["Air Conditioner (2 Ton)", "Air Conditioner (3 Ton)", "Water Purifier", "Generator"],
+  "Furniture": ["Chairs", "Computer Tables", "Cupboards", "Benches"],
+  "Equipment Maintenance & Consumables": ["UPS AMC", "Equipment Maintenance"],
+  "Printing & Stationery": [
+    "A-4 Reams", "Box Files", "Flat Files", "Student Handbooks", "Lab Manuals",
+    "Chalk Piece Boxes", "Dusters", "Sketch Pens", "OHP Markers", "White Board Markers",
+    "Legal Paper Reams", "A4 Cloth Covers", "A3 Cloth Covers", "Rubber Bands", "Door Mats",
+    "Stick Files", "L-Folder Packs", "Envelope Covers (College)", "Envelope Covers (Brown)",
+    "Student Attendance Registers", "Student & Staff ID Cards", "CMOS Batteries",
+  ],
+  "Workshops/Seminars/Paper Presentations": [
+    "Conducting Workshop/Seminar", "Faculty Deputation", "Student Deputation", "Industrial Tours",
+  ],
+  "Inhouse R&D Activities": ["Seed Money for Projects", "Patents", "Professional Body Activities"],
+};
+
+export function itemTitleOptionsForCategory(category: string): string[] {
+  return CATEGORY_ITEM_OPTIONS[category] ?? [];
+}
+
 // How many staff a Staff Salaries line item covers. Unset/empty means the
 // item predates this field (or used "Custom" pricing) — treated as 1 so old
 // requests keep totalling the same way they always did.

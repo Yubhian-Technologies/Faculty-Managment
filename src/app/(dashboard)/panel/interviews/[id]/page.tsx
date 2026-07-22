@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { useAuthStore } from "@/store/authStore";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ const defaultFeedback = (): FeedbackForm => ({
 
 export default function PanelInterviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const myUid = useAuthStore((s) => s.user?.uid);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -74,13 +76,17 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
   const [submittedFor, setSubmittedFor] = useState<string[]>([]);
 
   useEffect(() => {
+    if (!myUid) return;
     Promise.all([
       fetch(`/api/college/hiring-batches/${id}`)
         .then((r) => r.json() as Promise<{ batch: HiringBatch }>)
         .then((d) => d.batch),
       fetch(`/api/college/panel-feedback?batchId=${id}`)
-        .then((r) => r.json() as Promise<{ feedback: { candidateId: string }[] }>)
-        .then((d) => d.feedback.map((f) => f.candidateId)),
+        .then((r) => r.json() as Promise<{ feedback: { candidateId: string; panelUid: string }[] }>)
+        // GET returns every panelist's feedback for non-PANEL_MEMBER roles (Principal/VP/HOD
+        // included, since they're often panel members too) — only count MY OWN submissions,
+        // otherwise another panelist scoring first would wrongly lock me out of scoring at all.
+        .then((d) => d.feedback.filter((f) => f.panelUid === myUid).map((f) => f.candidateId)),
     ])
       .then(([b, submitted]) => {
         setBatch(b);
@@ -93,7 +99,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load interview" }))
       .finally(() => setIsLoading(false));
-  }, [id]);
+  }, [id, myUid]);
 
   function selectCandidate(c: Candidate) {
     setSelectedCandidate(c);

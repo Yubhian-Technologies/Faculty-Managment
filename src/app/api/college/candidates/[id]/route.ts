@@ -169,6 +169,83 @@ export async function PATCH(
       });
     }
 
+    const candidateData = candidateSnap.data() as { name?: string; batchId?: string };
+
+    // Final Principal decision: notify the HOD, log it, and — if every other
+    // candidate in the batch already has a decision — close out the batch
+    // server-side instead of relying on the client to notice and follow up.
+    if ((status === "APPROVED" || status === "REJECTED") && candidateData.batchId) {
+      const batchRef = db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("hiringBatches")
+        .doc(candidateData.batchId);
+      const batchSnap = await batchRef.get();
+
+      if (batchSnap.exists) {
+        const batch = batchSnap.data() as { hodUid?: string; position?: string };
+
+        if (batch.hodUid) {
+          await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
+            collegeId: session.collegeId,
+            toUid: batch.hodUid,
+            type: status === "APPROVED" ? "HIRING_APPROVED" : "HIRING_REJECTED",
+            title: status === "APPROVED" ? "Candidate Approved" : "Candidate Rejected",
+            message: `${candidateData.name ?? "A candidate"} for ${batch.position ?? "the position"} was ${status === "APPROVED" ? "approved" : "rejected"} by the Principal.`,
+            link: `/hod/batches/${candidateData.batchId}`,
+            read: false,
+            createdAt: now,
+          });
+        }
+
+        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+          collegeId: session.collegeId,
+          action: "HIRING_DECISION_MADE",
+          performedBy: session.uid,
+          performedByName: actorName,
+          targetId: id,
+          details: { status, batchId: candidateData.batchId },
+          timestamp: now,
+        });
+
+        const siblingsSnap = await db
+          .collection("colleges")
+          .doc(session.collegeId)
+          .collection("candidates")
+          .where("batchId", "==", candidateData.batchId)
+          .get();
+        const allDecided = siblingsSnap.docs.every((d) => {
+          if (d.id === id) return true; // just decided above
+          const s = (d.data() as { status?: string }).status;
+          return s === "APPROVED" || s === "REJECTED";
+        });
+        if (allDecided) {
+          await batchRef.update({ currentPhase: "COMPLETED", status: "COMPLETED", updatedAt: now });
+        }
+      }
+    }
+
+    // Documents verified → candidate ready for the HOD to send the offer letter
+    if (stage === "DECISION" && status !== "REJECTED") {
+      const batchIdForNotif = candidateData.batchId;
+      const hodUidForNotif = batchIdForNotif
+        ? ((await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(batchIdForNotif).get())
+            .data() as { hodUid?: string } | undefined)?.hodUid
+        : undefined;
+      if (hodUidForNotif) {
+        await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
+          collegeId: session.collegeId,
+          toUid: hodUidForNotif,
+          type: "GENERAL",
+          title: "Candidate Ready for Offer",
+          message: `${candidateData.name ?? "A candidate"}'s documents are verified. Please send the offer letter.`,
+          link: `/hod/offers/new`,
+          read: false,
+          createdAt: now,
+        });
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

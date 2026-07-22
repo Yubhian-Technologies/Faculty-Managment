@@ -130,11 +130,12 @@ export interface Candidate {
 
 // ─── Hiring Batch Phase ───────────────────────────────────────────────────────
 
+// A batch is created directly at PRINCIPAL_REVIEW (the HOD has already
+// collected candidates and set up the panel before submitting) and only
+// moves forward from there — there is no pre-batch "collection"/"setup"
+// phase in the data model.
 export type BatchPhase =
-  | "CANDIDATE_COLLECTION"    // HOD collecting & shortlisting candidates
-  | "PANEL_SETUP"             // HOD setting panel members, date, batch submitted
   | "PRINCIPAL_REVIEW"        // Awaiting principal approval
-  | "COLLEGE_OFFICE_SETUP"    // College office setting venue + required documents
   | "HOD_FINAL_SETUP"         // HOD assigning demo classroom + coordinator
   | "INTERVIEW_READY"         // All setup done, ready for interview day
   | "IN_PROGRESS"             // Demo day happening; coordinator runs QR session
@@ -143,10 +144,7 @@ export type BatchPhase =
   | "COMPLETED";              // Batch closed, offer/appointment letters issued
 
 export const BATCH_PHASE_LABELS: Record<BatchPhase, string> = {
-  CANDIDATE_COLLECTION: "Collecting Candidates",
-  PANEL_SETUP: "Panel Setup",
   PRINCIPAL_REVIEW: "Principal Review",
-  COLLEGE_OFFICE_SETUP: "Office Setup",
   HOD_FINAL_SETUP: "Final HOD Setup",
   INTERVIEW_READY: "Ready for Interview",
   IN_PROGRESS: "Demo In Progress",
@@ -255,34 +253,6 @@ export interface HRFeedback {
   recommendation: "ACCEPT" | "REJECT" | "MAYBE";
   comments?: string;
   submittedAt: Timestamp;
-}
-
-// ─── Hiring Salary Agreement (collection: hiringSalaryAgreements) ─────────────
-// The salary negotiated at end of recruitment — distinct from monthly payroll
-
-export interface HiringSalaryAgreement {
-  id: string;
-  collegeId: string;
-  candidateId: string;
-  batchId: string;
-  candidateName: string;
-  agreedMonthly: number;
-  agreedAnnual: number;
-  breakdown: {
-    basic: number;
-    hra: number;
-    da: number;
-    ta: number;
-    medicalAllowance: number;
-    otherAllowances: number;
-    pf: number;
-    professionalTax: number;
-    tds: number;
-  };
-  negotiatedBy: string;
-  negotiatedByUid: string;
-  agreedAt: Timestamp;
-  createdAt: Timestamp;
 }
 
 // ─── Hiring Document Verification (collection: hiringDocVerifications) ─────────

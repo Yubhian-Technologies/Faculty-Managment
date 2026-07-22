@@ -3,10 +3,11 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { provisionFacultyFromOffer } from "@/lib/firestore/facultyProvisioning";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "ACCOUNTS", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get("batchId");
     const candidateId = searchParams.get("candidateId");
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("ACCOUNTS", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       candidateId: string;
       batchId: string;
@@ -51,10 +52,15 @@ export async function POST(request: Request) {
       joiningDate: string;
       ctcAnnual: number;
       subjects?: string[];
+      facultyEmail: string;
+      facultyPassword: string;
     };
 
-    const { candidateId, batchId, candidateName, designation, department, joiningDate, ctcAnnual } = body;
-    if (!candidateId || !batchId || !designation || !department || !joiningDate || !ctcAnnual) {
+    const {
+      candidateId, batchId, candidateName, designation, department, joiningDate, ctcAnnual,
+      facultyEmail, facultyPassword,
+    } = body;
+    if (!candidateId || !batchId || !designation || !department || !joiningDate || !ctcAnnual || !facultyEmail || !facultyPassword) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -77,7 +83,8 @@ export async function POST(request: Request) {
       joiningDate: new Date(joiningDate),
       ctcAnnual,
       subjects: body.subjects ?? [],
-      status: "DRAFT",
+      // No separate draft/review step — HOD sends the offer in the same action.
+      status: "SENT",
       generatedBy: actorName,
       generatedByUid: session.uid,
       generatedAt: now,
@@ -87,26 +94,31 @@ export async function POST(request: Request) {
 
     await docRef.set(letter);
 
-    // Notify candidate's HOD
+    const provisioning = await provisionFacultyFromOffer(db, session.collegeId, docRef.id, {
+      email: facultyEmail,
+      password: facultyPassword,
+    });
+
+    // Notify candidate's HOD (e.g. Principal/VP sending on the HOD's behalf)
     const batchSnap = await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(batchId).get();
     if (batchSnap.exists) {
       const batch = batchSnap.data() as { hodUid?: string; position?: string };
-      if (batch.hodUid) {
+      if (batch.hodUid && batch.hodUid !== session.uid) {
         const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
         await notifRef.set({
           collegeId: session.collegeId,
           toUid: batch.hodUid,
           type: "OFFER_LETTER_CREATED",
-          title: "Offer Letter Created",
-          message: `An offer letter has been drafted for ${candidateName} (${batch.position ?? designation}).`,
-          link: `/accounts/offers`,
+          title: "Offer Letter Sent",
+          message: `An offer letter has been sent to ${candidateName} (${batch.position ?? designation}).`,
+          link: `/hod/offers`,
           read: false,
           createdAt: now,
         });
       }
     }
 
-    return NextResponse.json({ id: docRef.id, ok: true });
+    return NextResponse.json({ id: docRef.id, ok: true, provisioning });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
