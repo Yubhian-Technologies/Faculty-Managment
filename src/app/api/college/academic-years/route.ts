@@ -5,29 +5,13 @@ import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { ensureAcademicYear, yearOrdinalLabel } from "@/lib/college/academicYears";
 
-// ADMINISTRATION (LOCATION-scoped) manages this for colleges in its own location;
-// PRINCIPAL manages it for their own college; SUPER_ADMIN for any college.
-// requireCollegeContext resolves collegeId from the session (Principal) or the
-// `?collegeId=` query param (Administration/Super Admin, who carry no collegeId).
-async function assertCollegeInScope(
-  db: FirebaseFirestore.Firestore,
-  collegeId: string,
-  role: string,
-  locationId: string
-): Promise<boolean> {
-  if (role !== "ADMINISTRATION") return true;
-  const snap = await db.collection("colleges").doc(collegeId).get();
-  return (snap.data() as { locationId?: string } | undefined)?.locationId === locationId;
-}
-
+// PRINCIPAL manages this for their own college; SUPER_ADMIN for any college
+// (via `?collegeId=`). requireCollegeContext resolves collegeId from the
+// session (Principal) or the query param (Super Admin, who carries no collegeId).
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "ADMINISTRATION", "PRINCIPAL", "HOD");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "HOD");
     const db = getAdminDb();
-
-    if (!(await assertCollegeInScope(db, session.collegeId, session.role, session.locationId))) {
-      return NextResponse.json({ error: "College not in your location" }, { status: 403 });
-    }
 
     const snap = await db
       .collection("colleges")
@@ -52,12 +36,8 @@ export async function GET(request: Request) {
 // appends the next one, keeping the sequence gap-free.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "ADMINISTRATION", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
     const db = getAdminDb();
-
-    if (!(await assertCollegeInScope(db, session.collegeId, session.role, session.locationId))) {
-      return NextResponse.json({ error: "College not in your location" }, { status: 403 });
-    }
 
     const existingSnap = await db
       .collection("colleges")
@@ -82,12 +62,8 @@ export async function POST(request: Request) {
 // sequence gap-free — blocked if any Section already exists for that year.
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "ADMINISTRATION", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
     const db = getAdminDb();
-
-    if (!(await assertCollegeInScope(db, session.collegeId, session.role, session.locationId))) {
-      return NextResponse.json({ error: "College not in your location" }, { status: 403 });
-    }
 
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const existingSnap = await collegeRef.collection("academicYears").get();

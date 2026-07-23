@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, ChevronDown, ChevronUp, Plus, CalendarRange, CalendarDays } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -99,22 +99,6 @@ export default function AdministrationCollegesPage() {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push(`/administration/colleges/${college.id}/academic-years`)}
-                  >
-                    <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
-                    Academic Years
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push(`/administration/colleges/${college.id}/academic-sessions`)}
-                  >
-                    <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-                    Academic Sessions
-                  </Button>
                   {showAddBtn && (
                     <Button
                       size="sm"
