@@ -73,8 +73,14 @@ export default function PrincipalStaffPage() {
   useEffect(() => { void load(roleFilter); }, [roleFilter]);
 
   const visibleUsers = users.filter((u) => {
+    // PANEL_MEMBER rows are faculty granted a login for interview-panel duty
+    // (via "Set Login" on the Faculty page) — their real details live in
+    // facultyMembers, not here. This page manages HOD/VP/College Office staff.
+    if ((u.role as string) === "PANEL_MEMBER") return false;
     if (statusFilter === "all") return true;
-    const active = u.isActive as boolean;
+    // Only an explicit `false` counts as deactivated — records with no
+    // isActive field at all (older/manually-created docs) are active by default.
+    const active = u.isActive !== false;
     return statusFilter === "active" ? active : !active;
   });
 
