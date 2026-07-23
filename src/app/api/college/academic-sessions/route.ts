@@ -4,29 +4,13 @@ import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// Same scope pattern as college/academic-years: ADMINISTRATION (LOCATION-scoped)
-// manages this for colleges in its own location; PRINCIPAL for their own college;
-// SUPER_ADMIN for any college. requireCollegeContext resolves collegeId from the
-// session (Principal) or the `?collegeId=` query param (Administration/Super Admin).
-async function assertCollegeInScope(
-  db: FirebaseFirestore.Firestore,
-  collegeId: string,
-  role: string,
-  locationId: string
-): Promise<boolean> {
-  if (role !== "ADMINISTRATION") return true;
-  const snap = await db.collection("colleges").doc(collegeId).get();
-  return (snap.data() as { locationId?: string } | undefined)?.locationId === locationId;
-}
-
+// PRINCIPAL/VICE_PRINCIPAL/HOD manage this for their own college; SUPER_ADMIN
+// for any college (via `?collegeId=`). requireCollegeContext resolves collegeId
+// from the session (Principal) or the query param (Super Admin).
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "ADMINISTRATION", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
     const db = getAdminDb();
-
-    if (!(await assertCollegeInScope(db, session.collegeId, session.role, session.locationId))) {
-      return NextResponse.json({ error: "College not in your location" }, { status: 403 });
-    }
 
     const snap = await db
       .collection("colleges")
@@ -48,7 +32,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "ADMINISTRATION", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
     const body = (await request.json()) as { label?: string; isCurrent?: boolean };
     const label = body.label?.trim();
 
@@ -57,9 +41,6 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
-    if (!(await assertCollegeInScope(db, session.collegeId, session.role, session.locationId))) {
-      return NextResponse.json({ error: "College not in your location" }, { status: 403 });
-    }
 
     const collection = db.collection("colleges").doc(session.collegeId).collection("academicSessions");
     const existing = await collection.where("label", "==", label).limit(1).get();
@@ -97,7 +78,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "ADMINISTRATION", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
     const body = (await request.json()) as { id?: string; isCurrent?: boolean };
 
     if (!body.id) {
@@ -105,9 +86,6 @@ export async function PATCH(request: Request) {
     }
 
     const db = getAdminDb();
-    if (!(await assertCollegeInScope(db, session.collegeId, session.role, session.locationId))) {
-      return NextResponse.json({ error: "College not in your location" }, { status: 403 });
-    }
 
     const collection = db.collection("colleges").doc(session.collegeId).collection("academicSessions");
     const ref = collection.doc(body.id);
@@ -142,7 +120,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "ADMINISTRATION", "PRINCIPAL");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) {
@@ -150,9 +128,6 @@ export async function DELETE(request: Request) {
     }
 
     const db = getAdminDb();
-    if (!(await assertCollegeInScope(db, session.collegeId, session.role, session.locationId))) {
-      return NextResponse.json({ error: "College not in your location" }, { status: 403 });
-    }
 
     await db.collection("colleges").doc(session.collegeId).collection("academicSessions").doc(id).delete();
     return NextResponse.json({ ok: true });
