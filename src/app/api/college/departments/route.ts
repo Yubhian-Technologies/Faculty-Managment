@@ -63,6 +63,15 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
+    // Keep the HOD's own profile department in sync — faculty-requirement
+    // and other HOD-scoped routes resolve department from their user doc,
+    // not from the department's hodUid pointer.
+    if (hodUid) {
+      await db.collection("colleges").doc(collegeId).collection("users").doc(hodUid)
+        .update({ department: name.trim(), updatedAt: now })
+        .catch(() => {});
+    }
+
     await db
       .collection("colleges")
       .doc(collegeId)
@@ -159,12 +168,27 @@ export async function PATCH(request: Request) {
       }
     }
 
-    await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("departments")
-      .doc(deptId)
-      .update({ ...updates, updatedAt: new Date() });
+    const deptRef = db.collection("colleges").doc(session.collegeId).collection("departments").doc(deptId);
+    const now = new Date();
+
+    // Keep the outgoing/incoming HOD's own profile department in sync with
+    // the assignment — faculty-requirement and other HOD-scoped routes
+    // resolve department from their user doc, not from hodUid.
+    if (updates.hodUid !== undefined) {
+      const deptSnap = await deptRef.get();
+      const prev = deptSnap.data() as { hodUid?: string; name?: string } | undefined;
+      const finalName = updates.name?.trim() ?? prev?.name ?? "";
+      const usersColl = db.collection("colleges").doc(session.collegeId).collection("users");
+
+      if (prev?.hodUid && prev.hodUid !== updates.hodUid) {
+        await usersColl.doc(prev.hodUid).update({ department: "", updatedAt: now }).catch(() => {});
+      }
+      if (updates.hodUid) {
+        await usersColl.doc(updates.hodUid).update({ department: finalName, updatedAt: now }).catch(() => {});
+      }
+    }
+
+    await deptRef.update({ ...updates, updatedAt: now });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
