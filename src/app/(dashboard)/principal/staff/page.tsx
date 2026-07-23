@@ -97,8 +97,8 @@ export default function PrincipalStaffPage() {
     setDownloadingResumeUid(user.uid);
     try {
       await downloadResumePdf({ ...user, collegeName }, (user.employeeId as string) || user.name);
-    } catch {
-      toast({ variant: "destructive", title: "Failed to generate resume" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
       setDownloadingResumeUid(null);
     }

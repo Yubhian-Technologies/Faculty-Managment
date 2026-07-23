@@ -105,8 +105,8 @@ export default function HODFacultyPage() {
         teachingAssignments = taData.assignments ?? [];
       } catch { /* non-critical — resume still generates without the live teaching-load table */ }
       await downloadResumePdf({ ...row, teachingAssignments, collegeName }, (row.employeeId as string) || (row.name as string));
-    } catch {
-      toast({ variant: "destructive", title: "Failed to generate resume" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
       setDownloadingResumeId(null);
     }
