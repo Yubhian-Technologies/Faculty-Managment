@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import { toCSV, parseCSV, downloadCSV } from "@/lib/utils/csv";
+import { toCSV, parseCSV, downloadCSV, matchHeaders } from "@/lib/utils/csv";
 import { COLUMNS, HINTS } from "@/lib/faculty/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
@@ -44,13 +44,9 @@ export default function FacultyImportPage() {
         if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
 
         const headers = parsed[0].map((h) => h.trim());
-        // Map header labels to column keys
-        const colKeys = COLUMNS.map((c) => c.label);
-        const keyMap: Record<number, string> = {};
-        headers.forEach((h, i) => {
-          const col = COLUMNS.find((c) => c.label.toLowerCase() === h.toLowerCase());
-          if (col) keyMap[i] = col.key;
-        });
+        // Map header labels to column keys — tolerant of case, punctuation, spacing,
+        // and common alternate wording (e.g. "DOJ" for "Joining Date").
+        const keyMap = matchHeaders(headers, COLUMNS);
 
         const dataRows = parsed.slice(1).map((cells) => {
           const row: ParsedRow = {};
@@ -58,19 +54,21 @@ export default function FacultyImportPage() {
             if (keyMap[i]) row[keyMap[i]] = val;
           });
           return row;
-        }).filter((r) => r.employeeId || r.name); // skip blank rows
+        }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
 
         if (dataRows.length === 0) { setParseError("No data rows found after the header."); return; }
         if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
 
-        // Warn about unmapped columns
         const mappedCount = Object.keys(keyMap).length;
-        if (mappedCount < 3) {
-          setParseError(`Only ${mappedCount} column(s) matched. Make sure you're using the downloaded template headers.`);
+        if (mappedCount === 0) {
+          setParseError("None of the columns in this file matched the template. Download the template above and copy your data into it.");
+          return;
+        }
+        if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("name")) {
+          setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
           return;
         }
 
-        void colKeys; // suppress unused warning
         setRows(dataRows);
       } catch {
         setParseError("Failed to parse the file. Ensure it is a valid CSV.");

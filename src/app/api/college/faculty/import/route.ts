@@ -190,7 +190,7 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
       internationalFiled: num(row.patentInternationalFiled) ?? 0,
       internationalPublished: num(row.patentInternationalPublished) ?? 0,
       internationalGranted: num(row.patentInternationalGranted) ?? 0,
-      details: row.patentDetails?.trim() || undefined,
+      details: row.patentDetails?.trim() ?? "",
     },
     phdScholarsPursuing: (num(row.phdScholarsPursuingCount) || row.phdScholarsPursuingUniversities?.trim())
       ? { count: num(row.phdScholarsPursuingCount) ?? 0, universities: row.phdScholarsPursuingUniversities?.trim() ?? "" }

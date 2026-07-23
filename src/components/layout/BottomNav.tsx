@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
-import { BOTTOM_NAV_ITEMS, type NavItem } from "./navConfig";
+import { BOTTOM_NAV_ITEMS, isNavItemActive, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useUIStore } from "@/store/uiStore";
@@ -37,9 +37,7 @@ export function BottomNav() {
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background border-t safe-area-pb">
       <div className="flex items-stretch h-16">
         {items.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(item.href + "/"));
+          const isActive = isNavItemActive(item, pathname, items);
           return (
             <Link
               key={item.href}
