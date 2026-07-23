@@ -146,8 +146,8 @@ export default function UsersPage() {
     try {
       const collegeName = colleges.find((c) => c.id === user.collegeId)?.name ?? "";
       await downloadResumePdf({ ...user, collegeName }, (user.employeeId as string) || (user.name as string));
-    } catch {
-      toast({ variant: "destructive", title: "Failed to generate resume" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
       setDownloadingResumeUid(null);
     }
