@@ -8,31 +8,34 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate } from "@/lib/utils";
 import type { BudgetRequest } from "@/types";
+
+type Row = BudgetRequest & { collegeId: string; collegeName: string };
 
 // Non-Goods emergency requests Finance has already approved — Finance can attach a
 // report here (any file form) for the requesting Principal/VP to view. Goods requests
 // don't appear: they continue into the existing Purchase Clearance pipeline instead.
 export function EmergencyReportUpload() {
-  const [requests, setRequests] = useState<BudgetRequest[]>([]);
+  const [requests, setRequests] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   function load() {
     setIsLoading(true);
-    collegeFetch("/api/college/budget-requests?status=FINANCE_APPROVED")
-      .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
-      .then((d) => setRequests((d.requests ?? []).filter((r) => r.isEmergency && r.emergencyType === "NON_GOODS")))
+    // FINANCE is a GLOBAL role overseeing every college — fan out across all
+    // of them instead of whichever college the sidebar has "selected".
+    fetch("/api/finance/budget-requests/overview?status=FINANCE_APPROVED&isEmergency=true")
+      .then((r) => r.json() as Promise<{ requests: Row[] }>)
+      .then((d) => setRequests((d.requests ?? []).filter((r) => r.emergencyType === "NON_GOODS")))
       .catch(() => toast({ variant: "destructive", title: "Failed to load emergency requests" }))
       .finally(() => setIsLoading(false));
   }
 
   useEffect(() => { load(); }, []);
 
-  async function handleFileChosen(request: BudgetRequest, file: File | undefined) {
+  async function handleFileChosen(request: Row, file: File | undefined) {
     if (!file) return;
     setUploadingId(request.id);
     try {
@@ -45,7 +48,7 @@ export function EmergencyReportUpload() {
       }
       const { url, fileName } = (await uploadRes.json()) as { url: string; fileName: string };
 
-      const patchRes = await collegeFetch(`/api/college/budget-requests/${request.id}`, {
+      const patchRes = await fetch(`/api/college/budget-requests/${request.id}?collegeId=${encodeURIComponent(request.collegeId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reportFileUrl: url, reportFileName: fileName }),
@@ -95,7 +98,7 @@ export function EmergencyReportUpload() {
                       Emergency · Non-Goods
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">{item.title} — requested by {item.hodName} on {formatDate(item.createdAt)}</p>
+                  <p className="text-xs text-muted-foreground">{item.title} · {item.collegeName} — requested by {item.hodName} on {formatDate(item.createdAt)}</p>
                 </div>
               </div>
             </CardHeader>
