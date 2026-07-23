@@ -69,7 +69,7 @@ export default function NewVacancyPage() {
   useEffect(() => {
     setReqLoading(true);
     fetch("/api/college/faculty-requirement")
-      .then((r) => r.json() as Promise<FacultyRequirementResult>)
+      .then(async (r) => (r.ok ? (r.json() as Promise<FacultyRequirementResult>) : null))
       .then((d) => setRequirement(d))
       .catch(() => {})
       .finally(() => setReqLoading(false));
