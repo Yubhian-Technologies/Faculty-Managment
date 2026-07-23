@@ -4,7 +4,7 @@ This traces the *actual* recruitment flow as implemented (not as the type names 
 
 | Pipeline | Tenancy | Where it lives | Complexity |
 |---|---|---|---|
-| **A. College pipeline** | `colleges/{id}/...` | `src/app/api/college/...`, dashboards `hod`, `principal`, `college-office`, `coordinator`, `panel`, `accounts` | Full 9-stage `HiringBatch` workflow — the primary flow, covered in detail below |
+| **A. College pipeline** | `colleges/{id}/...` | `src/app/api/college/...`, dashboards `hod`, `principal`, `college-office`, `coordinator`, `panel` | Full 9-stage `HiringBatch` workflow — the primary flow, covered in detail below |
 | **B. Location pipeline** | `locations/{id}/...` | `src/app/api/location/...`, dashboards `location-dept-head`, `hr-admin`, `administration` | Simpler 3-role linear approval chain, no batches/panel-scoring machinery |
 | **C. General Admin pipeline** | global | `src/app/api/admin/general-admin-vacancies/...` | Single-step Vice Principal → Super Admin approval, no candidates/interviews |
 
@@ -57,13 +57,13 @@ This traces the *actual* recruitment flow as implemented (not as the type names 
 12. **Anonymous student feedback** — `/feedback/[collegeId]/[batchId]/[candidateId]` (public, no auth), 5-criteria star rating → `POST /api/public/student-feedback`.
     - A legacy 2-segment route `/feedback/[id]/[sub]` still exists but posts without `collegeId`, which the API requires — it is orphaned/broken and nothing links to it anymore.
 
-### Stage 6 — Panel Scoring, HR Feedback, Salary Negotiation, Document Verification
+### Stage 6 — Panel Scoring, HR Feedback, Document Verification
 
 13. **HOD reopens scoring** — "Open Panel Scoring" → `PATCH hiring-batches/[id]` `{currentPhase: "PANEL_INTERVIEW"}`, notifying all panel members.
 14. **Panel members score candidates** — `panel/interviews/[id]` (scoring allowed only when `currentPhase ∈ {PANEL_INTERVIEW, PRINCIPAL_FINAL_REVIEW, COMPLETED}`): rates `technicalKnowledge/communicationSkills/teachingMethodology` (1–5) + `recommendation: ACCEPT|REJECT|MAYBE` → `POST /api/college/panel-feedback` (upsert, one doc per panelist+candidate). HOD, if also on the panel, uses the same endpoint via an inline form on their own batch page.
 15. **HR feedback** — a working endpoint (`POST /api/college/hr-feedback`, "HOD acts as HR in this flow" per guard comment) exists, but **no page in the app calls it** — it's a dead-end capability with no reachable submission form.
-16. **Salary negotiation** — role **ACCOUNTS** (`accounts/salary/new`) picks a completed/final-review batch and a `DECISION`-stage candidate, enters a salary breakdown → `POST /api/college/salary-records`, writing a `HiringSalaryAgreement` and re-confirming `candidate.currentStage: "DECISION"`.
-17. **Document verification** — the dedicated `HiringDocVerification` type/collection is **entirely unused** (no route, no UI). What actually runs is ad-hoc via `Candidate.currentStage`/`status`: `college-office/documents` shows a checklist built from `batch.requiredDocuments` and, on "Mark Verified & Proceed", `PATCH candidates/[id]` `{stage: "DECISION", status: "IN_PROGRESS"}`. A second, redundant page (`college-office/candidates`) does the same transition without any checklist.
+16. **Document verification** — the dedicated `HiringDocVerification` type/collection is **entirely unused** (no route, no UI). What actually runs is ad-hoc via `Candidate.currentStage`/`status`: `college-office/documents` shows a checklist built from `batch.requiredDocuments` and, on "Mark Verified & Proceed", `PATCH candidates/[id]` `{stage: "DECISION", status: "IN_PROGRESS"}`. A second, redundant page (`college-office/candidates`) does the same transition without any checklist.
+    - There is no salary-negotiation step anymore — CTC is set directly on the offer letter in Stage 8.
 
 ### Stage 7 — Principal Final Decision
 
@@ -73,17 +73,21 @@ This traces the *actual* recruitment flow as implemented (not as the type names 
     - Once every candidate in the batch has a decision, the client also fires `PATCH hiring-batches/[id]` `{currentPhase: "COMPLETED", status: "COMPLETED"}` — this completion check is **client-side only**; closing the tab mid-way can leave a batch stuck without ever reaching `COMPLETED`.
     - The UI says "the College Office will be notified" on approve, but no notification actually fires for this status/stage change.
 
-### Stage 8 — Offer Letter, Appointment Letter, Faculty Provisioning
+### Stage 8 — Offer Letter + Faculty Provisioning (moved to HOD, single-step)
 
-20. **Offer letter** — role **ACCOUNTS** (`accounts/offers/new`) picks a `DECISION`-stage candidate with a signed salary agreement, sets designation/department/joining date → `POST /api/college/offer-letters` (also allowed for `PRINCIPAL, VICE_PRINCIPAL, SUPER_ADMIN`). Created as `status: "DRAFT"`.
-21. **Status progression** (`accounts/offers`): DRAFT → "Mark as Sent" → SENT → Accept/Reject or "Create Faculty Account".
-    - **PDF generation and email are built but never invoked** for this flow: `src/lib/pdf/offerLetterTemplate.ts` + the generic `/api/pdf/generate` route support `OFFER_LETTER`/`APPOINTMENT_LETTER`, and `/api/email/send` has an offer-letter template — but nothing in the offer pages calls either. `OfferLetter.pdfUrl` is never populated; it's a pure status record.
-    - **`AppointmentLetter` is completely unused** — no route ever creates one, despite the type and a template function existing.
-22. **Faculty provisioning** (the one fully-automated step) — triggered by marking an offer `SENT` (or via the separate idempotent `POST offer-letters/[id]/provision` endpoint, kept for offers marked SENT before auto-provisioning existed):
-    - Creates a **Firebase Auth user** with a **hardcoded default password (`12345678`)**; falls back to an existing `systemUsers` doc by email if the auth account already exists.
-    - Writes a `colleges/{id}/users/{uid}` login doc with **`role: "PANEL_MEMBER"`** (labeled "Faculty" in `ROLE_LABELS` — this is the system's generic teaching-staff role, not literally interview-panel duty).
-    - Creates the `facultyMembers/{new}` doc (`status: "ACTIVE"`, auto-incrementing `employeeId`), carrying over `pendingTeachingPreference` from the candidate's `courseId/year/preferredSubjectIds` **only if both were captured back at candidate-creation time** (Stage 2).
-    - When the offer is later marked `ACCEPTED`, `candidate.status` is independently set to `"APPROVED"` again — a second write on top of the Principal's Stage 7 decision.
+> **Updated**: this stage no longer lives under `accounts/` — `accounts/offers`, `accounts/salary`, and `POST /api/college/salary-records` were removed. Offer creation and faculty-login provisioning now happen together in one HOD action; there is no separate salary-negotiation record or DRAFT status.
+
+19. **Send offer letter** — role **HOD** (also PRINCIPAL/VICE_PRINCIPAL/SUPER_ADMIN) at `hod/offers/new`, reachable standalone or deep-linked from the pipeline board's "Send Offer Letter" button (`?batchId=`). Picks a finalized batch (`COMPLETED` or `PRINCIPAL_FINAL_REVIEW`) and a `DECISION`-stage candidate not yet offered, sets designation/department/joining date/CTC/subjects, **plus the faculty's login email and password directly in the same form** (password field has a dice-roll "generate" button using a client-side `randomPassword()`).
+    → `POST /api/college/offer-letters` creates the letter with `status: "SENT"` immediately (no DRAFT step) and, in the same request, calls `provisionFacultyFromOffer()` with the HOD-supplied `{email, password}` — so the offer and the login are created atomically from the caller's perspective.
+20. **List / status progression** (`hod/offers`): shows Sent/Accepted/Rejected counts; each row can Download PDF, Email Candidate, Retry Faculty Account (idempotent, for offers that predate this flow or whose provisioning failed), or Mark Accepted/Rejected.
+    - Marking `ACCEPTED` independently re-sets `candidate.status: "APPROVED"` — a second write on top of the Principal's Stage 7 decision (unchanged behavior from before).
+    - PDF generation is now actually wired up client-side: `src/lib/pdf/downloadOfferLetter.ts` renders `offerLetterTemplate.ts` in-browser (no server round-trip to `/api/pdf/generate`). Email is also wired: "Email Candidate" calls `/api/email/send` with `type: "OFFER_LETTER"`.
+    - `AppointmentLetter` remains completely unused — no route ever creates one.
+21. **Faculty provisioning** — `src/lib/firestore/facultyProvisioning.ts`, shared by the offer-letters POST (HOD supplies credentials) and the manual idempotent `POST offer-letters/[id]/provision` retry endpoint (falls back to the candidate's own email + a **server-generated random password** — `randomBytes(9)`, not a hardcoded default anymore):
+    - Creates a **Firebase Auth user**; on `auth/email-already-exists`, falls back to the existing `systemUsers` doc by email instead of failing.
+    - Writes a `colleges/{id}/users/{uid}` login doc with **`role: "PANEL_MEMBER"`** (labeled "Faculty" in `ROLE_LABELS`) and a matching `systemUsers/{uid}` doc.
+    - Creates the `facultyMembers/{new}` doc (`status: "ACTIVE"`, auto-incrementing `employeeId` via a `.count()` query), carrying over `pendingTeachingPreference` from the candidate's `courseId/year/preferredSubjectIds` **only if both were captured back at candidate-creation time** (Stage 2).
+    - The retry endpoint's generated password is shown to the HOD **once**, in a "will not be shown again" dialog on `hod/offers` — it is not stored or emailed automatically.
 
 ---
 
@@ -123,10 +127,9 @@ For institution-wide, non-departmental hiring (e.g. admin staff), submitted dire
 | `PATCH /api/college/hiring-batches/[id]` | Mega-endpoint: Principal approve/reject, Office venue+docs, HOD setup+coordinator, demo-complete, all phase transitions | Principal, VP, HOD, Super Admin, College Office, Panel Member |
 | `POST /api/college/panel-feedback` | Upsert panel scoring | Principal, VP, HOD, Super Admin, Panel Member |
 | `POST /api/college/hr-feedback` | "HR" assessment (no UI calls it) | HOD, Principal, VP, Super Admin |
-| `POST /api/college/salary-records` | Hiring salary agreement | Accounts, HOD, Principal, VP, Super Admin |
-| `POST /api/college/offer-letters` | Create draft offer | Accounts, Principal, VP, Super Admin |
-| `PATCH /api/college/offer-letters/[id]` | Status changes; SENT auto-provisions faculty | Accounts, Principal, VP, Super Admin |
-| `POST /api/college/offer-letters/[id]/provision` | Manual/idempotent faculty provisioning | Accounts, Principal, VP, Super Admin |
+| `POST /api/college/offer-letters` | Create + send offer, provisions faculty login in the same request | HOD, Principal, VP, Super Admin |
+| `PATCH /api/college/offer-letters/[id]` | Accept/reject | HOD, Principal, VP, Super Admin |
+| `POST /api/college/offer-letters/[id]/provision` | Manual/idempotent faculty provisioning retry | HOD, Principal, VP, Super Admin |
 | `POST /api/public/student-feedback` | Anonymous demo feedback | none (public) |
 
 ---
@@ -136,7 +139,66 @@ For institution-wide, non-departmental hiring (e.g. admin staff), submitted dire
 - `BatchPhase` values `CANDIDATE_COLLECTION`, `PANEL_SETUP`, `COLLEGE_OFFICE_SETUP` are declared in the type but never actually written by any route — real phase sequence is `PRINCIPAL_REVIEW → HOD_FINAL_SETUP → INTERVIEW_READY → IN_PROGRESS → PANEL_INTERVIEW → PRINCIPAL_FINAL_REVIEW → COMPLETED`.
 - HR feedback (`HRFeedback`) has a working API but no reachable UI form.
 - `HiringDocVerification` type/collection is fully unused; document verification is done ad-hoc via `Candidate.currentStage`/`status`, duplicated across two College Office pages.
-- Offer/appointment letter PDF generation and email sending are implemented but never called; `AppointmentLetter` is never created.
+- `AppointmentLetter` type/template exist but no route ever creates one.
 - Batch completion (`currentPhase: "COMPLETED"`) is a client-side check, not server-enforced — can get stuck if the browser closes mid-decision.
-- Faculty provisioning sets a hardcoded default password (`12345678`) for new Firebase Auth accounts.
 - A legacy 2-segment public feedback route (`/feedback/[id]/[sub]`) is broken against the current API contract and unreachable from the app.
+- Salary negotiation as a distinct recorded step is gone (`accounts/salary`, `HiringSalaryAgreement`, `POST /api/college/salary-records` all removed) — CTC is now just a field on the offer letter itself, set by whoever sends it.
+
+---
+
+## Budget & Indent/Purchase-Clearance Workflow
+
+Separate module, same tenancy (`colleges/{collegeId}/...`). Newest and most-iterated part of the codebase — see `src/types/budget.ts` / `src/types/indent.ts` / `src/types/finance.ts` for the full shapes.
+
+### Budget proposal (HOD → Principal → Finance)
+
+`colleges/{collegeId}/budgetRequests/{id}` — one composite department proposal per submission (not one request per line item).
+
+```
+HOD submits                    → PENDING_PRINCIPAL_VERIFICATION
+  Principal/VP: VERIFY         → L1_FROZEN
+     Finance: APPROVE          → FINANCE_APPROVED  (creates FinanceBudget + auto-creates a linked
+                                                      financePurchaseClearance, unless emergency/Non-Goods)
+     Finance: REJECT           → FINANCE_REJECTED   (terminal)
+     Finance: RETURN           → RETURNED_TO_HOD    (HOD edits, resubmits)
+  Principal/VP: REJECT         → PRINCIPAL_REJECTED (terminal)
+  Principal/VP: RETURN         → RETURNED_TO_HOD    (HOD edits, resubmits)
+```
+
+- **HOD** (`hod/budget`) builds the request from `nonRecurring`/`recurring` category groups (Lab Equipment, Furniture, Staff Salaries, Workshops, etc. — Annexure-2-style), each item carrying category-specific fields (`CATEGORY_FIELD_CONFIG`) plus optional ad-hoc custom fields per item. Totals roll up `item → category group → section → request` (`src/types/budget.ts`).
+- **Principal/VP** (`principal/budget`, `principal/budget/report`) verify/reject/return, and view the Annexure-2 department rollup.
+- **Finance** (`finance/budget-approvals` to approve/reject/return at `L1_FROZEN`; `finance/budget` for the resulting `FinanceBudget` ledger; `finance/budget/report` for the rollup) — the approval PATCH runs in a Firestore transaction with a fresh status re-read to prevent double-approval races.
+- Every transition writes `history[]`, an `AuditLog` entry, and notifies the next role. API: `src/app/api/college/budget-requests/route.ts` (list/create) + `[id]/route.ts` (the state machine).
+- **Known gap**: no data-migration script for the (twice-changed) `BudgetRequest` shape — `normalizeBudgetRequest()` defensively defaults missing arrays so old docs don't crash the UI, but pre-restructure requests render empty and need re-entry.
+
+### Indent / Purchase Clearance (procurement that follows an approved budget)
+
+Two parallel, same-shape flows: `colleges/{collegeId}/indentRequests/{id}` (HOD raises directly against a category) and `colleges/{collegeId}/financePurchaseClearance/{id}` (raised manually by an HOD, **or** auto-created when a budget request hits `FINANCE_APPROVED` above).
+
+```
+HOD submits, category picked → GOODS: PENDING_PURCHASE_REVIEW      NON_GOODS: PENDING_FINANCE_REVIEW (skips Purchase Dept)
+  GOODS only:
+    Purchase Dept: REJECT           → REJECTED_BY_PURCHASE (terminal)
+    Purchase Dept: RETURN           → RETURNED_TO_HOD (HOD edits, resubmits)
+    Purchase Dept: SEND_TO_FINANCE  → PENDING_FINANCE_REVIEW (needs ≥3 quotations, 1 selected)
+    Finance: RETURN                 → RETURNED_TO_PURCHASE (Purchase Dept revises quotations)
+  Both branches:
+    Finance: REJECT  → REJECTED (terminal)
+    Finance: APPROVE → GOODS: APPROVED → Purchase Dept buys → HOD uploads receipt/GRN → COMPLETED
+                        NON_GOODS: COMPLETED directly
+```
+
+(`FinancePurchaseClearance` always follows the GOODS branch — it's always procurement.) Both Finance-approval PATCHes run in a transaction + fresh status re-read, same double-approval guard as the budget flow. API: `src/app/api/college/indent-requests/[id]/route.ts`, `src/app/api/college/finance-purchase-clearance/[id]/route.ts`; cross-college overview for the GLOBAL `PURCHASE_DEPT`/`FINANCE` roles at `src/app/api/purchase/indents/overview/` and `src/app/api/finance/budget-requests/overview/` (one read per college — no composite index deployed for a `collectionGroup` query yet).
+
+**Fixed bug worth knowing about**: `notifyRole()` was copy-pasted across four route files without branching on `ROLE_SCOPE` — since `FINANCE`/`PURCHASE_DEPT` profiles live in global `systemUsers`, not a college's `users` subcollection, those roles were silently never notified of new/forwarded requests. Now centralized in `src/lib/notify.ts`; any new call site for these roles should import from there.
+
+### Route reference (Budget/Indent)
+
+| Route | Purpose | Who |
+|---|---|---|
+| `POST /api/college/budget-requests` | Submit department budget proposal | HOD |
+| `PATCH /api/college/budget-requests/[id]` | Verify/reject/return (Principal), approve/reject/return (Finance) | HOD (resubmit), Principal, VP, Finance |
+| `POST/PATCH /api/college/indent-requests[/id]` | Raise/advance an indent request | HOD, Purchase Dept, Finance |
+| `POST/PATCH /api/college/finance-purchase-clearance[/id]` | Raise/advance a purchase clearance (or auto-created from an approved budget) | HOD, Purchase Dept, Finance |
+| `GET /api/purchase/indents/overview` | Cross-college indent queue | Purchase Dept (global) |
+| `GET /api/finance/budget-requests/overview` | Cross-college budget/clearance queue | Finance (global) |
