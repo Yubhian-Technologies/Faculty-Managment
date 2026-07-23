@@ -13,12 +13,13 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
 import { toast } from "@/hooks/useToast";
-import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { budgetRequestTotal, NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type BudgetRequest } from "@/types";
 
+type Row = BudgetRequest & { collegeId: string; collegeName: string };
+
 export function IncomingBudgetRequests() {
-  const [requests, setRequests] = useState<BudgetRequest[]>([]);
+  const [requests, setRequests] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
@@ -33,8 +34,11 @@ export function IncomingBudgetRequests() {
 
   function load() {
     setIsLoading(true);
-    collegeFetch("/api/college/budget-requests?status=L1_FROZEN")
-      .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
+    // FINANCE is a GLOBAL role overseeing every college — this must fan out
+    // across all of them, not just whichever college happens to be the
+    // sidebar's currently "selected" one (see /api/finance/budget-requests/overview).
+    fetch("/api/finance/budget-requests/overview?status=L1_FROZEN")
+      .then((r) => r.json() as Promise<{ requests: Row[] }>)
       .then((d) => {
         const sorted = [...(d.requests ?? [])].sort(
           (a, b) => new Date(a.requestDate).getTime() - new Date(b.requestDate).getTime()
@@ -69,7 +73,7 @@ export function IncomingBudgetRequests() {
     return `Items to reconsider: ${labels.join(", ")}.\n\nReason: ${reconsiderReason.trim()}`;
   }
 
-  async function act(request: BudgetRequest, action: "APPROVE" | "REJECT" | "RETURN", remarksOverride?: string) {
+  async function act(request: Row, action: "APPROVE" | "REJECT" | "RETURN", remarksOverride?: string) {
     const effectiveRemarks = remarksOverride ?? remarks;
     if (action === "APPROVE" && !fiscalYear.trim()) {
       toast({ variant: "destructive", title: "Financial year is required" });
@@ -81,7 +85,9 @@ export function IncomingBudgetRequests() {
     }
     setActingId(request.id);
     try {
-      const res = await collegeFetch(`/api/college/budget-requests/${request.id}`, {
+      // Target this request's own college explicitly — it may not be whichever
+      // college the sidebar currently has "selected" (see load() above).
+      const res = await fetch(`/api/college/budget-requests/${request.id}?collegeId=${encodeURIComponent(request.collegeId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -168,7 +174,7 @@ export function IncomingBudgetRequests() {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">{item.title}</p>
+                  <p className="text-xs text-muted-foreground">{item.title} · {item.collegeName}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 border-blue-200">
