@@ -24,9 +24,17 @@ const ROLE_TABS = [
   { key: "COLLEGE_OFFICE", label: "College Office" },
 ];
 
+const STATUS_TABS = [
+  { key: "active", label: "Active" },
+  { key: "inactive", label: "Inactive" },
+  { key: "all", label: "All" },
+] as const;
+type StatusFilter = (typeof STATUS_TABS)[number]["key"];
+
 export default function PrincipalStaffPage() {
   const router = useRouter();
   const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deactivating, setDeactivating] = useState<string | null>(null);
@@ -47,10 +55,16 @@ export default function PrincipalStaffPage() {
     try {
       const url = `/api/college/users${role ? `?role=${role}` : ""}`;
       const res = await fetch(url);
-      const data = await res.json() as { users: UserRow[] };
+      const data = await res.json() as { users?: UserRow[]; error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: data.error ?? `Failed to load staff (${res.status})` });
+        setUsers([]);
+        return;
+      }
       setUsers(data.users ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load staff" });
+      toast({ variant: "destructive", title: "Network error — failed to load staff" });
+      setUsers([]);
     } finally {
       setIsLoading(false);
     }
@@ -58,10 +72,16 @@ export default function PrincipalStaffPage() {
 
   useEffect(() => { void load(roleFilter); }, [roleFilter]);
 
+  const visibleUsers = users.filter((u) => {
+    if (statusFilter === "all") return true;
+    const active = u.isActive as boolean;
+    return statusFilter === "active" ? active : !active;
+  });
+
   function handleExportAll() {
     setIsExporting(true);
     try {
-      exportStaffCsv(users);
+      exportStaffCsv(visibleUsers);
     } finally {
       setIsExporting(false);
     }
@@ -181,7 +201,7 @@ export default function PrincipalStaffPage() {
         description="Manage HODs and College Office staff"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExportAll} loading={isExporting} disabled={isExporting || users.length === 0}>
+            <Button variant="outline" onClick={handleExportAll} loading={isExporting} disabled={isExporting || visibleUsers.length === 0}>
               <Download className="h-4 w-4 mr-2" />Export All Details
             </Button>
             <Button onClick={() => router.push("/principal/staff/new")}>
@@ -192,30 +212,47 @@ export default function PrincipalStaffPage() {
         }
       />
 
-      <div className="flex gap-2 flex-wrap">
-        {ROLE_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setRoleFilter(tab.key)}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              roleFilter === tab.key
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border hover:bg-muted"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
+          {ROLE_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setRoleFilter(tab.key)}
+              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                roleFilter === tab.key
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 rounded-lg border p-1">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                statusFilter === tab.key
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <DataTable
-        data={users}
+        data={visibleUsers}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.uid as string}
         searchPlaceholder="Search staff..."
         searchKeys={["name", "email", "department"] as (keyof UserRow)[]}
-        emptyTitle="No staff members yet"
+        emptyTitle={statusFilter === "active" ? "No active staff members" : "No staff members yet"}
         emptyDescription="Add HODs, College Office staff, and Accounts"
         emptyAction={
           <Button onClick={() => router.push("/principal/staff/new")}>
