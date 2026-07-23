@@ -11,6 +11,18 @@ export interface NavItem {
   section?: string; // optional section header rendered above this item
 }
 
+// A nav item is "active" if its href exactly matches the current path, or —
+// only when no other item in the same list matches exactly — if it's a
+// prefix of the path (so a detail/sub-page without its own nav entry still
+// highlights its parent). The exact-match guard prevents a shorter href
+// (e.g. "/super-admin/users") from also lighting up when a sibling item's
+// href (e.g. "/super-admin/users/new") is the one that exactly matches.
+export function isNavItemActive(item: NavItem, pathname: string, allItems: NavItem[]): boolean {
+  if (pathname === item.href) return true;
+  if (allItems.some((i) => i.href === pathname)) return false;
+  return item.href !== "/" && pathname.startsWith(item.href + "/");
+}
+
 export const NAV_ITEMS: NavItem[] = [
   // Management
   { label: "Dashboard", href: "/management/dashboard", iconName: "LayoutDashboard", roles: ["MANAGEMENT"] },

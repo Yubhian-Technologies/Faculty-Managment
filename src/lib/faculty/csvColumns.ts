@@ -7,19 +7,21 @@ export interface FacultyCsvColumn {
   label: string;
   required: boolean;
   sample: string;
+  // Alternate header wordings that should still map to this column (see matchHeaders in csv.ts).
+  aliases?: string[];
 }
 
 export const COLUMNS: FacultyCsvColumn[] = [
-  { key: "employeeId",        label: "Employee ID",                  required: true,  sample: "VIT001" },
-  { key: "name",               label: "Name",                         required: true,  sample: "Dr. A. Ravi Kumar" },
-  { key: "email",              label: "Personal Email",               required: true,  sample: "ravi@gmail.com" },
-  { key: "phone",              label: "Phone",                        required: false, sample: "9876543210" },
+  { key: "employeeId",        label: "Employee ID",                  required: true,  sample: "VIT001", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
+  { key: "name",               label: "Name",                         required: true,  sample: "Dr. A. Ravi Kumar", aliases: ["Faculty Name", "Full Name", "Employee Name"] },
+  { key: "email",              label: "Personal Email",               required: true,  sample: "ravi@gmail.com", aliases: ["Email", "Email ID", "Personal Email ID"] },
+  { key: "phone",              label: "Phone",                        required: false, sample: "9876543210", aliases: ["Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",        label: "Designation",                  required: true,  sample: "Asst. Prof." },
   { key: "qualification",      label: "Qualification",                required: true,  sample: "M.Tech" },
   { key: "specialization",     label: "Specialization",               required: false, sample: "Machine Learning" },
-  { key: "employmentType",     label: "Employment Type",              required: true,  sample: "Regular" },
-  { key: "status",             label: "Status (Active/On Leave/Resigned/Retired)", required: false, sample: "Active" },
-  { key: "joiningDate",        label: "Joining Date (YYYY-MM-DD)",    required: true,  sample: "2020-06-01" },
+  { key: "employmentType",     label: "Employment Type",              required: true,  sample: "Regular", aliases: ["Employment", "Type of Employment"] },
+  { key: "status",             label: "Status (Active/On Leave/Resigned/Retired)", required: false, sample: "Active", aliases: ["Status"] },
+  { key: "joiningDate",        label: "Joining Date (YYYY-MM-DD)",    required: true,  sample: "2020-06-01", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
   { key: "experienceYears",    label: "Total Experience (Years)",      required: false, sample: "5" },
   { key: "internalExperience", label: "Internal Exp (Years)",         required: false, sample: "3" },
   { key: "externalExperience", label: "External Exp (Years)",         required: false, sample: "1" },
