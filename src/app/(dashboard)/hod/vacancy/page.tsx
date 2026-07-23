@@ -29,7 +29,7 @@ export default function HODVacancyPage() {
         .then((d) => setVacancies(d.vacancyRequests ?? []))
         .catch(() => toast({ variant: "destructive", title: "Failed to load vacancies" })),
       fetch("/api/college/faculty-requirement")
-        .then(async (r) => (r.ok ? (r.json() as Promise<FacultyRequirementResult>) : null))
+        .then((r) => r.json() as Promise<FacultyRequirementResult>)
         .then((d) => setRequirement(d))
         .catch(() => {}),
     ]).finally(() => setIsLoading(false));
