@@ -67,6 +67,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // A faculty member can't teach two classes at once — block regardless of section/year/course.
+    const facultyConflict = await collegeRef.collection("timetableSlots")
+      .where("facultyId", "==", assignment.facultyId)
+      .where("day", "==", day)
+      .where("periodNumber", "==", Number(periodNumber))
+      .limit(1)
+      .get();
+    if (!facultyConflict.empty) {
+      const other = facultyConflict.docs[0].data() as { subjectName?: string };
+      return NextResponse.json(
+        { error: `Conflict: ${assignment.facultyName || "this faculty"} already teaches ${other.subjectName ?? "another class"} on ${day} period ${periodNumber} in a different section` },
+        { status: 409 }
+      );
+    }
+
     const now = new Date();
     const ref = await collegeRef.collection("timetableSlots").add({
       collegeId: session.collegeId,

@@ -65,8 +65,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       employeeId: string;
       name: string;
-      email: string;
-      collegeEmail?: string;
+      email?: string;
+      collegeEmail: string;
       password: string;
       phone?: string;
       designation: Designation;
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     const {
       employeeId,
       name,
-      email,
+      collegeEmail,
       password,
       designation,
       qualification,
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
       profilePhotoUrl,
     } = body;
 
-    if (!employeeId || !name || !email || !password || !designation || !qualification || !employmentType || !joiningDate) {
+    if (!employeeId || !name || !collegeEmail || !password || !designation || !qualification || !employmentType || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Uploaded before the record exists (under a temp id), so we can only check
@@ -130,8 +130,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
     }
 
-    // Create Firebase Auth user via REST API (no firebase-admin/auth required)
-    const uid = await createFirebaseUser(email, password, name);
+    // College email is the login username — create the Firebase Auth user with it,
+    // not the personal email (which is optional, contact-only).
+    const uid = await createFirebaseUser(collegeEmail, password, name);
 
     const now = new Date();
 
@@ -145,7 +146,7 @@ export async function POST(request: Request) {
         uid,
         collegeId,
         name,
-        email,
+        email: collegeEmail,
         role: "PANEL_MEMBER",
         department,
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
@@ -166,8 +167,8 @@ export async function POST(request: Request) {
       department,
       employeeId,
       name,
-      email,
-      ...(body.collegeEmail ? { collegeEmail: body.collegeEmail } : {}),
+      collegeEmail,
+      ...(body.email ? { email: body.email } : {}),
       phone: body.phone ?? "",
       designation,
       qualification,
@@ -186,7 +187,7 @@ export async function POST(request: Request) {
 
     // Role mapping for Firestore-based session resolution
     await db.collection("systemUsers").doc(uid).set({
-      uid, role: "PANEL_MEMBER", collegeId, email, name,
+      uid, role: "PANEL_MEMBER", collegeId, email: collegeEmail, name,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 

@@ -37,6 +37,27 @@ export async function PATCH(
     if (body.isActive != null) updates.isActive = body.isActive;
 
     await ref.update(updates);
+
+    // hoursPerWeek is shown/edited from multiple places (the Subjects page and every
+    // faculty member's teaching-assignment editor) but is owned here — cascade it to every
+    // existing teaching assignment for this subject so all of them (and the period-count
+    // cap in their editors) stay in sync.
+    if (body.hoursPerWeek != null) {
+      const newHours = Number(body.hoursPerWeek);
+      const assignmentsSnap = await db
+        .collection("colleges").doc(session.collegeId)
+        .collection("teachingAssignments")
+        .where("subjectId", "==", id)
+        .get();
+      const now = new Date();
+      for (let i = 0; i < assignmentsSnap.docs.length; i += 400) {
+        const chunk = assignmentsSnap.docs.slice(i, i + 400);
+        const batch = db.batch();
+        for (const doc of chunk) batch.update(doc.ref, { hoursPerWeek: newHours, updatedAt: now });
+        await batch.commit();
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

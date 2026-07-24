@@ -174,6 +174,22 @@ export async function POST(request: Request) {
               assignmentId: ref.id,
             }, { status: 409 });
           }
+
+          // A faculty member can't teach two classes at once — block regardless of section/year/course.
+          const facultyConflict = await collegeRef.collection("timetableSlots")
+            .where("facultyId", "==", facultyId)
+            .where("day", "==", slot.day)
+            .where("periodNumber", "==", slot.periodNumber)
+            .limit(1)
+            .get();
+          if (!facultyConflict.empty) {
+            const other = facultyConflict.docs[0].data() as { subjectName?: string };
+            return NextResponse.json({
+              error: `Conflict: ${facultyName || "this faculty"} already teaches ${other.subjectName ?? "another class"} on ${slot.day} period ${slot.periodNumber} in a different section`,
+              assignmentId: ref.id,
+            }, { status: 409 });
+          }
+
           const slotRef = collegeRef.collection("timetableSlots").doc();
           await slotRef.set({
             collegeId: session.collegeId,
@@ -199,7 +215,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ id: ref.id, slotIds: createdSlots }, { status: 201 });
     } else if (body.academicYear && body.semester) {
       const [facultySnap, subjectSnap] = await Promise.all([
-        collegeRef.collection("users").doc(body.facultyId).get(),
+        collegeRef.collection("facultyMembers").doc(body.facultyId).get(),
         collegeRef.collection("subjects").doc(body.subjectId).get(),
       ]);
 
@@ -294,12 +310,14 @@ export async function DELETE(request: Request) {
     }
 
     const db = getAdminDb();
-    await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("teachingAssignments")
-      .doc(assignmentId)
-      .delete();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const ref = collegeRef.collection("teachingAssignments").doc(assignmentId);
+
+    const slotsSnap = await collegeRef.collection("timetableSlots").where("assignmentId", "==", assignmentId).get();
+    const batch = db.batch();
+    slotsSnap.docs.forEach((d) => batch.delete(d.ref));
+    batch.delete(ref);
+    await batch.commit();
 
     return NextResponse.json({ ok: true });
   } catch (err) {

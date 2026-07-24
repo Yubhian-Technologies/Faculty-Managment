@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Course, Section, Subject, CourseYearTiming, DayOfWeek } from "@/types";
@@ -32,6 +31,7 @@ export interface StagedTeachingRow {
 }
 
 const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const NO_SUBJECT = "__none__"; // sentinel: Radix Select items can't use an empty string value
 
 function newLocalId() {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `local_${Date.now()}_${Math.random()}`;
@@ -58,7 +58,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   const [sectionsCache, setSectionsCache] = useState<Record<string, Section[]>>({});
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
   const [timingCache, setTimingCache] = useState<Record<string, CourseYearTiming | null>>({});
-  const [occupiedCache, setOccupiedCache] = useState<Record<string, { day: string; periodNumber: number }[]>>({});
+  const [occupiedCache, setOccupiedCache] = useState<Record<string, { assignmentId: string; day: string; periodNumber: number }[]>>({});
 
   useEffect(() => {
     fetch("/api/college/courses")
@@ -90,7 +90,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   async function ensureOccupied(sectionId: string) {
     if (sectionId in occupiedCache) return;
     const res = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}`);
-    const d = await res.json() as { slots: { day: string; periodNumber: number }[] };
+    const d = await res.json() as { slots: { assignmentId: string; day: string; periodNumber: number }[] };
     setOccupiedCache((c) => ({ ...c, [sectionId]: d.slots ?? [] }));
   }
 
@@ -137,6 +137,14 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   }
 
   function handleSubjectChange(row: StagedTeachingRow, subjectId: string) {
+    if (subjectId === NO_SUBJECT) {
+      // HOD is clearing the subject to leave this course/section row's periods empty for now,
+      // without deleting the whole row.
+      updateRow(row.localId, {
+        subjectId: "", subjectName: "", subjectCode: "", hoursPerWeek: 0, slots: [],
+      });
+      return;
+    }
     const key = `${row.courseId}_${row.year}`;
     const subject = (subjectsCache[key] ?? []).find((s) => s.id === subjectId);
     updateRow(row.localId, {
@@ -149,6 +157,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
   function toggleSlot(row: StagedTeachingRow, day: DayOfWeek, periodNumber: number) {
     const exists = row.slots.find((s) => s.day === day && s.periodNumber === periodNumber);
+    if (!exists && row.slots.length >= row.hoursPerWeek) return; // cap reached — hours/week defines the slot count
     const slots = exists
       ? row.slots.filter((s) => !(s.day === day && s.periodNumber === periodNumber))
       : [...row.slots, { localId: newLocalId(), day, periodNumber }];
@@ -175,6 +184,20 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
         const timing = timingCache[key];
         const occupied = occupiedCache[row.sectionId] ?? [];
         const periodNumbers = timing ? Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1) : [];
+        // Periods this same faculty member is already teaching in any other row (any other
+        // section/year/course, including ones staged but not yet saved) — a teacher can't be
+        // in two classes at once, so these must block regardless of which section they're in.
+        const facultyBusyElsewhere = new Set(
+          value
+            .filter((r) => r.localId !== row.localId)
+            .flatMap((r) => r.slots.map((s) => `${s.day}_${s.periodNumber}`))
+        );
+        // Subjects this faculty is already assigned to in another row shouldn't be offered
+        // again — picking the same subject twice would just duplicate the assignment.
+        const subjectsUsedElsewhere = new Set(
+          value.filter((r) => r.localId !== row.localId).map((r) => r.subjectId).filter(Boolean)
+        );
+        const availableSubjects = subjects.filter((s) => s.id === row.subjectId || !subjectsUsedElsewhere.has(s.id));
 
         return (
           <div key={row.localId} className="space-y-3 rounded-md bg-muted/30 p-3">
@@ -213,8 +236,12 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                   <Select value={row.subjectId} onValueChange={(v) => handleSubjectChange(row, v)} disabled={!row.year}>
                     <SelectTrigger><SelectValue placeholder="Subject" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value={NO_SUBJECT}>None — leave periods empty</SelectItem>
                       {subjects.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects for this year</div>}
-                      {subjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
+                      {subjects.length > 0 && availableSubjects.length === 0 && (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">All subjects for this year are already assigned</div>
+                      )}
+                      {availableSubjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -227,13 +254,11 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
             {row.subjectId && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
-                  <Label className="text-xs">Hours / Week</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={row.hoursPerWeek}
-                    onChange={(e) => updateRow(row.localId, { hoursPerWeek: Number(e.target.value) })}
-                  />
+                  <Label className="text-xs">Hours to Allot / Week</Label>
+                  <p className="text-sm font-medium">{row.hoursPerWeek}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Set on the subject — edit it from Subjects if this needs to change.
+                  </p>
                 </div>
               </div>
             )}
@@ -242,7 +267,10 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                  <Label className="text-xs">Weekly Schedule — pick day &amp; period for this subject/section</Label>
+                  <Label className="text-xs">
+                    Weekly Schedule — pick day &amp; period for this subject/section
+                    {" "}({row.slots.length}/{row.hoursPerWeek} periods selected)
+                  </Label>
                 </div>
                 {!timing ? (
                   <p className="text-xs text-amber-600">
@@ -265,22 +293,37 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                             <td className="p-1.5 font-medium">{p}</td>
                             {DAYS.map((d) => {
                               const selected = row.slots.some((s) => s.day === d && s.periodNumber === p);
-                              const takenByOther = occupied.some((s) => s.day === d && s.periodNumber === p)
-                                && !selected;
+                              // Slots already belonging to this same assignment (loaded from the server)
+                              // are this row's own — deselecting one must free it, not lock it as "taken".
+                              const sectionConflict = occupied.some(
+                                (s) => s.day === d && s.periodNumber === p && s.assignmentId !== row.id
+                              );
+                              const selfConflict = !selected && facultyBusyElsewhere.has(`${d}_${p}`);
+                              const takenByOther = sectionConflict || selfConflict;
+                              const capReached = !selected && row.slots.length >= row.hoursPerWeek;
+                              const disabled = takenByOther || capReached;
                               return (
                                 <td key={d} className="p-1">
                                   <button
                                     type="button"
-                                    disabled={takenByOther}
+                                    disabled={disabled}
                                     onClick={() => toggleSlot(row, d, p)}
                                     className={`h-6 w-10 rounded border text-[10px] transition-colors ${
                                       selected
                                         ? "bg-primary text-primary-foreground border-primary"
-                                        : takenByOther
+                                        : disabled
                                           ? "bg-muted text-muted-foreground cursor-not-allowed"
                                           : "bg-background hover:bg-muted border-border"
                                     }`}
-                                    title={takenByOther ? "Already occupied for this section" : undefined}
+                                    title={
+                                      sectionConflict
+                                        ? "Already occupied for this section"
+                                        : selfConflict
+                                          ? "This faculty already teaches another class at this time (different section/year)"
+                                          : capReached
+                                            ? "Hours/week limit reached — increase hours/week to select more periods"
+                                            : undefined
+                                    }
                                   >
                                     {selected ? "✓" : takenByOther ? "✕" : ""}
                                   </button>

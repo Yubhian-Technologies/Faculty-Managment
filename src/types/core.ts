@@ -432,7 +432,7 @@ export interface FacultyMember {
   department: string;
   employeeId: string;
   name: string;
-  email: string;
+  email?: string;       // personal email — optional, contact only
   phone?: string;
   designation: Designation;
   qualification: string;
@@ -468,7 +468,7 @@ export interface FacultyMember {
   passportNumber?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
-  collegeEmail?: string;
+  collegeEmail: string;    // required — this is the faculty member's login username
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationDate?: Timestamp;
   maritalStatus?: "Single" | "Married";
