@@ -101,20 +101,38 @@ export default function HodOffersPage() {
     }
   }
 
+  // Candidate address and interview date aren't stored on the OfferLetter row itself —
+  // fetch them from the candidate/batch docs at generation time (both the download and
+  // email flows need the same extras for the letter body).
+  async function fetchLetterExtras(letter: OfferRow): Promise<{ candidateAddress?: string; candidateEmail?: string; interviewDate?: string }> {
+    type CandRes = { candidate?: { email?: string; permanentAddress?: string; residenceAddress?: string } };
+    type BatchRes = { batch?: { interviewDate?: Parameters<typeof formatDate>[0] } };
+    const [candData, batchData] = await Promise.all([
+      fetch(`/api/college/candidates/${letter.candidateId}`).then((r) => r.json() as Promise<CandRes>).catch((): CandRes => ({})),
+      fetch(`/api/college/hiring-batches/${letter.batchId}`).then((r) => r.json() as Promise<BatchRes>).catch((): BatchRes => ({})),
+    ]);
+    const candidate = candData.candidate;
+    return {
+      candidateAddress: candidate?.permanentAddress || candidate?.residenceAddress,
+      candidateEmail: candidate?.email,
+      interviewDate: batchData.batch?.interviewDate ? formatDate(batchData.batch.interviewDate) : undefined,
+    };
+  }
+
   async function generatePdf(letter: OfferRow) {
     setDownloadingId(letter.id);
     try {
+      const { candidateAddress, interviewDate } = await fetchLetterExtras(letter);
       await downloadOfferLetterPdf(
         {
           candidateName: letter.candidateName ?? "",
+          candidateAddress,
           designation: letter.designation,
           department: letter.department,
-          joiningDate: formatDate(letter.joiningDate as Parameters<typeof formatDate>[0]),
-          ctcAnnual: letter.ctcAnnual,
-          ctcMonthly: Math.round(letter.ctcAnnual / 12),
-          subjects: letter.subjects,
           collegeName: collegeInfo.name,
           collegeAddress: collegeInfo.address,
+          interviewDate,
+          joiningDate: formatDate(letter.joiningDate as Parameters<typeof formatDate>[0]),
           letterDate: formatDate(new Date()),
         },
         letter.candidateName ?? letter.id
@@ -132,29 +150,30 @@ export default function HodOffersPage() {
       const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error("Not authenticated");
 
-      const candRes = await fetch(`/api/college/candidates/${letter.candidateId}`);
-      const candData = await candRes.json() as { candidate?: { email?: string } };
-      const email = candData.candidate?.email;
-      if (!email) throw new Error("Candidate has no email on file");
+      const { candidateAddress, candidateEmail, interviewDate } = await fetchLetterExtras(letter);
+      if (!candidateEmail) throw new Error("Candidate has no email on file");
 
       const res = await fetch("/api/email/send", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           type: "OFFER_LETTER",
-          to: email,
+          to: candidateEmail,
           data: {
             candidateName: letter.candidateName,
+            candidateAddress,
             position: letter.designation,
             department: letter.department,
-            joiningDate: formatDate(letter.joiningDate as Parameters<typeof formatDate>[0]),
-            ctcAnnual: letter.ctcAnnual,
             collegeName: collegeInfo.name,
+            collegeAddress: collegeInfo.address,
+            interviewDate,
+            joiningDate: formatDate(letter.joiningDate as Parameters<typeof formatDate>[0]),
+            letterDate: formatDate(new Date()),
           },
         }),
       });
       if (!res.ok) throw new Error("Failed to send email");
-      toast({ variant: "success", title: "Offer letter emailed", description: `Sent to ${email}` });
+      toast({ variant: "success", title: "Offer letter emailed", description: `Sent to ${candidateEmail}` });
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to send email", description: err instanceof Error ? err.message : undefined });
     } finally {

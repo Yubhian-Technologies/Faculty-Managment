@@ -1,26 +1,31 @@
-export function getOfferLetterHTML({
-  candidateName,
-  designation,
-  department,
-  joiningDate,
-  ctcAnnual,
-  ctcMonthly,
-  subjects,
-  collegeName,
-  collegeAddress,
-  letterDate,
-}: {
+export interface OfferLetterData {
   candidateName: string;
+  candidateAddress?: string;
   designation: string;
   department: string;
-  joiningDate: string;
-  ctcAnnual: number;
-  ctcMonthly: number;
-  subjects?: string[];
   collegeName: string;
   collegeAddress?: string;
+  interviewDate?: string;
+  joiningDate: string;
   letterDate: string;
-}): string {
+}
+
+export function getOfferLetterHTML({
+  candidateName,
+  candidateAddress,
+  designation,
+  department,
+  collegeName,
+  collegeAddress,
+  interviewDate,
+  joiningDate,
+  letterDate,
+}: OfferLetterData): string {
+  const collegeFull = collegeAddress ? `${collegeName}, ${collegeAddress}` : collegeName;
+  const interviewClause = interviewDate
+    ? `With reference to your application and discussion during the interview held on ${interviewDate}, we`
+    : "With reference to your application and discussion during the interview, we";
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -28,81 +33,48 @@ export function getOfferLetterHTML({
 <style>
   body { font-family: "Times New Roman", serif; margin: 0; padding: 0; color: #000; }
   .page { width: 210mm; min-height: 297mm; padding: 20mm 25mm; box-sizing: border-box; }
-  .header { text-align: center; border-bottom: 3px double #1d4ed8; padding-bottom: 16px; margin-bottom: 24px; }
-  .college-name { font-size: 24px; font-weight: bold; color: #1d4ed8; margin: 0; }
-  .college-address { font-size: 12px; color: #555; margin: 4px 0 0; }
-  .title { text-align: center; font-size: 16px; font-weight: bold; text-decoration: underline; margin: 24px 0; letter-spacing: 1px; }
-  .meta { margin-bottom: 20px; }
-  .meta p { margin: 4px 0; font-size: 13px; }
-  .body-text { font-size: 14px; line-height: 1.8; margin-bottom: 16px; }
-  .terms-title { font-weight: bold; font-size: 14px; margin: 20px 0 8px; }
-  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-  th { background: #1d4ed8; color: #fff; padding: 8px 12px; font-size: 13px; text-align: left; }
-  td { padding: 8px 12px; font-size: 13px; border: 1px solid #ddd; }
-  tr:nth-child(even) td { background: #f8fafc; }
-  .signature { margin-top: 48px; display: flex; justify-content: space-between; }
-  .sig-block { text-align: center; }
-  .sig-line { width: 150px; border-top: 1px solid #000; margin: 48px auto 8px; }
-  .footer { position: fixed; bottom: 10mm; left: 25mm; right: 25mm; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
+  .date { text-align: right; margin-bottom: 24px; font-size: 14px; }
+  p { font-size: 14px; line-height: 1.8; margin: 12px 0; }
+  .signature { margin-top: 32px; }
+  .to-block { margin-top: 40px; }
+  .copies { margin-top: 32px; font-size: 14px; }
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="header">
-    <p class="college-name">${collegeName}</p>
-    ${collegeAddress ? `<p class="college-address">${collegeAddress}</p>` : ""}
-  </div>
+  <p class="date">Dt. ${letterDate}</p>
 
-  <div class="title">OFFER LETTER</div>
+  <p>Dear Sir/Madam,</p>
 
-  <div class="meta">
-    <p><strong>Date:</strong> ${letterDate}</p>
-    <p><strong>Ref No:</strong> VP/OL/${new Date().getFullYear()}/${Math.floor(Math.random() * 9000) + 1000}</p>
-  </div>
-
-  <p class="body-text">To,<br><strong>${candidateName}</strong></p>
-
-  <p class="body-text">Dear ${candidateName},</p>
-
-  <p class="body-text">
-    We are pleased to offer you the position of <strong>${designation}</strong> in the Department of <strong>${department}</strong> at ${collegeName}, subject to satisfactory verification of your credentials and documents.
+  <p>
+    ${interviewClause} are pleased to appoint you as <strong>${designation}</strong> in the department of <strong>${department}</strong> of ${collegeFull} on the terms and conditions you have agreed during the interview.
   </p>
 
-  <p class="terms-title">Terms &amp; Conditions of Employment</p>
-  <table>
-    <tr><th>Detail</th><th>Information</th></tr>
-    <tr><td>Designation</td><td>${designation}</td></tr>
-    <tr><td>Department</td><td>${department}</td></tr>
-    <tr><td>Date of Joining</td><td>${joiningDate}</td></tr>
-    ${subjects?.length ? `<tr><td>Subjects to Teach</td><td>${subjects.join(", ")}</td></tr>` : ""}
-    <tr><td>Monthly CTC</td><td>₹${ctcMonthly.toLocaleString("en-IN")} per month</td></tr>
-    <tr><td>Annual CTC</td><td>₹${ctcAnnual.toLocaleString("en-IN")} per annum</td></tr>
-  </table>
+  <p>Appointment letter will be issued at the time of reporting to duty.</p>
 
-  <p class="body-text">
-    This offer is contingent upon successful completion of background verification, original document verification, and joining formalities. Please report to the HR office on the date of joining with all original documents.
-  </p>
+  <p>You are requested to join on or before <strong>${joiningDate}</strong>.</p>
 
-  <p class="body-text">
-    Kindly sign and return a copy of this letter as acceptance of the offer.
-  </p>
+  <p>You need to submit all your original certificates at the time of joining our Organization.</p>
+
+  <p>You are welcome to our organization and wish you will have a good career with us.</p>
+
+  <p>You are requested to acknowledge the receipt of this offer letter and intimate the proposed date of joining.</p>
 
   <div class="signature">
-    <div class="sig-block">
-      <div class="sig-line"></div>
-      <p style="margin:0;font-size:13px;"><strong>Candidate Signature</strong></p>
-      <p style="margin:4px 0 0;font-size:12px;color:#555;">${candidateName}</p>
-    </div>
-    <div class="sig-block">
-      <div class="sig-line"></div>
-      <p style="margin:0;font-size:13px;"><strong>Principal / Authorized Signatory</strong></p>
-      <p style="margin:4px 0 0;font-size:12px;color:#555;">${collegeName}</p>
-    </div>
+    <p>Yours faithfully,</p>
+    <p style="margin-top:40px;">For ${collegeName}</p>
   </div>
-</div>
 
-<div class="footer">
-  ${collegeName} · Offer Letter · Generated by Vishnu People on ${letterDate}
+  <div class="to-block">
+    <p style="margin:0;">To</p>
+    <p style="margin:0;">${candidateName},</p>
+    ${candidateAddress ? candidateAddress.split(",").map((line) => `<p style="margin:0;">${line.trim()}</p>`).join("") : ""}
+  </div>
+
+  <div class="copies">
+    <p>Copies to:&nbsp;&nbsp;1) The Principal, ${collegeName}</p>
+    <p style="margin-left:24px;">2) Accounts &amp; Finance Department, ${collegeName}</p>
+  </div>
 </div>
 </body>
 </html>`;

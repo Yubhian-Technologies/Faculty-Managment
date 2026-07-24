@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const deptView = searchParams.get("dept") === "true";
     const requestedFacultyId = searchParams.get("facultyId");
+    const sectionId = searchParams.get("sectionId");
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -26,7 +27,11 @@ export async function GET(request: Request) {
     let assignmentQuery: FirebaseFirestore.Query = collegeRef.collection("teachingAssignments");
     let timetableSlots: (TimetableSlot & { id: string })[] = [];
 
-    if (deptView && session.role === "HOD") {
+    if (sectionId) {
+      // Section-scoped view (e.g. "assign faculty per subject" on the section edit page) —
+      // all HOD/Principal/etc. roles above may view any section within their own college.
+      assignmentQuery = assignmentQuery.where("sectionId", "==", sectionId);
+    } else if (deptView && session.role === "HOD") {
       // Resolve HOD's department from their user profile
       const hodSnap = await collegeRef.collection("users").doc(session.uid).get();
       const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";

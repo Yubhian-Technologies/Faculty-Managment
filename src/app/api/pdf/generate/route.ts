@@ -5,6 +5,7 @@ import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getOfferLetterHTML, getAppointmentLetterHTML } from "@/lib/pdf/offerLetterTemplate";
 import { getFinanceReportHTML, getFinanceReceiptHTML } from "@/lib/pdf/financeReportTemplate";
 import { getResumeHTML } from "@/lib/pdf/resumeTemplate";
+import { renderHtmlToPdf } from "@/lib/pdf/renderPdf";
 
 async function verifyToken(request: Request): Promise<string | null> {
   const auth = request.headers.get("Authorization");
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
     const filename = filenames[body.type];
 
     if (body.type === "OFFER_LETTER") {
-      html = getOfferLetterHTML(body.data as Parameters<typeof getOfferLetterHTML>[0]);
+      html = getOfferLetterHTML(body.data as unknown as Parameters<typeof getOfferLetterHTML>[0]);
     } else if (body.type === "APPOINTMENT_LETTER") {
       html = getAppointmentLetterHTML(
         body.data as Parameters<typeof getAppointmentLetterHTML>[0]
@@ -51,13 +52,16 @@ export async function POST(request: Request) {
       html = getResumeHTML(body.data as unknown as Parameters<typeof getResumeHTML>[0]);
     }
 
-    // Dynamic import via variable to avoid static bundling
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const puppeteerPkg = "puppeteer";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const puppeteer = await (import(/* webpackIgnore: true */ puppeteerPkg) as Promise<any>).catch(() => null);
+    // The resume reads at normal font size and is free to spill onto additional pages —
+    // give it real page margins so page breaks have breathing room. Other letter/report
+    // templates are short, single-page documents designed around zero margin.
+    const margin = body.type === "RESUME"
+      ? { top: "12mm", bottom: "12mm", left: "0", right: "0" }
+      : { top: "0", bottom: "0", left: "0", right: "0" };
 
-    if (!puppeteer) {
+    const pdfBuffer = await renderHtmlToPdf(html, margin);
+
+    if (!pdfBuffer) {
       // Fallback: return HTML as a download if Puppeteer not available (Vercel)
       return new Response(html, {
         headers: {
@@ -67,34 +71,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const browser = await puppeteer.default.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-
-    const page = await browser.newPage();
-    // A4 @ 96dpi — keeps the DOM layout width in sync with the printed page width so
-    // content isn't laid out against Puppeteer's default 800x600 viewport and then
-    // rescaled to fit A4 (the classic cause of PDFs rendering "shrunk" in a corner).
-    await page.setViewport({ width: 794, height: 1123 });
-    await page.setContent(html, { waitUntil: "networkidle0" });
-
-    // The resume reads at normal font size and is free to spill onto additional pages —
-    // give it real page margins so page breaks have breathing room. Other letter/report
-    // templates are short, single-page documents designed around zero margin.
-    const margin = body.type === "RESUME"
-      ? { top: "12mm", bottom: "12mm", left: "0", right: "0" }
-      : { top: "0", bottom: "0", left: "0", right: "0" };
-
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin,
-    });
-
-    await browser.close();
-
-    return new Response(pdfBuffer, {
+    return new Response(new Uint8Array(pdfBuffer), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,

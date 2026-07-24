@@ -145,7 +145,7 @@ service cloud.firestore {
 
       match /vacancyRequests/{requestId} {
         allow read: if isStaff(collegeId);
-        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
+        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
         allow update: if isPrincipal(collegeId) || isHOD(collegeId);
         allow delete: if isSuperAdmin();
       }

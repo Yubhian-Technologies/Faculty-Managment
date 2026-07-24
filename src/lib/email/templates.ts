@@ -63,17 +63,13 @@ export function offerLetterEmail({
   position,
   department,
   joiningDate,
-  ctcAnnual,
   collegeName,
-  downloadLink,
 }: {
   candidateName: string;
   position: string;
   department: string;
   joiningDate: string;
-  ctcAnnual: number;
   collegeName: string;
-  downloadLink?: string;
 }): string {
   return `
 <!DOCTYPE html>
@@ -87,23 +83,7 @@ export function offerLetterEmail({
     </div>
     <div style="padding:32px 24px;">
       <p style="color:#0f172a;font-size:16px;">Dear <strong>${candidateName}</strong>,</p>
-      <p style="color:#475569;">We are delighted to offer you the position of <strong>${position}</strong> in the <strong>${department}</strong> department.</p>
-      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px;margin:24px 0;">
-        <h3 style="color:#065f46;margin:0 0 12px;">Offer Summary</h3>
-        <table style="width:100%;">
-          <tr><td style="padding:6px 0;color:#64748b;font-size:14px;width:150px;">Position</td><td style="color:#0f172a;font-size:14px;font-weight:600;">${position}</td></tr>
-          <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Department</td><td style="color:#0f172a;font-size:14px;font-weight:600;">${department}</td></tr>
-          <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Date of Joining</td><td style="color:#0f172a;font-size:14px;font-weight:600;">${joiningDate}</td></tr>
-          <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Annual CTC</td><td style="color:#059669;font-size:16px;font-weight:700;">₹${ctcAnnual.toLocaleString("en-IN")}</td></tr>
-        </table>
-      </div>
-      ${
-        downloadLink
-          ? `<div style="text-align:center;margin:24px 0;">
-        <a href="${downloadLink}" style="background:#1d4ed8;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;">Download Offer Letter</a>
-      </div>`
-          : ""
-      }
+      <p style="color:#475569;">We are delighted to offer you the position of <strong>${position}</strong> in the <strong>${department}</strong> department. Please find your offer letter attached.</p>
       <p style="color:#475569;font-size:14px;">Please confirm your acceptance by reporting on <strong>${joiningDate}</strong>. Bring all original documents on your joining date.</p>
       <p style="color:#0f172a;font-weight:600;">Congratulations and welcome to the team!<br><br>HR Department<br>${collegeName}</p>
     </div>

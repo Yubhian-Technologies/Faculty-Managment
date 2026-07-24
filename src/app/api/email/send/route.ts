@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { interviewInvitationEmail, offerLetterEmail } from "@/lib/email/templates";
+import { getOfferLetterHTML, type OfferLetterData } from "@/lib/pdf/offerLetterTemplate";
+import { renderHtmlToPdf } from "@/lib/pdf/renderPdf";
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
 
     let html = "";
     let subject = body.subject ?? "Notification from FMS";
+    let attachments: { filename: string; content: Buffer }[] | undefined;
 
     if (body.type === "INTERVIEW_INVITATION") {
       subject = `Interview Invitation — ${body.data.position as string}`;
@@ -47,6 +50,11 @@ export async function POST(request: Request) {
     } else if (body.type === "OFFER_LETTER") {
       subject = `Offer Letter — ${body.data.collegeName as string}`;
       html = offerLetterEmail(body.data as Parameters<typeof offerLetterEmail>[0]);
+
+      const letterData = body.data as unknown as OfferLetterData & { position?: string };
+      const letterHtml = getOfferLetterHTML({ ...letterData, designation: letterData.designation ?? letterData.position ?? "" });
+      const pdfBuffer = await renderHtmlToPdf(letterHtml, { top: "0", bottom: "0", left: "0", right: "0" });
+      if (pdfBuffer) attachments = [{ filename: "offer-letter.pdf", content: pdfBuffer }];
     } else {
       html = `<p>${String(body.data.message ?? "")}</p>`;
     }
@@ -57,6 +65,7 @@ export async function POST(request: Request) {
       to: body.to,
       subject,
       html,
+      attachments,
     }).catch((err) => console.error("[email/send] Failed:", err));
 
     return NextResponse.json({ ok: true });
