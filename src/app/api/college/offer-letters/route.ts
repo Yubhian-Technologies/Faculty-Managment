@@ -52,15 +52,15 @@ export async function POST(request: Request) {
       joiningDate: string;
       ctcAnnual: number;
       subjects?: string[];
-      facultyEmail: string;
+      collegeEmail: string;
       facultyPassword: string;
     };
 
     const {
       candidateId, batchId, candidateName, designation, department, joiningDate, ctcAnnual,
-      facultyEmail, facultyPassword,
+      collegeEmail, facultyPassword,
     } = body;
-    if (!candidateId || !batchId || !designation || !department || !joiningDate || !ctcAnnual || !facultyEmail || !facultyPassword) {
+    if (!candidateId || !batchId || !designation || !department || !joiningDate || !ctcAnnual || !collegeEmail || !facultyPassword) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     await docRef.set(letter);
 
     const provisioning = await provisionFacultyFromOffer(db, session.collegeId, docRef.id, {
-      email: facultyEmail,
+      collegeEmail,
       password: facultyPassword,
     });
 

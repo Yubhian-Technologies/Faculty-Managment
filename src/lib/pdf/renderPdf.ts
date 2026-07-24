@@ -5,19 +5,49 @@ export interface PdfMargin {
   right: string;
 }
 
-// Returns null when puppeteer isn't resolvable (e.g. Vercel, where it's optional-at-runtime —
-// see AGENTS.md). Callers should fall back to serving/attaching the raw HTML instead.
-export async function renderHtmlToPdf(html: string, margin: PdfMargin): Promise<Buffer | null> {
-  // Dynamic import via variable to avoid static bundling
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Browser = any;
+
+// On Vercel, full `puppeteer`'s bundled ~300MB desktop Chromium won't fit in (or run
+// correctly in) a serverless function — so there we use `puppeteer-core` (no bundled
+// browser) with `@sparticuz/chromium`, a Chromium build made for Lambda-style
+// environments. Everywhere else (local dev, a real `next start` server) we use full
+// `puppeteer`, whose bundled-browser download makes local setup a no-config `npm install`.
+// See next.config.ts's `outputFileTracingIncludes` for the matching deploy-side config
+// that ships @sparticuz/chromium's binary into the function bundle.
+async function launchBrowser(): Promise<Browser | null> {
+  if (process.env.VERCEL) {
+    try {
+      const chromium = (await import("@sparticuz/chromium")).default;
+      const puppeteerCore = (await import("puppeteer-core")).default;
+      return await puppeteerCore.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: true,
+      });
+    } catch (err) {
+      console.error("[renderHtmlToPdf] serverless chromium launch failed", err);
+      return null;
+    }
+  }
+
+  // Dynamic import via variable so bundlers/tracers can't detect this dependency and
+  // pull its bundled Chromium into a deployment trace (it's only ever used locally).
   const puppeteerPkg = "puppeteer";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const puppeteer = await (import(/* webpackIgnore: true */ puppeteerPkg) as Promise<any>).catch(() => null);
   if (!puppeteer) return null;
-
-  const browser = await puppeteer.default.launch({
+  return await puppeteer.default.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
+}
+
+// Returns null when no renderer is available at all. Callers should fall back to
+// serving/attaching the raw HTML instead.
+export async function renderHtmlToPdf(html: string, margin: PdfMargin): Promise<Buffer | null> {
+  const browser = await launchBrowser();
+  if (!browser) return null;
 
   try {
     const page = await browser.newPage();

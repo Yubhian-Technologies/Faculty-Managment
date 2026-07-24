@@ -21,13 +21,13 @@ type CreateForm = {
   joiningDate: string;
   ctcAnnual: string;
   subjects: string;
-  facultyEmail: string;
+  collegeEmail: string;
   facultyPassword: string;
 };
 
 const emptyForm = (): CreateForm => ({
   batchId: "", candidateId: "", designation: "", department: "", joiningDate: "",
-  ctcAnnual: "", subjects: "", facultyEmail: "", facultyPassword: "",
+  ctcAnnual: "", subjects: "", collegeEmail: "", facultyPassword: "",
 });
 
 function randomPassword(): string {
@@ -94,13 +94,12 @@ export default function NewHodOfferLetterPage() {
   }
 
   function handleCandidateChange(candidateId: string) {
-    const candidate = candidates.find((c) => c.id === candidateId);
-    setForm((f) => ({ ...f, candidateId, facultyEmail: f.facultyEmail || candidate?.email || "" }));
+    setForm((f) => ({ ...f, candidateId }));
   }
 
   async function handleSend() {
-    const { batchId, candidateId, designation, department, joiningDate, ctcAnnual, facultyEmail, facultyPassword } = form;
-    if (!batchId || !candidateId || !designation || !department || !joiningDate || !ctcAnnual || !facultyEmail || !facultyPassword) {
+    const { batchId, candidateId, designation, department, joiningDate, ctcAnnual, collegeEmail, facultyPassword } = form;
+    if (!batchId || !candidateId || !designation || !department || !joiningDate || !ctcAnnual || !collegeEmail || !facultyPassword) {
       toast({ variant: "destructive", title: "Fill in all required fields" });
       return;
     }
@@ -119,13 +118,13 @@ export default function NewHodOfferLetterPage() {
           joiningDate,
           ctcAnnual: Number(ctcAnnual),
           subjects: form.subjects.split(",").map((s) => s.trim()).filter(Boolean),
-          facultyEmail,
+          collegeEmail,
           facultyPassword,
         }),
       });
       const data = await res.json() as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to send offer");
-      setSentConfirm({ name: selectedCandidate?.name ?? "the candidate", email: facultyEmail });
+      setSentConfirm({ name: selectedCandidate?.name ?? "the candidate", email: collegeEmail });
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -210,8 +209,9 @@ export default function NewHodOfferLetterPage() {
             <div className="space-y-3 pt-2 border-t">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Faculty Login</p>
               <div className="space-y-2">
-                <Label>Login Email *</Label>
-                <Input type="email" value={form.facultyEmail} onChange={(e) => setForm((f) => ({ ...f, facultyEmail: e.target.value }))} placeholder="faculty@college.edu" />
+                <Label>College Email *</Label>
+                <Input type="email" value={form.collegeEmail} onChange={(e) => setForm((f) => ({ ...f, collegeEmail: e.target.value }))} placeholder="name@vishnu.edu.in" />
+                <p className="text-xs text-muted-foreground">This becomes their login username — not the candidate&rsquo;s personal email.</p>
               </div>
               <div className="space-y-2">
                 <Label>Password *</Label>
