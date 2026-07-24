@@ -165,6 +165,7 @@ export default function EditFacultyPage() {
           subjectName: a.subjectName,
           subjectCode: a.subjectCode,
           hoursPerWeek: a.hoursPerWeek,
+          subjectHoursPerWeek: a.hoursPerWeek,
           slots: (d.timetableSlots ?? [])
             .filter((s) => s.assignmentId === a.id)
             .map((s) => ({ localId: s.id, id: s.id, day: s.day, periodNumber: s.periodNumber })),
@@ -198,6 +199,7 @@ export default function EditFacultyPage() {
             subjectName: subject?.name ?? pendingPreference.subjectNames[pendingPreference.subjectIds.indexOf(subjectId)] ?? "",
             subjectCode: subject?.code ?? "",
             hoursPerWeek: subject?.hoursPerWeek ?? 0,
+            subjectHoursPerWeek: subject?.hoursPerWeek ?? 0,
             slots: [],
           };
         });
@@ -214,10 +216,6 @@ export default function EditFacultyPage() {
     e.preventDefault();
     if (!employeeId.trim()) {
       toast({ variant: "destructive", title: "Employee ID is required" });
-      return;
-    }
-    if (!email.trim()) {
-      toast({ variant: "destructive", title: "Email is required" });
       return;
     }
     if (!form.collegeEmail.trim()) {
@@ -299,12 +297,13 @@ export default function EditFacultyPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Email *</Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="faculty@personal.com" />
-              </div>
-              <div className="space-y-2">
                 <Label>College Email *</Label>
                 <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@vishnu.edu.in" />
+                <p className="text-xs text-muted-foreground">This is their login username.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Personal Email</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="faculty@example.com" />
               </div>
             </div>
 

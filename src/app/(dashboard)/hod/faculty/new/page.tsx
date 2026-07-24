@@ -28,8 +28,8 @@ import type { Designation, EmploymentType, FacultyProfileFields } from "@/types"
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
   name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  collegeEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().optional(),
   staffType: z.enum(["teaching", "supporting"]),
@@ -139,14 +139,15 @@ export default function NewFacultyPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input id="email" type="email" {...register("email")} placeholder="faculty@college.edu" />
-                {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="collegeEmail">College Email</Label>
+                <Label htmlFor="collegeEmail">College Email *</Label>
                 <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@vishnu.edu.in" />
                 {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
+                <p className="text-xs text-muted-foreground">This is used as their login username.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Personal Email</Label>
+                <Input id="email" type="email" {...register("email")} placeholder="faculty@example.com" />
+                {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
@@ -159,7 +160,7 @@ export default function NewFacultyPage() {
               <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
               {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
               <p className="text-xs text-muted-foreground">
-                Share this with the faculty member so they can log in as a Panel Member.
+                Share this with the faculty member so they can log in with their college email as a Panel Member.
               </p>
             </div>
 
