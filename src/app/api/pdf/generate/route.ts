@@ -1,4 +1,8 @@
 export const dynamic = "force-dynamic";
+// Headless Chromium cold-starts (Brotli-decompressing the binary + launching it) plus
+// rendering can take longer than Vercel's default function timeout, especially on a
+// cold Lambda instance — give it real headroom.
+export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
