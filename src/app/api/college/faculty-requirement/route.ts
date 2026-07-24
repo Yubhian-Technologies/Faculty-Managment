@@ -69,11 +69,35 @@ export async function GET(request: Request) {
     // ── Total faculty required (1:15) ─────────────────────────────────────────
     const totalRequired = requiredFacultyCount(totalStudents);
 
-    // ── Cadre split (1:2:6) ───────────────────────────────────────────────────
+    // ── Cadre split (1:2:6) ────────────────────────────────────────────────────
+    // Largest-remainder apportionment: floor each share, then hand out the
+    // leftover seats to whichever cadre has the biggest fractional part. Using
+    // independent Math.ceil() per cadre (the old approach) can round Professor
+    // AND Associate up separately and overshoot totalRequired for small
+    // departments (e.g. totalRequired=1 → prof=1, assoc=1 → sums to 2).
     const unit = totalRequired / CADRE_TOTAL_PARTS;
-    const profRequired  = Math.ceil(CADRE_PARTS.prof  * unit);
-    const assocRequired = Math.ceil(CADRE_PARTS.assoc * unit);
-    const asstRequired  = Math.max(0, totalRequired - profRequired - assocRequired);
+    const rawProf = CADRE_PARTS.prof * unit;
+    const rawAssoc = CADRE_PARTS.assoc * unit;
+    const rawAsst = CADRE_PARTS.asst * unit;
+
+    let profRequired = Math.floor(rawProf);
+    let assocRequired = Math.floor(rawAssoc);
+    let asstRequired = Math.floor(rawAsst);
+
+    let remainder = totalRequired - (profRequired + assocRequired + asstRequired);
+    const byRemainder: Array<["prof" | "assoc" | "asst", number]> = [
+      ["prof", rawProf - profRequired] as ["prof", number],
+      ["assoc", rawAssoc - assocRequired] as ["assoc", number],
+      ["asst", rawAsst - asstRequired] as ["asst", number],
+    ].sort((a, b) => b[1] - a[1]);
+
+    for (const [key] of byRemainder) {
+      if (remainder <= 0) break;
+      if (key === "prof") profRequired++;
+      else if (key === "assoc") assocRequired++;
+      else asstRequired++;
+      remainder--;
+    }
 
     // ── Current active faculty by designation ─────────────────────────────────
     const facultySnap = await db

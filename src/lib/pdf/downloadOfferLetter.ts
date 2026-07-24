@@ -1,18 +1,8 @@
 import { auth } from "@/lib/firebase/client";
+import type { OfferLetterData } from "@/lib/pdf/offerLetterTemplate";
 
 export async function downloadOfferLetterPdf(
-  data: {
-    candidateName: string;
-    designation: string;
-    department: string;
-    joiningDate: string;
-    ctcAnnual: number;
-    ctcMonthly: number;
-    subjects?: string[];
-    collegeName: string;
-    collegeAddress?: string;
-    letterDate: string;
-  },
+  data: OfferLetterData,
   filenameHint: string
 ): Promise<void> {
   const token = await auth.currentUser?.getIdToken();

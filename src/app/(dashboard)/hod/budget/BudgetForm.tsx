@@ -20,6 +20,12 @@ function nowForDateTimeInput(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function defaultAcademicYear(): string {
+  const d = new Date();
+  const startYear = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; // FY starts April
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
+}
+
 interface BudgetFormProps {
   editingRequest?: BudgetRequest | null;
   onCancel: () => void;
@@ -28,7 +34,7 @@ interface BudgetFormProps {
 
 export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProps) {
   const lastRemarks = [...(editingRequest?.history ?? [])].reverse().find((h) => h.remarks)?.remarks;
-  const [academicYear, setAcademicYear] = useState(editingRequest?.academicYear ?? "");
+  const [academicYear, setAcademicYear] = useState(editingRequest?.academicYear ?? defaultAcademicYear());
   const [title, setTitle] = useState(editingRequest?.title ?? "");
   const [requestDate, setRequestDate] = useState(editingRequest?.requestDate ?? nowForDateTimeInput());
   const [nonRecurring, setNonRecurring] = useState<BudgetCategoryGroup[]>(
@@ -40,7 +46,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
   const [isSaving, setIsSaving] = useState(false);
 
   function resetForm() {
-    setAcademicYear("");
+    setAcademicYear(defaultAcademicYear());
     setTitle("");
     setRequestDate(nowForDateTimeInput());
     setNonRecurring([emptyBudgetCategoryGroup()]);

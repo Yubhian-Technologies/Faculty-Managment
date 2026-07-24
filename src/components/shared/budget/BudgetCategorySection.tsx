@@ -96,11 +96,15 @@ function CategoryGroupReadOnly({
   selectable,
   selectedIds,
   onToggleItem,
+  itemReasons,
+  onReasonChange,
 }: {
   group: BudgetCategoryGroup;
   selectable?: boolean;
   selectedIds?: Set<string>;
   onToggleItem?: (itemId: string, label: string) => void;
+  itemReasons?: Record<string, string>;
+  onReasonChange?: (itemId: string, reason: string) => void;
 }) {
   return (
     <div className="rounded-lg border p-4 space-y-3">
@@ -112,6 +116,8 @@ function CategoryGroupReadOnly({
         selectable={selectable}
         selectedIds={selectedIds}
         onToggleItem={onToggleItem}
+        itemReasons={itemReasons}
+        onReasonChange={onReasonChange}
       />
     </div>
   );
@@ -128,9 +134,11 @@ interface BudgetCategorySectionProps {
   selectable?: boolean;
   selectedIds?: Set<string>;
   onToggleItem?: (itemId: string, label: string) => void;
+  itemReasons?: Record<string, string>;
+  onReasonChange?: (itemId: string, reason: string) => void;
 }
 
-export function BudgetCategorySection({ label, categories, groups, onChange, readOnly = false, department, selectable, selectedIds, onToggleItem }: BudgetCategorySectionProps) {
+export function BudgetCategorySection({ label, categories, groups, onChange, readOnly = false, department, selectable, selectedIds, onToggleItem, itemReasons, onReasonChange }: BudgetCategorySectionProps) {
   function updateGroup(id: string, updated: BudgetCategoryGroup) {
     onChange?.(groups.map((g) => (g.id === id ? updated : g)));
   }
@@ -165,6 +173,8 @@ export function BudgetCategorySection({ label, categories, groups, onChange, rea
               selectable={selectable}
               selectedIds={selectedIds}
               onToggleItem={onToggleItem}
+              itemReasons={itemReasons}
+              onReasonChange={onReasonChange}
             />
           ) : (
             <CategoryGroupCard

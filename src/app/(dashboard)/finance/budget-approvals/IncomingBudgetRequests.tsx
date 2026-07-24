@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
@@ -18,19 +17,26 @@ import { budgetRequestTotal, NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, typ
 
 type Row = BudgetRequest & { collegeId: string; collegeName: string };
 
+function defaultFiscalYear(): string {
+  const d = new Date();
+  const startYear = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; // FY starts April
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
+}
+
 export function IncomingBudgetRequests() {
   const [requests, setRequests] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
   const [mode, setMode] = useState<"idle" | "approve" | "reject" | "return" | "reconsider">("idle");
-  const [fiscalYear, setFiscalYear] = useState("");
+  const [fiscalYear, setFiscalYear] = useState(defaultFiscalYear());
   const [remarks, setRemarks] = useState("");
-  const [reconsiderReason, setReconsiderReason] = useState("");
-  // itemId -> "title (category)", so Finance can tick specific line items that
-  // can't be justified before writing one reason and sending the whole request
-  // back to the HOD (there's no per-item status — this only shapes the remarks).
+  // Items left unticked ("not approved") land here awaiting a per-item reason —
+  // ticked items need no entry at all, since ticked == approved is the default.
+  // itemId -> "title (category)"
   const [flaggedItems, setFlaggedItems] = useState<Record<string, string>>({});
+  // itemId -> Finance's reason that specific item can't be approved as-is.
+  const [itemReasons, setItemReasons] = useState<Record<string, string>>({});
 
   function load() {
     setIsLoading(true);
@@ -53,10 +59,10 @@ export function IncomingBudgetRequests() {
 
   function resetAction() {
     setMode("idle");
-    setFiscalYear("");
+    setFiscalYear(defaultFiscalYear());
     setRemarks("");
-    setReconsiderReason("");
     setFlaggedItems({});
+    setItemReasons({});
   }
 
   function toggleFlag(itemId: string, label: string) {
@@ -66,11 +72,25 @@ export function IncomingBudgetRequests() {
       else next[itemId] = label;
       return next;
     });
+    // Un-ticking back to "approved" drops any reason that was attached.
+    setItemReasons((prev) => {
+      if (!(itemId in prev)) return prev;
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
   }
 
+  function setItemReason(itemId: string, reason: string) {
+    setItemReasons((prev) => ({ ...prev, [itemId]: reason }));
+  }
+
+  const allFlaggedItemsHaveReasons = Object.keys(flaggedItems).every((id) => itemReasons[id]?.trim());
+
   function reconsiderRemarks(): string {
-    const labels = Object.values(flaggedItems);
-    return `Items to reconsider: ${labels.join(", ")}.\n\nReason: ${reconsiderReason.trim()}`;
+    return Object.entries(flaggedItems)
+      .map(([itemId, label]) => `${label}: ${itemReasons[itemId]?.trim() || "(no reason provided)"}`)
+      .join("\n");
   }
 
   async function act(request: Row, action: "APPROVE" | "REJECT" | "RETURN", remarksOverride?: string) {
@@ -198,6 +218,8 @@ export function IncomingBudgetRequests() {
                   selectable
                   selectedIds={new Set(Object.keys(flaggedItems))}
                   onToggleItem={toggleFlag}
+                  itemReasons={itemReasons}
+                  onReasonChange={setItemReason}
                 />
                 <BudgetCategorySection
                   label="Recurring"
@@ -207,6 +229,8 @@ export function IncomingBudgetRequests() {
                   selectable
                   selectedIds={new Set(Object.keys(flaggedItems))}
                   onToggleItem={toggleFlag}
+                  itemReasons={itemReasons}
+                  onReasonChange={setItemReason}
                 />
 
                 {mode === "idle" && (
@@ -239,7 +263,7 @@ export function IncomingBudgetRequests() {
                         onClick={() => setMode("reconsider")}
                       >
                         <Flag className="h-3.5 w-3.5 mr-1" />
-                        Reconsider Flagged Items ({Object.keys(flaggedItems).length})
+                        Return Items Not Approved ({Object.keys(flaggedItems).length})
                       </Button>
                     )}
                     <Button
@@ -276,37 +300,28 @@ export function IncomingBudgetRequests() {
                 {mode === "reconsider" && (
                   <div className="space-y-3 rounded-md border border-red-300/60 bg-red-50 p-3 pt-2 border-t">
                     <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-red-800">Items flagged as unacceptable</Label>
+                      <Label className="text-sm font-medium text-red-800">Items not approved</Label>
                       <div className="space-y-1.5 rounded-md border bg-background p-2">
                         {Object.keys(flaggedItems).length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No items flagged — tick items above first.</p>
+                          <p className="text-xs text-muted-foreground">No items unticked — untick items above first.</p>
                         ) : (
                           Object.entries(flaggedItems).map(([itemId, label]) => (
-                            <label key={itemId} className="flex items-center gap-2 text-sm">
-                              <Checkbox checked onCheckedChange={() => toggleFlag(itemId, label)} />
-                              {label}
-                            </label>
+                            <div key={itemId} className="text-sm space-y-0.5">
+                              <p className="font-medium">{label}</p>
+                              <p className={`text-xs ${itemReasons[itemId]?.trim() ? "text-muted-foreground" : "text-destructive"}`}>
+                                {itemReasons[itemId]?.trim() || "No reason added yet — click \"Add Reason\" on this item above."}
+                              </p>
+                            </div>
                           ))
                         )}
                       </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium text-red-800">Reason Finance can&apos;t approve these</Label>
-                      <Textarea
-                        value={reconsiderReason}
-                        onChange={(e) => setReconsiderReason(e.target.value)}
-                        placeholder="Explain why these items can't be approved as-is..."
-                        rows={2}
-                        disabled={isActingThis}
-                        className="resize-none text-sm bg-background"
-                      />
                     </div>
                     <div className="flex gap-2">
                       <Button
                         size="sm"
                         className="bg-red-600 hover:bg-red-700 text-white"
                         loading={isActingThis}
-                        disabled={Object.keys(flaggedItems).length === 0 || !reconsiderReason.trim()}
+                        disabled={Object.keys(flaggedItems).length === 0 || !allFlaggedItemsHaveReasons}
                         onClick={() => void act(item, "RETURN", reconsiderRemarks())}
                       >
                         Send Back to HOD

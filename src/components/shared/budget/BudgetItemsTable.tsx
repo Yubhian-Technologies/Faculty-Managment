@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
@@ -43,14 +44,17 @@ interface BudgetItemsTableProps {
   // HOD's own department is resolved server-side, so this is only needed for
   // the Principal/VP emergency-request form where department is free text.
   department?: string;
-  // Finance's read-only review view only: lets Finance tick specific items to
-  // flag as unjustifiable before returning the request to the HOD.
+  // Finance's read-only review view only: every item starts ticked (approved).
+  // Un-ticking an item marks it as not approved and requires a reason attached
+  // to that specific item before the request can be returned to the HOD.
   selectable?: boolean;
   selectedIds?: Set<string>;
   onToggleItem?: (itemId: string, label: string) => void;
+  itemReasons?: Record<string, string>;
+  onReasonChange?: (itemId: string, reason: string) => void;
 }
 
-export function BudgetItemsTable({ items, onChange, readOnly = false, category, department, selectable = false, selectedIds, onToggleItem }: BudgetItemsTableProps) {
+export function BudgetItemsTable({ items, onChange, readOnly = false, category, department, selectable = false, selectedIds, onToggleItem, itemReasons, onReasonChange }: BudgetItemsTableProps) {
   const cfg = fieldConfigForCategory(category);
   const hasMultiplier = cfg.extraFields.some((f) => f.isMultiplier) || !!cfg.fixedTotalMultiplier;
   const priceLabel = cfg.priceLabel ?? (hasMultiplier ? "Unit Price" : "Amount");
@@ -124,7 +128,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category, 
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground w-36">{priceLabel}</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground w-36">{totalLabel}</th>
                 {!readOnly && <th className="px-3 py-2 w-10" />}
-                {selectable && <th className="px-3 py-2 w-16 text-center font-medium text-muted-foreground">Flag</th>}
+                {selectable && <th className="px-3 py-2 w-16 text-center font-medium text-muted-foreground">Approved</th>}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -144,6 +148,8 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category, 
                   selectable={selectable}
                   isFlagged={selectedIds?.has(item.id) ?? false}
                   onToggleFlag={() => onToggleItem?.(item.id, `${item.title || "Untitled item"} (${category})`)}
+                  reason={itemReasons?.[item.id]}
+                  onReasonChange={(reason) => onReasonChange?.(item.id, reason)}
                 />
               ))}
             </tbody>
@@ -184,13 +190,16 @@ interface ItemRowsProps {
   selectable?: boolean;
   isFlagged?: boolean;
   onToggleFlag?: () => void;
+  reason?: string;
+  onReasonChange?: (reason: string) => void;
 }
 
-function ItemRows({ item, cfg, category, readOnly, colCount, removable, salaryStructures, headcountByKey, onUpdate, onRemove, selectable = false, isFlagged = false, onToggleFlag }: ItemRowsProps) {
+function ItemRows({ item, cfg, category, readOnly, colCount, removable, salaryStructures, headcountByKey, onUpdate, onRemove, selectable = false, isFlagged = false, onToggleFlag, reason, onReasonChange }: ItemRowsProps) {
   const [adding, setAdding] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
   const [draftType, setDraftType] = useState<"TEXT" | "NUMBER">("TEXT");
   const [draftMultiplier, setDraftMultiplier] = useState(false);
+  const [reasonOpen, setReasonOpen] = useState(!!reason?.trim());
 
   const customFields = item.customFields ?? [];
   const isStaffSalaries = category === "Staff Salaries";
@@ -268,7 +277,11 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
           <td className="px-3 py-2 font-medium">{formatCurrency(itemTotal(item, category))}</td>
           {selectable && (
             <td className="px-3 py-2 text-center">
-              <Checkbox checked={isFlagged} onCheckedChange={() => onToggleFlag?.()} aria-label={`Flag ${item.title || "item"} for reconsideration`} />
+              <Checkbox
+                checked={!isFlagged}
+                onCheckedChange={() => onToggleFlag?.()}
+                aria-label={isFlagged ? `Approve ${item.title || "item"}` : `Mark ${item.title || "item"} as not approved`}
+              />
             </td>
           )}
         </tr>
@@ -361,6 +374,34 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
             <Button type="button" variant="ghost" size="sm" onClick={onRemove} disabled={!removable} aria-label="Remove item">
               <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
+          </td>
+        </tr>
+      )}
+
+      {readOnly && selectable && isFlagged && (
+        <tr className="bg-red-50/60">
+          <td colSpan={colCount} className="px-3 py-2">
+            {reasonOpen ? (
+              <Textarea
+                value={reason ?? ""}
+                onChange={(e) => onReasonChange?.(e.target.value)}
+                placeholder="Why can't this item be approved?"
+                rows={2}
+                autoFocus
+                className="resize-none text-xs bg-background"
+              />
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-100"
+                onClick={() => setReasonOpen(true)}
+              >
+                <Flag className="h-3 w-3 mr-1" />
+                Add Reason
+              </Button>
+            )}
           </td>
         </tr>
       )}
