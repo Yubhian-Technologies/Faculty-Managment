@@ -15,15 +15,31 @@ type Browser = any;
 // `puppeteer`, whose bundled-browser download makes local setup a no-config `npm install`.
 // See next.config.ts's `outputFileTracingIncludes` for the matching deploy-side config
 // that ships @sparticuz/chromium's binary into the function bundle.
+//
+// `puppeteer`/`puppeteer-core` and `@sparticuz/chromium` are exact-pinned (no `^`) in
+// package.json, not just here — @sparticuz/chromium always trails the latest Chromium
+// by a release or two (it publishes a build for each major Chromium version some days
+// after Google/Puppeteer ship it), so puppeteer-core's bundled Chrome revision and
+// @sparticuz/chromium's revision drift out of sync easily. A caret range would let a
+// routine `npm install`/`npm update` bump puppeteer-core ahead of whatever Chromium
+// build @sparticuz/chromium currently ships, silently reintroducing a version
+// mismatch. If bumping either, re-check both revisions match first (compare
+// node_modules/puppeteer-core/lib/puppeteer/revisions.js's `chrome` value against the
+// @sparticuz/chromium release notes at https://github.com/Sparticuz/chromium/releases).
 async function launchBrowser(): Promise<Browser | null> {
   if (process.env.VERCEL) {
     try {
       const chromium = (await import("@sparticuz/chromium")).default;
       const puppeteerCore = (await import("puppeteer-core")).default;
+      // Matches @sparticuz/chromium's documented usage exactly: `defaultArgs` merges
+      // chromium's serverless-tuned flags with puppeteer-core's own required launch
+      // args (e.g. remote-debugging setup) — passing `chromium.args` alone omits those
+      // and can fail to establish the CDP connection. `headless: "shell"` is required
+      // because this Chromium build doesn't support the "new" headless mode.
       return await puppeteerCore.launch({
-        args: chromium.args,
+        args: await puppeteerCore.defaultArgs({ args: chromium.args, headless: "shell" }),
         executablePath: await chromium.executablePath(),
-        headless: true,
+        headless: "shell",
       });
     } catch (err) {
       console.error("[renderHtmlToPdf] serverless chromium launch failed", err);
