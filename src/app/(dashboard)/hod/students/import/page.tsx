@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
+import { toCSV, parseCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 
 // ─── Template definition ───────────────────────────────────────────────────────
 // S.No is a convenience column for the sheet author only (not stored) — every
@@ -15,15 +16,15 @@ import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, Al
 
 const COLUMNS = [
   { key: "sno",             label: "S.No",             required: false, sample: "1" },
-  { key: "rollNumber",      label: "Roll Number",      required: true,  sample: "21A91A0501" },
-  { key: "name",            label: "Name",             required: true,  sample: "P. Sai Kumar" },
+  { key: "rollNumber",      label: "Roll Number",      required: true,  sample: "21A91A0501", aliases: ["Roll No", "Roll No.", "Roll Num"] },
+  { key: "name",            label: "Name",             required: true,  sample: "P. Sai Kumar", aliases: ["Student Name", "Full Name"] },
   { key: "status",          label: "Status",           required: true,  sample: "REGULAR" },
   { key: "section",         label: "Section",          required: true,  sample: "A" },
-  { key: "year",            label: "Academic Year",    required: true,  sample: "2" },
+  { key: "year",            label: "Academic Year",    required: true,  sample: "2", aliases: ["Year"] },
   { key: "gender",          label: "Gender",           required: false, sample: "Male" },
-  { key: "dateOfBirth",     label: "Date of Birth (YYYY-MM-DD)", required: false, sample: "2004-08-12" },
-  { key: "guardianContact", label: "Guardian Contact", required: false, sample: "9876543210" },
-  { key: "email",           label: "Email",            required: false, sample: "sai@gmail.com" },
+  { key: "dateOfBirth",     label: "Date of Birth (YYYY-MM-DD)", required: false, sample: "2004-08-12", aliases: ["DOB", "Date of Birth"] },
+  { key: "guardianContact", label: "Guardian Contact", required: false, sample: "9876543210", aliases: ["Parent Contact", "Guardian Phone", "Parent Phone"] },
+  { key: "email",           label: "Email",            required: false, sample: "sai@gmail.com", aliases: ["Email ID"] },
 ];
 
 const HINTS = [
@@ -32,40 +33,6 @@ const HINTS = [
   "Section must already exist (create it first under Sections)",
   "A single file may mix multiple sections and years",
 ];
-
-// ─── CSV helpers (same convention as the faculty import page) ─────────────────
-
-function toCSV(rows: string[][]): string {
-  return rows
-    .map((row) => row.map((cell) => (cell.includes(",") || cell.includes('"') ? `"${cell.replace(/"/g, '""')}"` : cell)).join(","))
-    .join("\r\n");
-}
-
-function parseCSV(text: string): string[][] {
-  const result: string[][] = [];
-  const lines = text.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const cells: string[] = [];
-    let inQuotes = false;
-    let cell = "";
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') { cell += '"'; i++; }
-        else { inQuotes = !inQuotes; }
-      } else if (ch === "," && !inQuotes) {
-        cells.push(cell.trim());
-        cell = "";
-      } else {
-        cell += ch;
-      }
-    }
-    cells.push(cell.trim());
-    result.push(cells);
-  }
-  return result;
-}
 
 type ParsedRow = Record<string, string>;
 type ImportResult = { created: number; failed: { row: number; rollNumber: string; error: string }[] };
@@ -92,51 +59,56 @@ export default function StudentImportPage() {
     URL.revokeObjectURL(url);
   }
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setParseError("");
     setRows([]);
     setResult(null);
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const text = ev.target?.result as string;
-        const parsed = parseCSV(text);
-        if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
+    const name = file.name.toLowerCase();
+    const isExcel = name.endsWith(".xlsx");
+    if (name.endsWith(".xls")) {
+      setParseError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      e.target.value = "";
+      return;
+    }
 
-        const headers = parsed[0].map((h) => h.trim());
-        const keyMap: Record<number, string> = {};
-        headers.forEach((h, i) => {
-          const col = COLUMNS.find((c) => c.label.toLowerCase() === h.toLowerCase());
-          if (col) keyMap[i] = col.key;
-        });
+    try {
+      const parsed = isExcel ? await parseExcelFile(file) : parseCSV(await readFileAsText(file));
+      if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
 
-        const dataRows = parsed.slice(1).map((cells) => {
-          const row: ParsedRow = {};
-          cells.forEach((val, i) => {
-            if (keyMap[i]) row[keyMap[i]] = val;
-          });
-          return row;
-        }).filter((r) => r.rollNumber || r.name);
+      const headers = parsed[0].map((h) => h.trim());
+      // Tolerant of case, punctuation, spacing, and alternate wording (e.g. "DOB" for Date of Birth).
+      const keyMap = matchHeaders(headers, COLUMNS);
 
-        if (dataRows.length === 0) { setParseError("No data rows found after the header."); return; }
-        if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
-
-        const mappedCount = Object.keys(keyMap).length;
-        if (mappedCount < 3) {
-          setParseError(`Only ${mappedCount} column(s) matched. Make sure you're using the downloaded template headers.`);
-          return;
-        }
-
-        setRows(dataRows);
-      } catch {
-        setParseError("Failed to parse the file. Ensure it is a valid CSV.");
+      // Check header matching BEFORE counting data rows — if nothing in the
+      // header row matched, every row maps to an empty object and would
+      // otherwise surface as the misleading "no data rows" error instead of
+      // pointing at the real problem (wrong/missing header row).
+      const mappedCount = Object.keys(keyMap).length;
+      if (mappedCount < 3) {
+        setParseError(`Only ${mappedCount} column(s) matched. Make sure the header row is the first row, and its wording is close to the template.`);
+        return;
       }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
+
+      const dataRows = parsed.slice(1).map((cells) => {
+        const row: ParsedRow = {};
+        cells.forEach((val, i) => {
+          if (keyMap[i]) row[keyMap[i]] = val;
+        });
+        return row;
+      }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
+
+      if (dataRows.length === 0) { setParseError("No data rows found after the header — check that your data starts on the row right after the header, with no blank rows in between."); return; }
+      if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
+
+      setRows(dataRows);
+    } catch {
+      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+    } finally {
+      e.target.value = "";
+    }
   }
 
   async function handleImport() {
@@ -199,7 +171,7 @@ export default function StudentImportPage() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">2</span>Upload Filled File</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
+          <input ref={fileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void handleFile(e)} />
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -207,8 +179,8 @@ export default function StudentImportPage() {
           >
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
-              <p className="font-medium text-sm">Click to select CSV file</p>
-              <p className="text-xs text-muted-foreground mt-1">Only .csv files are supported</p>
+              <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. "DOB" for Date of Birth)</p>
             </div>
           </button>
           {parseError && (

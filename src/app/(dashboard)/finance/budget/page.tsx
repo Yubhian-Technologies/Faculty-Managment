@@ -146,7 +146,10 @@ export default function FinanceBudgetPage() {
             </Button>
           )}
           {row.status !== "CLOSED" && (
-            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => void handleClose(row)}>Close</Button>
+            <>
+              <Button size="sm" variant="outline" onClick={() => router.push(`/finance/budget/${row.id}/revise`)}>Revise</Button>
+              <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => void handleClose(row)}>Close</Button>
+            </>
           )}
         </div>
       ),
@@ -166,7 +169,7 @@ export default function FinanceBudgetPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Management"
-        description="Allocate and monitor department budgets"
+        description="Allocate, revise, and monitor department budgets"
         actions={
           <>
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>

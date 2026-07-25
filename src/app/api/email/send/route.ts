@@ -5,7 +5,6 @@ import nodemailer from "nodemailer";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { interviewInvitationEmail, offerLetterEmail } from "@/lib/email/templates";
 import { getOfferLetterHTML, type OfferLetterData } from "@/lib/pdf/offerLetterTemplate";
-import { renderHtmlToPdf } from "@/lib/pdf/renderPdf";
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -51,10 +50,11 @@ export async function POST(request: Request) {
       subject = `Offer Letter — ${body.data.collegeName as string}`;
       html = offerLetterEmail(body.data as Parameters<typeof offerLetterEmail>[0]);
 
+      // No headless-browser dependency in this deployment (see /api/pdf/generate) —
+      // attach the letter as a downloadable HTML file instead of a rendered PDF.
       const letterData = body.data as unknown as OfferLetterData & { position?: string };
       const letterHtml = getOfferLetterHTML({ ...letterData, designation: letterData.designation ?? letterData.position ?? "" });
-      const pdfBuffer = await renderHtmlToPdf(letterHtml, { top: "0", bottom: "0", left: "0", right: "0" });
-      if (pdfBuffer) attachments = [{ filename: "offer-letter.pdf", content: pdfBuffer }];
+      attachments = [{ filename: "offer-letter.html", content: Buffer.from(letterHtml, "utf8") }];
     } else {
       html = `<p>${String(body.data.message ?? "")}</p>`;
     }
