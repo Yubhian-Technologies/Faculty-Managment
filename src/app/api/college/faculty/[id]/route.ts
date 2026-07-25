@@ -176,15 +176,21 @@ export async function PATCH(
     await ref.update(updates);
 
     // Best-effort: if this faculty record has a linked system login, keep their
-    // photo in sync there too so it shows up on their own dashboard/nav avatar.
-    if (body.profilePhotoUrl !== undefined) {
+    // name/photo in sync there too — the login doc (colleges/{id}/users) is what
+    // panel-member pickers, notifications, and the nav/avatar read from, so edits
+    // made here on the faculty details page must propagate or those surfaces show
+    // stale data from account creation time.
+    if (body.profilePhotoUrl !== undefined || body.name !== undefined) {
       const linkedUid = (snap.data() as { userUid?: string }).userUid;
       if (linkedUid) {
+        const loginSync: Record<string, string> = {};
+        if (body.profilePhotoUrl !== undefined) loginSync.profilePhotoUrl = body.profilePhotoUrl;
+        if (body.name !== undefined) loginSync.name = body.name;
         try {
           await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid)
-            .set({ profilePhotoUrl: body.profilePhotoUrl }, { merge: true });
+            .set(loginSync, { merge: true });
           await db.collection("systemUsers").doc(linkedUid)
-            .set({ profilePhotoUrl: body.profilePhotoUrl }, { merge: true });
+            .set(loginSync, { merge: true });
         } catch { /* non-fatal */ }
       }
     }
@@ -218,8 +224,45 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+    const facultyData = snap.data() as { name?: string; userUid?: string };
 
     await ref.delete();
+
+    // Also remove the linked login account — otherwise it lingers in
+    // colleges/{id}/users forever and keeps showing up in panel-member
+    // pickers, staff lists, etc. even though the faculty record is gone.
+    const linkedUid = facultyData.userUid;
+    if (linkedUid) {
+      await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid).delete();
+      await db.collection("systemUsers").doc(linkedUid).delete();
+
+      // Best-effort: remove the Firebase Auth account too. If it fails, the
+      // Firestore records are still gone, which is what the UI reads from.
+      try {
+        const { getAdminAuth } = await import("@/lib/firebase/admin");
+        const auth = await getAdminAuth();
+        await auth.deleteUser(linkedUid);
+      } catch (authErr) {
+        console.warn("[college/faculty/[id] DELETE] Auth deletion failed (non-fatal):", authErr);
+      }
+    }
+
+    let actorName = "Unknown";
+    try {
+      const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+    } catch { /* best-effort */ }
+
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "FACULTY_DELETED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: id,
+      details: { name: facultyData.name ?? "" },
+      timestamp: new Date(),
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

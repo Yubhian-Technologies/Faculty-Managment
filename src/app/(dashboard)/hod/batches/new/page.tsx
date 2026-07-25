@@ -11,12 +11,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, KeyRound } from "lucide-react";
 import { ROLE_LABELS } from "@/types";
 import type { VacancyRequest, Candidate, FMSUser } from "@/types";
 
 const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL"] as const;
 const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
+
+interface FacultyRecord {
+  id: string;
+  name: string;
+  department?: string;
+  userUid?: string;
+}
 
 export default function NewBatchPage() {
   const router = useRouter();
@@ -30,6 +37,9 @@ export default function NewBatchPage() {
   const [defaultMembers, setDefaultMembers] = useState<FMSUser[]>([]);
   // Selectable: other HODs + PANEL_MEMBER
   const [staffList, setStaffList] = useState<FMSUser[]>([]);
+  // Faculty Details records in this department with no login account yet —
+  // shown so it's clear who's missing and why, instead of just vanishing
+  const [loginlessFaculty, setLoginlessFaculty] = useState<FacultyRecord[]>([]);
 
   const [selectedVacancyId, setSelectedVacancyId] = useState("");
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
@@ -52,10 +62,15 @@ export default function NewBatchPage() {
       fetch("/api/college/users?allDepts=true&includeAll=true")
         .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
         .then((d) => d.users ?? []),
+      fetch("/api/college/faculty")
+        .then((r) => r.json() as Promise<{ faculty: FacultyRecord[] }>)
+        .then((d) => d.faculty ?? [])
+        .catch(() => [] as FacultyRecord[]),
     ])
-      .then(([v, c, s]) => {
+      .then(([v, c, s, f]) => {
         setVacancies(v);
         setCandidates(c);
+        setLoginlessFaculty(f.filter((rec) => !rec.userUid));
 
         // Auto-select if vacancyId was passed from pipeline
         if (prefilledVacancyId && v.find((vac) => vac.id === prefilledVacancyId)) {
@@ -299,14 +314,14 @@ export default function NewBatchPage() {
             ))}
 
             {/* Divider */}
-            {staffList.length > 0 && (
+            {(staffList.length > 0 || loginlessFaculty.length > 0) && (
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide pt-1">
                 Additional members (optional)
               </p>
             )}
 
             {/* Selectable: other HODs + PANEL_MEMBER */}
-            {staffList.length === 0 ? (
+            {staffList.length === 0 && loginlessFaculty.length === 0 ? (
               <p className="text-sm text-muted-foreground">No additional staff available.</p>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -323,6 +338,29 @@ export default function NewBatchPage() {
                         {ROLE_LABELS[s.role] ?? s.role}{s.department ? ` · ${s.department}` : ""}
                       </p>
                     </label>
+                  </div>
+                ))}
+
+                {/* Faculty with no login account yet — shown so it's clear why
+                    they can't be picked, instead of silently disappearing */}
+                {loginlessFaculty.map((f) => (
+                  <div key={`nf-${f.id}`} className="flex items-center gap-3 p-2 border border-dashed rounded-lg opacity-60">
+                    <Checkbox id={`nf-${f.id}`} checked={false} disabled />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{f.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Faculty{f.department ? ` · ${f.department}` : ""}
+                      </p>
+                    </div>
+                    <a
+                      href={`/hod/faculty/${f.id}/credentials`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline shrink-0"
+                    >
+                      <KeyRound className="h-3 w-3" />
+                      Set up login
+                    </a>
                   </div>
                 ))}
               </div>
