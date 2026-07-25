@@ -1,15 +1,10 @@
 export const dynamic = "force-dynamic";
-// Headless Chromium cold-starts (Brotli-decompressing the binary + launching it) plus
-// rendering can take longer than Vercel's default function timeout, especially on a
-// cold Lambda instance — give it real headroom.
-export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getOfferLetterHTML, getAppointmentLetterHTML } from "@/lib/pdf/offerLetterTemplate";
 import { getFinanceReportHTML, getFinanceReceiptHTML } from "@/lib/pdf/financeReportTemplate";
 import { getResumeHTML } from "@/lib/pdf/resumeTemplate";
-import { renderHtmlToPdf } from "@/lib/pdf/renderPdf";
 
 async function verifyToken(request: Request): Promise<string | null> {
   const auth = request.headers.get("Authorization");
@@ -22,6 +17,10 @@ async function verifyToken(request: Request): Promise<string | null> {
   }
 }
 
+// Serves the letter/report/resume as a downloadable HTML document — the browser can
+// print it to a real PDF (Ctrl/Cmd+P → Save as PDF) with the exact same layout. No
+// headless-browser dependency (Puppeteer et al.), so this works identically on any
+// serverless host with zero native binaries, cold-start cost, or version pinning.
 export async function POST(request: Request) {
   const uid = await verifyToken(request);
   if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,11 +33,11 @@ export async function POST(request: Request) {
 
     let html = "";
     const filenames: Record<typeof body.type, string> = {
-      OFFER_LETTER: "offer-letter.pdf",
-      APPOINTMENT_LETTER: "appointment-letter.pdf",
-      FINANCE_REPORT: "financial-report.pdf",
-      FINANCE_RECEIPT: "finance-receipt.pdf",
-      RESUME: "resume.pdf",
+      OFFER_LETTER: "offer-letter.html",
+      APPOINTMENT_LETTER: "appointment-letter.html",
+      FINANCE_REPORT: "financial-report.html",
+      FINANCE_RECEIPT: "finance-receipt.html",
+      RESUME: "resume.html",
     };
     const filename = filenames[body.type];
 
@@ -56,34 +55,15 @@ export async function POST(request: Request) {
       html = getResumeHTML(body.data as unknown as Parameters<typeof getResumeHTML>[0]);
     }
 
-    // The resume reads at normal font size and is free to spill onto additional pages —
-    // give it real page margins so page breaks have breathing room. Other letter/report
-    // templates are short, single-page documents designed around zero margin.
-    const margin = body.type === "RESUME"
-      ? { top: "12mm", bottom: "12mm", left: "0", right: "0" }
-      : { top: "0", bottom: "0", left: "0", right: "0" };
-
-    const pdfBuffer = await renderHtmlToPdf(html, margin);
-
-    if (!pdfBuffer) {
-      // Fallback: return HTML as a download if Puppeteer not available (Vercel)
-      return new Response(html, {
-        headers: {
-          "Content-Type": "text/html",
-          "Content-Disposition": `attachment; filename="${filename.replace(".pdf", ".html")}"`,
-        },
-      });
-    }
-
-    return new Response(new Uint8Array(pdfBuffer), {
+    return new Response(html, {
       headers: {
-        "Content-Type": "application/pdf",
+        "Content-Type": "text/html",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "no-store",
       },
     });
   } catch (err) {
     console.error("[pdf/generate]", err);
-    return NextResponse.json({ error: "PDF generation failed" }, { status: 500 });
+    return NextResponse.json({ error: "Document generation failed" }, { status: 500 });
   }
 }

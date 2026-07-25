@@ -810,6 +810,7 @@ export type AuditAction =
   | "FACULTY_CREATED"
   | "FACULTY_UPDATED"
   | "FACULTY_STATUS_CHANGED"
+  | "FACULTY_DELETED"
   // Leave module
   | "LEAVE_APPLIED"
   | "LEAVE_HOD_APPROVED"
