@@ -1,6 +1,31 @@
 // Minimal CSV encode/decode helpers, shared by the faculty bulk-import page and
 // the full-detail faculty export.
 
+// Parses a real .xlsx workbook's first sheet into the same string[][] shape
+// parseCSV produces, so uploaders can feed either format into one pipeline
+// (matchHeaders, blank-row filtering, etc.) without knowing which was used.
+// Parsing happens server-side (POST /api/college/parse-excel, real Node
+// exceljs) rather than in the browser — exceljs ships a separate browser
+// bundle for client use that has proven unreliable at reading files (it's
+// fine for the exports elsewhere in the app, which only ever write).
+export async function parseExcelFile(file: File): Promise<string[][]> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/college/parse-excel", { method: "POST", body: formData });
+  const json = await res.json() as { rows?: string[][]; error?: string };
+  if (!res.ok) throw new Error(json.error ?? "Failed to parse Excel file");
+  return json.rows ?? [];
+}
+
+export function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => resolve((ev.target?.result as string) ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
 export function toCSV(rows: string[][]): string {
   return rows
     .map((row) => row.map((cell) => (cell.includes(",") || cell.includes('"') ? `"${cell.replace(/"/g, '""')}"` : cell)).join(","))

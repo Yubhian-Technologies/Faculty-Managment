@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import { toCSV, parseCSV, downloadCSV, matchHeaders } from "@/lib/utils/csv";
+import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { COLUMNS, HINTS } from "@/lib/faculty/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
@@ -29,53 +29,61 @@ export default function FacultyImportPage() {
     downloadCSV(toCSV([headers, sample1]), "faculty_import_template.csv");
   }
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setParseError("");
     setRows([]);
     setResult(null);
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const text = ev.target?.result as string;
-        const parsed = parseCSV(text);
-        if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
+    const name = file.name.toLowerCase();
+    const isExcel = name.endsWith(".xlsx");
+    if (name.endsWith(".xls")) {
+      setParseError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      e.target.value = "";
+      return;
+    }
 
-        const headers = parsed[0].map((h) => h.trim());
-        // Map header labels to column keys — tolerant of case, punctuation, spacing,
-        // and common alternate wording (e.g. "DOJ" for "Joining Date").
-        const keyMap = matchHeaders(headers, COLUMNS);
+    try {
+      const parsed = isExcel ? await parseExcelFile(file) : parseCSV(await readFileAsText(file));
+      if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
 
-        const dataRows = parsed.slice(1).map((cells) => {
-          const row: ParsedRow = {};
-          cells.forEach((val, i) => {
-            if (keyMap[i]) row[keyMap[i]] = val;
-          });
-          return row;
-        }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
+      const headers = parsed[0].map((h) => h.trim());
+      // Map header labels to column keys — tolerant of case, punctuation, spacing,
+      // and common alternate wording (e.g. "DOJ" for "Joining Date").
+      const keyMap = matchHeaders(headers, COLUMNS);
 
-        if (dataRows.length === 0) { setParseError("No data rows found after the header."); return; }
-        if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
-
-        const mappedCount = Object.keys(keyMap).length;
-        if (mappedCount === 0) {
-          setParseError("None of the columns in this file matched the template. Download the template above and copy your data into it.");
-          return;
-        }
-        if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("name")) {
-          setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
-          return;
-        }
-
-        setRows(dataRows);
-      } catch {
-        setParseError("Failed to parse the file. Ensure it is a valid CSV.");
+      // Check header matching BEFORE counting data rows — if nothing in the
+      // header row matched, every row maps to an empty object and would
+      // otherwise surface as the misleading "no data rows" error instead of
+      // pointing at the real problem (wrong/missing header row).
+      const mappedCount = Object.keys(keyMap).length;
+      if (mappedCount === 0) {
+        setParseError("None of the columns in this file matched the template. Make sure the header row is the first row, and its wording is close to the template (e.g. \"Employee ID\", \"DOJ\").");
+        return;
       }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
+      if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("name")) {
+        setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
+        return;
+      }
+
+      const dataRows = parsed.slice(1).map((cells) => {
+        const row: ParsedRow = {};
+        cells.forEach((val, i) => {
+          if (keyMap[i]) row[keyMap[i]] = val;
+        });
+        return row;
+      }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
+
+      if (dataRows.length === 0) { setParseError("No data rows found after the header — check that your data starts on the row right after the header, with no blank rows in between."); return; }
+      if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
+
+      setRows(dataRows);
+    } catch {
+      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+    } finally {
+      e.target.value = "";
+    }
   }
 
   async function handleImport() {
@@ -139,7 +147,7 @@ export default function FacultyImportPage() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">2</span>Upload Filled CSV</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
+          <input ref={fileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void handleFile(e)} />
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -147,8 +155,8 @@ export default function FacultyImportPage() {
           >
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
-              <p className="font-medium text-sm">Click to select CSV file</p>
-              <p className="text-xs text-muted-foreground mt-1">Only .csv files are supported</p>
+              <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. "DOJ" for Joining Date)</p>
             </div>
           </button>
           {parseError && (
