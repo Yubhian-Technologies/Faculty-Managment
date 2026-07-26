@@ -47,6 +47,16 @@ const DESIGNATION_TO_CADRE: Record<string, "PROFESSOR" | "ASSOCIATE_PROFESSOR" |
   "Lecturer":            "ASSISTANT_PROFESSOR",
 };
 
+const QUALIFICATION_OPTIONS = [
+  "M.Tech",
+  "Ph.D",
+  "M.Phil",
+  "MCA",
+  "M.Sc",
+  "MBA",
+  "Others",
+] as const;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type PositionEntry = {
@@ -57,6 +67,7 @@ type PositionEntry = {
   requiredCount: number;
   availableCount: number;
   qualification: string;
+  qualificationOther: string;
   justification: string;
 };
 
@@ -69,8 +80,13 @@ function newEntry(): PositionEntry {
     requiredCount: 1,
     availableCount: 0,
     qualification: "",
+    qualificationOther: "",
     justification: "",
   };
+}
+
+function resolvedQualification(entry: PositionEntry): string {
+  return entry.qualification === "Others" ? entry.qualificationOther.trim() : entry.qualification;
 }
 
 function isEntryValid(entry: PositionEntry): boolean {
@@ -79,7 +95,7 @@ function isEntryValid(entry: PositionEntry): boolean {
     !!entry.designation &&
     (entry.designation !== "Others" || entry.customDesignation.trim().length > 0) &&
     entry.requiredCount >= 1 &&
-    entry.qualification.trim().length > 0 &&
+    resolvedQualification(entry).length > 0 &&
     entry.justification.trim().length >= 10
   );
 }
@@ -174,7 +190,7 @@ export default function NewVacancyPage() {
             positionCategory: entry.category,
             requiredCount: entry.requiredCount,
             availableCount: entry.availableCount,
-            qualification: entry.qualification.trim(),
+            qualification: resolvedQualification(entry),
             justification: entry.justification.trim(),
             studentStrength: requirement?.totalStudents ?? 0,
             totalFacultyRequired: requirement?.totalRequired ?? 0,
@@ -287,9 +303,6 @@ export default function NewVacancyPage() {
                         }`}
                       >
                         <span className="block font-semibold">{CATEGORY_LABELS[cat]}</span>
-                        <span className="text-xs text-muted-foreground font-normal mt-0.5 block">
-                          {cat === "TEACHING" ? "Professors & Lecturers" : "Technical & Non-Technical"}
-                        </span>
                       </button>
                     ))}
                   </div>
@@ -338,7 +351,7 @@ export default function NewVacancyPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Vacancies Required <span className="text-destructive">*</span></Label>
+                    <Label>Current Hiring Requirement <span className="text-destructive">*</span></Label>
                     <Input
                       type="number"
                       min={1}
@@ -367,11 +380,26 @@ export default function NewVacancyPage() {
 
                 <div className="space-y-2">
                   <Label>Required Qualification <span className="text-destructive">*</span></Label>
-                  <Input
+                  <Select
                     value={entry.qualification}
-                    onChange={(e) => updateEntry(entry.key, { qualification: e.target.value })}
-                    placeholder="e.g. M.Tech / Ph.D in Computer Science..."
-                  />
+                    onValueChange={(v) => updateEntry(entry.key, { qualification: v, qualificationOther: "" })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select qualification..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {QUALIFICATION_OPTIONS.map((q) => (
+                        <SelectItem key={q} value={q}>{q}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {entry.qualification === "Others" && (
+                    <Input
+                      value={entry.qualificationOther}
+                      onChange={(e) => updateEntry(entry.key, { qualificationOther: e.target.value })}
+                      placeholder="Specify qualification..."
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-2">
