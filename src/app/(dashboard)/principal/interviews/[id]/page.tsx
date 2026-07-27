@@ -3,17 +3,20 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { ExternalLink, FileText, Users, Calendar, Briefcase } from "lucide-react";
-import type { HiringBatch, Candidate } from "@/types";
+import { ExternalLink, FileText, Users, Calendar, Briefcase, Pencil } from "lucide-react";
+import { ROLE_LABELS } from "@/types";
+import type { HiringBatch, Candidate, FMSUser } from "@/types";
 
 type BatchRow = Record<string, unknown> & HiringBatch;
 
@@ -26,6 +29,7 @@ export default function InterviewDetailPage() {
   const [loadingBatch, setLoadingBatch] = useState(true);
   const [detailCandidates, setDetailCandidates] = useState<Candidate[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [allUsers, setAllUsers] = useState<FMSUser[]>([]);
 
   const initialAction = searchParams.get("action");
   const [action, setAction] = useState<"approve" | "reject" | null>(
@@ -34,7 +38,15 @@ export default function InterviewDetailPage() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  // Modify plan state
+  const [editing, setEditing] = useState(false);
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
+  const [editVenue, setEditVenue] = useState("");
+  const [editPanel, setEditPanel] = useState<string[]>([]);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  function loadPage() {
     setLoadingBatch(true);
     fetch("/api/college/hiring-batches")
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
@@ -49,7 +61,16 @@ export default function InterviewDetailPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load interview plan" }))
       .finally(() => setLoadingBatch(false));
-  }, [id, router]);
+  }
+
+  useEffect(() => {
+    loadPage();
+    fetch("/api/college/users?allDepts=true&includeAll=true")
+      .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
+      .then((d) => setAllUsers(d.users ?? []))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -61,6 +82,56 @@ export default function InterviewDetailPage() {
       .catch(() => {})
       .finally(() => setLoadingCandidates(false));
   }, [id]);
+
+  function openEdit() {
+    if (!detailBatch) return;
+    const d = detailBatch.interviewDate as { seconds?: number } | string | Date | null;
+    if (d && typeof d === "object" && "seconds" in d && d.seconds) {
+      setEditDate(new Date(d.seconds * 1000).toISOString().split("T")[0]);
+    } else if (d instanceof Date) {
+      setEditDate(d.toISOString().split("T")[0]);
+    } else if (typeof d === "string") {
+      setEditDate(d.split("T")[0]);
+    } else {
+      setEditDate("");
+    }
+    setEditTime((detailBatch.interviewTime as string) ?? "");
+    setEditVenue((detailBatch.interviewVenue as string) ?? "");
+    setEditPanel([...(detailBatch.panelMemberUids as string[] ?? [])]);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!editDate) {
+      toast({ variant: "destructive", title: "Interview date is required" });
+      return;
+    }
+    if (editPanel.length < 2) {
+      toast({ variant: "destructive", title: "Select at least 2 panel members" });
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch(`/api/college/hiring-batches/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interviewDate: editDate,
+          interviewTime: editTime,
+          interviewVenue: editVenue,
+          panelMemberUids: editPanel,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Plan updated" });
+      setEditing(false);
+      loadPage();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update plan" });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
 
   async function handleAction() {
     if (!detailBatch || !action) return;
@@ -101,8 +172,99 @@ export default function InterviewDetailPage() {
       <PageHeader
         title={detailBatch?.position as string}
         description={detailBatch?.department as string}
-        actions={detailBatch ? <StatusBadge status={(detailBatch as unknown as HiringBatch).status} /> : undefined}
+        actions={
+          <div className="flex items-center gap-2">
+            {detailBatch && <StatusBadge status={(detailBatch as unknown as HiringBatch).status} />}
+            {!editing && (
+              <Button size="sm" variant="outline" onClick={openEdit}>
+                <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                Modify Plan
+              </Button>
+            )}
+          </div>
+        }
       />
+
+      {/* ── Modify Plan form ───────────────────────────────────────────────── */}
+      {editing && (
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="text-base">Modify Interview Plan</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Interview Date *</Label>
+                <Input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Interview Time</Label>
+                <Input
+                  type="time"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Venue</Label>
+              <Input
+                value={editVenue}
+                onChange={(e) => setEditVenue(e.target.value)}
+                placeholder="e.g. Conference Hall, Block B"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>
+                Panel Members *
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {editPanel.length} selected (min 2)
+                </span>
+              </Label>
+              <div className="max-h-56 overflow-y-auto rounded-md border p-2 space-y-1">
+                {allUsers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground p-2">No staff found</p>
+                ) : (
+                  allUsers.map((u) => (
+                    <div key={u.uid} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/40">
+                      <Checkbox
+                        id={`ep-${u.uid}`}
+                        checked={editPanel.includes(u.uid)}
+                        onCheckedChange={(checked) =>
+                          setEditPanel((prev) =>
+                            checked ? [...prev, u.uid] : prev.filter((x) => x !== u.uid)
+                          )
+                        }
+                      />
+                      <label htmlFor={`ep-${u.uid}`} className="flex-1 cursor-pointer">
+                        <p className="text-sm font-medium">{u.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {ROLE_LABELS[u.role] ?? u.role}{u.department ? ` · ${u.department}` : ""}
+                        </p>
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-1">
+              <Button variant="outline" onClick={() => setEditing(false)} disabled={isSavingEdit}>
+                Cancel
+              </Button>
+              <Button onClick={saveEdit} loading={isSavingEdit}>
+                Save Changes
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="pt-6 space-y-5">
@@ -122,7 +284,7 @@ export default function InterviewDetailPage() {
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <Users className="h-4 w-4 shrink-0" />
-              <span><strong className="text-foreground">Candidates:</strong> {(detailBatch?.candidateIds as string[] | undefined)?.length ?? 0}</span>
+              <span><strong className="text-foreground">Candidates:</strong> {detailCandidates.length}</span>
             </div>
           </div>
 
@@ -147,7 +309,7 @@ export default function InterviewDetailPage() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="outline" className="text-xs">
-                          {c.source === "CAREERS_PAGE" ? "Careers Page" : "Referral"}
+                          {c.source === "CAREERS_PAGE" ? "Careers Page" : c.source === "REFERRAL" ? "Referral" : c.source}
                         </Badge>
                         <StatusBadge status={c.status} />
                       </div>
@@ -229,7 +391,6 @@ export default function InterviewDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Quick approve confirm (from table row buttons — deep-linked with ?action=approve) */}
       <ConfirmDialog
         open={action === "approve" && !!detailBatch && !detailCandidates.length && !loadingCandidates}
         onOpenChange={(open) => { if (!open) { setAction(null); } }}

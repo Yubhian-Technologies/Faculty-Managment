@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor, ArrowRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor, ArrowRight, Clock } from "lucide-react";
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useAuthStore } from "@/store/authStore";
@@ -180,11 +180,16 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
                   </Button>
                 )}
               </>
-            ) : (
+            ) : (batch as Record<string, unknown>).demoSessionOpen ? (
               <Button variant="outline" onClick={() => setDemoCompleteDialog(true)}>
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Mark Demo Complete
               </Button>
+            ) : (
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground px-1">
+                <Clock className="h-4 w-4 shrink-0" />
+                Waiting for HOD to verify documents &amp; open demo session
+              </div>
             )}
             <Button onClick={() => setIsFullscreen(true)}>
               <Maximize2 className="h-4 w-4 mr-2" />

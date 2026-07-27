@@ -24,11 +24,24 @@ import {
   ArrowRight,
   Pencil,
   Mail,
+  FileText,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type { HiringBatch, Candidate, FacultyMember, FMSUser } from "@/types";
 import { useAuthStore } from "@/store/authStore";
+
+const DOCUMENT_OPTIONS = [
+  "Resume / CV",
+  "Aadhar Card",
+  "SSC Certificate (10th)",
+  "UG Certificate",
+  "PG Certificate",
+  "Ph.D Certificate",
+  "Experience Certificates",
+  "Pay Slips (Last 3 months)",
+  "Resignation Letter",
+];
 
 type PanelFeedbackItem = {
   id: string;
@@ -153,7 +166,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [coordinatorFacultyId, setCoordinatorFacultyId] = useState("");
   const [interviewVenue, setInterviewVenue] = useState("");
   const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
-  const [newDoc, setNewDoc] = useState("");
 
   // Phase transitions
   const [isReleasingToPanel, setIsReleasingToPanel] = useState(false);
@@ -168,6 +180,9 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [hrSelectedCandidate, setHrSelectedCandidate] = useState<Candidate | null>(null);
   const [hrForm, setHrForm] = useState<HrForm>(defaultHrForm());
   const [isSubmittingHrFeedback, setIsSubmittingHrFeedback] = useState(false);
+
+  // Document verification + demo session open
+  const [isOpeningDemo, setIsOpeningDemo] = useState(false);
 
   async function load() {
     try {
@@ -500,8 +515,46 @@ ${institution}`;
       .join(",");
 
     const subject = `Interview Call Letter – ${batch.position} | ${institution}`;
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(ccEmails)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const uploadLink = `${window.location.origin}/candidate-docs/${candidate.id}`;
+    const bodyWithLink = body + `\n\n──────────────────────────────\nDocument Upload Portal\n\nPlease upload your documents before the interview using the link below:\n${uploadLink}\n\nDocuments required:\n${docs}\n──────────────────────────────`;
+
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(ccEmails)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyWithLink)}`;
     window.open(gmailUrl, "_blank");
+  }
+
+  async function verifyDocs(candidateId: string) {
+    try {
+      const res = await fetch(`/api/college/candidates/${candidateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ docsVerified: true }),
+      });
+      if (!res.ok) throw new Error();
+      setCandidates((prev) =>
+        prev.map((c) => c.id === candidateId ? { ...c, docsVerified: true } as Candidate : c)
+      );
+      toast({ variant: "success", title: "Documents verified" });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to verify documents" });
+    }
+  }
+
+  async function openDemoSession() {
+    setIsOpeningDemo(true);
+    try {
+      const res = await fetch(`/api/college/hiring-batches/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ demoSessionOpen: true }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Demo session opened", description: "The coordinator can now start demo day." });
+      void load();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to open demo session" });
+    } finally {
+      setIsOpeningDemo(false);
+    }
   }
 
   if (isLoading) {
@@ -589,51 +642,27 @@ ${institution}`;
 
             {/* Required Documents */}
             <div className="space-y-2">
-              <Label>Required Documents <span className="font-normal text-muted-foreground">(candidates must bring)</span></Label>
-              <div className="flex gap-2">
-                <Input
-                  value={newDoc}
-                  onChange={(e) => setNewDoc(e.target.value)}
-                  placeholder="e.g. Resume, Aadhar Card, Certificates"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newDoc.trim()) {
-                      e.preventDefault();
-                      setRequiredDocuments((prev) => [...prev, newDoc.trim()]);
-                      setNewDoc("");
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    if (newDoc.trim()) {
-                      setRequiredDocuments((prev) => [...prev, newDoc.trim()]);
-                      setNewDoc("");
-                    }
-                  }}
-                >
-                  Add
-                </Button>
+              <Label>Required Documents <span className="font-normal text-muted-foreground">(candidates must bring — included in call letter)</span></Label>
+              <div className="rounded-md border p-3 space-y-2">
+                {DOCUMENT_OPTIONS.map((doc) => (
+                  <div key={doc} className="flex items-center gap-3">
+                    <Checkbox
+                      id={`doc-${doc}`}
+                      checked={requiredDocuments.includes(doc)}
+                      onCheckedChange={(checked) =>
+                        setRequiredDocuments((prev) =>
+                          checked ? [...prev, doc] : prev.filter((d) => d !== doc)
+                        )
+                      }
+                    />
+                    <label htmlFor={`doc-${doc}`} className="text-sm cursor-pointer select-none">
+                      {doc}
+                    </label>
+                  </div>
+                ))}
               </div>
               {requiredDocuments.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {requiredDocuments.map((doc) => (
-                    <span
-                      key={doc}
-                      className="flex items-center gap-1 bg-muted text-sm px-2.5 py-1 rounded-full"
-                    >
-                      {doc}
-                      <button
-                        type="button"
-                        onClick={() => setRequiredDocuments((prev) => prev.filter((d) => d !== doc))}
-                        className="ml-0.5 text-muted-foreground hover:text-destructive text-base leading-none"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
+                <p className="text-xs text-muted-foreground">{requiredDocuments.length} document{requiredDocuments.length !== 1 ? "s" : ""} selected</p>
               )}
             </div>
 
@@ -1295,18 +1324,152 @@ ${institution}`;
         </>
       )}
 
-      {/* Pending demo message */}
-      {batch.currentPhase === "INTERVIEW_READY" && (
-        <Card className="border-dashed">
-          <CardContent className="p-6 text-center">
-            <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="font-medium text-sm">Waiting for Demo Day</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              The coordinator will mark the demo complete on interview day. Feedback sections unlock after that.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Document Verification + Open Demo Session */}
+      {batch.currentPhase === "INTERVIEW_READY" && (() => {
+        type CandidateExt = Candidate & {
+          docsVerified?: boolean;
+          submittedDocuments?: Record<string, { label: string; url: string; uploadedAt: string }>;
+        };
+        const demoSessionOpen = (batch as Record<string, unknown>).demoSessionOpen === true;
+        const allVerified = candidates.length > 0 && candidates.every((c) => (c as CandidateExt).docsVerified === true);
+
+        if (demoSessionOpen) {
+          return (
+            <Card className="border-green-200 bg-green-50/40">
+              <CardContent className="p-5 flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                <div>
+                  <p className="font-medium text-sm text-green-800">Demo session is open</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    The coordinator can now start the demo. Feedback sections unlock after the demo is marked complete.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        }
+
+        return (
+          <Card className="border-amber-200">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-amber-600" />
+                Document Verification
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Review each candidate&apos;s uploaded documents and verify before opening the demo session.
+              </p>
+
+              {candidates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No candidates in this batch.</p>
+              ) : (
+                <div className="space-y-4">
+                  {candidates.map((c) => {
+                    const cExt = c as CandidateExt;
+                    const required: string[] = batch.requiredDocuments ?? [];
+                    const submitted = cExt.submittedDocuments ?? {};
+                    const allDocsUploaded =
+                      required.length === 0 ||
+                      required.every((d) => submitted[d.replace(/[^a-zA-Z0-9_-]/g, "_")]);
+
+                    return (
+                      <div
+                        key={c.id}
+                        className={`rounded-lg border p-4 space-y-3 ${
+                          cExt.docsVerified ? "border-green-200 bg-green-50/30" : "border-border"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-sm">{c.name}</p>
+                            <p className="text-xs text-muted-foreground">{c.email}</p>
+                          </div>
+                          {cExt.docsVerified ? (
+                            <span className="flex items-center gap-1 text-xs text-green-600 font-medium shrink-0">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Verified
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!allDocsUploaded}
+                              onClick={() => void verifyDocs(c.id)}
+                            >
+                              Mark Verified
+                            </Button>
+                          )}
+                        </div>
+
+                        {required.length > 0 && (
+                          <div className="space-y-1.5 pt-1 border-t">
+                            {required.map((doc) => {
+                              const key = doc.replace(/[^a-zA-Z0-9_-]/g, "_");
+                              const upload = submitted[key];
+                              return (
+                                <div key={doc} className="flex items-center justify-between text-xs">
+                                  <span
+                                    className={`flex items-center gap-1.5 ${
+                                      upload ? "text-green-700" : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {upload ? (
+                                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                    ) : (
+                                      <div className="h-3 w-3 rounded-full border border-muted-foreground/30 shrink-0" />
+                                    )}
+                                    {doc}
+                                  </span>
+                                  {upload && (
+                                    <a
+                                      href={upload.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary hover:underline ml-2 shrink-0"
+                                    >
+                                      View
+                                    </a>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {!allDocsUploaded && !cExt.docsVerified && (
+                          <p className="text-xs text-amber-600 flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Waiting for candidate to upload all required documents.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {allVerified ? (
+                <div className="pt-3 border-t flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-sm">All documents verified</p>
+                    <p className="text-xs text-muted-foreground">Open the demo session so the coordinator can start demo day.</p>
+                  </div>
+                  <Button onClick={() => void openDemoSession()} loading={isOpeningDemo} className="shrink-0">
+                    Open Demo Session
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground pt-2 border-t">
+                  Verify all candidates&apos; documents to unlock the demo session.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
     </div>
   );
 }
