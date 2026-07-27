@@ -198,6 +198,28 @@ export async function PATCH(
           });
         }
 
+        // Notify College Office staff to begin document verification
+        if (status === "APPROVED") {
+          const coSnap = await db
+            .collection("colleges")
+            .doc(session.collegeId)
+            .collection("users")
+            .where("role", "==", "COLLEGE_OFFICE")
+            .get();
+          for (const coDoc of coSnap.docs) {
+            await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
+              collegeId: session.collegeId,
+              toUid: coDoc.id,
+              type: "GENERAL",
+              title: "Candidate Approved — Document Verification Required",
+              message: `${candidateData.name ?? "A candidate"} for ${batch.position ?? "the position"} has been approved. Please verify their documents.`,
+              link: `/college-office/candidates`,
+              read: false,
+              createdAt: now,
+            });
+          }
+        }
+
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId,
           action: "HIRING_DECISION_MADE",
@@ -225,21 +247,22 @@ export async function PATCH(
       }
     }
 
-    // Documents verified → candidate ready for the HOD to send the offer letter
+    // Documents verified → notify Accounts to send the offer letter
     if (stage === "DECISION" && status !== "REJECTED") {
-      const batchIdForNotif = candidateData.batchId;
-      const hodUidForNotif = batchIdForNotif
-        ? ((await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(batchIdForNotif).get())
-            .data() as { hodUid?: string } | undefined)?.hodUid
-        : undefined;
-      if (hodUidForNotif) {
+      const accountsSnap = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("users")
+        .where("role", "==", "ACCOUNTS")
+        .get();
+      for (const accDoc of accountsSnap.docs) {
         await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
           collegeId: session.collegeId,
-          toUid: hodUidForNotif,
+          toUid: accDoc.id,
           type: "GENERAL",
-          title: "Candidate Ready for Offer",
+          title: "Candidate Ready for Offer Letter",
           message: `${candidateData.name ?? "A candidate"}'s documents are verified. Please send the offer letter.`,
-          link: `/hod/offers/new`,
+          link: `/accounts/hiring`,
           read: false,
           createdAt: now,
         });

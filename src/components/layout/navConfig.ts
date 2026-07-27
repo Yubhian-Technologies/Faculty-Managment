@@ -143,7 +143,8 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Accounts
   { label: "Dashboard", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
-  { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"] },
+  { label: "Hiring — Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
+  { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
 
   // Finance
   { label: "Dashboard", href: "/finance", iconName: "LayoutDashboard", roles: ["FINANCE"] },
@@ -245,7 +246,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   ACCOUNTS: [
     { label: "Home", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
-    { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"] },
+    { label: "Hiring", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"] },
+    { label: "Salary", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"] },
   ],
   FINANCE: [
     { label: "Home", href: "/finance", iconName: "LayoutDashboard", roles: ["FINANCE"] },

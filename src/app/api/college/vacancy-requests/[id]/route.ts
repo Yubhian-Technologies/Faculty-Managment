@@ -119,7 +119,7 @@ export async function PATCH(
         type: notifType,
         title: notifTitle,
         message: notifMessage,
-        link: `/hod/vacancy/${id}`,
+        link: `/hod/vacancy`,
         read: false,
         createdAt: now,
       });

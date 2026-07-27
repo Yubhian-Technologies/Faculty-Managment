@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
+import { Plus, Trash2 } from "lucide-react";
 import type { FacultyRequirementResult } from "@/app/api/college/faculty-requirement/route";
 
 // ─── Position catalogue ──────────────────────────────────────────────────────
@@ -38,14 +39,66 @@ const CATEGORY_LABELS: Record<Category, string> = {
   SUPPORTING_STAFF: "Supporting Staff",
 };
 
-// Map designation label → cadre key (for auto-fill)
 const DESIGNATION_TO_CADRE: Record<string, "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR"> = {
-  "Professor":          "PROFESSOR",
+  "Professor":           "PROFESSOR",
   "Associate Professor": "ASSOCIATE_PROFESSOR",
   "Assistant Professor": "ASSISTANT_PROFESSOR",
-  "Senior Lecturer":    "ASSISTANT_PROFESSOR",
-  "Lecturer":           "ASSISTANT_PROFESSOR",
+  "Senior Lecturer":     "ASSISTANT_PROFESSOR",
+  "Lecturer":            "ASSISTANT_PROFESSOR",
 };
+
+const QUALIFICATION_OPTIONS = [
+  "M.Tech",
+  "Ph.D",
+  "M.Phil",
+  "MCA",
+  "M.Sc",
+  "MBA",
+  "Others",
+] as const;
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type PositionEntry = {
+  key: string;
+  category: Category | "";
+  designation: string;
+  customDesignation: string;
+  requiredCount: number;
+  availableCount: number;
+  qualification: string;
+  qualificationOther: string;
+  justification: string;
+};
+
+function newEntry(): PositionEntry {
+  return {
+    key: Math.random().toString(36).slice(2),
+    category: "",
+    designation: "",
+    customDesignation: "",
+    requiredCount: 1,
+    availableCount: 0,
+    qualification: "",
+    qualificationOther: "",
+    justification: "",
+  };
+}
+
+function resolvedQualification(entry: PositionEntry): string {
+  return entry.qualification === "Others" ? entry.qualificationOther.trim() : entry.qualification;
+}
+
+function isEntryValid(entry: PositionEntry): boolean {
+  return (
+    !!entry.category &&
+    !!entry.designation &&
+    (entry.designation !== "Others" || entry.customDesignation.trim().length > 0) &&
+    entry.requiredCount >= 1 &&
+    resolvedQualification(entry).length > 0 &&
+    entry.justification.trim().length >= 10
+  );
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -55,17 +108,9 @@ export default function NewVacancyPage() {
 
   const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
   const [reqLoading, setReqLoading] = useState(true);
-
-  const [category, setCategory] = useState<Category | "">("");
-  const [designation, setDesignation] = useState("");
-  const [customDesignation, setCustomDesignation] = useState("");
-  const [requiredCount, setRequiredCount] = useState(1);
-  const [availableCount, setAvailableCount] = useState(0);
-  const [qualification, setQualification] = useState("");
-  const [justification, setJustification] = useState("");
+  const [entries, setEntries] = useState<PositionEntry[]>([newEntry()]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch faculty requirement data on mount
   useEffect(() => {
     setReqLoading(true);
     fetch("/api/college/faculty-requirement")
@@ -75,100 +120,110 @@ export default function NewVacancyPage() {
       .finally(() => setReqLoading(false));
   }, []);
 
-  // When designation changes, auto-fill counts from requirement data
-  function handleDesignationChange(val: string) {
-    setDesignation(val);
-    setCustomDesignation("");
-
-    if (!requirement) return;
-
-    const cadreKey = DESIGNATION_TO_CADRE[val];
-    if (!cadreKey) return;
-
-    const cadreRow = requirement.cadre.find((c) => c.key === cadreKey);
-    if (!cadreRow) return;
-
-    // Auto-fill vacancy count with the gap (but minimum 1)
-    if (cadreRow.gap > 0) setRequiredCount(cadreRow.gap);
-    // Auto-fill current staff with current count
-    setAvailableCount(cadreRow.current);
-
-    // Auto-generate justification
-    const justText =
-      `Based on department student strength of ${requirement.totalStudents} students, ` +
-      `the 1:${requirement.studentFacultyRatio} ratio requires ${requirement.totalRequired} faculty total. ` +
-      `Applying the 1:2:6 cadre ratio, ${cadreRow.required} ${cadreRow.label} position(s) are required. ` +
-      `Currently ${cadreRow.current} active. Shortage: ${cadreRow.gap} position(s).`;
-    setJustification(justText);
+  function updateEntry(key: string, patch: Partial<PositionEntry>) {
+    setEntries((prev) => prev.map((e) => (e.key === key ? { ...e, ...patch } : e)));
   }
 
-  function handleCategoryChange(val: Category) {
-    setCategory(val);
-    setDesignation("");
-    setCustomDesignation("");
-    setRequiredCount(1);
-    setAvailableCount(0);
-    setJustification("");
+  function handleDesignationChange(key: string, val: string) {
+    const patch: Partial<PositionEntry> = { designation: val, customDesignation: "" };
+
+    if (requirement) {
+      const cadreKey = DESIGNATION_TO_CADRE[val];
+      if (cadreKey) {
+        const cadreRow = requirement.cadre.find((c) => c.key === cadreKey);
+        if (cadreRow) {
+          if (cadreRow.gap > 0) patch.requiredCount = cadreRow.gap;
+          patch.availableCount = cadreRow.current;
+          patch.justification =
+            `Based on department student strength of ${requirement.totalStudents} students, ` +
+            `the 1:${requirement.studentFacultyRatio} ratio requires ${requirement.totalRequired} faculty total. ` +
+            `Applying the 1:2:6 cadre ratio, ${cadreRow.required} ${cadreRow.label} position(s) are required. ` +
+            `Currently ${cadreRow.current} active. Shortage: ${cadreRow.gap} position(s).`;
+        }
+      }
+    }
+    updateEntry(key, patch);
   }
 
-  const roleOptions =
-    category === "TEACHING"
-      ? TEACHING_ROLES
-      : category === "SUPPORTING_STAFF"
-      ? SUPPORTING_ROLES
-      : [];
+  function handleCategoryChange(key: string, val: Category) {
+    updateEntry(key, {
+      category: val,
+      designation: "",
+      customDesignation: "",
+      requiredCount: 1,
+      availableCount: 0,
+      justification: "",
+    });
+  }
 
-  const finalPosition =
-    designation === "Others" ? customDesignation.trim() : designation;
+  function addEntry() {
+    setEntries((prev) => [...prev, newEntry()]);
+  }
 
-  // Which cadre row is selected (for panel highlight)
-  const highlightedCadre = designation ? (DESIGNATION_TO_CADRE[designation] ?? null) : null;
+  function removeEntry(key: string) {
+    setEntries((prev) => prev.filter((e) => e.key !== key));
+  }
 
-  const isValid =
-    !!category &&
-    !!designation &&
-    (designation !== "Others" || customDesignation.trim().length > 0) &&
-    requiredCount >= 1 &&
-    qualification.trim().length > 0 &&
-    justification.trim().length >= 10;
+  const allValid = entries.length > 0 && entries.every(isEntryValid);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isValid) {
-      toast({ variant: "destructive", title: "Please fill all required fields" });
+    if (!allValid) {
+      toast({ variant: "destructive", title: "Please fill all required fields for every position" });
       return;
     }
 
     setIsSubmitting(true);
-    try {
-      const res = await fetch("/api/college/vacancy-requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          department: user?.department ?? "",
-          position: finalPosition,
-          positionCategory: category,
-          requiredCount,
-          availableCount,
-          qualification: qualification.trim(),
-          justification: justification.trim(),
-          // Attach ratio data for Principal's review
-          studentStrength: requirement?.totalStudents ?? 0,
-          totalFacultyRequired: requirement?.totalRequired ?? 0,
-          cadreRatioData: requirement?.cadre ?? [],
-        }),
-      });
-      const json = await res.json() as { id?: string; error?: string };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to submit", description: json.error });
-        return;
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const entry of entries) {
+      const finalPosition =
+        entry.designation === "Others" ? entry.customDesignation.trim() : entry.designation;
+      try {
+        const res = await fetch("/api/college/vacancy-requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            department: user?.department ?? "",
+            position: finalPosition,
+            positionCategory: entry.category,
+            requiredCount: entry.requiredCount,
+            availableCount: entry.availableCount,
+            qualification: resolvedQualification(entry),
+            justification: entry.justification.trim(),
+            studentStrength: requirement?.totalStudents ?? 0,
+            totalFacultyRequired: requirement?.totalRequired ?? 0,
+            cadreRatioData: requirement?.cadre ?? [],
+          }),
+        });
+        if (res.ok) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch {
+        failCount++;
       }
-      toast({ variant: "success", title: "Vacancy request submitted", description: "The Principal has been notified." });
+    }
+
+    setIsSubmitting(false);
+
+    if (failCount === 0) {
+      toast({
+        variant: "success",
+        title: successCount === 1 ? "Vacancy request submitted" : `${successCount} vacancy requests submitted`,
+        description: "The Principal has been notified.",
+      });
       router.push("/hod/vacancy");
-    } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
-    } finally {
-      setIsSubmitting(false);
+    } else if (successCount > 0) {
+      toast({
+        variant: "destructive",
+        title: `${successCount} submitted, ${failCount} failed`,
+        description: "Please retry the failed position(s).",
+      });
+    } else {
+      toast({ variant: "destructive", title: "Failed to submit", description: "Please try again." });
     }
   }
 
@@ -176,192 +231,223 @@ export default function NewVacancyPage() {
     <div className="max-w-2xl space-y-5">
       <PageHeader
         title="New Hiring Request"
-        description="Submit a faculty hiring request to the Principal"
+        description="Submit one or more faculty vacancy requests to the Principal"
       />
 
-      {/* Faculty Requirement Panel */}
       {reqLoading ? (
         <div className="h-48 rounded-lg border bg-muted/30 animate-pulse" />
       ) : requirement ? (
-        <FacultyRequirementPanel
-          data={requirement}
-          highlightDesignation={highlightedCadre}
-        />
+        <FacultyRequirementPanel data={requirement} highlightDesignation={null} />
       ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Shared department */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Vacancy Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-
-            {/* Department — read-only */}
-            <div className="space-y-2">
-              <Label>Department</Label>
-              <div className="flex items-center gap-2">
-                <Input value={user?.department ?? "—"} disabled className="bg-muted" />
-                <Badge variant="secondary" className="shrink-0 text-xs">Auto-filled</Badge>
-              </div>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex-1 space-y-1">
+              <Label className="text-xs text-muted-foreground">Department</Label>
+              <p className="text-sm font-medium">{user?.department ?? "—"}</p>
             </div>
-
-            {/* Position Category */}
-            <div className="space-y-2">
-              <Label>Position Category <span className="text-destructive">*</span></Label>
-              <div className="grid grid-cols-2 gap-3">
-                {(Object.keys(CATEGORY_LABELS) as Category[]).map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => handleCategoryChange(cat)}
-                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-all text-left ${
-                      category === cat
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border hover:border-primary/40"
-                    }`}
-                  >
-                    <span className="block font-semibold">{CATEGORY_LABELS[cat]}</span>
-                    <span className="text-xs text-muted-foreground font-normal mt-0.5 block">
-                      {cat === "TEACHING" ? "Professors & Lecturers" : "Technical & Non-Technical"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Designation */}
-            {category && (
-              <div className="space-y-2">
-                <Label>Designation <span className="text-destructive">*</span></Label>
-                <Select value={designation} onValueChange={handleDesignationChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select designation..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roleOptions.map((role) => {
-                      const cadreKey = DESIGNATION_TO_CADRE[role];
-                      const cadreRow = requirement?.cadre.find((c) => c.key === cadreKey);
-                      return (
-                        <SelectItem key={role} value={role}>
-                          <span className="flex items-center gap-2">
-                            {role}
-                            {cadreRow && cadreRow.gap > 0 && (
-                              <span className="text-xs text-red-500 font-medium">−{cadreRow.gap}</span>
-                            )}
-                            {cadreRow && cadreRow.gap === 0 && cadreRow.surplus === 0 && (
-                              <span className="text-xs text-green-500">✓</span>
-                            )}
-                          </span>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-                {designation && DESIGNATION_TO_CADRE[designation] && (
-                  <p className="text-xs text-muted-foreground">
-                    Count auto-filled from cadre gap. You can adjust if needed.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Custom designation for "Others" */}
-            {designation === "Others" && (
-              <div className="space-y-2">
-                <Label>Specify Designation <span className="text-destructive">*</span></Label>
-                <Input
-                  value={customDesignation}
-                  onChange={(e) => setCustomDesignation(e.target.value)}
-                  placeholder="Enter the designation..."
-                />
-              </div>
-            )}
-
-            {/* Count fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Vacancies Required <span className="text-destructive">*</span></Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={requiredCount}
-                  onChange={(e) => setRequiredCount(Number(e.target.value))}
-                />
-                {highlightedCadre && requirement && (() => {
-                  const row = requirement.cadre.find((c) => c.key === highlightedCadre);
-                  return row?.gap ? (
-                    <p className="text-xs text-red-600">
-                      Cadre gap: {row.gap} — auto-filled from ratio calculation
-                    </p>
-                  ) : row?.surplus ? (
-                    <p className="text-xs text-blue-600">
-                      This cadre has a surplus of {row.surplus}. Verify before submitting.
-                    </p>
-                  ) : null;
-                })()}
-              </div>
-              <div className="space-y-2">
-                <Label>Current Staff Available</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={availableCount}
-                  onChange={(e) => setAvailableCount(Number(e.target.value))}
-                />
-              </div>
-            </div>
-
-            {/* Qualification */}
-            <div className="space-y-2">
-              <Label>Required Qualification <span className="text-destructive">*</span></Label>
-              <Input
-                value={qualification}
-                onChange={(e) => setQualification(e.target.value)}
-                placeholder="e.g. M.Tech / Ph.D in Computer Science..."
-              />
-            </div>
-
-            {/* Justification */}
-            <div className="space-y-2">
-              <Label>Justification <span className="text-destructive">*</span></Label>
-              <Textarea
-                value={justification}
-                onChange={(e) => setJustification(e.target.value)}
-                placeholder="Explain why this vacancy is required..."
-                rows={4}
-              />
-              {justification.length > 0 && justification.trim().length < 10 && (
-                <p className="text-xs text-destructive">Minimum 10 characters required</p>
-              )}
-            </div>
+            <Badge variant="secondary" className="text-xs shrink-0">Auto-filled</Badge>
           </CardContent>
         </Card>
 
-        {/* Summary preview */}
-        {isValid && (
-          <Card className="border-green-200 bg-green-50/50">
-            <CardContent className="p-4 text-sm">
-              <p className="font-medium text-green-800 mb-1">Request Summary</p>
-              <p className="text-green-700">
-                <span className="font-semibold">{requiredCount}</span> × {finalPosition}
-                &nbsp;·&nbsp; {CATEGORY_LABELS[category as Category]}
-                &nbsp;·&nbsp; {user?.department}
-                {requirement && requirement.totalStudents > 0 && (
-                  <span className="text-xs ml-2 opacity-80">
-                    (based on {requirement.totalStudents} students · 1:{requirement.studentFacultyRatio} ratio)
-                  </span>
+        {/* Position entries */}
+        {entries.map((entry, idx) => {
+          const roleOptions =
+            entry.category === "TEACHING"
+              ? TEACHING_ROLES
+              : entry.category === "SUPPORTING_STAFF"
+              ? SUPPORTING_ROLES
+              : [];
+
+          const finalPosition =
+            entry.designation === "Others" ? entry.customDesignation.trim() : entry.designation;
+
+          const highlightedCadre = entry.designation ? (DESIGNATION_TO_CADRE[entry.designation] ?? null) : null;
+
+          return (
+            <Card key={entry.key} className="relative">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">
+                    Position {entries.length > 1 ? idx + 1 : "Details"}
+                  </CardTitle>
+                  {entries.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => removeEntry(entry.key)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Position Category */}
+                <div className="space-y-2">
+                  <Label>Position Category <span className="text-destructive">*</span></Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(Object.keys(CATEGORY_LABELS) as Category[]).map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => handleCategoryChange(entry.key, cat)}
+                        className={`p-3 rounded-lg border-2 text-sm font-medium transition-all text-left ${
+                          entry.category === cat
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border hover:border-primary/40"
+                        }`}
+                      >
+                        <span className="block font-semibold">{CATEGORY_LABELS[cat]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {entry.category && (
+                  <div className="space-y-2">
+                    <Label>Designation <span className="text-destructive">*</span></Label>
+                    <Select value={entry.designation} onValueChange={(v) => handleDesignationChange(entry.key, v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select designation..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roleOptions.map((role) => {
+                          const cadreKey = DESIGNATION_TO_CADRE[role];
+                          const cadreRow = requirement?.cadre.find((c) => c.key === cadreKey);
+                          return (
+                            <SelectItem key={role} value={role}>
+                              <span className="flex items-center gap-2">
+                                {role}
+                                {cadreRow && cadreRow.gap > 0 && (
+                                  <span className="text-xs text-red-500 font-medium">−{cadreRow.gap}</span>
+                                )}
+                                {cadreRow && cadreRow.gap === 0 && cadreRow.surplus === 0 && (
+                                  <span className="text-xs text-green-500">✓</span>
+                                )}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
-              </p>
-            </CardContent>
-          </Card>
-        )}
+
+                {entry.designation === "Others" && (
+                  <div className="space-y-2">
+                    <Label>Specify Designation <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={entry.customDesignation}
+                      onChange={(e) => updateEntry(entry.key, { customDesignation: e.target.value })}
+                      placeholder="Enter the designation..."
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Current Hiring Requirement <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={entry.requiredCount}
+                      onChange={(e) => updateEntry(entry.key, { requiredCount: Number(e.target.value) })}
+                    />
+                    {highlightedCadre && requirement && (() => {
+                      const row = requirement.cadre.find((c) => c.key === highlightedCadre);
+                      return row?.gap ? (
+                        <p className="text-xs text-red-600">Cadre gap: {row.gap} — auto-filled</p>
+                      ) : row?.surplus ? (
+                        <p className="text-xs text-blue-600">Surplus of {row.surplus}. Verify before submitting.</p>
+                      ) : null;
+                    })()}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Current Staff Available</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={entry.availableCount}
+                      onChange={(e) => updateEntry(entry.key, { availableCount: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Required Qualification <span className="text-destructive">*</span></Label>
+                  <Select
+                    value={entry.qualification}
+                    onValueChange={(v) => updateEntry(entry.key, { qualification: v, qualificationOther: "" })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select qualification..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {QUALIFICATION_OPTIONS.map((q) => (
+                        <SelectItem key={q} value={q}>{q}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {entry.qualification === "Others" && (
+                    <Input
+                      value={entry.qualificationOther}
+                      onChange={(e) => updateEntry(entry.key, { qualificationOther: e.target.value })}
+                      placeholder="Specify qualification..."
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Justification <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    value={entry.justification}
+                    onChange={(e) => updateEntry(entry.key, { justification: e.target.value })}
+                    placeholder="Explain why this vacancy is required..."
+                    rows={3}
+                  />
+                  {entry.justification.length > 0 && entry.justification.trim().length < 10 && (
+                    <p className="text-xs text-destructive">Minimum 10 characters required</p>
+                  )}
+                </div>
+
+                {isEntryValid(entry) && (
+                  <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+                    <span className="font-semibold">{entry.requiredCount}</span> × {finalPosition}
+                    &nbsp;·&nbsp; {CATEGORY_LABELS[entry.category as Category]}
+                    {requirement && requirement.totalStudents > 0 && (
+                      <span className="text-xs ml-2 opacity-80">
+                        ({requirement.totalStudents} students · 1:{requirement.studentFacultyRatio} ratio)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+        {/* Add another position */}
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={addEntry}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Another Position
+        </Button>
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end sticky bottom-4 bg-background/80 backdrop-blur py-3 -mx-6 px-6 border-t">
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Cancel
           </Button>
-          <Button type="submit" loading={isSubmitting} disabled={!isValid}>
-            Submit to Principal
+          <Button type="submit" loading={isSubmitting} disabled={!allValid}>
+            Submit {entries.length > 1 ? `${entries.length} Requests` : "to Principal"}
           </Button>
         </div>
       </form>
