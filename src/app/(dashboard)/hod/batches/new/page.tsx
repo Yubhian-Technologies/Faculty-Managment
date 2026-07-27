@@ -56,7 +56,7 @@ export default function NewBatchPage() {
       fetch("/api/college/vacancy-requests?status=APPROVED")
         .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
         .then((d) => d.vacancyRequests ?? []),
-      fetch("/api/college/candidates?isShortlisted=true")
+      fetch("/api/college/candidates")
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
       fetch("/api/college/users?allDepts=true&includeAll=true")
@@ -113,13 +113,14 @@ export default function NewBatchPage() {
   ]);
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
-  const filteredCandidates = selectedVacancy
-    ? candidates.filter(
-        (c) =>
-          !c.batchId &&
-          (c.vacancyId === selectedVacancyId || c.position === selectedVacancy.position)
-      )
-    : candidates.filter((c) => !c.batchId);
+  const filteredCandidates = candidates.filter((c) => {
+    if (!c.isShortlisted || c.batchId) return false;
+    if (!selectedVacancy) return true;
+    // Mirror PipelineBoard matching: direct vacancyId link OR (no vacancyId + position + department)
+    if (c.vacancyId && c.vacancyId === selectedVacancyId) return true;
+    if (!c.vacancyId && c.position === selectedVacancy.position && c.department === selectedVacancy.department) return true;
+    return false;
+  });
 
   function toggleCandidate(id: string) {
     setSelectedCandidates((prev) =>

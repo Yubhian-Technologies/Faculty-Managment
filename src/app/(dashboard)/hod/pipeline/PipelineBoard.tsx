@@ -404,9 +404,11 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         setSentCandidateIds(new Set(letters.map((l) => l.candidateId)));
         const built: PipelineEntry[] = vacancies.map((v) => ({
           vacancy: v,
-          candidates: candidates.filter(
-            (c) => c.vacancyId === v.id || (!c.vacancyId && c.position === v.position && c.department === v.department)
-          ),
+          candidates: candidates.filter((c) => {
+            if (c.vacancyId) return c.vacancyId === v.id;
+            // Unlinked candidates: only count if not already in another batch
+            return c.position === v.position && c.department === v.department && !c.batchId;
+          }),
           batch: batches.find((b) => b.vacancyId === v.id) ?? null,
         }));
         built.sort(
