@@ -24,7 +24,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeContext(request, "HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
       action?: "RESUBMIT" | "REJECT" | "RETURN" | "SEND_TO_FINANCE" | "GOODS_PURCHASED" | "APPROVE" | "UPLOAD_GRN";
@@ -52,10 +52,15 @@ export async function PATCH(
 
     const existing = { id: snap.id, ...snap.data() } as FinancePurchaseClearance;
     const now = new Date();
+    // Emergency (GOODS) requests route the owner-facing steps to the Principal/
+    // VP who raised the underlying budget request instead of an HOD — see
+    // isEmergency on FinancePurchaseClearance.
+    const ownerLink = existing.isEmergency ? "/principal/purchase-clearance" : "/hod/purchase-clearance";
 
-    // ── HOD: resubmit after being returned, or upload the GRN once purchased ──
+    // ── Owner (HOD, or Principal/VP for an emergency request): resubmit
+    // after being returned, or upload the GRN once purchased ──────────────
 
-    if (session.role === "HOD") {
+    if (session.role === "HOD" || session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
       if (existing.hodUid !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
@@ -73,7 +78,7 @@ export async function PATCH(
           action: "PENDING_PURCHASE_REVIEW" as const,
           by: session.uid,
           byName: hodName,
-          byRole: "HOD" as const,
+          byRole: session.role as "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL",
           at: now,
         };
 
@@ -118,7 +123,7 @@ export async function PATCH(
           action: "COMPLETED" as const,
           by: session.uid,
           byName: hodName,
-          byRole: "HOD" as const,
+          byRole: session.role as "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL",
           at: now,
         };
 
@@ -164,7 +169,7 @@ export async function PATCH(
       return NextResponse.json({ error: "action must be RESUBMIT or UPLOAD_GRN" }, { status: 400 });
     }
 
-    // ── Purchase Dept: reject / return to HOD, forward to Finance, or mark goods purchased ──
+    // ── Purchase Dept: reject / return to owner, forward to Finance, or mark goods purchased ──
 
     if (session.role === "PURCHASE_DEPT") {
       const { name: purchaseName } = await getUserProfile(db, session.collegeId, session.uid);
@@ -207,7 +212,7 @@ export async function PATCH(
           nextStatus === "REJECTED_BY_PURCHASE" ? "PURCHASE_CLEARANCE_REJECTED_BY_PURCHASE" : "PURCHASE_CLEARANCE_RETURNED_TO_HOD",
           nextStatus === "REJECTED_BY_PURCHASE" ? "Purchase Clearance Rejected" : "Purchase Clearance Returned",
           `Purchase Dept ${nextStatus === "REJECTED_BY_PURCHASE" ? "rejected" : "returned"} your purchase clearance request "${existing.items}". Remarks: ${body.remarks}`,
-          "/hod/purchase-clearance"
+          ownerLink
         );
 
         return NextResponse.json({ success: true });
@@ -297,7 +302,7 @@ export async function PATCH(
         });
 
         const notifMessage = `${purchaseName} purchased the goods for "${existing.items}" (${existing.department}).`;
-        await notify(db, session.collegeId, existing.hodUid, "PURCHASE_CLEARANCE_GOODS_PURCHASED", "Goods Purchased — Upload GRN", `${notifMessage} Upload the GRN to confirm receipt.`, "/hod/purchase-clearance");
+        await notify(db, session.collegeId, existing.hodUid, "PURCHASE_CLEARANCE_GOODS_PURCHASED", "Goods Purchased — Upload GRN", `${notifMessage} Upload the GRN to confirm receipt.`, ownerLink);
         await notifyRole(db, session.collegeId, "FINANCE", "PURCHASE_CLEARANCE_GOODS_PURCHASED", "Goods Purchased", notifMessage, "/finance/purchase-clearance");
 
         return NextResponse.json({ success: true });
@@ -358,7 +363,7 @@ export async function PATCH(
     const notifVerb = nextStatus === "APPROVED" ? "approved" : nextStatus === "REJECTED" ? "rejected" : "returned";
     const notifMessage = `Finance ${notifVerb} the purchase clearance request "${existing.items}".${body.remarks ? " Remarks: " + body.remarks : ""}`;
 
-    await notify(db, session.collegeId, existing.hodUid, notifType, notifTitle, notifMessage, "/hod/purchase-clearance");
+    await notify(db, session.collegeId, existing.hodUid, notifType, notifTitle, notifMessage, ownerLink);
     await notifyRole(db, session.collegeId, "PURCHASE_DEPT", notifType, notifTitle, notifMessage, "/purchase/indents");
 
     return NextResponse.json({ success: true });

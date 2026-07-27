@@ -396,18 +396,28 @@ export async function PATCH(
             timestamp: now,
           });
 
-          // Auto-create a linked Purchase Finance Clearance request so this
-          // budget's procurement can proceed through Purchase Dept — same
-          // record shape the HOD would raise manually, pre-filled and
-          // pre-linked via budgetId, attributed to the same HOD who raised
-          // the budget request (their uid/name are already on `req`). Starts
-          // at PENDING_PURCHASE_REVIEW so it goes through the normal
-          // quotation-sourcing → Finance-approval flow like any other request.
+          // Auto-create a linked Purchase Finance Clearance request — but only
+          // for an emergency GOODS request, which has no HOD Indent Request to
+          // fall back on and needs to reach Purchase Dept immediately. Normal
+          // (non-emergency) budget requests do NOT get one here: approving a
+          // budget request only creates the FinanceBudget "line" the HOD can
+          // spend against; actual procurement goes through a separately-raised
+          // Indent Request (src/types/indent.ts), which is the only path that
+          // should reach Purchase Dept for the regular flow.
           //
-          // Skipped for Non-Goods emergency requests: those have no further
-          // downstream step by design — Finance attaches a report instead
-          // (separate branch above), not a purchase clearance.
-          if (!(req.isEmergency && req.emergencyType === "NON_GOODS")) {
+          // Emergency NON_GOODS requests are also skipped: those have no
+          // further downstream step by design — Finance attaches a report
+          // instead (separate branch above), not a purchase clearance.
+          //
+          // pre-filled and pre-linked via budgetId, attributed to whoever
+          // raised the budget request (their uid/name are already on
+          // `req.hodUid`/`req.hodName` — for an emergency request that's a
+          // Principal/VP, not an HOD, so isEmergency is carried over too and
+          // the GRN step must route to them at /principal/purchase-clearance
+          // instead of /hod/*). Starts at PENDING_PURCHASE_REVIEW so it goes
+          // through the normal quotation-sourcing → Finance-approval flow
+          // like any other request.
+          if (req.isEmergency && req.emergencyType === "GOODS") {
             purchaseClearanceId = purchaseClearanceRef.id;
             tx.set(purchaseClearanceRef, {
               collegeId: session.collegeId,
@@ -418,6 +428,7 @@ export async function PATCH(
               estimatedAmount: budgetRequestTotal(req),
               budgetId: budgetRef.id,
               sourceRequestId: id,
+              isEmergency: true,
               status: "PENDING_PURCHASE_REVIEW",
               quotations: [],
               history: [],

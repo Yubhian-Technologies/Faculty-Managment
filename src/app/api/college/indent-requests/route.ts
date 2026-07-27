@@ -18,7 +18,7 @@ async function getUser(db: Firestore, collegeId: string, uid: string): Promise<{
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
@@ -32,6 +32,8 @@ export async function GET(request: Request) {
 
     let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as IndentRequest);
 
+    // PRINCIPAL/VICE_PRINCIPAL (read-only "View" tab) and PURCHASE_DEPT/
+    // FINANCE see every indent in the college; only HOD is scoped to their own.
     if (session.role === "HOD") {
       requests = requests.filter((r) => r.hodUid === session.uid);
     }

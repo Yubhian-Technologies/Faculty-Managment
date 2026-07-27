@@ -12,11 +12,12 @@ function toMillis(value: unknown): number {
   return value ? new Date(value as string).getTime() : 0;
 }
 
-// Cross-college view for PURCHASE_DEPT and FINANCE — both are GLOBAL roles that
-// serve every college across every location, so their "all requests" view needs
-// to fan out over every college's indentRequests + financePurchaseClearance
-// subcollections instead of the single-collegeId scope every other
-// /api/college/* route uses.
+// Cross-college view for PURCHASE_DEPT, FINANCE, and MANAGEMENT — all GLOBAL
+// roles that serve every college across every location, so their "all
+// requests" view needs to fan out over every college's indentRequests +
+// financePurchaseClearance subcollections instead of the single-collegeId
+// scope every other /api/college/* route uses. MANAGEMENT is read-only here
+// (this route only implements GET) — used for the org-wide "View" tab.
 //
 // Deliberately NOT a collectionGroup(...) query — see the identical precedent/
 // rationale in src/app/api/management/emergency-budget-requests/route.ts:
@@ -26,7 +27,7 @@ function toMillis(value: unknown): number {
 // directly is a plain collection-scoped filter, indexed automatically.
 export async function GET(request: Request) {
   try {
-    await requireRole("PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
+    await requireRole("PURCHASE_DEPT", "FINANCE", "MANAGEMENT", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const locationIdFilter = searchParams.get("locationId");
     const collegeIdFilter = searchParams.get("collegeId");

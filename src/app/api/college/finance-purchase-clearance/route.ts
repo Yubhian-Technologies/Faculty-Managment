@@ -25,7 +25,7 @@ function toMillis(value: unknown): number {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
@@ -38,8 +38,9 @@ export async function GET(request: Request) {
 
     let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    // HOD sees only the requests they themselves raised
-    if (session.role === "HOD") {
+    // HOD, and Principal/VP (owners of an auto-created emergency request) see
+    // only the requests they themselves raised
+    if (session.role === "HOD" || session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
       requests = requests.filter((r) => (r as { hodUid?: string }).hodUid === session.uid);
     }
     if (status) requests = requests.filter((r) => (r as { status?: string }).status === status);

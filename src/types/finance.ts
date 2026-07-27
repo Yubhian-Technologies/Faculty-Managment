@@ -175,7 +175,9 @@ export interface PurchaseClearanceHistoryEntry {
   action: PurchaseClearanceStatus;
   by: string;
   byName: string;
-  byRole: "HOD" | "PURCHASE_DEPT" | "FINANCE";
+  // PRINCIPAL/VICE_PRINCIPAL only appear when the clearance was auto-created
+  // from an emergency (GOODS) budget request — see isEmergency below.
+  byRole: "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "PURCHASE_DEPT" | "FINANCE";
   at: Timestamp;
   remarks?: string;
 }
@@ -191,6 +193,9 @@ export interface PurchaseQuotation {
 export interface FinancePurchaseClearance {
   id: string;
   collegeId: string;
+  // Owner of the request — a real HOD when raised manually, or a Principal/
+  // Vice Principal's own uid/name when auto-created from an emergency (GOODS)
+  // budget request they raised (see isEmergency below).
   hodUid: string;
   hodName: string;
   department: string;
@@ -203,7 +208,12 @@ export interface FinancePurchaseClearance {
   quotations: PurchaseQuotation[];
   selectedQuotationId?: string;
   sourceRequestId?: string; // links back to colleges/{id}/budgetRequests/{id}, if auto-created from an approved budget request
-  // GRN (Goods Receipt Note) — set by the HOD once goods are confirmed received
+  // True when auto-created from an emergency budget request — hodUid then
+  // belongs to the Principal/VP who raised it, not an HOD, and the GRN step
+  // must route to /principal/purchase-clearance instead of /hod/purchase-clearance.
+  isEmergency?: boolean;
+  // GRN (Goods Receipt Note) — set by the owner (HOD, or Principal/VP for an
+  // emergency request) once goods are confirmed received
   grnUrl?: string;
   grnFileName?: string;
   grnNumber?: string;
