@@ -17,9 +17,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import type { LeaveRequestV2, LeaveTypeCodeV2 } from "@/types/leave";
+import type { LeaveRequestV2, LeaveTypeCodeV2, LeaveBalanceV2, LeaveTypeFull } from "@/types/leave";
 
 const LT_LABELS: Partial<Record<LeaveTypeCodeV2, string>> = {
   CL: "Casual Leave", SCL: "Special Casual Leave", EL: "Earned Leave",
@@ -41,6 +48,30 @@ export default function HODLeaveApprovalsPage() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectState, setRejectState] = useState<RejectState | null>(null);
 
+  // "Others" resolution — the HOD picks the actual leave type to sanction,
+  // informed by the applicant's own remaining balance for each type.
+  const [leaveTypeOptions, setLeaveTypeOptions] = useState<LeaveTypeFull[]>([]);
+  const [applicantBalances, setApplicantBalances] = useState<Record<string, LeaveBalanceV2[]>>({});
+  const [loadingBalancesFor, setLoadingBalancesFor] = useState<string | null>(null);
+  const [otherTypeChoice, setOtherTypeChoice] = useState<Record<string, LeaveTypeCodeV2 | "">>({});
+
+  useEffect(() => {
+    fetch("/api/leave/types")
+      .then((r) => r.json() as Promise<{ leaveTypes: LeaveTypeFull[] }>)
+      .then((d) => setLeaveTypeOptions((d.leaveTypes ?? []).filter((lt) => !lt.rules.isVacationEntitlement)))
+      .catch(() => { /* non-fatal — dropdown just shows codes without balances */ });
+  }, []);
+
+  const loadApplicantBalances = useCallback((employeeId: string) => {
+    if (applicantBalances[employeeId]) return;
+    setLoadingBalancesFor(employeeId);
+    fetch(`/api/leave/balances?uid=${employeeId}`)
+      .then((r) => r.json() as Promise<{ balances: LeaveBalanceV2[] }>)
+      .then((d) => setApplicantBalances((prev) => ({ ...prev, [employeeId]: d.balances ?? [] })))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty's leave balances" }))
+      .finally(() => setLoadingBalancesFor(null));
+  }, [applicantBalances]);
+
   const load = useCallback(() => {
     setIsLoading(true);
     fetch("/api/leave/applications?dept=true")
@@ -52,19 +83,27 @@ export default function HODLeaveApprovalsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleApprove(id: string) {
+  async function handleApprove(id: string, isOtherRequest?: boolean) {
+    const chosenType = otherTypeChoice[id];
+    if (isOtherRequest && !chosenType) {
+      toast({ variant: "destructive", title: "Select a leave type to sanction this request as." });
+      return;
+    }
     setApprovingId(id);
     try {
       const res = await fetch(`/api/leave/applications/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "APPROVE" }),
+        body: JSON.stringify({
+          action: "APPROVE",
+          ...(isOtherRequest && chosenType ? { leaveTypeCode: chosenType } : {}),
+        }),
       });
       if (!res.ok) {
         const err = await res.json() as { error?: string };
         throw new Error(err.error ?? "Failed to approve");
       }
-      toast({ variant: "success", title: "Leave approved", description: "Forwarded to Principal for ratification." });
+      toast({ variant: "success", title: "Leave approved" });
       setRequests((prev) => prev.filter((r) => r.id !== id));
       setExpandedId(null);
     } catch (err) {
@@ -145,7 +184,11 @@ export default function HODLeaveApprovalsPage() {
                     <button
                       type="button"
                       className="w-full text-left p-4 space-y-2"
-                      onClick={() => setExpandedId(isExpanded ? null : req.id)}
+                      onClick={() => {
+                        const nextExpanded = isExpanded ? null : req.id;
+                        setExpandedId(nextExpanded);
+                        if (nextExpanded && req.isOtherRequest) loadApplicantBalances(req.employeeId);
+                      }}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
@@ -167,7 +210,9 @@ export default function HODLeaveApprovalsPage() {
                       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                         <BookOpen className="h-4 w-4 shrink-0" />
                         <span className="font-medium text-foreground">
-                          {LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode}
+                          {req.isOtherRequest
+                            ? "Others — needs type selection"
+                            : (req.leaveTypeCode ? LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode : "—")}
                         </span>
                         <span>·</span>
                         <CalendarDays className="h-4 w-4 shrink-0" />
@@ -210,6 +255,47 @@ export default function HODLeaveApprovalsPage() {
                             <p className="font-medium">{req.contactNumber}</p>
                           </div>
                         </div>
+
+                        {/* "Others" — HOD picks the actual leave type to sanction */}
+                        {req.isOtherRequest && !req.leaveTypeCode && !isRejectingThis && (
+                          <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50 p-3">
+                            <Label className="text-sm font-medium text-blue-900">
+                              Sanction as which leave type? *
+                            </Label>
+                            <p className="text-xs text-blue-800/80">
+                              Faculty applied under &quot;Others&quot; and the Principal has already approved
+                              the general request. Review the reason above and pick whichever leave type
+                              best fits, based on their remaining balance — this finalizes the approval.
+                            </p>
+                            <Select
+                              value={otherTypeChoice[req.id] ?? ""}
+                              onValueChange={(v) =>
+                                setOtherTypeChoice((prev) => ({ ...prev, [req.id]: v as LeaveTypeCodeV2 }))
+                              }
+                            >
+                              <SelectTrigger className="bg-background">
+                                <SelectValue placeholder={
+                                  loadingBalancesFor === req.employeeId ? "Loading balances…" : "Select leave type"
+                                } />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {leaveTypeOptions.map((lt) => {
+                                  const bal = (applicantBalances[req.employeeId] ?? []).find(
+                                    (b) => b.leaveTypeCode === lt.code
+                                  );
+                                  const available = bal
+                                    ? Math.max(0, bal.opening + bal.credited - bal.used - bal.pending)
+                                    : null;
+                                  return (
+                                    <SelectItem key={lt.code} value={lt.code}>
+                                      {lt.label} {available !== null ? `— ${available} day(s) available` : ""}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
 
                         {/* Inline reject form */}
                         {isRejectingThis && (
@@ -257,8 +343,8 @@ export default function HODLeaveApprovalsPage() {
                             <Button
                               size="sm"
                               className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={() => void handleApprove(req.id)}
-                              disabled={isAnyActionRunning}
+                              onClick={() => void handleApprove(req.id, req.isOtherRequest)}
+                              disabled={isAnyActionRunning || (req.isOtherRequest && !otherTypeChoice[req.id])}
                               loading={isApprovingThis}
                             >
                               <CheckCircle className="h-4 w-4 mr-1.5" />

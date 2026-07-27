@@ -112,7 +112,7 @@ export default function HODLeaveDetailPage() {
       </Button>
 
       <PageHeader
-        title={LT_LABELS[request.leaveTypeCode] ?? request.leaveTypeCode}
+        title={request.leaveTypeCode ? LT_LABELS[request.leaveTypeCode] ?? request.leaveTypeCode : "Leave Application"}
         description={`Applied on ${formatDate(request.appliedOn as Parameters<typeof formatDate>[0])}`}
       />
 
@@ -187,8 +187,8 @@ export default function HODLeaveDetailPage() {
                 </div>
               );
             })()}
-            {(request.status === "PENDING_RATIFICATION" || request.status === "APPROVED" ||
-              (request.status === "REJECTED" && steps.some((s) => s.sequence === 2))) && (() => {
+            {(request.status === "PENDING_RATIFICATION" ||
+              steps.some((s) => s.sequence === 2)) && (() => {
               const pStep = steps.find((s) => s.sequence === 2);
               return pStep?.action ? (
                 <div className="flex items-start gap-3">

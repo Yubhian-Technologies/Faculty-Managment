@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { ArrowLeft } from "lucide-react";
-import type { LeaveEmploymentType, StaffCategory } from "@/types/leave";
+import { ArrowLeft, Lock } from "lucide-react";
+import type { EmployeeLeaveProfile, LeaveEmploymentType, StaffCategory } from "@/types/leave";
 
 interface ProfileForm {
   employmentType: LeaveEmploymentType | "";
@@ -40,10 +40,55 @@ const INITIAL: ProfileForm = {
   livingChildrenCount: 0,
 };
 
+// Fields HR already set on the faculty record — pre-filled from there and
+// locked so the faculty can't redefine them during self-service setup.
+type LockedField = "employmentType" | "gender" | "maritalStatus" | "dateOfJoining";
+
+// Firestore Timestamps cross the API as plain JSON (`{ _seconds, _nanoseconds }`),
+// not class instances — so `.toDate()` isn't available on the client.
+function timestampToDateInput(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  const v = value as { toDate?: () => Date; _seconds?: number; seconds?: number };
+  if (typeof v.toDate === "function") return v.toDate().toISOString().split("T")[0];
+  const secs = v._seconds ?? v.seconds;
+  return typeof secs === "number" ? new Date(secs * 1000).toISOString().split("T")[0] : "";
+}
+
 export default function LeaveProfileSetupPage() {
   const router = useRouter();
   const [form, setForm] = useState<ProfileForm>(INITIAL);
+  const [locked, setLocked] = useState<Partial<Record<LockedField, boolean>>>({});
+  const [loadingDefaults, setLoadingDefaults] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/leave/profile")
+      .then((r) => r.json() as Promise<{ profile: EmployeeLeaveProfile | null; facultyDefaults: Partial<EmployeeLeaveProfile> | null }>)
+      .then((d) => {
+        if (d.profile) {
+          // Already set up — nothing to pre-fill here; the faculty page redirects away.
+          return;
+        }
+        const fd = d.facultyDefaults;
+        if (!fd) return;
+        const nextLocked: Partial<Record<LockedField, boolean>> = {};
+        setForm((prev) => {
+          const next = { ...prev };
+          if (fd.employmentType) { next.employmentType = fd.employmentType; nextLocked.employmentType = true; }
+          if (fd.gender) { next.gender = fd.gender; nextLocked.gender = true; }
+          if (fd.maritalStatus) { next.maritalStatus = fd.maritalStatus; nextLocked.maritalStatus = true; }
+          if (fd.dateOfJoining) {
+            const iso = timestampToDateInput(fd.dateOfJoining);
+            if (iso) { next.dateOfJoining = iso; nextLocked.dateOfJoining = true; }
+          }
+          return next;
+        });
+        setLocked(nextLocked);
+      })
+      .catch(() => { /* non-fatal — faculty can still fill the form manually */ })
+      .finally(() => setLoadingDefaults(false));
+  }, []);
 
   function set<K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -109,13 +154,17 @@ export default function LeaveProfileSetupPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Employment Type *</Label>
+                <Label className="flex items-center gap-1.5">
+                  Employment Type *
+                  {locked.employmentType && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </Label>
                 <Select
                   value={form.employmentType}
                   onValueChange={(v) => set("employmentType", v as LeaveEmploymentType)}
+                  disabled={locked.employmentType}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
+                    <SelectValue placeholder={loadingDefaults ? "Loading…" : "Select type"} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="permanent">Permanent</SelectItem>
@@ -123,6 +172,9 @@ export default function LeaveProfileSetupPage() {
                     <SelectItem value="training">Training</SelectItem>
                   </SelectContent>
                 </Select>
+                {locked.employmentType && (
+                  <p className="text-xs text-muted-foreground">Set by HR and can&apos;t be changed here.</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -143,13 +195,20 @@ export default function LeaveProfileSetupPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Date of Joining *</Label>
+              <Label className="flex items-center gap-1.5">
+                Date of Joining *
+                {locked.dateOfJoining && <Lock className="h-3 w-3 text-muted-foreground" />}
+              </Label>
               <Input
                 type="date"
                 value={form.dateOfJoining}
                 onChange={(e) => set("dateOfJoining", e.target.value)}
                 max={new Date().toISOString().split("T")[0]}
+                disabled={locked.dateOfJoining}
               />
+              {locked.dateOfJoining && (
+                <p className="text-xs text-muted-foreground">Set by HR and can&apos;t be changed here.</p>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
@@ -184,10 +243,14 @@ export default function LeaveProfileSetupPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Gender *</Label>
+                <Label className="flex items-center gap-1.5">
+                  Gender *
+                  {locked.gender && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </Label>
                 <Select
                   value={form.gender}
                   onValueChange={(v) => set("gender", v as "male" | "female" | "other")}
+                  disabled={locked.gender}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select gender" />
@@ -201,10 +264,14 @@ export default function LeaveProfileSetupPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Marital Status *</Label>
+                <Label className="flex items-center gap-1.5">
+                  Marital Status *
+                  {locked.maritalStatus && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </Label>
                 <Select
                   value={form.maritalStatus}
                   onValueChange={(v) => set("maritalStatus", v as "married" | "unmarried")}
+                  disabled={locked.maritalStatus}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
@@ -216,6 +283,9 @@ export default function LeaveProfileSetupPage() {
                 </Select>
               </div>
             </div>
+            {(locked.gender || locked.maritalStatus) && (
+              <p className="text-xs text-muted-foreground -mt-2">Set by HR and can&apos;t be changed here.</p>
+            )}
 
             <div className="space-y-2">
               <Label>Living children count</Label>

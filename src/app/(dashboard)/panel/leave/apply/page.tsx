@@ -35,6 +35,10 @@ import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { countLeaveDays, toDateString } from "@/lib/leave/dayCounter";
 import { runRuleEngine, buildValidationContext } from "@/lib/leave/ruleEngine";
 
+// Faculty only pick from these three types directly; anything else goes
+// through "Others" and the HOD decides the actual type to sanction it as.
+const FACULTY_VISIBLE_CODES: LeaveTypeCodeV2[] = ["CL", "SCL", "EL"];
+
 const LT_COLOR_MAP: Record<string, string> = {
   blue: "bg-blue-50 text-blue-700 border-blue-200",
   green: "bg-green-50 text-green-700 border-green-200",
@@ -58,7 +62,7 @@ export default function LeaveApplyPage() {
   const [profile, setProfile] = useState<EmployeeLeaveProfile | null>(null);
   const [loadingMeta, setLoadingMeta] = useState(true);
 
-  const [selectedCode, setSelectedCode] = useState<LeaveTypeCodeV2 | "">("");
+  const [selectedCode, setSelectedCode] = useState<LeaveTypeCodeV2 | "OTHER" | "">("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [isHalfDay, setIsHalfDay] = useState(false);
@@ -107,6 +111,11 @@ export default function LeaveApplyPage() {
   const selectedType = useMemo(
     () => leaveTypes.find((lt) => lt.code === selectedCode) ?? null,
     [leaveTypes, selectedCode]
+  );
+  const isOtherSelected = selectedCode === "OTHER";
+  const visibleLeaveTypes = useMemo(
+    () => leaveTypes.filter((lt) => FACULTY_VISIBLE_CODES.includes(lt.code)),
+    [leaveTypes]
   );
 
   const currentBalance = useMemo(
@@ -203,7 +212,7 @@ export default function LeaveApplyPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          leaveTypeCode: selectedCode,
+          ...(isOtherSelected ? { isOtherRequest: true } : { leaveTypeCode: selectedCode }),
           fromDate,
           toDate,
           ...(isHalfDay ? { isHalfDay: true, halfDaySession } : {}),
@@ -221,7 +230,11 @@ export default function LeaveApplyPage() {
         toast({ variant: "destructive", title: json.error ?? "Submission failed" });
         return;
       }
-      toast({ variant: "success", title: "Leave application submitted", description: `${computedDays} day(s) sent for HOD review.` });
+      toast({
+        variant: "success",
+        title: "Leave application submitted",
+        description: `${computedDays} day(s) sent for ${isOtherSelected ? "Principal" : "HOD"} review.`,
+      });
       router.push("/panel/leave");
     } catch {
       toast({ variant: "destructive", title: "Network error" });
@@ -256,7 +269,7 @@ export default function LeaveApplyPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {leaveTypes.map((lt) => {
+              {visibleLeaveTypes.map((lt) => {
                 const isSelected = selectedCode === lt.code;
                 const colorCls = LT_COLOR_MAP[lt.color] ?? LT_COLOR_MAP["gray"];
                 return (
@@ -278,6 +291,21 @@ export default function LeaveApplyPage() {
                   </button>
                 );
               })}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCode("OTHER");
+                  setIsHalfDay(false);
+                }}
+                className={`rounded-lg border-2 p-3 text-left transition-all ${
+                  isOtherSelected
+                    ? "bg-slate-50 text-slate-700 border-slate-400 font-semibold"
+                    : "border-muted bg-background hover:border-muted-foreground/30"
+                }`}
+              >
+                <p className="text-xs font-bold">Others</p>
+                <p className="text-xs mt-0.5 truncate">HOD will decide</p>
+              </button>
             </div>
 
             {selectedType && (
@@ -298,11 +326,24 @@ export default function LeaveApplyPage() {
                 )}
               </div>
             )}
+
+            {isOtherSelected && (
+              <div className="rounded-lg bg-muted/40 p-3 space-y-1">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground">
+                    Use this if your reason doesn&apos;t fit Casual, Special Casual, or Earned Leave.
+                    This goes to your Principal for a general review first; once approved, your HOD
+                    will pick the most suitable leave type based on your remaining balances.
+                  </p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Dates */}
-        {selectedType && (
+        {(selectedType || isOtherSelected) && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Leave Period</CardTitle>
@@ -342,7 +383,7 @@ export default function LeaveApplyPage() {
                     id="fromDate"
                     type="date"
                     value={fromDate}
-                    min={!selectedType.rules.retroactiveAllowed ? today : undefined}
+                    min={selectedType && !selectedType.rules.retroactiveAllowed ? today : undefined}
                     onChange={(e) => {
                       setFromDate(e.target.value);
                       if (!toDate || e.target.value > toDate) setToDate(e.target.value);
@@ -370,7 +411,7 @@ export default function LeaveApplyPage() {
                   <span className="text-sm text-foreground font-medium">
                     {isHalfDay ? "0.5 day (half day)" : `${computedDays} day${computedDays !== 1 ? "s" : ""}`}
                   </span>
-                  {selectedType.rules.excludeHolidaysAndSundays && !isHalfDay && (
+                  {selectedType?.rules.excludeHolidaysAndSundays && !isHalfDay && (
                     <span className="text-xs text-muted-foreground">(holidays/Sundays excluded)</span>
                   )}
                   {validating && <span className="text-xs text-muted-foreground">Validating...</span>}
@@ -405,7 +446,7 @@ export default function LeaveApplyPage() {
         )}
 
         {/* Details */}
-        {selectedType && fromDate && (isHalfDay || toDate) && (
+        {(selectedType || isOtherSelected) && fromDate && (isHalfDay || toDate) && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Details</CardTitle>
@@ -442,7 +483,7 @@ export default function LeaveApplyPage() {
                 />
               </div>
 
-              {(selectedType.rules.requiresHandoverAfterDays !== undefined && computedDays >= selectedType.rules.requiresHandoverAfterDays) && (
+              {(selectedType?.rules.requiresHandoverAfterDays !== undefined && computedDays >= selectedType.rules.requiresHandoverAfterDays) && (
                 <div className="space-y-2">
                   <Label htmlFor="substitute">Substitute / handover arrangement</Label>
                   <Textarea
@@ -516,7 +557,7 @@ export default function LeaveApplyPage() {
         )}
 
         {/* Actions */}
-        {selectedType && (
+        {(selectedType || isOtherSelected) && (
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => router.back()} disabled={submitting}>
               Cancel

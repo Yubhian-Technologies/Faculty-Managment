@@ -89,7 +89,8 @@ export async function POST(request: Request) {
     );
 
     const body = (await request.json()) as {
-      leaveTypeCode: LeaveTypeCodeV2;
+      leaveTypeCode?: LeaveTypeCodeV2;
+      isOtherRequest?: boolean;
       fromDate: string;
       toDate: string;
       isHalfDay?: boolean;
@@ -102,25 +103,29 @@ export async function POST(request: Request) {
       medicalCertificateUrl?: string;
     };
 
-    const { leaveTypeCode, fromDate, toDate, reason, leaveAddress, contactNumber } = body;
+    const { leaveTypeCode, isOtherRequest, fromDate, toDate, reason, leaveAddress, contactNumber } = body;
 
-    if (!leaveTypeCode || !fromDate || !toDate || !reason || !leaveAddress || !contactNumber) {
+    if ((!leaveTypeCode && !isOtherRequest) || !fromDate || !toDate || !reason || !leaveAddress || !contactNumber) {
       return NextResponse.json(
-        { error: "leaveTypeCode, fromDate, toDate, reason, leaveAddress, contactNumber are required" },
+        { error: "leaveTypeCode (or isOtherRequest), fromDate, toDate, reason, leaveAddress, contactNumber are required" },
         { status: 400 }
       );
     }
 
     const db = getAdminDb();
 
-    // Load leave type config (from Firestore or seed fallback)
-    const ltSnap = await db.collection("leaveTypes").doc(leaveTypeCode).get();
-    const leaveType: LeaveTypeFull = ltSnap.exists
-      ? ({ id: ltSnap.id, ...ltSnap.data() } as LeaveTypeFull)
-      : (LEAVE_TYPE_SEED.find((l) => l.code === leaveTypeCode) as LeaveTypeFull);
+    // Load leave type config (from Firestore or seed fallback) — skipped for "Others" requests,
+    // where the HOD picks the actual type at approval time.
+    let leaveType: LeaveTypeFull | null = null;
+    if (!isOtherRequest) {
+      const ltSnap = await db.collection("leaveTypes").doc(leaveTypeCode as string).get();
+      leaveType = ltSnap.exists
+        ? ({ id: ltSnap.id, ...ltSnap.data() } as LeaveTypeFull)
+        : (LEAVE_TYPE_SEED.find((l) => l.code === leaveTypeCode) as LeaveTypeFull) ?? null;
 
-    if (!leaveType) {
-      return NextResponse.json({ error: "Unknown leave type" }, { status: 400 });
+      if (!leaveType) {
+        return NextResponse.json({ error: "Unknown leave type" }, { status: 400 });
+      }
     }
 
     // Load employee profile
@@ -135,10 +140,6 @@ export async function POST(request: Request) {
 
     const from = new Date(fromDate);
     const to = new Date(toDate);
-
-    if (body.isHalfDay) {
-      // Half-day: 0.5, no need for holiday lookup
-    }
 
     // Fetch holidays for the leave period from college's holiday calendar
     const holidayDates = new Set<string>();
@@ -164,7 +165,7 @@ export async function POST(request: Request) {
     const computedDays = body.isHalfDay
       ? 0.5
       : countLeaveDays(from, to, {
-          excludeHolidaysAndSundays: leaveType.rules.excludeHolidaysAndSundays ?? false,
+          excludeHolidaysAndSundays: leaveType?.rules.excludeHolidaysAndSundays ?? true,
           holidayDates,
         });
 
@@ -175,29 +176,33 @@ export async function POST(request: Request) {
       );
     }
 
-    // Load current balance
     const year = from.getFullYear();
-    const balSnap = await LEAVE_COL(session.collegeId, db)
-      .doc(balanceDocId(session.uid, leaveTypeCode, year))
-      .get();
-    const currentBalance = balSnap.exists
-      ? ({ id: balSnap.id, ...balSnap.data() } as LeaveBalanceV2)
-      : null;
+    let balSnap: FirebaseFirestore.DocumentSnapshot | null = null;
 
-    // Run rule engine
-    const ctx = buildValidationContext({
-      fromDate: from,
-      toDate: to,
-      computedDays,
-      leaveType,
-      profile,
-      currentBalance,
-      holidayDates,
-    });
-    const { errors, canSubmit } = runRuleEngine(ctx);
+    if (leaveType) {
+      // Load current balance
+      balSnap = await LEAVE_COL(session.collegeId, db)
+        .doc(balanceDocId(session.uid, leaveTypeCode as LeaveTypeCodeV2, year))
+        .get();
+      const currentBalance = balSnap.exists
+        ? ({ id: balSnap.id, ...balSnap.data() } as LeaveBalanceV2)
+        : null;
 
-    if (!canSubmit) {
-      return NextResponse.json({ error: errors[0]?.message ?? "Validation failed", errors }, { status: 422 });
+      // Run rule engine
+      const ctx = buildValidationContext({
+        fromDate: from,
+        toDate: to,
+        computedDays,
+        leaveType,
+        profile,
+        currentBalance,
+        holidayDates,
+      });
+      const { errors, canSubmit } = runRuleEngine(ctx);
+
+      if (!canSubmit) {
+        return NextResponse.json({ error: errors[0]?.message ?? "Validation failed", errors }, { status: 422 });
+      }
     }
 
     // Look up employee name + department
@@ -213,7 +218,8 @@ export async function POST(request: Request) {
       employeeId: session.uid,
       employeeName: userData?.name ?? "Unknown",
       department: userData?.department ?? profile.department ?? "",
-      leaveTypeCode,
+      ...(leaveTypeCode ? { leaveTypeCode } : {}),
+      isOtherRequest: !!isOtherRequest,
       fromDate: from,
       toDate: to,
       computedDays,
@@ -226,16 +232,20 @@ export async function POST(request: Request) {
       otherEmploymentAck: body.otherEmploymentAck ?? false,
       ...(body.medicalCertificateUrl ? { medicalCertificateUrl: body.medicalCertificateUrl } : {}),
       applicantRole: session.role,
-      status: "PENDING_HOD",
-      currentApproverRole: "HOD",
+      // "Others" requests go to the Principal first for a general review;
+      // the HOD only sees them afterwards to pick the actual leave type.
+      // Everything else goes to the HOD first, as usual.
+      status: isOtherRequest ? "PENDING_RATIFICATION" : "PENDING_HOD",
+      currentApproverRole: isOtherRequest ? "PRINCIPAL" : "HOD",
       appliedOn: now,
       createdAt: now,
       updatedAt: now,
     });
 
-    // Reserve pending days in balance (if balance exists)
-    if (balSnap.exists) {
-      const balRef = LEAVE_COL(session.collegeId, db).doc(balanceDocId(session.uid, leaveTypeCode, year));
+    // Reserve pending days in balance (if balance exists) — not applicable for
+    // "Others" requests, which reserve balance once the HOD assigns a type.
+    if (balSnap?.exists) {
+      const balRef = LEAVE_COL(session.collegeId, db).doc(balanceDocId(session.uid, leaveTypeCode as LeaveTypeCodeV2, year));
       const balData = balSnap.data() ?? {};
       await balRef.update({
         pending: (balData.pending ?? 0) + computedDays,

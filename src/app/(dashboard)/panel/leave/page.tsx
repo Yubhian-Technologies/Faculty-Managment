@@ -182,7 +182,7 @@ export default function FacultyLeavePage() {
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode}
+                        {req.isOtherRequest ? "Others" : (req.leaveTypeCode ? LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode : "—")}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {formatDate(req.fromDate as Parameters<typeof formatDate>[0])}

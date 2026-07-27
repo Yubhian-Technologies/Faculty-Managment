@@ -356,7 +356,14 @@ export interface LeaveRequestV2 {
   employeeId: string;
   employeeName: string;
   department: string;
-  leaveTypeCode: LeaveTypeCodeV2;
+  // Undefined only while isOtherRequest is true and the HOD has not yet picked
+  // the actual leave type to sanction it against.
+  leaveTypeCode?: LeaveTypeCodeV2;
+  // Employee applied via the "Others" option instead of picking a specific type;
+  // the HOD selects the real leaveTypeCode at approval time based on the reason
+  // and the employee's remaining balances. Faculty-facing UI always shows "Others"
+  // for these requests, regardless of which type the HOD ultimately sanctioned.
+  isOtherRequest?: boolean;
   fromDate: Timestamp;
   toDate: Timestamp;
   computedDays: number;
