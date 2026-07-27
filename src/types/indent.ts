@@ -115,6 +115,16 @@ export interface IndentRequest {
   receiptUploadedBy?: string;
   receiptUploadedByName?: string;
   receiptUploadedAt?: Timestamp;
+  // GRN (Goods Receipt Note) — set by the HOD once goods are confirmed
+  // received. GOODS-only, optional on top of the already-terminal COMPLETED
+  // status (doesn't gate anything downstream — it's the HOD's own confirmation).
+  grnUrl?: string;
+  grnFileName?: string;
+  grnNumber?: string;
+  grnMessage?: string;
+  grnUploadedBy?: string;
+  grnUploadedByName?: string;
+  grnUploadedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

@@ -54,7 +54,7 @@ export async function PATCH(
     const session = await requireCollegeContext(request, "HOD", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
-      action?: "REJECT" | "RETURN" | "SEND_TO_FINANCE" | "APPROVE" | "UPLOAD_RECEIPT";
+      action?: "REJECT" | "RETURN" | "SEND_TO_FINANCE" | "APPROVE" | "UPLOAD_RECEIPT" | "UPLOAD_GRN";
       remarks?: string;
       items?: IndentItem[];
       quotations?: IndentQuotation[];
@@ -62,6 +62,10 @@ export async function PATCH(
       receiptUrl?: string;
       receiptFileName?: string;
       receiptAmount?: number;
+      grnUrl?: string;
+      grnFileName?: string;
+      grnNumber?: string;
+      grnMessage?: string;
     };
 
     const db = getAdminDb();
@@ -74,12 +78,64 @@ export async function PATCH(
     const req = { id: snap.id, ...snap.data() } as IndentRequest;
     const now = new Date();
 
-    // ── HOD edits and resubmits a returned indent ──────────────────────────
+    // ── HOD edits and resubmits a returned indent, or uploads a GRN once a
+    // GOODS indent's purchase is completed ─────────────────────────────────
 
     if (session.role === "HOD") {
       if (req.hodUid !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
+
+      if (body.action === "UPLOAD_GRN") {
+        if (req.status !== "COMPLETED" || req.requestType === "NON_GOODS") {
+          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+        }
+        if (req.grnUrl) {
+          return NextResponse.json({ error: "GRN already uploaded" }, { status: 409 });
+        }
+        if (!body.grnUrl || !body.grnNumber || !body.grnMessage) {
+          return NextResponse.json({ error: "grnUrl, grnNumber, and grnMessage are all required" }, { status: 400 });
+        }
+
+        const hodName = await getUserName(db, session.collegeId, session.uid);
+        const historyEntry = {
+          action: "COMPLETED" as const,
+          byRole: "HOD" as const,
+          byUid: session.uid,
+          byName: hodName,
+          at: now,
+          remarks: `GRN #${body.grnNumber} uploaded`,
+        };
+
+        await ref.update({
+          grnUrl: body.grnUrl,
+          grnFileName: body.grnFileName ?? null,
+          grnNumber: body.grnNumber,
+          grnMessage: body.grnMessage,
+          grnUploadedBy: session.uid,
+          grnUploadedByName: hodName,
+          grnUploadedAt: now,
+          history: [...(req.history ?? []), historyEntry],
+          updatedAt: now,
+        });
+
+        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+          collegeId: session.collegeId,
+          action: "INDENT_GRN_UPLOADED",
+          performedBy: session.uid,
+          performedByName: hodName,
+          targetId: id,
+          details: { title: req.title, department: req.department, grnNumber: body.grnNumber },
+          timestamp: now,
+        });
+
+        const notifMessage = `${hodName} confirmed goods received for "${req.title}" (${req.department}). GRN #${body.grnNumber}.`;
+        await notifyRole(db, session.collegeId, "PURCHASE_DEPT", "INDENT_GRN_UPLOADED", "GRN Uploaded", notifMessage, "/purchase/indents");
+        await notifyRole(db, session.collegeId, "FINANCE", "INDENT_GRN_UPLOADED", "GRN Uploaded", notifMessage, "/finance/receipts");
+
+        return NextResponse.json({ ok: true });
+      }
+
       if (req.status !== "RETURNED_TO_HOD") {
         return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
       }

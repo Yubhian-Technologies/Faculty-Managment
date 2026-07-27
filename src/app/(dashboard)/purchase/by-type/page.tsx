@@ -110,7 +110,7 @@ export default function PurchaseByTypePage() {
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {list.map((item) => (
-                    <Link key={item.id} href={`/purchase/indents/${item.id}`}>
+                    <Link key={item.id} href={`/purchase/indents/${item.id}?collegeId=${item.collegeId}`}>
                       <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                         <CardContent className="p-4 space-y-2">
                           <div className="flex items-start justify-between gap-2">

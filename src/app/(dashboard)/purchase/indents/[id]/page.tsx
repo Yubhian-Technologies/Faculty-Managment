@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle, ExternalLink, RotateCcw, Send, ShoppingBag, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { IndentItemsTable } from "@/components/shared/indent/IndentItemsTable";
 import { QuotationsForm } from "@/components/shared/indent/QuotationsForm";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
+import { useAuthStore } from "@/store/authStore";
 import { formatCurrency, formatDate, stripLeadingZeros } from "@/lib/utils";
 import { indentItemsTotal, type IndentQuotation, type IndentRequest } from "@/types";
 
@@ -22,7 +23,9 @@ const MIN_QUOTATIONS = 3;
 
 export default function PurchaseIndentDetailPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
+  const setSelectedCollegeId = useAuthStore((s) => s.setSelectedCollegeId);
   const [request, setRequest] = useState<IndentRequest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [quotations, setQuotations] = useState<IndentQuotation[]>([]);
@@ -51,7 +54,16 @@ export default function PurchaseIndentDetailPage() {
       .finally(() => setIsLoading(false));
   }
 
-  useEffect(() => { load(); }, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // Org-wide views (By Category, By Goods/Non-Goods) link here with the
+    // indent's own collegeId in the URL, since the previously-selected
+    // college in the sidebar (if any) may belong to a different indent
+    // entirely — sync it into the store before fetching, same as
+    // /purchase/browse/[locationId]/[collegeId] already does.
+    const collegeId = searchParams.get("collegeId");
+    if (collegeId) setSelectedCollegeId(collegeId);
+    load();
+  }, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function act(action: "REJECT" | "RETURN" | "SEND_TO_FINANCE", remarks?: string) {
     if (!request) return;
@@ -92,7 +104,7 @@ export default function PurchaseIndentDetailPage() {
     try {
       const fd = new FormData();
       fd.append("file", receiptFile);
-      const uploadRes = await fetch("/api/upload/indent-receipt", { method: "POST", body: fd });
+      const uploadRes = await collegeFetch("/api/upload/indent-receipt", { method: "POST", body: fd });
       const uploadData = (await uploadRes.json()) as { url?: string; filename?: string; error?: string };
       if (!uploadRes.ok) throw new Error(uploadData.error ?? "Upload failed");
 
