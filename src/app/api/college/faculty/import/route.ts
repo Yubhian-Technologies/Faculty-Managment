@@ -159,12 +159,6 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     gateQualifiedYear: num(row.gateQualifiedYear),
     gateScore: num(row.gateScore),
     netSletQualificationYear: num(row.netSletQualificationYear),
-    teachingExperienceBeforeJoiningYears: num(row.teachingExperienceBeforeJoiningYears) ?? 0,
-    teachingExperienceSinceJoiningYears: num(row.teachingExperienceSinceJoiningYears) ?? 0,
-    researchOrIndustryExperienceYears: num(row.researchOrIndustryExperienceYears) ?? 0,
-    totalProfessionalExperienceYears: num(row.totalProfessionalExperienceYears) ?? 0,
-    totalWeeklyTeachingLoadHours: num(row.totalWeeklyTeachingLoadHours) ?? 0,
-    averageStudentFeedbackScore: num(row.averageStudentFeedbackScore),
     teachingAssignment: row.primaryTeachingRole?.trim() || courses(row).length > 0
       ? { primaryTeachingRole: row.primaryTeachingRole?.trim() ?? "", courses: courses(row) }
       : undefined,

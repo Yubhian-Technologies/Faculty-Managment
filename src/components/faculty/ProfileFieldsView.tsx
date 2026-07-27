@@ -71,15 +71,7 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true }:
         </div>
       </Section>
 
-      <Section number={2} title="Tenure & Load">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Field label="Teaching Exp Before Joining (yrs)" value={p.teachingExperienceBeforeJoiningYears} />
-          <Field label="Teaching Exp Since Joining (yrs)" value={p.teachingExperienceSinceJoiningYears} />
-          <Field label="Research/Industry Exp (yrs)" value={p.researchOrIndustryExperienceYears} />
-          <Field label="Total Professional Exp (yrs)" value={p.totalProfessionalExperienceYears} />
-          <Field label="Weekly Teaching Load (Hrs)" value={p.totalWeeklyTeachingLoadHours} />
-          <Field label="Avg Student Feedback Score" value={p.averageStudentFeedbackScore} />
-        </div>
+      <Section number={2} title="Previous Institutions Worked">
         <div className="space-y-2">
           <SubLabel>Previous Institutions Worked At</SubLabel>
           {(p.previousInstitutions ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
@@ -262,6 +254,40 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true }:
 
       <Section number={7} title="Others">
         <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "—"}</p>
+      </Section>
+
+      <Section number={8} title="Tenure & Load">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 items-start">
+          <div className="rounded-lg border bg-muted/20 shadow-sm p-3 space-y-2">
+            <SubLabel>Past</SubLabel>
+            {(p.tenurePastRecords ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+              <div className="space-y-2">
+                {p.tenurePastRecords?.map((r, i) => (
+                  <div key={i} className="rounded-md border bg-background shadow-sm p-2 grid grid-cols-2 gap-2">
+                    <Field label="Academic Year" value={r.academicYear} />
+                    <Field label="Semester" value={r.semester} />
+                    <Field label="Subject" value={r.subject} />
+                    <Field label="Student Pass %" value={r.studentPassPercentage} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="rounded-lg border bg-muted/20 shadow-sm p-3 space-y-2">
+            <SubLabel>Present</SubLabel>
+            {(p.tenurePresentRecords ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+              <div className="space-y-2">
+                {p.tenurePresentRecords?.map((r, i) => (
+                  <div key={i} className="rounded-md border bg-background shadow-sm p-2 grid grid-cols-2 gap-2">
+                    <Field label="Academic Year" value={r.academicYear} />
+                    <Field label="Semester" value={r.semester} />
+                    <Field label="Subject" value={r.subject} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </Section>
     </div>
   );
