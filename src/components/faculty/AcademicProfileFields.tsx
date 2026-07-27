@@ -15,6 +15,8 @@ import type {
   LabEstablished,
   AuthoredBook,
   PreviousInstitution,
+  TenurePastRecord,
+  TenurePresentRecord,
 } from "@/types";
 
 interface Props {
@@ -30,6 +32,8 @@ const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", r
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
 const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
 const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "", yearsWorked: 0 };
+const EMPTY_TENURE_PAST: TenurePastRecord = { academicYear: "", semester: "", subject: "" };
+const EMPTY_TENURE_PRESENT: TenurePresentRecord = { academicYear: "", semester: "", subject: "" };
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="pt-2 pb-1 border-t"><p className="text-sm font-medium text-muted-foreground">{children}</p></div>;
@@ -40,6 +44,28 @@ function NumInput({ label, value, onChange }: { label: string; value: number | u
     <div className="space-y-2">
       <Label>{label}</Label>
       <Input type="number" value={value ?? 0} onChange={(e) => onChange(Number(e.target.value))} />
+    </div>
+  );
+}
+
+// Clamps to 0-100 and allows the field to be cleared (undefined) since Student
+// Pass % is optional — unlike NumInput, which always coerces to a number.
+function PercentInput({ label, value, onChange }: { label: string; value: number | undefined; onChange: (v: number | undefined) => void }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Input
+        type="number"
+        min={0}
+        max={100}
+        placeholder="0-100"
+        value={value ?? ""}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === "") { onChange(undefined); return; }
+          onChange(Math.min(100, Math.max(0, Number(raw))));
+        }}
+      />
     </div>
   );
 }
@@ -69,13 +95,14 @@ function DegreeFields({ label, value, onChange }: { label: string; value: Degree
 }
 
 function RepeatingGroup<T>({
-  title, items, empty, onChange, renderRow,
+  title, items, empty, onChange, renderRow, addLabel = "Add",
 }: {
   title: string;
   items: T[] | undefined;
   empty: T;
   onChange: (next: T[]) => void;
   renderRow: (item: T, update: (patch: Partial<T>) => void) => React.ReactNode;
+  addLabel?: string;
 }) {
   const list = items ?? [];
   return (
@@ -83,7 +110,7 @@ function RepeatingGroup<T>({
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
         <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, empty])}>
-          <Plus className="h-3.5 w-3.5 mr-1" />Add
+          <Plus className="h-3.5 w-3.5 mr-1" />{addLabel}
         </Button>
       </div>
       {list.length === 0 && <p className="text-xs text-muted-foreground">None added yet.</p>}
@@ -155,16 +182,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         <NumInput label="NET/SLET Qualification Year" value={value.netSletQualificationYear} onChange={(v) => set("netSletQualificationYear", v)} />
       </div>
 
-      {/* Module 2 */}
-      <SectionTitle>Module 2 — Tenure &amp; Load</SectionTitle>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <NumInput label="Teaching Experience Before Joining (yrs)" value={value.teachingExperienceBeforeJoiningYears} onChange={(v) => set("teachingExperienceBeforeJoiningYears", v)} />
-        <NumInput label="Teaching Experience Since Joining (yrs)" value={value.teachingExperienceSinceJoiningYears} onChange={(v) => set("teachingExperienceSinceJoiningYears", v)} />
-        <NumInput label="Research/Industry Experience (yrs)" value={value.researchOrIndustryExperienceYears} onChange={(v) => set("researchOrIndustryExperienceYears", v)} />
-        <NumInput label="Total Professional Experience (yrs)" value={value.totalProfessionalExperienceYears} onChange={(v) => set("totalProfessionalExperienceYears", v)} />
-        <NumInput label="Total Weekly Teaching Load (Hours)" value={value.totalWeeklyTeachingLoadHours} onChange={(v) => set("totalWeeklyTeachingLoadHours", v)} />
-        <NumInput label="Average Student Feedback Score" value={value.averageStudentFeedbackScore} onChange={(v) => set("averageStudentFeedbackScore", v)} />
-      </div>
+      <SectionTitle>Module 2 — Previous Institutions Worked</SectionTitle>
       <RepeatingGroup
         title="Previous Institutions Worked At"
         items={value.previousInstitutions}
@@ -365,6 +383,40 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           onChange={(e) => set("otherInformation", e.target.value)}
           placeholder="Anything not covered above — add it here"
           rows={4}
+        />
+      </div>
+
+      {/* Module 8 */}
+      <SectionTitle>Module 8 — Tenure &amp; Load</SectionTitle>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 items-start">
+        <RepeatingGroup
+          title="Past"
+          items={value.tenurePastRecords}
+          empty={EMPTY_TENURE_PAST}
+          addLabel="Add Past Record"
+          onChange={(v) => set("tenurePastRecords", v)}
+          renderRow={(item, update) => (
+            <>
+              <TextInput label="Academic Year *" value={item.academicYear} onChange={(v) => update({ academicYear: v })} placeholder="e.g. 2024–2025" />
+              <TextInput label="Semester *" value={item.semester} onChange={(v) => update({ semester: v })} placeholder="e.g. II Semester" />
+              <TextInput label="Subject *" value={item.subject} onChange={(v) => update({ subject: v })} placeholder="e.g. Artificial Intelligence" />
+              <PercentInput label="Student Pass %" value={item.studentPassPercentage} onChange={(v) => update({ studentPassPercentage: v })} />
+            </>
+          )}
+        />
+        <RepeatingGroup
+          title="Present"
+          items={value.tenurePresentRecords}
+          empty={EMPTY_TENURE_PRESENT}
+          addLabel="Add Present Record"
+          onChange={(v) => set("tenurePresentRecords", v)}
+          renderRow={(item, update) => (
+            <>
+              <TextInput label="Academic Year *" value={item.academicYear} onChange={(v) => update({ academicYear: v })} placeholder="e.g. 2025–2026" />
+              <TextInput label="Semester *" value={item.semester} onChange={(v) => update({ semester: v })} placeholder="e.g. I Semester" />
+              <TextInput label="Subject Currently Teaching *" value={item.subject} onChange={(v) => update({ subject: v })} placeholder="e.g. Machine Learning" />
+            </>
+          )}
         />
       </div>
     </div>

@@ -24,15 +24,12 @@ export async function downloadResumePdf(record: Record<string, unknown>, filenam
   }
 
   const blob = await res.blob();
-  if (!blob.type.includes("pdf")) {
-    throw new Error("PDF generation is unavailable right now — please try again shortly.");
-  }
-
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   const safeHint = filenameHint.replace(/[^a-zA-Z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "resume";
-  link.download = `resume-${safeHint}.pdf`;
+  // Falls back to an .html download when puppeteer isn't available server-side (see AGENTS.md).
+  link.download = `resume-${safeHint}.${blob.type.includes("pdf") ? "pdf" : "html"}`;
   link.click();
   URL.revokeObjectURL(url);
 }

@@ -27,6 +27,19 @@ interface PreviousInstitution {
   yearsWorked?: number;
 }
 
+interface TenurePastRecord {
+  academicYear?: string;
+  semester?: string;
+  subject?: string;
+  studentPassPercentage?: number;
+}
+
+interface TenurePresentRecord {
+  academicYear?: string;
+  semester?: string;
+  subject?: string;
+}
+
 interface Publication {
   title?: string;
   coAuthors?: string;
@@ -85,12 +98,6 @@ interface FacultyProfileFieldsLike {
   gateScore?: number;
   netSletQualificationYear?: number;
 
-  teachingExperienceBeforeJoiningYears?: number;
-  teachingExperienceSinceJoiningYears?: number;
-  researchOrIndustryExperienceYears?: number;
-  totalProfessionalExperienceYears?: number;
-  totalWeeklyTeachingLoadHours?: number;
-  averageStudentFeedbackScore?: number;
   teachingAssignment?: TeachingAssignmentSummary;
   previousInstitutions?: PreviousInstitution[];
 
@@ -128,6 +135,9 @@ interface FacultyProfileFieldsLike {
   fundingConsultancyRevenue?: number;
 
   otherInformation?: string;
+
+  tenurePastRecords?: TenurePastRecord[];
+  tenurePresentRecords?: TenurePresentRecord[];
 }
 
 export interface ResumeData {
@@ -323,16 +333,14 @@ export function getResumeHTML(data: ResumeData): string {
     data.joiningDate ? `${formatDate(data.joiningDate as Parameters<typeof formatDate>[0])} - ${data.isActive === false ? "Left" : "Present"}` : ""
   );
   const experienceBullets = bullets([
-    (data.experienceYears || ap?.totalProfessionalExperienceYears) &&
-      `Total Professional Experience: ${esc(data.experienceYears || ap?.totalProfessionalExperienceYears)} years`,
+    data.experienceYears &&
+      `Total Professional Experience: ${esc(data.experienceYears)} years`,
     (data.internalExperience || data.externalExperience) &&
       `Internal / External Experience: ${data.internalExperience ?? 0} yrs internal, ${data.externalExperience ?? 0} yrs external`,
     (data.inCampusExperience || data.industryExperience) &&
       `In-Campus / Industry Experience: ${data.inCampusExperience ?? 0} yrs in-campus, ${data.industryExperience ?? 0} yrs industry`,
-    (data.researchExperience || ap?.researchOrIndustryExperienceYears) &&
-      `Research / Industry Experience: ${esc(data.researchExperience || ap?.researchOrIndustryExperienceYears)} years`,
-    (ap?.teachingExperienceBeforeJoiningYears || ap?.teachingExperienceSinceJoiningYears) &&
-      `Teaching Experience: ${ap?.teachingExperienceBeforeJoiningYears ?? 0} yrs before joining, ${ap?.teachingExperienceSinceJoiningYears ?? 0} yrs since joining`,
+    data.researchExperience &&
+      `Research / Industry Experience: ${esc(data.researchExperience)} years`,
     data.specialization && `Specialization: ${esc(data.specialization)}`,
     data.qualification && `Qualification: ${esc(data.qualification)}`,
   ]);
@@ -345,8 +353,6 @@ export function getResumeHTML(data: ResumeData): string {
 
   // ── Teaching load ────────────────────────────────────────────────────────
   const teachingLoadBullets = bullets([
-    ap?.totalWeeklyTeachingLoadHours && `Weekly Teaching Load: ${esc(ap.totalWeeklyTeachingLoadHours)} hours`,
-    ap?.averageStudentFeedbackScore && `Average Student Feedback Score: ${esc(ap.averageStudentFeedbackScore)}`,
     ap?.teachingAssignment?.primaryTeachingRole && `Primary Teaching Role: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
   ]);
   const teachingCourses = ap?.teachingAssignment?.courses?.length
@@ -462,6 +468,34 @@ export function getResumeHTML(data: ResumeData): string {
   // ── Other information ────────────────────────────────────────────────────
   const otherInfoBody = ap?.otherInformation ? `<p class="summary-text">${esc(ap.otherInformation)}</p>` : "";
 
+  // ── Tenure & Load (Past / Present) ──────────────────────────────────────
+  const tenurePastEntries = ap?.tenurePastRecords?.length
+    ? `<div class="subheading">Past</div>` +
+      ap.tenurePastRecords
+        .map((r) =>
+          detailTable(
+            detail("Academic Year", r.academicYear) +
+            detail("Semester", r.semester) +
+            detail("Subject", r.subject) +
+            detail("Student Pass %", r.studentPassPercentage)
+          )
+        )
+        .join("")
+    : "";
+  const tenurePresentEntries = ap?.tenurePresentRecords?.length
+    ? `<div class="subheading">Present</div>` +
+      ap.tenurePresentRecords
+        .map((r) =>
+          detailTable(
+            detail("Academic Year", r.academicYear) +
+            detail("Semester", r.semester) +
+            detail("Subject", r.subject)
+          )
+        )
+        .join("")
+    : "";
+  const tenureLoadBody = tenurePastEntries + tenurePresentEntries;
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -498,6 +532,8 @@ export function getResumeHTML(data: ResumeData): string {
   .bullets li::before { content: "○"; position: absolute; left: 0; top: 1px; font-size: 8px; }
 
   .summary-text { font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; margin: 0 0 8px; }
+  .subheading { font-weight: bold; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; color: #111827; margin: 8px 0 3px; break-after: avoid-page; }
+  .subheading:first-child { margin-top: 0; }
   .empty-note { font-size: 12px; color: #6b7280; font-style: italic; margin: 3px 0 8px; }
 
   /* Compact 2-up key/value grid — used for personal/financial facts, which are
@@ -545,6 +581,7 @@ export function getResumeHTML(data: ResumeData): string {
   ${renderSection("Certifications & Professional Memberships", certificationsBody)}
   ${renderSection("Other Information", otherInfoBody)}
   ${renderSection("Financial Standing", financialBody)}
+  ${renderSection("Tenure & Load", tenureLoadBody)}
 
   <div class="footer">Generated on ${esc(formatDate(new Date()))} — Confidential, for internal institutional use only.</div>
 </div>

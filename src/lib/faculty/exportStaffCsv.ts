@@ -114,12 +114,6 @@ function buildRow(user: FMSUser): Record<string, string> {
     gateQualifiedYear: s(p.gateQualifiedYear),
     gateScore: s(p.gateScore),
     netSletQualificationYear: s(p.netSletQualificationYear),
-    teachingExperienceBeforeJoiningYears: s(p.teachingExperienceBeforeJoiningYears),
-    teachingExperienceSinceJoiningYears: s(p.teachingExperienceSinceJoiningYears),
-    researchOrIndustryExperienceYears: s(p.researchOrIndustryExperienceYears),
-    totalProfessionalExperienceYears: s(p.totalProfessionalExperienceYears),
-    totalWeeklyTeachingLoadHours: s(p.totalWeeklyTeachingLoadHours),
-    averageStudentFeedbackScore: s(p.averageStudentFeedbackScore),
     primaryTeachingRole: s(p.teachingAssignment?.primaryTeachingRole),
 
     publicationsFirstOrCorrespondingAuthor: s(p.publicationsFirstOrCorrespondingAuthor),

@@ -525,6 +525,19 @@ export interface PreviousInstitution {
   yearsWorked: number;
 }
 
+export interface TenurePastRecord {
+  academicYear: string;
+  semester: string;
+  subject: string;
+  studentPassPercentage?: number; // optional, 0-100
+}
+
+export interface TenurePresentRecord {
+  academicYear: string;
+  semester: string;
+  subject: string; // subject currently teaching
+}
+
 export interface Publication {
   title: string;
   coAuthors: string;
@@ -584,13 +597,7 @@ export interface FacultyProfileFields {
   gateScore?: number;
   netSletQualificationYear?: number;
 
-  // Module 2 — Tenure & Load
-  teachingExperienceBeforeJoiningYears: number;
-  teachingExperienceSinceJoiningYears: number;
-  researchOrIndustryExperienceYears: number;
-  totalProfessionalExperienceYears: number;
-  totalWeeklyTeachingLoadHours: number;
-  averageStudentFeedbackScore?: number;
+  // Previous Institutions Worked / Current Teaching Assignment
   teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL
   previousInstitutions: PreviousInstitution[]; // prior institutions worked at, before this one
 
@@ -633,6 +640,10 @@ export interface FacultyProfileFields {
 
   // Module 7 — Others
   otherInformation?: string;
+
+  // Module 8 — Tenure & Load
+  tenurePastRecords: TenurePastRecord[];
+  tenurePresentRecords: TenurePresentRecord[];
 }
 
 // PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object
