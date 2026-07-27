@@ -49,6 +49,13 @@ function StepIcon({ action }: { action?: string }) {
   return <Clock className="h-4 w-4 text-muted-foreground" />;
 }
 
+function roleLabel(role?: string) {
+  if (role === "VICE_PRINCIPAL") return "Vice Principal";
+  if (role === "PRINCIPAL") return "Principal";
+  if (role === "HOD") return "HOD";
+  return role ?? "Reviewer";
+}
+
 export default function LeaveApplicationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -124,7 +131,9 @@ export default function LeaveApplicationDetailPage() {
 
   const statusStyle = STATUS_STYLES[request.status] ?? "bg-gray-50 text-gray-500 border-gray-200";
   const statusLabel = STATUS_LABELS[request.status] ?? request.status;
-  const canCancel = request.status === "PENDING_HOD";
+  const canCancel =
+    request.status === "PENDING_HOD" ||
+    (request.status === "PENDING_RATIFICATION" && request.isOtherRequest && !request.leaveTypeCode);
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -141,7 +150,7 @@ export default function LeaveApplicationDetailPage() {
       </div>
 
       <PageHeader
-        title={LT_LABELS[request.leaveTypeCode] ?? request.leaveTypeCode}
+        title={request.isOtherRequest ? "Others" : (request.leaveTypeCode ? LT_LABELS[request.leaveTypeCode] ?? request.leaveTypeCode : "Leave Application")}
         description={`Applied on ${formatDate(request.appliedOn as Parameters<typeof formatDate>[0])}`}
       />
 
@@ -231,25 +240,27 @@ export default function LeaveApplicationDetailPage() {
               </div>
             </div>
 
-            {/* HOD step */}
+            {/* Stage 1 — for "Others" requests the Principal reviews first;
+                for everything else the HOD reviews first. */}
             {(() => {
-              const hodStep = steps.find((s) => s.approverRole === "HOD");
-              if (hodStep?.action) {
+              const stage1Label = request.isOtherRequest ? "Principal" : "HOD";
+              const step1 = steps.find((s) => s.sequence === 1);
+              if (step1?.action) {
                 return (
                   <div className="flex items-start gap-3">
-                    <StepIcon action={hodStep.action} />
+                    <StepIcon action={step1.action} />
                     <div>
                       <p className="text-sm font-medium">
-                        HOD {hodStep.action === "APPROVED" ? "Approved" : "Rejected"}
-                        {hodStep.approverName && ` — ${hodStep.approverName}`}
+                        {roleLabel(step1.approverRole)} {step1.action === "APPROVED" ? "Approved" : "Rejected"}
+                        {step1.approverName && ` — ${step1.approverName}`}
                       </p>
-                      {hodStep.actedOn && (
+                      {step1.actedOn && (
                         <p className="text-xs text-muted-foreground">
-                          {formatDate(hodStep.actedOn as Parameters<typeof formatDate>[0])}
+                          {formatDate(step1.actedOn as Parameters<typeof formatDate>[0])}
                         </p>
                       )}
-                      {hodStep.comments && (
-                        <p className="text-xs mt-1 rounded bg-muted/40 p-1.5">{hodStep.comments}</p>
+                      {step1.comments && (
+                        <p className="text-xs mt-1 rounded bg-muted/40 p-1.5">{step1.comments}</p>
                       )}
                     </div>
                   </div>
@@ -259,34 +270,39 @@ export default function LeaveApplicationDetailPage() {
                 <div className="flex items-start gap-3">
                   <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                   <p className="text-sm text-muted-foreground">
-                    {request.status === "CANCELLED" ? "Cancelled before HOD review" : "Awaiting HOD review"}
+                    {request.status === "CANCELLED" ? `Cancelled before ${stage1Label} review` : `Awaiting ${stage1Label} review`}
                   </p>
                 </div>
               );
             })()}
 
-            {/* Principal step (if progressed) */}
-            {(request.status === "PENDING_RATIFICATION" ||
-              request.status === "PENDING_MANAGEMENT" ||
-              request.status === "APPROVED" ||
-              request.status === "REJECTED" && steps.some((s) => s.sequence === 2)) && (() => {
-              const principalStep = steps.find((s) => s.sequence === 2);
-              if (principalStep?.action) {
+            {/* Stage 2 — only reached once stage 1 approves. For "Others" requests
+                this is the HOD picking the actual leave type; for everything else
+                it's Principal ratification, which only applies to a few leave types. */}
+            {(() => {
+              const step1Approved = steps.some((s) => s.sequence === 1 && s.action === "APPROVED");
+              const showStage2 = request.isOtherRequest
+                ? step1Approved
+                : (request.status === "PENDING_RATIFICATION" || request.status === "PENDING_MANAGEMENT" || steps.some((s) => s.sequence === 2));
+              if (!showStage2) return null;
+
+              const stage2Label = request.isOtherRequest ? "HOD" : "Principal";
+              const step2 = steps.find((s) => s.sequence === 2);
+              if (step2?.action) {
                 return (
                   <div className="flex items-start gap-3">
-                    <StepIcon action={principalStep.action} />
+                    <StepIcon action={step2.action} />
                     <div>
                       <p className="text-sm font-medium">
-                        {principalStep.approverRole === "VICE_PRINCIPAL" ? "Vice Principal" : "Principal"}{" "}
-                        {principalStep.action === "APPROVED" ? "Approved" : "Rejected"}
+                        {roleLabel(step2.approverRole)} {step2.action === "APPROVED" ? "Approved" : "Rejected"}
                       </p>
-                      {principalStep.actedOn && (
+                      {step2.actedOn && (
                         <p className="text-xs text-muted-foreground">
-                          {formatDate(principalStep.actedOn as Parameters<typeof formatDate>[0])}
+                          {formatDate(step2.actedOn as Parameters<typeof formatDate>[0])}
                         </p>
                       )}
-                      {principalStep.comments && (
-                        <p className="text-xs mt-1 rounded bg-muted/40 p-1.5">{principalStep.comments}</p>
+                      {step2.comments && (
+                        <p className="text-xs mt-1 rounded bg-muted/40 p-1.5">{step2.comments}</p>
                       )}
                     </div>
                   </div>
@@ -295,7 +311,7 @@ export default function LeaveApplicationDetailPage() {
               return (
                 <div className="flex items-start gap-3">
                   <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <p className="text-sm text-muted-foreground">Awaiting Principal review</p>
+                  <p className="text-sm text-muted-foreground">Awaiting {stage2Label} review</p>
                 </div>
               );
             })()}

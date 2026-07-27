@@ -205,7 +205,9 @@ export default function PrincipalLeaveApprovalsPage() {
 
                       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                         <BookOpen className="h-4 w-4 shrink-0" />
-                        <span className="font-medium text-foreground">{LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode}</span>
+                        <span className="font-medium text-foreground">
+                          {req.isOtherRequest ? "Others" : (req.leaveTypeCode ? LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode : "—")}
+                        </span>
                         <span>·</span>
                         <CalendarDays className="h-4 w-4 shrink-0" />
                         <span>
@@ -225,6 +227,12 @@ export default function PrincipalLeaveApprovalsPage() {
                     {/* Expanded details */}
                     {isExpanded && (
                       <div className="border-t px-4 pb-4 pt-3 space-y-3">
+                        {req.isOtherRequest && !req.leaveTypeCode && (
+                          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+                            Applied under &quot;Others&quot; — no specific leave type yet. Approving here forwards
+                            it to the HOD, who will pick the most suitable type based on the reason below.
+                          </p>
+                        )}
                         <div className="text-sm">
                           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Reason</span>
                           <p className="mt-1 rounded bg-muted/40 p-2">{req.reason}</p>
