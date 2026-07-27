@@ -250,7 +250,7 @@ function PipelineCard({ entry, sentCandidateIds }: { entry: PipelineEntry; sentC
           <Step step={1} label="Request" sub={stage1Sub} state={stateFor(1)} />
           <Step step={2} label="Candidates" sub={stage2Sub} state={stateFor(2)} />
           <Step step={3} label="Interview" sub={stage3Sub} state={stateFor(3)} />
-          <Step step={4} label="Decision" sub={stage4Sub} state={stateFor(4)} isLast />
+          <Step step={4} label="Result" sub={stage4Sub} state={stateFor(4)} isLast />
         </div>
       </div>
 

@@ -105,7 +105,7 @@ export default function NewCandidatePage() {
         );
         const filtered = allVacancies.filter((v) =>
           (dept ? v.department === dept : true) &&
-          (v.availableCount ?? v.requiredCount) > 0 &&
+          (v.requiredCount ?? 1) > 0 &&
           !completedVacancyIds.has(v.id)
         );
         setVacancies(filtered);
