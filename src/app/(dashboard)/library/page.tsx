@@ -9,7 +9,7 @@ export default function LibraryDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name?.split(" ")[0] ?? "Library"}`}
-        description="Library — location library administration"
+        description="Library — college library administration"
       />
       <p className="text-muted-foreground text-sm">Library features are being set up. Check back soon.</p>
     </div>

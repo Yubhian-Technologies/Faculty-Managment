@@ -18,14 +18,10 @@ const CREATABLE_ROLES = [
   { value: "HR_ADMIN", label: "HR Admin" },
   { value: "ADMIN_OFFICE", label: "Admin Office" },
   { value: "ACCOUNTS", label: "Accounts" },
-  { value: "OFFICE", label: "Office" },
-  { value: "PLACEMENT_DEPT", label: "Placement Department" },
-  { value: "LIBRARY", label: "Library" },
-  { value: "EXAM_CELL", label: "Exam Cell" },
   { value: "LOCATION_DEPT_HEAD", label: "Dept Head" },
 ] as const;
 
-const SINGLETON_ROLES = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "OFFICE", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const SINGLETON_ROLES = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
 
 export default function NewLocationUserPage() {
   const router = useRouter();
@@ -160,7 +156,7 @@ export default function NewLocationUserPage() {
               )}
               {!loadingUsers && allSingletonsFilled && (
                 <p className="text-xs text-muted-foreground">
-                  All singleton roles (HR Admin, Admin Office, Accounts, Office, Placement Department, Library, Exam Cell) are filled. You can still add Dept Heads.
+                  All singleton roles (HR Admin, Admin Office, Accounts) are filled. You can still add Dept Heads.
                 </p>
               )}
             </div>

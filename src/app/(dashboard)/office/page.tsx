@@ -9,7 +9,7 @@ export default function OfficeDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name?.split(" ")[0] ?? "Office"}`}
-        description="Office — location administrative support"
+        description="Office — college administrative support"
       />
       <p className="text-muted-foreground text-sm">Office features are being set up. Check back soon.</p>
     </div>
