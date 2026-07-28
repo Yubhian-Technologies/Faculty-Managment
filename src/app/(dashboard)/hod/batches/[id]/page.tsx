@@ -293,7 +293,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         body: JSON.stringify({ currentPhase: "PRINCIPAL_FINAL_REVIEW" }),
       });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Submitted for Principal review", description: "The Principal has been notified to make final hiring decisions." });
+      toast({ variant: "success", title: "Submitted for Principal review", description: "The Principal has been notified to make final approval." });
       void load();
     } catch {
       toast({ variant: "destructive", title: "Failed to submit for review" });
@@ -1122,7 +1122,7 @@ ${institution}`;
                   <CheckCircle2 className="h-5 w-5" />
                   <div>
                     <p className="font-medium text-sm">Submitted for Principal review</p>
-                    <p className="text-xs text-muted-foreground">The Principal will review all evaluations and make final hiring decisions.</p>
+                    <p className="text-xs text-muted-foreground">The Principal will review all evaluations and make final approval.</p>
                   </div>
                 </div>
               ) : (
@@ -1130,7 +1130,7 @@ ${institution}`;
                   <div>
                     <p className="font-medium text-sm">Submit All Evaluations to Principal</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Submit demo scores and panel assessments to the Principal for final hiring decisions.
+                      Submit demo scores and panel assessments to the Principal for final approval.
                     </p>
                   </div>
                   <Button onClick={submitForPrincipalReview} loading={isSubmittingForReview} className="shrink-0">

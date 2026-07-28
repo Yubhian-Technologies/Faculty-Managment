@@ -115,6 +115,8 @@ export interface Candidate {
   status: CandidateStatus;
   isShortlisted: boolean;
   hasArrived: boolean;
+  verifiedDocuments?: string[];
+  submittedDocuments?: Record<string, { label: string; url: string; uploadedAt: string }>;
   arrivedAt?: Timestamp;
   interviewMode?: InterviewMode;
   referralType?: ReferralType;

@@ -83,6 +83,9 @@ export async function POST(request: Request) {
       weaknesses?: string;
       recommendation: "ACCEPT" | "REJECT" | "MAYBE";
       comments?: string;
+      expectedJoiningDate?: string;
+      expectedSalary?: string;
+      negotiatedSalary?: string;
     };
 
     const { batchId, candidateId, ratings, recommendation } = body;
@@ -124,6 +127,9 @@ export async function POST(request: Request) {
       weaknesses: body.weaknesses ?? "",
       recommendation,
       comments: body.comments ?? "",
+      ...(body.expectedJoiningDate ? { expectedJoiningDate: body.expectedJoiningDate } : {}),
+      ...(body.expectedSalary ? { expectedSalary: body.expectedSalary } : {}),
+      ...(body.negotiatedSalary ? { negotiatedSalary: body.negotiatedSalary } : {}),
       submittedAt: now,
     };
 

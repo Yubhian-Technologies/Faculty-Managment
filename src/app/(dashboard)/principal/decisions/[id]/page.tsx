@@ -7,7 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import {
@@ -21,9 +26,10 @@ import {
   Clock,
   FileText,
   Mail,
+  Scroll,
 } from "lucide-react";
 import type { HiringBatch, Candidate, FMSUser } from "@/types";
-import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
+import { downloadOfferLetterPdf, downloadAppointmentLetterPdf } from "@/lib/pdf/downloadOfferLetter";
 
 type PanelFeedbackItem = {
   id: string;
@@ -77,6 +83,23 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
   const [collegeUsers, setCollegeUsers] = useState<FMSUser[]>([]);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Appointment letter dialog
+  type ApptForm = {
+    title: string; address: string; basicPay: string; payScale: string;
+    daPercent: string; hraPercent: string; otherAllowances: string;
+    affiliatedUniversity: string; reportingAddress: string; collegePhone: string;
+    societyAbbr: string; societyHqCity: string;
+  };
+  const defaultApptForm = (): ApptForm => ({
+    title: "Mr.", address: "", basicPay: "", payScale: "15600-39100+6000 AGP",
+    daPercent: "80", hraPercent: "10", otherAllowances: "",
+    affiliatedUniversity: "J.N.T. University, Kakinada",
+    reportingAddress: "", collegePhone: "", societyAbbr: "SVES", societyHqCity: "Hyderabad",
+  });
+  const [apptDialog, setApptDialog] = useState<Candidate | null>(null);
+  const [apptForm, setApptForm] = useState<ApptForm>(defaultApptForm());
+  const [isGeneratingAppt, setIsGeneratingAppt] = useState(false);
 
   // Per-candidate decision state
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
@@ -240,7 +263,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
     );
     const cc = ccUsers.map((u) => u.email).filter(Boolean).join(",");
     const principalPf = panelFeedback.find(
-      (f) => f.candidateId === candidate.id && (f.negotiatedSalary ?? f.expectedSalary)
+      (f) => f.candidateId === candidate.id && (f.expectedJoiningDate || f.negotiatedSalary != null || f.expectedSalary != null)
     );
     const salary = principalPf?.negotiatedSalary ?? principalPf?.expectedSalary;
     const joiningDate = principalPf?.expectedJoiningDate
@@ -259,6 +282,75 @@ Department: ${batch.department}
 Expected Joining Date: ${joiningDate}${salary ? `\nNegotiated Salary: ₹${Number(salary).toLocaleString("en-IN")}/month` : ""}
 
 Kindly confirm your acceptance by replying to this email at the earliest.
+
+We look forward to welcoming you to our institution.
+
+Warm regards,
+${collegeName || "Sri Vishnu Educational Society"}`;
+
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(gmailUrl, "_blank");
+  }
+
+  async function submitApptLetter() {
+    if (!apptDialog || !batch) return;
+    setIsGeneratingAppt(true);
+    try {
+      const principalPf = panelFeedback.find(
+        (f) => f.candidateId === apptDialog.id && f.expectedJoiningDate
+      );
+      const joiningDate = principalPf?.expectedJoiningDate
+        ? new Date(principalPf.expectedJoiningDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+        : undefined;
+      const salary = apptForm.basicPay
+        ? apptForm.basicPay
+        : String(principalPf?.negotiatedSalary ?? principalPf?.expectedSalary ?? "");
+
+      await downloadAppointmentLetterPdf(
+        {
+          candidateName: `${apptForm.title} ${apptDialog.name}`.trim(),
+          candidateAddress: apptForm.address,
+          designation: batch.position,
+          department: batch.department,
+          collegeName: collegeName || "Sri Vishnu Educational Society",
+          collegeAddress: apptForm.reportingAddress || undefined,
+          letterDate: new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "."),
+          basicPay: salary || undefined,
+          payScale: apptForm.payScale || undefined,
+          daPercent: apptForm.daPercent,
+          hraPercent: apptForm.hraPercent,
+          otherAllowances: apptForm.otherAllowances || undefined,
+          affiliatedUniversity: apptForm.affiliatedUniversity,
+          reportingAddress: apptForm.reportingAddress || undefined,
+          collegePhone: apptForm.collegePhone || undefined,
+          societyAbbr: apptForm.societyAbbr,
+          societyHqCity: apptForm.societyHqCity,
+          ...(joiningDate ? {} : {}),
+        },
+        `${apptDialog.name.replace(/\s+/g, "-")}-appointment`
+      );
+      setApptDialog(null);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to generate appointment letter" });
+    } finally {
+      setIsGeneratingAppt(false);
+    }
+  }
+
+  function sendApptEmail(candidate: Candidate) {
+    if (!batch) return;
+    const ccUsers = collegeUsers.filter((u) =>
+      ["VICE_PRINCIPAL", "COLLEGE_OFFICE", "HOD"].includes(u.role)
+    );
+    const cc = ccUsers.map((u) => u.email).filter(Boolean).join(",");
+    const subject = `Appointment Order – ${batch.position} | ${collegeName || "Sri Vishnu Educational Society"}`;
+    const body = `Dear ${candidate.name},
+
+We are pleased to inform you of your appointment as ${batch.position} in the Department of ${batch.department} at ${collegeName || "Sri Vishnu Educational Society"}.
+
+Please find the appointment order attached to this email.
+
+Kindly sign and return a copy of the appointment order upon receipt, confirming your acceptance of the terms and conditions.
 
 We look forward to welcoming you to our institution.
 
@@ -456,25 +548,50 @@ ${collegeName || "Sri Vishnu Educational Society"}`;
                       <>
                         <p className="text-sm text-green-700 flex items-center gap-1.5">
                           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                          Candidate approved — offer letter ready to send.
+                          Candidate approved — letters ready to generate.
                         </p>
-                        <div className="flex gap-2 flex-wrap">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            loading={isGenerating === candidate.id}
-                            onClick={() => void generateOfferLetter(candidate)}
-                          >
-                            <FileText className="h-4 w-4 mr-1.5" />
-                            Generate Offer Letter
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => sendOfferEmail(candidate)}
-                          >
-                            <Mail className="h-4 w-4 mr-1.5" />
-                            Send via Email
-                          </Button>
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Offer Letter</p>
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              loading={isGenerating === candidate.id}
+                              onClick={() => void generateOfferLetter(candidate)}
+                            >
+                              <FileText className="h-4 w-4 mr-1.5" />
+                              Generate Offer Letter
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => sendOfferEmail(candidate)}
+                            >
+                              <Mail className="h-4 w-4 mr-1.5" />
+                              Send via Email
+                            </Button>
+                          </div>
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-1">Appointment Order</p>
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setApptForm(defaultApptForm());
+                                setApptDialog(candidate);
+                              }}
+                            >
+                              <Scroll className="h-4 w-4 mr-1.5" />
+                              Generate Appointment Order
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => sendApptEmail(candidate)}
+                            >
+                              <Mail className="h-4 w-4 mr-1.5" />
+                              Send via Email
+                            </Button>
+                          </div>
                         </div>
                       </>
                     ) : (
@@ -524,6 +641,110 @@ ${collegeName || "Sri Vishnu Educational Society"}`;
           );
         })}
       </div>
+
+      {/* Appointment Letter Dialog */}
+      <Dialog open={!!apptDialog} onOpenChange={(o) => { if (!o) setApptDialog(null); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Generate Appointment Order — {apptDialog?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Title</Label>
+                <Select value={apptForm.title} onValueChange={(v) => setApptForm((f) => ({ ...f, title: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Mr.">Mr.</SelectItem>
+                    <SelectItem value="Mrs.">Mrs.</SelectItem>
+                    <SelectItem value="Ms.">Ms.</SelectItem>
+                    <SelectItem value="Dr.">Dr.</SelectItem>
+                    <SelectItem value="Prof.">Prof.</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <Label className="text-xs">Candidate Address</Label>
+                <Textarea
+                  rows={3}
+                  placeholder={"H.No. 37-2-17, Innespeta\nRajahmundry East\nAndhra Pradesh"}
+                  value={apptForm.address}
+                  onChange={(e) => setApptForm((f) => ({ ...f, address: e.target.value }))}
+                  className="text-sm resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Basic Pay (₹)</Label>
+                <Input
+                  placeholder="e.g. 25,187"
+                  value={apptForm.basicPay}
+                  onChange={(e) => setApptForm((f) => ({ ...f, basicPay: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Pay Scale</Label>
+                <Input
+                  placeholder="15600-39100+6000 AGP"
+                  value={apptForm.payScale}
+                  onChange={(e) => setApptForm((f) => ({ ...f, payScale: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">DA %</Label>
+                <Input value={apptForm.daPercent} onChange={(e) => setApptForm((f) => ({ ...f, daPercent: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">HRA %</Label>
+                <Input value={apptForm.hraPercent} onChange={(e) => setApptForm((f) => ({ ...f, hraPercent: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Other Allowances (₹)</Label>
+                <Input placeholder="e.g. 28,746" value={apptForm.otherAllowances} onChange={(e) => setApptForm((f) => ({ ...f, otherAllowances: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Affiliated University</Label>
+              <Input value={apptForm.affiliatedUniversity} onChange={(e) => setApptForm((f) => ({ ...f, affiliatedUniversity: e.target.value }))} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Reporting Address</Label>
+                <Input placeholder="Vishnupur, BHIMAVARAM – 534 202" value={apptForm.reportingAddress} onChange={(e) => setApptForm((f) => ({ ...f, reportingAddress: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">College Phone</Label>
+                <Input placeholder="08816-250864" value={apptForm.collegePhone} onChange={(e) => setApptForm((f) => ({ ...f, collegePhone: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Society Abbreviation</Label>
+                <Input placeholder="SVES" value={apptForm.societyAbbr} onChange={(e) => setApptForm((f) => ({ ...f, societyAbbr: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Society HQ City</Label>
+                <Input placeholder="Hyderabad" value={apptForm.societyHqCity} onChange={(e) => setApptForm((f) => ({ ...f, societyHqCity: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApptDialog(null)}>Cancel</Button>
+            <Button loading={isGeneratingAppt} onClick={() => void submitApptLetter()}>
+              <Scroll className="h-4 w-4 mr-1.5" />
+              Download PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={!!confirmFor}

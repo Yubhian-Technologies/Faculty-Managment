@@ -82,7 +82,7 @@ export default function CollegeOfficeCandidatesPage() {
         if (stage === "DOCUMENT_VERIFICATION") {
           return (
             <Button asChild size="sm" variant="outline" className="text-blue-700 border-blue-300">
-              <Link href="/college-office/documents" onClick={(e) => e.stopPropagation()}>
+              <Link href={`/college-office/documents?candidateId=${row.id}`} onClick={(e) => e.stopPropagation()}>
                 Verify in Documents →
               </Link>
             </Button>

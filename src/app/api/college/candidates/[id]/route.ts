@@ -63,6 +63,7 @@ export async function PATCH(
       name?: string;
       email?: string;
       phone?: string;
+      verifiedDocuments?: string[];
     };
 
     const db = getAdminDb();
@@ -81,11 +82,12 @@ export async function PATCH(
     }
 
     const updates: Record<string, unknown> = { updatedAt: now };
-    const { isShortlisted, hasArrived, docsVerified, callLetterSent, status, stage, batchId, resumeUrl, name, email, phone } = body;
+    const { isShortlisted, hasArrived, docsVerified, callLetterSent, status, stage, batchId, resumeUrl, name, email, phone, verifiedDocuments } = body;
 
     if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
     if (docsVerified !== undefined) updates.docsVerified = docsVerified;
     if (callLetterSent !== undefined) updates.callLetterSent = callLetterSent;
+    if (verifiedDocuments !== undefined) updates.verifiedDocuments = verifiedDocuments;
     if (hasArrived !== undefined) {
       updates.hasArrived = hasArrived;
       if (hasArrived) {
