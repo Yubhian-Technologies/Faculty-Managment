@@ -55,7 +55,11 @@ export default function NewBatchPage() {
     Promise.all([
       fetch("/api/college/vacancy-requests?status=APPROVED")
         .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
-        .then((d) => d.vacancyRequests ?? []),
+        .then((d) => {
+          const dept = user?.department;
+          const all = d.vacancyRequests ?? [];
+          return dept ? all.filter((v) => v.department === dept) : all;
+        }),
       fetch("/api/college/candidates")
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
@@ -113,12 +117,16 @@ export default function NewBatchPage() {
   ]);
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
+  const hodDept = user?.department ?? "";
   const filteredCandidates = candidates.filter((c) => {
-    if (!c.isShortlisted || c.batchId) return false;
+    // Exclude candidates already in a batch
+    if (c.batchId) return false;
+    // Always scope to HOD's department
+    if (hodDept && c.department !== hodDept) return false;
     if (!selectedVacancy) return true;
-    // Mirror PipelineBoard matching: direct vacancyId link OR (no vacancyId + position + department)
+    // Direct vacancyId link OR position + department match (mirrors PipelineBoard)
     if (c.vacancyId && c.vacancyId === selectedVacancyId) return true;
-    if (!c.vacancyId && c.position === selectedVacancy.position && c.department === selectedVacancy.department) return true;
+    if (!c.vacancyId && c.position === selectedVacancy.position) return true;
     return false;
   });
 
@@ -263,7 +271,7 @@ export default function NewBatchPage() {
           <CardContent>
             {filteredCandidates.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No shortlisted candidates without a batch. Add and shortlist candidates first.
+                No candidates found for this hiring request. Add candidates first.
               </p>
             ) : (
               <div className="space-y-3">
