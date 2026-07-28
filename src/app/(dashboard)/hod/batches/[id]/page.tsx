@@ -478,7 +478,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
 
 Greetings from ${institution}.
 
-Thank you for your interest in joining our institution. Based on your application and profile, we are pleased to invite you to attend an interview for the position of Faculty – ${batch.department}.
+Thank you for your interest in joining our institution. Based on your application and profile, we are pleased to invite you to attend an interview for the position of ${batch.position} at ${batch.department}.
 
 INTERVIEW DETAILS:
 
@@ -1383,10 +1383,13 @@ ${institution}`;
                     const required: string[] = batch.requiredDocuments ?? [];
                     const submitted = cExt.submittedDocuments ?? {};
                     const callLetterSent = cExt.callLetterSent === true;
+                    const hasArrived = c.hasArrived === true;
                     const allDocsUploaded =
                       required.length === 0
-                        ? callLetterSent  // no required docs: only allow if call letter was sent
+                        ? callLetterSent
                         : required.every((d) => submitted[d.replace(/[^a-zA-Z0-9_-]/g, "_")]);
+                    // If the candidate is physically present, HOD can verify in person
+                    const canVerify = hasArrived || allDocsUploaded;
 
                     return (
                       <div
@@ -1409,7 +1412,7 @@ ${institution}`;
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={!allDocsUploaded}
+                              disabled={!canVerify}
                               onClick={() => void verifyDocs(c.id)}
                             >
                               Mark Verified
@@ -1457,6 +1460,8 @@ ${institution}`;
                             <Clock className="h-3 w-3" />
                             {!callLetterSent
                               ? "Send the call letter to the candidate first."
+                              : hasArrived
+                              ? "Some documents not uploaded — verify in person before marking."
                               : "Waiting for candidate to upload all required documents."}
                           </p>
                         )}
