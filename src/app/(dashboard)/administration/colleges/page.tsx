@@ -10,15 +10,6 @@ import { toast } from "@/hooks/useToast";
 import type { College } from "@/types";
 
 type PrincipalRow = { uid: string; name: string; email: string; role: string; isActive: boolean };
-type StaffRow = { uid: string; name: string; email: string; role: string; isActive: boolean };
-
-// College-scoped, one holder per role per college — see administration/college-staff API.
-const COLLEGE_STAFF_ROLES = [
-  { value: "OFFICE", label: "Office" },
-  { value: "PLACEMENT_DEPT", label: "Placement Department" },
-  { value: "LIBRARY", label: "Library" },
-  { value: "EXAM_CELL", label: "Exam Cell" },
-] as const;
 
 export default function AdministrationCollegesPage() {
   const router = useRouter();
@@ -27,8 +18,6 @@ export default function AdministrationCollegesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [principalMap, setPrincipalMap] = useState<Record<string, PrincipalRow[]>>({});
   const [loadingPrincipals, setLoadingPrincipals] = useState<string | null>(null);
-  const [staffMap, setStaffMap] = useState<Record<string, StaffRow[]>>({});
-  const [loadingStaff, setLoadingStaff] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -56,18 +45,6 @@ export default function AdministrationCollegesPage() {
         setLoadingPrincipals(null);
       }
     }
-    if (!staffMap[college.id]) {
-      setLoadingStaff(college.id);
-      try {
-        const res = await fetch(`/api/administration/college-staff?collegeId=${college.id}`);
-        const data = await res.json() as { staff: StaffRow[] };
-        setStaffMap((prev) => ({ ...prev, [college.id]: data.staff ?? [] }));
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load college staff" });
-      } finally {
-        setLoadingStaff(null);
-      }
-    }
   }
 
   if (isLoading) {
@@ -85,7 +62,7 @@ export default function AdministrationCollegesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Colleges"
-        description="Manage colleges and their principals, office, placement, library and exam cell staff in this location"
+        description="Manage colleges and their principals in this location"
         actions={
           <Button onClick={() => router.push("/administration/colleges/new")}>
             <Plus className="h-4 w-4 mr-2" />
@@ -163,41 +140,6 @@ export default function AdministrationCollegesPage() {
                           </Badge>
                         </div>
                       ))}
-                    </div>
-                  )}
-
-                  <p className="text-xs font-medium text-muted-foreground mb-2 mt-4 uppercase tracking-wide">Office / Placement Department / Library / Exam Cell</p>
-                  {loadingStaff === college.id ? (
-                    <div className="h-8 w-32 bg-muted animate-pulse rounded" />
-                  ) : (
-                    <div className="space-y-2">
-                      {COLLEGE_STAFF_ROLES.map((r) => {
-                        const holder = (staffMap[college.id] ?? []).find((s) => s.role === r.value);
-                        return (
-                          <div key={r.value} className="flex items-center justify-between rounded-lg border bg-card p-3">
-                            {holder ? (
-                              <div>
-                                <p className="text-sm font-medium">{holder.name}</p>
-                                <p className="text-xs text-muted-foreground">{holder.email}</p>
-                              </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground">Not assigned yet</p>
-                            )}
-                            {holder ? (
-                              <Badge variant="outline" className="text-xs">{r.label}</Badge>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => router.push(`/administration/colleges/${college.id}/staff/new?role=${r.value}`)}
-                              >
-                                <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                                Add {r.label}
-                              </Button>
-                            )}
-                          </div>
-                        );
-                      })}
                     </div>
                   )}
                 </div>
