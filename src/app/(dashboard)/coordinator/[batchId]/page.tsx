@@ -97,8 +97,10 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
     );
   }
 
+  const demoSessionOpen = (batch as Record<string, unknown>).demoSessionOpen === true;
+
   // Fullscreen QR mode — for projecting to class
-  if (isFullscreen) {
+  if (isFullscreen && demoSessionOpen) {
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50 p-8">
         <div className="text-center space-y-6 max-w-lg w-full">
@@ -191,14 +193,38 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
                 Waiting for HOD to verify documents &amp; open demo session
               </div>
             )}
-            <Button onClick={() => setIsFullscreen(true)}>
-              <Maximize2 className="h-4 w-4 mr-2" />
-              Fullscreen Mode
-            </Button>
+            {demoSessionOpen && !batch.demoComplete && (
+              <Button onClick={() => setIsFullscreen(true)}>
+                <Maximize2 className="h-4 w-4 mr-2" />
+                Fullscreen Mode
+              </Button>
+            )}
           </div>
         }
       />
 
+      {/* Locked state — demo session not open yet */}
+      {!demoSessionOpen && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardContent className="p-8 text-center space-y-3">
+            <Clock className="h-10 w-10 text-amber-500 mx-auto" />
+            <p className="font-semibold text-amber-800">Demo session not started yet</p>
+            <p className="text-sm text-amber-700 max-w-sm mx-auto">
+              The HOD must verify candidate documents and open the demo session before QR codes become available for student feedback.
+            </p>
+            {role === "HOD" && (
+              <Button asChild className="mt-2" size="sm">
+                <Link href={`/hod/batches/${batchId}`}>
+                  Go to Batch — Verify Documents
+                  <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                </Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {demoSessionOpen && (
       <div className="grid gap-6 md:grid-cols-2">
         {/* QR Card */}
         <Card>
@@ -274,6 +300,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Demo info */}
       <Card className="border-dashed">
