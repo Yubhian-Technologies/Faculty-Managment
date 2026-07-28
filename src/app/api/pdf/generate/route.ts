@@ -17,10 +17,26 @@ async function verifyToken(request: Request): Promise<string | null> {
   }
 }
 
-// Serves the letter/report/resume as a downloadable HTML document — the browser can
-// print it to a real PDF (Ctrl/Cmd+P → Save as PDF) with the exact same layout. No
-// headless-browser dependency (Puppeteer et al.), so this works identically on any
-// serverless host with zero native binaries, cold-start cost, or version pinning.
+async function htmlToPdf(html: string): Promise<Buffer | null> {
+  try {
+    const puppeteer = await import("puppeteer");
+    const browser = await puppeteer.default.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      const pdf = await page.pdf({ format: "A4", printBackground: true });
+      return Buffer.from(pdf);
+    } finally {
+      await browser.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   const uid = await verifyToken(request);
   if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,22 +47,20 @@ export async function POST(request: Request) {
       data: Record<string, unknown>;
     };
 
-    let html = "";
     const filenames: Record<typeof body.type, string> = {
-      OFFER_LETTER: "offer-letter.html",
-      APPOINTMENT_LETTER: "appointment-letter.html",
-      FINANCE_REPORT: "financial-report.html",
-      FINANCE_RECEIPT: "finance-receipt.html",
-      RESUME: "resume.html",
+      OFFER_LETTER: "offer-letter",
+      APPOINTMENT_LETTER: "appointment-letter",
+      FINANCE_REPORT: "financial-report",
+      FINANCE_RECEIPT: "finance-receipt",
+      RESUME: "resume",
     };
-    const filename = filenames[body.type];
+    const baseName = filenames[body.type];
 
+    let html = "";
     if (body.type === "OFFER_LETTER") {
       html = getOfferLetterHTML(body.data as unknown as Parameters<typeof getOfferLetterHTML>[0]);
     } else if (body.type === "APPOINTMENT_LETTER") {
-      html = getAppointmentLetterHTML(
-        body.data as Parameters<typeof getAppointmentLetterHTML>[0]
-      );
+      html = getAppointmentLetterHTML(body.data as Parameters<typeof getAppointmentLetterHTML>[0]);
     } else if (body.type === "FINANCE_REPORT") {
       html = getFinanceReportHTML(body.data as Parameters<typeof getFinanceReportHTML>[0]);
     } else if (body.type === "FINANCE_RECEIPT") {
@@ -55,10 +69,23 @@ export async function POST(request: Request) {
       html = getResumeHTML(body.data as unknown as Parameters<typeof getResumeHTML>[0]);
     }
 
+    const pdfBuffer = await htmlToPdf(html);
+
+    if (pdfBuffer) {
+      return new Response(pdfBuffer, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${baseName}.pdf"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    // Puppeteer unavailable — return HTML so the user can print-to-PDF
     return new Response(html, {
       headers: {
         "Content-Type": "text/html",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="${baseName}.html"`,
         "Cache-Control": "no-store",
       },
     });
