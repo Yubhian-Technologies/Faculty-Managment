@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -49,6 +50,9 @@ type FeedbackForm = {
   strengths: string;
   weaknesses: string;
   comments: string;
+  expectedJoiningDate: string;
+  expectedSalary: string;
+  negotiatedSalary: string;
 };
 
 const defaultFeedback = (): FeedbackForm => ({
@@ -61,11 +65,16 @@ const defaultFeedback = (): FeedbackForm => ({
   strengths: "",
   weaknesses: "",
   comments: "",
+  expectedJoiningDate: "",
+  expectedSalary: "",
+  negotiatedSalary: "",
 });
 
 export default function PanelInterviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const myUid = useAuthStore((s) => s.user?.uid);
+  const myRole = useAuthStore((s) => s.user?.role);
+  const isPrincipal = myRole === "PRINCIPAL" || myRole === "VICE_PRINCIPAL";
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -126,6 +135,11 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
           weaknesses: form.weaknesses,
           recommendation: form.recommendation,
           comments: form.comments,
+          ...(isPrincipal && {
+            expectedJoiningDate: form.expectedJoiningDate,
+            expectedSalary: form.expectedSalary,
+            negotiatedSalary: form.negotiatedSalary,
+          }),
         }),
       });
       if (!res.ok) throw new Error();
@@ -303,6 +317,43 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
                     rows={2}
                   />
                 </div>
+
+                {isPrincipal && (
+                  <div className="space-y-3 pt-2 border-t">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Offer Details</p>
+                    <div className="space-y-2">
+                      <Label>Expected Joining Date</Label>
+                      <Input
+                        type="date"
+                        value={form.expectedJoiningDate}
+                        min={new Date().toISOString().split("T")[0]}
+                        onChange={(e) => setForm((f) => ({ ...f, expectedJoiningDate: e.target.value }))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Expected Salary (₹)</Label>
+                        <Input
+                          type="number"
+                          value={form.expectedSalary}
+                          onChange={(e) => setForm((f) => ({ ...f, expectedSalary: e.target.value }))}
+                          placeholder="e.g. 50000"
+                          min={0}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Negotiated Salary (₹)</Label>
+                        <Input
+                          type="number"
+                          value={form.negotiatedSalary}
+                          onChange={(e) => setForm((f) => ({ ...f, negotiatedSalary: e.target.value }))}
+                          placeholder="e.g. 45000"
+                          min={0}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-2 justify-end">
                   <Button variant="outline" onClick={() => { setSelectedCandidate(null); setForm(defaultFeedback()); }}>
