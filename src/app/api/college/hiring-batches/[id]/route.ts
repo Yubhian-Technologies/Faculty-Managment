@@ -81,6 +81,8 @@ export async function PATCH(
       candidateIds?: string[];
       interviewDate?: string;
       interviewTime?: string;
+      // HOD action: open demo session after doc verification
+      demoSessionOpen?: boolean;
       // Coordinator action
       demoComplete?: boolean;
     };
@@ -159,6 +161,9 @@ export async function PATCH(
     if (body.candidateIds !== undefined) updates.candidateIds = body.candidateIds;
     if (body.interviewDate !== undefined) updates.interviewDate = new Date(body.interviewDate);
     if (body.interviewTime !== undefined) updates.interviewTime = body.interviewTime;
+    if (body.demoSessionOpen === true) {
+      updates.demoSessionOpen = true;
+    }
     if (body.demoComplete === true) {
       updates.demoComplete = true;
       if (body.currentPhase === undefined) {
