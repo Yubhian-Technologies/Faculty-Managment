@@ -102,12 +102,12 @@ export default function HODBudgetDetailPage() {
         </CardContent>
       </Card>
 
-      {request.status === "RETURNED_TO_HOD" && !showResubmit && (
+      {(request.status === "RETURNED_TO_HOD" || request.status === "PENDING_SUBMISSION") && !showResubmit && (
         <Card>
           <CardContent className="pt-6">
             <Button onClick={() => setShowResubmit(true)}>
               <Pencil className="h-4 w-4 mr-1" />
-              Edit & Resubmit
+              {request.status === "PENDING_SUBMISSION" ? "Fill & Submit Budget" : "Edit & Resubmit"}
             </Button>
           </CardContent>
         </Card>
@@ -115,7 +115,9 @@ export default function HODBudgetDetailPage() {
 
       {showResubmit && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Edit & Resubmit Budget Request</h2>
+          <h2 className="text-lg font-semibold">
+            {request.status === "PENDING_SUBMISSION" ? "Submit Department Budget" : "Edit & Resubmit Budget Request"}
+          </h2>
           <BudgetForm
             editingRequest={request}
             onCancel={() => setShowResubmit(false)}

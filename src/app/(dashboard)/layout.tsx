@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { TopBar } from "@/components/layout/TopBar";
+import { ActionableNotificationPopup } from "@/components/notifications/ActionableNotificationPopup";
 import { useAuthStore } from "@/store/authStore";
 import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 
@@ -46,6 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </footer>
       </div>
       <BottomNav />
+      <ActionableNotificationPopup />
     </div>
   );
 }

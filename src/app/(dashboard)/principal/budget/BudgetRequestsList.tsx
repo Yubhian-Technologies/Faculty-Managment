@@ -10,6 +10,7 @@ import { budgetRequestTotal, type BudgetRequest, type BudgetRequestStatus } from
 
 const STATUS_OPTIONS: readonly (BudgetRequestStatus | "All")[] = [
   "All",
+  "PENDING_SUBMISSION",
   "PENDING_PRINCIPAL_VERIFICATION",
   "RETURNED_TO_HOD",
   "L1_FROZEN",
