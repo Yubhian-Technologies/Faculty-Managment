@@ -11,6 +11,10 @@ export type UserRole =
   | "HR_ADMIN"
   | "ADMIN_OFFICE"
   | "LOCATION_DEPT_HEAD"
+  | "OFFICE"
+  | "PLACEMENT_DEPT"
+  | "LIBRARY"
+  | "EXAM_CELL"
   // College-scoped
   | "PRINCIPAL"
   | "VICE_PRINCIPAL"
@@ -30,6 +34,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   HR_ADMIN: "HR Admin",
   ADMIN_OFFICE: "Admin Office",
   LOCATION_DEPT_HEAD: "Dept Head",
+  OFFICE: "Office",
+  PLACEMENT_DEPT: "Placement Department",
+  LIBRARY: "Library",
+  EXAM_CELL: "Exam Cell",
   PRINCIPAL: "Principal",
   VICE_PRINCIPAL: "Vice Principal",
   HOD: "Head of Department",
@@ -49,6 +57,10 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   HR_ADMIN: "/hr-admin",
   ADMIN_OFFICE: "/admin-office",
   LOCATION_DEPT_HEAD: "/location-dept-head",
+  OFFICE: "/office",
+  PLACEMENT_DEPT: "/placement-dept",
+  LIBRARY: "/library",
+  EXAM_CELL: "/exam-cell",
   PRINCIPAL: "/principal",
   VICE_PRINCIPAL: "/vice-principal",
   HOD: "/hod",
@@ -77,6 +89,10 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   HR_ADMIN: 2,
   ADMIN_OFFICE: 2,
   LOCATION_DEPT_HEAD: 2,
+  OFFICE: 2,
+  PLACEMENT_DEPT: 2,
+  LIBRARY: 2,
+  EXAM_CELL: 2,
   ACCOUNTS: 2,
   PRINCIPAL: 3,
   VICE_PRINCIPAL: 3,
@@ -112,6 +128,10 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   HR_ADMIN: "LOCATION",
   ADMIN_OFFICE: "LOCATION",
   LOCATION_DEPT_HEAD: "LOCATION",
+  OFFICE: "LOCATION",
+  PLACEMENT_DEPT: "LOCATION",
+  LIBRARY: "LOCATION",
+  EXAM_CELL: "LOCATION",
   ACCOUNTS: "LOCATION",
   PRINCIPAL: "COLLEGE",
   VICE_PRINCIPAL: "COLLEGE",

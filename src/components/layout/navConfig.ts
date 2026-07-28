@@ -60,6 +60,18 @@ export const NAV_ITEMS: NavItem[] = [
   // Admin Office
   { label: "Dashboard", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
 
+  // Office
+  { label: "Dashboard", href: "/office", iconName: "LayoutDashboard", roles: ["OFFICE"] },
+
+  // Placement Department
+  { label: "Dashboard", href: "/placement-dept", iconName: "LayoutDashboard", roles: ["PLACEMENT_DEPT"] },
+
+  // Library
+  { label: "Dashboard", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
+
+  // Exam Cell
+  { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
+
   // Location Dept Head
   { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
   { label: "Hiring Requests", href: "/location-dept-head/vacancies", iconName: "ClipboardPlus", roles: ["LOCATION_DEPT_HEAD"], section: "Hiring" },
@@ -210,6 +222,18 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   ADMIN_OFFICE: [
     { label: "Home", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
+  ],
+  OFFICE: [
+    { label: "Home", href: "/office", iconName: "LayoutDashboard", roles: ["OFFICE"] },
+  ],
+  PLACEMENT_DEPT: [
+    { label: "Home", href: "/placement-dept", iconName: "LayoutDashboard", roles: ["PLACEMENT_DEPT"] },
+  ],
+  LIBRARY: [
+    { label: "Home", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
+  ],
+  EXAM_CELL: [
+    { label: "Home", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   ],
   LOCATION_DEPT_HEAD: [
     { label: "Home", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
