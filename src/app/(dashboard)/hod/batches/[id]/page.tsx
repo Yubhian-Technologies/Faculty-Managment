@@ -516,7 +516,7 @@ ${institution}`;
 
     const subject = `Interview Call Letter – ${batch.position} | ${institution}`;
     const uploadLink = `${window.location.origin}/candidate-docs/${candidate.id}`;
-    const bodyWithLink = body + `\n\n──────────────────────────────\nDocument Upload Portal\n\nPlease upload your documents before the interview using the link below:\n${uploadLink}\n\nDocuments required:\n${docs}\n──────────────────────────────`;
+    const bodyWithLink = body + `\n\n──────────────────────────────\nDocument Upload Portal\n\nPlease upload your documents before the interview using the link below:\n${uploadLink}\n──────────────────────────────`;
 
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(ccEmails)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyWithLink)}`;
     window.open(gmailUrl, "_blank");
