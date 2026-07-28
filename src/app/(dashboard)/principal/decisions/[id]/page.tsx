@@ -19,8 +19,11 @@ import {
   Users,
   Star,
   Clock,
+  FileText,
+  Mail,
 } from "lucide-react";
-import type { HiringBatch, Candidate } from "@/types";
+import type { HiringBatch, Candidate, FMSUser } from "@/types";
+import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
 
 type PanelFeedbackItem = {
   id: string;
@@ -33,6 +36,9 @@ type PanelFeedbackItem = {
   strengths?: string;
   weaknesses?: string;
   comments?: string;
+  expectedJoiningDate?: string;
+  expectedSalary?: string;
+  negotiatedSalary?: string;
 };
 
 
@@ -67,6 +73,9 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
   const [studentFeedback, setStudentFeedback] = useState<StudentFeedbackSummary[]>([]);
+  const [collegeName, setCollegeName] = useState("");
+  const [collegeUsers, setCollegeUsers] = useState<FMSUser[]>([]);
+  const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Per-candidate decision state
@@ -86,15 +95,24 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
       const cands = candidatesRes.candidates ?? [];
       setCandidates(cands);
 
-      const [pfRes, sfRes] = await Promise.all([
+      const [pfRes, sfRes, usersRes, infoRes] = await Promise.all([
         fetch(`/api/college/panel-feedback?batchId=${id}`)
           .then((r) => r.json() as Promise<{ feedback: PanelFeedbackItem[] }>)
           .then((d) => d.feedback ?? []),
         fetch(`/api/college/student-feedback?batchId=${id}`)
           .then((r) => r.json() as Promise<{ feedback: { candidateId: string; ratings: Record<string, number> }[] }>)
           .then((d) => d.feedback ?? []),
+        fetch("/api/college/users?allDepts=true&includeAll=true")
+          .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
+          .then((d) => d.users ?? [])
+          .catch(() => [] as FMSUser[]),
+        fetch("/api/college/info")
+          .then((r) => r.json() as Promise<{ name?: string }>)
+          .catch(() => ({} as { name?: string })),
       ]);
       setPanelFeedback(pfRes);
+      setCollegeUsers(usersRes);
+      setCollegeName((infoRes as { name?: string }).name ?? "");
 
       // Aggregate student feedback by candidate
       const summaryMap: Record<string, { count: number; sums: Record<string, number> }> = {};
@@ -184,6 +202,71 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
     } finally {
       setIsSaving(null);
     }
+  }
+
+  async function generateOfferLetter(candidate: Candidate) {
+    if (!batch) return;
+    setIsGenerating(candidate.id);
+    try {
+      const principalPf = panelFeedback.find(
+        (f) => f.candidateId === candidate.id && f.expectedJoiningDate
+      );
+      const joiningDate = principalPf?.expectedJoiningDate
+        ? new Date(principalPf.expectedJoiningDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+        : "To be confirmed";
+      await downloadOfferLetterPdf(
+        {
+          candidateName: candidate.name,
+          designation: batch.position,
+          department: batch.department,
+          collegeName: collegeName || "Sri Vishnu Educational Society",
+          joiningDate,
+          interviewDate: formatDate(batch.interviewDate),
+          letterDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+        },
+        `${candidate.name.replace(/\s+/g, "-")}-${batch.position.replace(/\s+/g, "-")}`
+      );
+    } catch {
+      toast({ variant: "destructive", title: "Failed to generate offer letter" });
+    } finally {
+      setIsGenerating(null);
+    }
+  }
+
+  function sendOfferEmail(candidate: Candidate) {
+    if (!batch) return;
+    const ccUsers = collegeUsers.filter((u) =>
+      ["VICE_PRINCIPAL", "COLLEGE_OFFICE", "HOD"].includes(u.role)
+    );
+    const cc = ccUsers.map((u) => u.email).filter(Boolean).join(",");
+    const principalPf = panelFeedback.find(
+      (f) => f.candidateId === candidate.id && (f.negotiatedSalary ?? f.expectedSalary)
+    );
+    const salary = principalPf?.negotiatedSalary ?? principalPf?.expectedSalary;
+    const joiningDate = principalPf?.expectedJoiningDate
+      ? new Date(principalPf.expectedJoiningDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+      : "To be confirmed";
+
+    const subject = `Offer Letter – ${batch.position} | ${collegeName || "Sri Vishnu Educational Society"}`;
+    const body = `Dear ${candidate.name},
+
+We are pleased to inform you that following your interview for the position of ${batch.position} at the Department of ${batch.department}, ${collegeName || "Sri Vishnu Educational Society"}, you have been selected for appointment.
+
+Please find the offer letter attached to this email.
+
+Position: ${batch.position}
+Department: ${batch.department}
+Expected Joining Date: ${joiningDate}${salary ? `\nNegotiated Salary: ₹${Number(salary).toLocaleString("en-IN")}/month` : ""}
+
+Kindly confirm your acceptance by replying to this email at the earliest.
+
+We look forward to welcoming you to our institution.
+
+Warm regards,
+${collegeName || "Sri Vishnu Educational Society"}`;
+
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(gmailUrl, "_blank");
   }
 
   if (isLoading) {
@@ -368,10 +451,35 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
 
                 {/* Decision area */}
                 {decision ? (
-                  <div className="pt-3 border-t text-sm text-muted-foreground">
-                    {decision.action === "APPROVED"
-                      ? "Candidate approved — moved to Document Verification."
-                      : "Candidate rejected."}
+                  <div className="pt-3 border-t space-y-3">
+                    {decision.action === "APPROVED" ? (
+                      <>
+                        <p className="text-sm text-green-700 flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                          Candidate approved — offer letter ready to send.
+                        </p>
+                        <div className="flex gap-2 flex-wrap">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            loading={isGenerating === candidate.id}
+                            onClick={() => void generateOfferLetter(candidate)}
+                          >
+                            <FileText className="h-4 w-4 mr-1.5" />
+                            Generate Offer Letter
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => sendOfferEmail(candidate)}
+                          >
+                            <Mail className="h-4 w-4 mr-1.5" />
+                            Send via Email
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Candidate rejected.</p>
+                    )}
                   </div>
                 ) : batch.currentPhase !== "PRINCIPAL_FINAL_REVIEW" ? (
                   <div className="pt-3 border-t text-sm text-muted-foreground flex items-center gap-1.5">
