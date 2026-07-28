@@ -26,13 +26,13 @@ export function useAuth() {
         const idTokenResult = await firebaseUser.getIdTokenResult();
         let role = idTokenResult.claims.role as string | undefined;
         let collegeId = idTokenResult.claims.collegeId as string | undefined;
+        let locationId = idTokenResult.claims.locationId as string | undefined;
         let serverProfile: FMSUser | null = null;
         let serverName: string | undefined;
         let serverEmail: string | undefined;
 
         // Users created via REST API have no JWT custom claims.
         // Call session API (uses Admin SDK, bypasses Firestore rules) to resolve role.
-        let locationId: string | undefined;
         if (!role) {
           try {
             const res = await fetch("/api/auth/session", {

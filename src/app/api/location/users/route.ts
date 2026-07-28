@@ -6,10 +6,10 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import type { UserRole } from "@/types";
 
-const LOCATION_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS"];
-const ADMIN_CREATABLE_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "LOCATION_DEPT_HEAD"];
+const LOCATION_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS", "OFFICE", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const ADMIN_CREATABLE_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "OFFICE", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "LOCATION_DEPT_HEAD"];
 // These roles can only have one holder per location
-const SINGLETON_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
+const SINGLETON_ROLES: UserRole[] = ["HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "OFFICE", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
 
 // Administration can also create Principals for colleges in their location
 // but that goes through a separate endpoint
