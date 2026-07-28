@@ -35,16 +35,6 @@ type PanelFeedbackItem = {
   comments?: string;
 };
 
-type HRFeedbackItem = {
-  id: string;
-  candidateId: string;
-  hrName: string;
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
-  ratings: { attitude: number; teamwork: number; adaptability: number; communication: number; overallFit: number };
-  salaryExpectation?: number;
-  noticePeriod?: string;
-  comments?: string;
-};
 
 type StudentFeedbackSummary = {
   candidateId: string;
@@ -76,7 +66,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
-  const [hrFeedback, setHRFeedback] = useState<HRFeedbackItem[]>([]);
   const [studentFeedback, setStudentFeedback] = useState<StudentFeedbackSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -97,19 +86,15 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
       const cands = candidatesRes.candidates ?? [];
       setCandidates(cands);
 
-      const [pfRes, hrRes, sfRes] = await Promise.all([
+      const [pfRes, sfRes] = await Promise.all([
         fetch(`/api/college/panel-feedback?batchId=${id}`)
           .then((r) => r.json() as Promise<{ feedback: PanelFeedbackItem[] }>)
-          .then((d) => d.feedback ?? []),
-        fetch(`/api/college/hr-feedback?batchId=${id}`)
-          .then((r) => r.json() as Promise<{ feedback: HRFeedbackItem[] }>)
           .then((d) => d.feedback ?? []),
         fetch(`/api/college/student-feedback?batchId=${id}`)
           .then((r) => r.json() as Promise<{ feedback: { candidateId: string; ratings: Record<string, number> }[] }>)
           .then((d) => d.feedback ?? []),
       ]);
       setPanelFeedback(pfRes);
-      setHRFeedback(hrRes);
 
       // Aggregate student feedback by candidate
       const summaryMap: Record<string, { count: number; sums: Record<string, number> }> = {};
@@ -231,7 +216,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
       <div className="space-y-4">
         {candidates.map((candidate) => {
           const pf = panelFeedback.filter((f) => f.candidateId === candidate.id);
-          const hr = hrFeedback.find((f) => f.candidateId === candidate.id);
           const sf = studentFeedback.find((f) => f.candidateId === candidate.id);
           const decision = decisions[candidate.id];
 
@@ -294,7 +278,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
 
               <CardContent className="space-y-4">
                 {/* Panel feedback summary */}
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                       <Users className="h-3 w-3" />Panel Evaluation ({pf.length} member{pf.length !== 1 ? "s" : ""})
@@ -365,42 +349,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                     )}
                   </div>
 
-                  {/* HR feedback summary */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">HR Assessment</p>
-                    {!hr ? (
-                      <p className="text-sm text-muted-foreground">No HR assessment yet</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {(
-                          [
-                            ["attitude", "Attitude"],
-                            ["teamwork", "Teamwork"],
-                            ["adaptability", "Adaptability"],
-                            ["communication", "Communication"],
-                            ["overallFit", "Overall Fit"],
-                          ] as [keyof typeof hr.ratings, string][]
-                        ).map(([key, label]) => (
-                          <div key={key} className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">{label}</span>
-                            <ScoreDots value={hr.ratings[key]} />
-                          </div>
-                        ))}
-                        <div className="pt-1 border-t flex items-center gap-3">
-                          <span className={`text-xs font-medium ${
-                            hr.recommendation === "ACCEPT" ? "text-green-600"
-                            : hr.recommendation === "REJECT" ? "text-red-600"
-                            : "text-amber-600"
-                          }`}>
-                            HR: {hr.recommendation}
-                          </span>
-                          {hr.noticePeriod && (
-                            <span className="text-xs text-muted-foreground">Notice: {hr.noticePeriod}</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* Panel member comments */}
