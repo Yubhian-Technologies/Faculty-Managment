@@ -520,6 +520,17 @@ ${institution}`;
 
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(ccEmails)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyWithLink)}`;
     window.open(gmailUrl, "_blank");
+
+    // Mark that the call letter was initiated for this candidate
+    void fetch(`/api/college/candidates/${candidate.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callLetterSent: true }),
+    }).then(() => {
+      setCandidates((prev) =>
+        prev.map((c) => c.id === candidate.id ? { ...c, callLetterSent: true } as Candidate : c)
+      );
+    });
   }
 
   async function verifyDocs(candidateId: string) {
@@ -1328,6 +1339,7 @@ ${institution}`;
       {batch.currentPhase === "INTERVIEW_READY" && (() => {
         type CandidateExt = Candidate & {
           docsVerified?: boolean;
+          callLetterSent?: boolean;
           submittedDocuments?: Record<string, { label: string; url: string; uploadedAt: string }>;
         };
         const demoSessionOpen = (batch as Record<string, unknown>).demoSessionOpen === true;
@@ -1370,9 +1382,11 @@ ${institution}`;
                     const cExt = c as CandidateExt;
                     const required: string[] = batch.requiredDocuments ?? [];
                     const submitted = cExt.submittedDocuments ?? {};
+                    const callLetterSent = cExt.callLetterSent === true;
                     const allDocsUploaded =
-                      required.length === 0 ||
-                      required.every((d) => submitted[d.replace(/[^a-zA-Z0-9_-]/g, "_")]);
+                      required.length === 0
+                        ? callLetterSent  // no required docs: only allow if call letter was sent
+                        : required.every((d) => submitted[d.replace(/[^a-zA-Z0-9_-]/g, "_")]);
 
                     return (
                       <div
@@ -1441,7 +1455,9 @@ ${institution}`;
                         {!allDocsUploaded && !cExt.docsVerified && (
                           <p className="text-xs text-amber-600 flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            Waiting for candidate to upload all required documents.
+                            {!callLetterSent
+                              ? "Send the call letter to the candidate first."
+                              : "Waiting for candidate to upload all required documents."}
                           </p>
                         )}
                       </div>

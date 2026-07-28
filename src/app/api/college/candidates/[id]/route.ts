@@ -55,6 +55,7 @@ export async function PATCH(
       isShortlisted?: boolean;
       hasArrived?: boolean;
       docsVerified?: boolean;
+      callLetterSent?: boolean;
       status?: string;
       stage?: string;
       batchId?: string;
@@ -80,10 +81,11 @@ export async function PATCH(
     }
 
     const updates: Record<string, unknown> = { updatedAt: now };
-    const { isShortlisted, hasArrived, docsVerified, status, stage, batchId, resumeUrl, name, email, phone } = body;
+    const { isShortlisted, hasArrived, docsVerified, callLetterSent, status, stage, batchId, resumeUrl, name, email, phone } = body;
 
     if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
     if (docsVerified !== undefined) updates.docsVerified = docsVerified;
+    if (callLetterSent !== undefined) updates.callLetterSent = callLetterSent;
     if (hasArrived !== undefined) {
       updates.hasArrived = hasArrived;
       if (hasArrived) {
