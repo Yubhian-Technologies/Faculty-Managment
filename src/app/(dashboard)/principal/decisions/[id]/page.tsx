@@ -246,8 +246,8 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                     <p className="text-sm text-muted-foreground">{candidate.email} · {candidate.phone}</p>
                     {(() => {
                       const pfSalary = pf.find((f) => f.salaryNegotiated != null);
-                      const salary = pfSalary?.salaryNegotiated ?? hr?.salaryExpectation;
-                      const notice = pfSalary?.noticePeriod || hr?.noticePeriod;
+                      const salary = pfSalary?.salaryNegotiated;
+                      const notice = pfSalary?.noticePeriod;
                       if (!salary) return null;
                       return (
                         <p className="text-sm font-medium text-primary mt-1">
