@@ -57,10 +57,23 @@ export interface BudgetRequestItem {
   customFields?: BudgetExtraFieldDef[]; // ad-hoc fields the HOD added for this item only, via "+ Add Field"
 }
 
+// HOD-set priority per category group — HOD dashboard only (see
+// BudgetCategorySection's showPriority prop). Optional so existing stored
+// groups without it still normalize/render fine everywhere else.
+export type BudgetPriority = "NORMAL" | "PRIORITY_1" | "PRIORITY_2" | "PRIORITY_3";
+
+export const BUDGET_PRIORITY_LABELS: Record<BudgetPriority, string> = {
+  NORMAL: "Normal Priority",
+  PRIORITY_1: "Priority 1",
+  PRIORITY_2: "Priority 2",
+  PRIORITY_3: "Priority 3",
+};
+
 export interface BudgetCategoryGroup {
   id: string;
   category: string;
   items: BudgetRequestItem[];
+  priority?: BudgetPriority;
 }
 
 export interface BudgetApprovalAction {
@@ -217,7 +230,7 @@ export const CATEGORY_FIELD_CONFIG: Record<string, BudgetCategoryFieldConfig> = 
   "Furniture": { extraFields: [QUANTITY_FIELD, { key: "justification", label: "Justification", type: "TEXT" }] },
   "Printing & Stationery": { extraFields: [QUANTITY_FIELD] },
   "Guest Faculty/Guest Lectures": { extraFields: [{ ...QUANTITY_FIELD, label: "Number of Lectures" }] },
-  "Inhouse R&D Activities": { extraFields: [QUANTITY_FIELD] },
+  "Inhouse R&D Activities": { extraFields: [] },
   "Workshops/Seminars/Paper Presentations": { extraFields: [] },
   "Department Forum's Activities": { extraFields: [] },
   "Equipment Maintenance & Consumables": { extraFields: [] },

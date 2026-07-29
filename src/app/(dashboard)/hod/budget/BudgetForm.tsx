@@ -164,6 +164,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
             categories={NON_RECURRING_CATEGORIES}
             groups={nonRecurring}
             onChange={setNonRecurring}
+            showPriority
           />
         </CardContent>
       </Card>
@@ -176,6 +177,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
             categories={RECURRING_CATEGORIES}
             groups={recurring}
             onChange={setRecurring}
+            showPriority
           />
         </CardContent>
       </Card>

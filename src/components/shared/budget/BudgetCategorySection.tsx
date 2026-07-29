@@ -8,14 +8,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import { BudgetItemsTable } from "@/components/shared/budget/BudgetItemsTable";
-import { reconcileExtrasForCategory, sectionTotal, type BudgetCategoryGroup, type BudgetRequestItem } from "@/types";
+import { reconcileExtrasForCategory, sectionTotal, BUDGET_PRIORITY_LABELS, type BudgetCategoryGroup, type BudgetPriority, type BudgetRequestItem } from "@/types";
+
+const BUDGET_PRIORITY_OPTIONS = Object.keys(BUDGET_PRIORITY_LABELS) as BudgetPriority[];
 
 function emptyItem(): BudgetRequestItem {
   return { id: crypto.randomUUID(), title: "", description: "", price: 0, extras: {}, customFields: [] };
 }
 
 function emptyGroup(): BudgetCategoryGroup {
-  return { id: crypto.randomUUID(), category: "", items: [emptyItem()] };
+  return { id: crypto.randomUUID(), category: "", items: [emptyItem()], priority: "NORMAL" };
 }
 
 interface CategoryGroupCardProps {
@@ -25,9 +27,11 @@ interface CategoryGroupCardProps {
   onRemove: () => void;
   removable: boolean;
   department?: string;
+  // HOD's own Create Budget Request form only — see BudgetCategorySection.
+  showPriority?: boolean;
 }
 
-function CategoryGroupCard({ group, categories, onChange, onRemove, removable, department }: CategoryGroupCardProps) {
+function CategoryGroupCard({ group, categories, onChange, onRemove, removable, department, showPriority }: CategoryGroupCardProps) {
   const isCustom = !!group.category && !(categories as readonly string[]).includes(group.category);
   const [selectValue, setSelectValue] = useState(isCustom ? "Other" : group.category);
   const [customCategory, setCustomCategory] = useState(isCustom ? group.category : "");
@@ -47,10 +51,14 @@ function CategoryGroupCard({ group, categories, onChange, onRemove, removable, d
     applyCategory(value);
   }
 
+  function handlePriorityChange(value: string) {
+    onChange({ ...group, priority: value as BudgetPriority });
+  }
+
   return (
     <div className="rounded-lg border p-4 space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className={`flex-1 grid grid-cols-1 gap-3 ${showPriority ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
           <div className="space-y-2">
             <Label>Category <span className="text-destructive">*</span></Label>
             <Select value={selectValue} onValueChange={handleSelectChange}>
@@ -64,6 +72,21 @@ function CategoryGroupCard({ group, categories, onChange, onRemove, removable, d
               </SelectContent>
             </Select>
           </div>
+          {showPriority && (
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={group.priority ?? "NORMAL"} onValueChange={handlePriorityChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select priority..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {BUDGET_PRIORITY_OPTIONS.map((p) => (
+                    <SelectItem key={p} value={p}>{BUDGET_PRIORITY_LABELS[p]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {selectValue === "Other" && (
             <div className="space-y-2">
               <Label>Specify Category <span className="text-destructive">*</span></Label>
@@ -98,6 +121,7 @@ function CategoryGroupReadOnly({
   onToggleItem,
   itemReasons,
   onReasonChange,
+  showPriority,
 }: {
   group: BudgetCategoryGroup;
   selectable?: boolean;
@@ -105,10 +129,18 @@ function CategoryGroupReadOnly({
   onToggleItem?: (itemId: string, label: string) => void;
   itemReasons?: Record<string, string>;
   onReasonChange?: (itemId: string, reason: string) => void;
+  showPriority?: boolean;
 }) {
   return (
     <div className="rounded-lg border p-4 space-y-3">
-      <p className="text-sm font-semibold">{group.category}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold">{group.category}</p>
+        {showPriority && (
+          <span className="text-xs font-medium text-muted-foreground">
+            {BUDGET_PRIORITY_LABELS[group.priority ?? "NORMAL"]}
+          </span>
+        )}
+      </div>
       <BudgetItemsTable
         items={group.items}
         readOnly
@@ -136,9 +168,11 @@ interface BudgetCategorySectionProps {
   onToggleItem?: (itemId: string, label: string) => void;
   itemReasons?: Record<string, string>;
   onReasonChange?: (itemId: string, reason: string) => void;
+  // HOD's own Create Budget Request form/view only — see CategoryGroupCard.
+  showPriority?: boolean;
 }
 
-export function BudgetCategorySection({ label, categories, groups, onChange, readOnly = false, department, selectable, selectedIds, onToggleItem, itemReasons, onReasonChange }: BudgetCategorySectionProps) {
+export function BudgetCategorySection({ label, categories, groups, onChange, readOnly = false, department, selectable, selectedIds, onToggleItem, itemReasons, onReasonChange, showPriority }: BudgetCategorySectionProps) {
   function updateGroup(id: string, updated: BudgetCategoryGroup) {
     onChange?.(groups.map((g) => (g.id === id ? updated : g)));
   }
@@ -175,6 +209,7 @@ export function BudgetCategorySection({ label, categories, groups, onChange, rea
               onToggleItem={onToggleItem}
               itemReasons={itemReasons}
               onReasonChange={onReasonChange}
+              showPriority={showPriority}
             />
           ) : (
             <CategoryGroupCard
@@ -185,6 +220,7 @@ export function BudgetCategorySection({ label, categories, groups, onChange, rea
               onRemove={() => removeGroup(group.id)}
               removable={groups.length > 1}
               department={department}
+              showPriority={showPriority}
             />
           )
         )}
