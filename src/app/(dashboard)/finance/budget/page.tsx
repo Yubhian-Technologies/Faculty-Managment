@@ -14,10 +14,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BudgetCategorySection } from "@/components/shared/budget/BudgetCategorySection";
+import { BudgetCycleSummaryCards } from "./BudgetCycleSummaryCards";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
-import { NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type FinanceBudget, type BudgetRequest } from "@/types";
+import { NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES, type FinanceBudget, type BudgetRequest, type BudgetCycle } from "@/types";
 
 type BudgetRow = FinanceBudget & Record<string, unknown>;
 
@@ -71,6 +72,8 @@ export default function FinanceBudgetPage() {
   const [sourceRequest, setSourceRequest] = useState<BudgetRequest | null>(null);
   const [isLoadingSource, setIsLoadingSource] = useState(false);
   const [selectedDeptName, setSelectedDeptName] = useState<string | null>(null);
+  const [currentCycle, setCurrentCycle] = useState<BudgetCycle | null>(null);
+  const [cycleRequests, setCycleRequests] = useState<BudgetRequest[]>([]);
 
   const groups = useMemo(() => groupByDepartment(budgets), [budgets]);
   // Derived by name (not a captured object) so the dialog reflects live totals
@@ -101,7 +104,30 @@ export default function FinanceBudgetPage() {
       .finally(() => setIsLoading(false));
   }
 
-  useEffect(() => { load(); }, []);
+  async function loadCycle() {
+    try {
+      const res = await collegeFetch("/api/college/budget-cycles");
+      const d = (await res.json()) as { cycles?: BudgetCycle[]; error?: string };
+      if (!res.ok) throw new Error(d.error ?? `Request failed (${res.status})`);
+
+      const cycles = d.cycles ?? [];
+      const latest = cycles[0] ?? null;
+      setCurrentCycle(latest);
+      if (!latest) { setCycleRequests([]); return; }
+
+      const res2 = await collegeFetch(`/api/college/budget-requests?budgetCycleId=${latest.id}`);
+      const d2 = (await res2.json()) as { requests?: BudgetRequest[]; error?: string };
+      if (!res2.ok) throw new Error(d2.error ?? `Request failed (${res2.status})`);
+      setCycleRequests(d2.requests ?? []);
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to load budget cycle", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  useEffect(() => { load(); loadCycle(); }, []);
+
+  const cycleSubmitted = cycleRequests.filter((r) => r.status !== "PENDING_SUBMISSION").length;
+  const cyclePending = cycleRequests.filter((r) => r.status === "PENDING_SUBMISSION").length;
 
   async function handleClose(budget: BudgetRow) {
     try {
@@ -169,19 +195,26 @@ export default function FinanceBudgetPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Management"
-        description="Allocate, revise, and monitor department budgets"
+        description="Track department budgets approved through the budget cycle workflow"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
+            <Button variant="outline" size="sm" onClick={() => { load(); loadCycle(); }} loading={isLoading}>
               <RefreshCw className="h-4 w-4 mr-1" />
               Refresh
             </Button>
             <Button onClick={() => router.push("/finance/budget/new")}>
               <Plus className="h-4 w-4 mr-1" />
-              New Budget
+              Release Budget Cycle
             </Button>
           </>
         }
+      />
+
+      <BudgetCycleSummaryCards
+        cycle={currentCycle}
+        totalDepartments={cycleRequests.length}
+        submitted={cycleSubmitted}
+        pending={cyclePending}
       />
 
       <DataTable

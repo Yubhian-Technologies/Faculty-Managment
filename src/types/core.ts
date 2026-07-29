@@ -781,6 +781,12 @@ export type NotificationType =
   | "BUDGET_REQUEST_REJECTED"
   | "BUDGET_REQUEST_APPROVED"
   | "BUDGET_REQUEST_REPORT_UPLOADED"
+  // Budget Cycle (Finance → Principal → departments)
+  | "BUDGET_CYCLE_RELEASED"
+  | "BUDGET_CYCLE_APPROVED"
+  | "BUDGET_CYCLE_REJECTED"
+  | "BUDGET_CYCLE_RETURNED"
+  | "DEPARTMENT_BUDGET_PENDING"
   // Indent (HOD → Purchase → Finance)
   | "INDENT_SUBMITTED"
   | "INDENT_SENT_TO_FINANCE"
@@ -811,6 +817,16 @@ export interface AppNotification {
   read: boolean;
   link?: string;
   createdAt: Timestamp;
+  // ─── Workflow notification framework (optional — absent on older docs) ────
+  // See src/lib/notifications/workflowNotifications.ts. `actionable` marks a
+  // notification as one that should surface as a login popup until the
+  // linked workflow step is completed, at which point the emitting route
+  // marks it `resolved` (kept for history, just no longer popped up).
+  actionable?: boolean;
+  resolved?: boolean;
+  entityType?: string;
+  entityId?: string;
+  dedupeKey?: string;
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
@@ -883,6 +899,11 @@ export type AuditAction =
   | "BUDGET_REQUEST_MANAGEMENT_APPROVED"
   | "BUDGET_REQUEST_MANAGEMENT_REJECTED"
   | "BUDGET_REQUEST_REPORT_UPLOADED"
+  // Budget Cycle (Finance → Principal → departments)
+  | "BUDGET_CYCLE_RELEASED"
+  | "BUDGET_CYCLE_APPROVED"
+  | "BUDGET_CYCLE_REJECTED"
+  | "BUDGET_CYCLE_RETURNED"
   // Indent module
   | "INDENT_SUBMITTED"
   | "INDENT_RETURNED_TO_HOD"
