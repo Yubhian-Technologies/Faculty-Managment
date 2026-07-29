@@ -10,9 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileUpload } from "@/components/shared/FileUpload";
 import { toast } from "@/hooks/useToast";
-import { collegeFetch, withCollegeId } from "@/lib/api/collegeFetch";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import { BUDGET_TYPE_LABELS, type BudgetType } from "@/types";
 
 function defaultFinancialYear(): string {
@@ -30,7 +29,6 @@ export default function NewBudgetCyclePage() {
   const [submissionDeadline, setSubmissionDeadline] = useState("");
   const [description, setDescription] = useState("");
   const [allowLateSubmission, setAllowLateSubmission] = useState(false);
-  const [attachment, setAttachment] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -46,18 +44,6 @@ export default function NewBudgetCyclePage() {
 
     setSaving(true);
     try {
-      let attachmentUrl: string | undefined;
-      let attachmentName: string | undefined;
-      if (attachment) {
-        const formData = new FormData();
-        formData.append("file", attachment);
-        const uploadRes = await fetch(withCollegeId("/api/upload/budget-circular"), { method: "POST", body: formData });
-        if (!uploadRes.ok) throw new Error("Attachment upload failed");
-        const uploaded = (await uploadRes.json()) as { url: string; fileName: string };
-        attachmentUrl = uploaded.url;
-        attachmentName = uploaded.fileName;
-      }
-
       const res = await collegeFetch("/api/college/budget-cycles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,8 +55,6 @@ export default function NewBudgetCyclePage() {
           submissionDeadline,
           description: description.trim(),
           allowLateSubmission,
-          attachmentUrl,
-          attachmentName,
         }),
       });
       if (!res.ok) {
@@ -140,16 +124,6 @@ export default function NewBudgetCyclePage() {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Any guidance for departments preparing their budgets..."
                 rows={4}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Attachment (Budget Circular)</Label>
-              <FileUpload
-                onFileSelect={setAttachment}
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                maxSizeMB={10}
-                label="Upload Budget Circular"
               />
             </div>
 

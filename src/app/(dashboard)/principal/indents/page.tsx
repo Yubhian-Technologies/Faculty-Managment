@@ -19,6 +19,7 @@ export default function PrincipalIndentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("ALL");
 
   useEffect(() => {
     setIsLoading(true);
@@ -29,10 +30,16 @@ export default function PrincipalIndentsPage() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  const departments = useMemo(
+    () => Array.from(new Set(requests.map((r) => r.department).filter(Boolean))).sort(),
+    [requests]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return requests.filter((r) => {
       if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
+      if (departmentFilter !== "ALL" && r.department !== departmentFilter) return false;
       if (!q) return true;
       return (
         r.title.toLowerCase().includes(q) ||
@@ -40,12 +47,12 @@ export default function PrincipalIndentsPage() {
         r.hodName.toLowerCase().includes(q)
       );
     });
-  }, [requests, search, statusFilter]);
+  }, [requests, search, statusFilter, departmentFilter]);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="View"
+        title="Budget History"
         description="Complete view of every indent request in your college — every step from submission through completion"
       />
 
@@ -56,6 +63,17 @@ export default function PrincipalIndentsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="sm:max-w-xs"
         />
+        <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+          <SelectTrigger className="sm:max-w-xs">
+            <SelectValue placeholder="All departments" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All departments</SelectItem>
+            {departments.map((d) => (
+              <SelectItem key={d} value={d}>{d}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="sm:max-w-xs">
             <SelectValue placeholder="All statuses" />
