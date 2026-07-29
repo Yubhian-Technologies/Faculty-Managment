@@ -27,14 +27,14 @@ export function BudgetRequestsTable({ requests, isLoading, onEditRequest, onView
       header: "",
       className: "text-right",
       render: (row) =>
-        row.status === "RETURNED_TO_HOD" || row.status === "PENDING_SUBMISSION" ? (
+        row.status === "RETURNED_TO_HOD" ? (
           <Button
             size="sm"
             variant="outline"
             onClick={(e) => { e.stopPropagation(); onEditRequest(row); }}
           >
             <Pencil className="h-3.5 w-3.5 mr-1" />
-            {row.status === "PENDING_SUBMISSION" ? "Fill & Submit" : "Edit & Resubmit"}
+            Edit & Resubmit
           </Button>
         ) : null,
     },

@@ -97,8 +97,8 @@ export default function HODBudgetDetailPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <BudgetCategorySection label="Non Recurring" categories={NON_RECURRING_CATEGORIES} groups={request.nonRecurring} readOnly />
-          <BudgetCategorySection label="Recurring" categories={RECURRING_CATEGORIES} groups={request.recurring} readOnly />
+          <BudgetCategorySection label="Non Recurring" categories={NON_RECURRING_CATEGORIES} groups={request.nonRecurring} readOnly showPriority />
+          <BudgetCategorySection label="Recurring" categories={RECURRING_CATEGORIES} groups={request.recurring} readOnly showPriority />
         </CardContent>
       </Card>
 
