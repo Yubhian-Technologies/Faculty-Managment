@@ -139,57 +139,45 @@ export default function DepartmentDetailPage() {
                       </div>
 
                       <div className="space-y-1.5 border-t pt-2">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Timings by Year</p>
+                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Year Timings</p>
                         {years.map((y) => {
                           const t = getTiming(c.id, y);
-                          return (
-                            <button
-                              key={y}
-                              type="button"
-                              onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
-                              className="flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-xs hover:bg-muted/50 transition-colors"
-                            >
-                              <span className="flex items-center gap-1.5">
-                                <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
-                                Year {y}
-                              </span>
-                              {t ? (
-                                <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                                  <CheckCircle2 className="h-3 w-3" />
-                                  {t.collegeStartTime}–{t.collegeEndTime} · {t.numberOfPeriods} periods
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">Not configured — tap to add</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="space-y-1.5 border-t pt-2">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Academic Year</p>
-                        {years.map((y) => {
                           const ay = getAcademicYear(c.id, y);
                           return (
-                            <button
+                            <div
                               key={y}
-                              type="button"
-                              onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`)}
-                              className="flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-xs hover:bg-muted/50 transition-colors"
+                              onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
+                              className="flex w-full flex-col gap-1 rounded-md border px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors cursor-pointer"
                             >
-                              <span className="flex items-center gap-1.5">
-                                <CalendarClock className="h-3 w-3 text-muted-foreground shrink-0" />
-                                Year {y}
-                              </span>
-                              {ay ? (
-                                <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                                  <CheckCircle2 className="h-3 w-3" />
-                                  {ay.label} — tap to advance
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="flex items-center gap-1.5 font-medium">
+                                  <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  Year {y}
                                 </span>
-                              ) : (
-                                <span className="text-muted-foreground">Not set — tap to add</span>
-                              )}
-                            </button>
+                                {t ? (
+                                  <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    {t.collegeStartTime}–{t.collegeEndTime} · {t.numberOfPeriods} periods
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">Not configured — tap to add</span>
+                                )}
+                              </div>
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`);
+                                }}
+                                className="flex items-center gap-1.5 self-start hover:underline"
+                              >
+                                <CalendarClock className="h-3 w-3 shrink-0" />
+                                {ay ? (
+                                  <span className="text-emerald-600 font-medium">{ay.label} — tap to advance</span>
+                                ) : (
+                                  <span className="text-orange-500 font-medium">Academic year required — tap to set</span>
+                                )}
+                              </span>
+                            </div>
                           );
                         })}
                       </div>
