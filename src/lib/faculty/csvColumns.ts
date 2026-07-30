@@ -193,6 +193,29 @@ export const COLUMNS: FacultyCsvColumn[] = [
 
   // ─── Others (Module 7) ────────────────────────────────────────────────────────
   { key: "otherInformation",       label: "Other Information",                  required: false, sample: "" },
+
+  // ─── Tenure & Load (Module 8) — Past teaching (with pass %) & present teaching ──
+  { key: "tenurePast1_academicYear", label: "Past Teaching 1 - Academic Year",   required: false, sample: "2023-2024" },
+  { key: "tenurePast1_semester",     label: "Past Teaching 1 - Semester",       required: false, sample: "II Semester" },
+  { key: "tenurePast1_subject",      label: "Past Teaching 1 - Subject",        required: false, sample: "Operating Systems" },
+  { key: "tenurePast1_passPercentage", label: "Past Teaching 1 - Student Pass %", required: false, sample: "92" },
+  { key: "tenurePast2_academicYear", label: "Past Teaching 2 - Academic Year",   required: false, sample: "" },
+  { key: "tenurePast2_semester",     label: "Past Teaching 2 - Semester",       required: false, sample: "" },
+  { key: "tenurePast2_subject",      label: "Past Teaching 2 - Subject",        required: false, sample: "" },
+  { key: "tenurePast2_passPercentage", label: "Past Teaching 2 - Student Pass %", required: false, sample: "" },
+  { key: "tenurePast3_academicYear", label: "Past Teaching 3 - Academic Year",   required: false, sample: "" },
+  { key: "tenurePast3_semester",     label: "Past Teaching 3 - Semester",       required: false, sample: "" },
+  { key: "tenurePast3_subject",      label: "Past Teaching 3 - Subject",        required: false, sample: "" },
+  { key: "tenurePast3_passPercentage", label: "Past Teaching 3 - Student Pass %", required: false, sample: "" },
+  { key: "tenurePresent1_academicYear", label: "Present Teaching 1 - Academic Year", required: false, sample: "2025-2026" },
+  { key: "tenurePresent1_semester",     label: "Present Teaching 1 - Semester",     required: false, sample: "I Semester" },
+  { key: "tenurePresent1_subject",      label: "Present Teaching 1 - Subject",      required: false, sample: "Machine Learning" },
+  { key: "tenurePresent2_academicYear", label: "Present Teaching 2 - Academic Year", required: false, sample: "" },
+  { key: "tenurePresent2_semester",     label: "Present Teaching 2 - Semester",     required: false, sample: "" },
+  { key: "tenurePresent2_subject",      label: "Present Teaching 2 - Subject",      required: false, sample: "" },
+  { key: "tenurePresent3_academicYear", label: "Present Teaching 3 - Academic Year", required: false, sample: "" },
+  { key: "tenurePresent3_semester",     label: "Present Teaching 3 - Semester",     required: false, sample: "" },
+  { key: "tenurePresent3_subject",      label: "Present Teaching 3 - Subject",      required: false, sample: "" },
 ];
 
 export const HINTS = [

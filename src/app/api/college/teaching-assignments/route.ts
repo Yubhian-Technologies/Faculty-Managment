@@ -99,6 +99,10 @@ export async function POST(request: Request) {
       hoursPerWeek?: number;
       totalHoursAllotted?: number;
       slots?: { day: string; periodNumber: number; classroom?: string }[];
+      isPast?: boolean;
+      pastAcademicYear?: string;
+      pastSemester?: string;
+      passPercentage?: number;
     };
 
     const { facultyId, facultyName, courseId, sectionId, subjectId } = body;
@@ -124,14 +128,20 @@ export async function POST(request: Request) {
       const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
 
       // Conflict check: this faculty already teaching this exact section+subject?
-      const existing = await collegeRef.collection("teachingAssignments")
-        .where("facultyId", "==", facultyId)
-        .where("sectionId", "==", sectionId)
-        .where("subjectId", "==", subjectId)
-        .limit(1)
-        .get();
-      if (!existing.empty) {
-        return NextResponse.json({ error: "This faculty is already assigned to this subject for this section" }, { status: 409 });
+      // Only applies to current assignments — past ones are historical records and
+      // may legitimately repeat the same section+subject across different years.
+      if (!body.isPast) {
+        // Firestore's "!=" excludes docs missing the field entirely, which every
+        // pre-existing current assignment does — so the isPast!==true filter has
+        // to happen in application code, not the query, to still catch them.
+        const existing = await collegeRef.collection("teachingAssignments")
+          .where("facultyId", "==", facultyId)
+          .where("sectionId", "==", sectionId)
+          .where("subjectId", "==", subjectId)
+          .get();
+        if (existing.docs.some((d) => !(d.data() as { isPast?: boolean }).isPast)) {
+          return NextResponse.json({ error: "This faculty is already assigned to this subject for this section" }, { status: 409 });
+        }
       }
 
       const now = new Date();
@@ -156,11 +166,18 @@ export async function POST(request: Request) {
         assignedByName: session.role,
         createdAt: now,
         updatedAt: now,
+        ...(body.isPast ? {
+          isPast: true,
+          pastAcademicYear: body.pastAcademicYear ?? "",
+          pastSemester: body.pastSemester ?? "",
+          ...(body.passPercentage != null ? { passPercentage: Number(body.passPercentage) } : {}),
+        } : {}),
       });
 
-      // Create any staged timetable slots (day + period) for this assignment
+      // Create any staged timetable slots (day + period) for this assignment —
+      // past rows never have any (no live schedule to book).
       const createdSlots: string[] = [];
-      if (body.slots?.length) {
+      if (!body.isPast && body.slots?.length) {
         for (const slot of body.slots) {
           const conflict = await collegeRef.collection("timetableSlots")
             .where("sectionId", "==", sectionId)
