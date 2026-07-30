@@ -10,8 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
+import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
@@ -149,7 +151,7 @@ export default function EditFacultyPage() {
   useEffect(() => {
     fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(facultyId)}`)
       .then((r) => r.json() as Promise<{
-        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number }>;
+        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number; isPast?: boolean; pastAcademicYear?: string; pastSemester?: string; passPercentage?: number }>;
         timetableSlots: Array<{ id: string; assignmentId: string; day: StagedTeachingRow["slots"][number]["day"]; periodNumber: number }>;
       }>)
       .then((d) => {
@@ -166,6 +168,10 @@ export default function EditFacultyPage() {
           subjectCode: a.subjectCode,
           hoursPerWeek: a.hoursPerWeek,
           subjectHoursPerWeek: a.hoursPerWeek,
+          isPast: a.isPast,
+          pastAcademicYear: a.pastAcademicYear,
+          pastSemester: a.pastSemester,
+          passPercentage: a.passPercentage,
           slots: (d.timetableSlots ?? [])
             .filter((s) => s.assignmentId === a.id)
             .map((s) => ({ localId: s.id, id: s.id, day: s.day, periodNumber: s.periodNumber })),
@@ -413,6 +419,31 @@ export default function EditFacultyPage() {
             </p>
           )}
           <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Teaching Load Summary</CardTitle></CardHeader>
+        <CardContent>
+          <TeachingLoadTable
+            rows={buildTeachingLoadRows({
+              currentAssignments: teachingRows.map((r) => ({
+                courseName: r.courseName,
+                year: r.year,
+                sectionName: r.sectionName,
+                subjectName: r.subjectName,
+                subjectCode: r.subjectCode,
+                hoursPerWeek: r.hoursPerWeek,
+                isPast: r.isPast,
+                pastAcademicYear: r.pastAcademicYear,
+                pastSemester: r.pastSemester,
+                passPercentage: r.passPercentage,
+              })),
+              staticCourses: academicProfile.teachingAssignment?.courses,
+              tenurePresentRecords: academicProfile.tenurePresentRecords,
+              tenurePastRecords: academicProfile.tenurePastRecords,
+            })}
+          />
         </CardContent>
       </Card>
     </div>

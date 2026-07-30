@@ -49,6 +49,12 @@ export async function syncTeachingAssignments(
           subjectId: row.subjectId,
           hoursPerWeek: row.hoursPerWeek,
           slots: row.slots.map((s) => ({ day: s.day, periodNumber: s.periodNumber })),
+          ...(row.isPast ? {
+            isPast: true,
+            pastAcademicYear: row.pastAcademicYear ?? "",
+            pastSemester: row.pastSemester ?? "",
+            ...(row.passPercentage != null ? { passPercentage: row.passPercentage } : {}),
+          } : {}),
         }),
       });
       if (!res.ok) errors.push(`Adding ${row.subjectName}: ${await parseError(res)}`);
@@ -56,6 +62,31 @@ export async function syncTeachingAssignments(
     }
 
     const original = originalRows.find((o) => o.id === row.id);
+
+    if (row.isPast) {
+      // Past rows have no weekly schedule to diff — just persist the past-record
+      // fields (academic year/semester/pass %) if they've changed.
+      if (
+        original?.pastAcademicYear !== row.pastAcademicYear ||
+        original?.pastSemester !== row.pastSemester ||
+        original?.passPercentage !== row.passPercentage ||
+        original?.hoursPerWeek !== row.hoursPerWeek
+      ) {
+        const res = await fetch(`/api/college/teaching-assignments/${row.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hoursPerWeek: row.hoursPerWeek,
+            pastAcademicYear: row.pastAcademicYear ?? "",
+            pastSemester: row.pastSemester ?? "",
+            passPercentage: row.passPercentage ?? null,
+          }),
+        });
+        if (!res.ok) errors.push(`Updating past record for ${row.subjectName}: ${await parseError(res)}`);
+      }
+      continue;
+    }
+
     const originalSlots = original?.slots ?? [];
     const removedSlots = originalSlots.filter((o) => o.id && !row.slots.some((s) => s.id === o.id));
     for (const slot of removedSlots) {
