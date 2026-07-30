@@ -36,9 +36,16 @@ function fmtExp(val: unknown): string {
   return String(+(Number(val).toFixed(1)));
 }
 
+// INTERVIEW_DONE faculty haven't actually joined yet — their joiningDate is the
+// proposed date from the offer letter, so it reads as an expectation, not a fact.
+function joiningLabel(status: unknown): string {
+  return status === "INTERVIEW_DONE" ? "Expected to join" : "Joined";
+}
+
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  INTERVIEW_DONE: "outline",
   ACTIVE: "default",
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
@@ -133,6 +140,7 @@ export default function HODFacultyPage() {
 
   const STATUS_TABS = [
     { key: "", label: "All" },
+    { key: "INTERVIEW_DONE", label: "Interview Done" },
     { key: "ACTIVE", label: "Active" },
     { key: "ON_LEAVE", label: "On Leave" },
     { key: "RESIGNED", label: "Resigned" },
@@ -153,7 +161,7 @@ export default function HODFacultyPage() {
             )}
             <p className="text-xs text-muted-foreground">{row.email as string}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
-            <p className="text-xs text-muted-foreground">Joined: {fmtDate(row.joiningDate)}</p>
+            <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
           </div>
         </div>
       ),
@@ -181,7 +189,7 @@ export default function HODFacultyPage() {
       render: (row) => (
         <div className="space-y-1">
           <Badge variant="outline">{EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? (row.employmentType as string)}</Badge>
-          <p className="text-xs text-muted-foreground">{fmtDate(row.joiningDate)}</p>
+          <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
         </div>
       ),
     },

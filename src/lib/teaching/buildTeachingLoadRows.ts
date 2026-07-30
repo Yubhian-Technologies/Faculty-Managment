@@ -1,9 +1,10 @@
-// Unifies every source of "who teaches what" into one flat table shape — the
-// live current teaching assignments (course/section-scoped, from the Teaching
-// Assignments module), the Module 2 static course summary, and Module 8's
-// past/present tenure records (academic year/semester, past ones carry a pass %).
-// Used by both the resume (src/lib/pdf/resumeTemplate.ts) and the Edit Faculty
-// Details page (TeachingLoadTable) so the two always show the same rows.
+// Unifies every source of "who teaches what" into two grouped table shapes —
+// current (the live current teaching assignments, the Module 2 static course
+// summary, and Module 8's present tenure records) and past (structured past
+// teaching assignments and Module 8's past tenure records, which carry a pass %
+// current rows never have). Used by both the resume (src/lib/pdf/resumeTemplate.ts)
+// and the Edit Faculty Details page (TeachingLoadTable) so the two always agree,
+// and both keep current/past visually separated rather than intermixed.
 
 export interface TeachingLoadRow {
   academicYear?: string;
@@ -16,6 +17,11 @@ export interface TeachingLoadRow {
   passPercentage?: number;
 }
 
+export interface TeachingLoadGroups {
+  current: TeachingLoadRow[];
+  past: TeachingLoadRow[];
+}
+
 interface CurrentAssignmentLike {
   courseName?: string;
   year?: number;
@@ -23,12 +29,14 @@ interface CurrentAssignmentLike {
   subjectName?: string;
   subjectCode?: string;
   hoursPerWeek?: number;
-  // Set on structured past teaching assignments (added via "Add Past Teaching
-  // Assignment" in the Current Teaching Assignments editor) — distinct from the
-  // free-text Module 8 tenure records below, but shown in the same table.
+  // Every assignment (current or past) carries which academic year/semester it
+  // belongs to. `isPast` additionally marks a structured past teaching assignment
+  // (added via "Add Past Teaching Assignment" in the Current Teaching Assignments
+  // editor) — distinct from the free-text Module 8 tenure records below, but shown
+  // in the same past group — which is the only thing that unlocks `passPercentage`.
+  assignmentAcademicYear?: string;
+  assignmentSemester?: string;
   isPast?: boolean;
-  pastAcademicYear?: string;
-  pastSemester?: string;
   passPercentage?: number;
 }
 
@@ -48,24 +56,28 @@ interface TenurePastLike extends TenurePresentLike {
   studentPassPercentage?: number;
 }
 
+function toRow(a: CurrentAssignmentLike): TeachingLoadRow {
+  return {
+    academicYear: a.assignmentAcademicYear,
+    courseName: a.courseName,
+    year: a.year,
+    section: a.sectionName,
+    semester: a.assignmentSemester,
+    subject: a.subjectCode ? `${a.subjectName ?? ""} (${a.subjectCode})`.trim() : a.subjectName,
+    hoursPerWeek: a.hoursPerWeek,
+    passPercentage: a.isPast ? a.passPercentage : undefined,
+  };
+}
+
 export function buildTeachingLoadRows(input: {
   currentAssignments?: CurrentAssignmentLike[];
   staticCourses?: StaticCourseLike[];
   tenurePresentRecords?: TenurePresentLike[];
   tenurePastRecords?: TenurePastLike[];
-}): TeachingLoadRow[] {
-  const current: TeachingLoadRow[] = (input.currentAssignments ?? [])
-    .filter((a) => a.courseName || a.subjectName)
-    .map((a) => ({
-      academicYear: a.isPast ? a.pastAcademicYear : undefined,
-      courseName: a.courseName,
-      year: a.year,
-      section: a.sectionName,
-      semester: a.isPast ? a.pastSemester : undefined,
-      subject: a.subjectCode ? `${a.subjectName ?? ""} (${a.subjectCode})`.trim() : a.subjectName,
-      hoursPerWeek: a.hoursPerWeek,
-      passPercentage: a.isPast ? a.passPercentage : undefined,
-    }));
+}): TeachingLoadGroups {
+  const assignments = (input.currentAssignments ?? []).filter((a) => a.courseName || a.subjectName);
+  const currentAssignmentRows = assignments.filter((a) => !a.isPast).map(toRow);
+  const pastAssignmentRows = assignments.filter((a) => a.isPast).map(toRow);
 
   const staticCourses: TeachingLoadRow[] = (input.staticCourses ?? [])
     .filter((c) => c.name || c.code)
@@ -91,5 +103,8 @@ export function buildTeachingLoadRows(input: {
       passPercentage: r.studentPassPercentage,
     }));
 
-  return [...current, ...staticCourses, ...present, ...past];
+  return {
+    current: [...currentAssignmentRows, ...staticCourses, ...present],
+    past: [...pastAssignmentRows, ...past],
+  };
 }

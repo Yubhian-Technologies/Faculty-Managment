@@ -15,6 +15,7 @@ import type { Department, Designation, FacultyMember, FacultyStatus, FMSUser } f
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  INTERVIEW_DONE: "outline",
   ACTIVE: "default",
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
@@ -23,6 +24,7 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
 
 const STATUS_TABS = [
   { key: "", label: "All" },
+  { key: "INTERVIEW_DONE", label: "Interview Done" },
   { key: "ACTIVE", label: "Active" },
   { key: "ON_LEAVE", label: "On Leave" },
   { key: "RESIGNED", label: "Resigned" },

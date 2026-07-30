@@ -29,12 +29,13 @@ export interface StagedTeachingRow {
   subjectCode: string;
   hoursPerWeek: number;
   slots: StagedSlot[];
-  // Past teaching assignments — same course/year/section/subject picker, but no
-  // weekly schedule (historical, nothing left to book) and instead carry the
-  // academic year/semester it was taught in plus the students' pass %.
+  // Which academic year/semester this assignment belongs to — captured for every
+  // row, current or past. Past rows use the same course/year/section/subject
+  // picker but have no weekly schedule (historical, nothing left to book) and
+  // additionally carry the students' pass %.
+  assignmentAcademicYear?: string;
+  assignmentSemester?: string;
   isPast?: boolean;
-  pastAcademicYear?: string;
-  pastSemester?: string;
   passPercentage?: number;
 }
 
@@ -53,7 +54,9 @@ function emptyRow(isPast = false): StagedTeachingRow {
     subjectId: "", subjectName: "", subjectCode: "",
     hoursPerWeek: 0,
     slots: [],
-    ...(isPast ? { isPast: true, pastAcademicYear: "", pastSemester: "", passPercentage: undefined } : {}),
+    assignmentAcademicYear: "",
+    assignmentSemester: "",
+    ...(isPast ? { isPast: true, passPercentage: undefined } : {}),
   };
 }
 
@@ -78,29 +81,38 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
   async function ensureCourseYearData(courseId: string, year: number) {
     const key = `${courseId}_${year}`;
-    if (!(key in sectionsCache)) {
-      const res = await fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${year}`);
-      const d = await res.json() as { sections: Section[] };
-      setSectionsCache((c) => ({ ...c, [key]: d.sections ?? [] }));
-    }
-    if (!(key in subjectsCache)) {
-      const res = await fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${year}`);
-      const d = await res.json() as { subjects: Subject[] };
-      setSubjectsCache((c) => ({ ...c, [key]: d.subjects ?? [] }));
-    }
-    if (!(key in timingCache)) {
-      const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`);
-      const d = await res.json() as { timings: CourseYearTiming[] };
-      const timing = (d.timings ?? []).find((t) => t.year === year) ?? null;
-      setTimingCache((c) => ({ ...c, [key]: timing }));
+    try {
+      if (!(key in sectionsCache)) {
+        const res = await fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${year}`);
+        const d = await res.json() as { sections: Section[] };
+        setSectionsCache((c) => ({ ...c, [key]: d.sections ?? [] }));
+      }
+      if (!(key in subjectsCache)) {
+        const res = await fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${year}`);
+        const d = await res.json() as { subjects: Subject[] };
+        setSubjectsCache((c) => ({ ...c, [key]: d.subjects ?? [] }));
+      }
+      if (!(key in timingCache)) {
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`);
+        const d = await res.json() as { timings: CourseYearTiming[] };
+        const timing = (d.timings ?? []).find((t) => t.year === year) ?? null;
+        setTimingCache((c) => ({ ...c, [key]: timing }));
+      }
+    } catch {
+      // Non-critical — transient network hiccup (e.g. a dev-server reload mid-request).
+      // The relevant dropdown just stays empty/disabled; picking the course/year again retries.
     }
   }
 
   async function ensureOccupied(sectionId: string) {
     if (sectionId in occupiedCache) return;
-    const res = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}`);
-    const d = await res.json() as { slots: { assignmentId: string; day: string; periodNumber: number }[] };
-    setOccupiedCache((c) => ({ ...c, [sectionId]: d.slots ?? [] }));
+    try {
+      const res = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}`);
+      const d = await res.json() as { slots: { assignmentId: string; day: string; periodNumber: number }[] };
+      setOccupiedCache((c) => ({ ...c, [sectionId]: d.slots ?? [] }));
+    } catch {
+      // Non-critical — see ensureCourseYearData.
+    }
   }
 
   // Hydrate caches for rows that arrive pre-populated (e.g. loaded from the server when
@@ -189,7 +201,22 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
       {value.length === 0 && <p className="text-xs text-muted-foreground">No teaching assignments added yet.</p>}
 
-      {value.map((row) => {
+      {value.filter((r) => !r.isPast).length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Current</p>
+          {value.filter((r) => !r.isPast).map(renderRow)}
+        </div>
+      )}
+      {value.filter((r) => r.isPast).length > 0 && (
+        <div className="space-y-3 border-t pt-3">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Past</p>
+          {value.filter((r) => r.isPast).map(renderRow)}
+        </div>
+      )}
+    </div>
+  );
+
+  function renderRow(row: StagedTeachingRow) {
         const course = courses.find((c) => c.id === row.courseId) ?? null;
         const yearOptions = course ? Array.from({ length: course.durationYears }, (_, i) => i + 1) : [];
         const key = `${row.courseId}_${row.year}`;
@@ -286,38 +313,40 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
               </div>
             )}
 
-            {row.isPast && row.subjectId && (
+            {row.subjectId && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Academic Year</Label>
                   <Input
-                    value={row.pastAcademicYear ?? ""}
-                    onChange={(e) => updateRow(row.localId, { pastAcademicYear: e.target.value })}
-                    placeholder="e.g. 2023-2024"
+                    value={row.assignmentAcademicYear ?? ""}
+                    onChange={(e) => updateRow(row.localId, { assignmentAcademicYear: e.target.value })}
+                    placeholder="e.g. 2025-2026"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Semester</Label>
                   <Input
-                    value={row.pastSemester ?? ""}
-                    onChange={(e) => updateRow(row.localId, { pastSemester: e.target.value })}
-                    placeholder="e.g. II Semester"
+                    value={row.assignmentSemester ?? ""}
+                    onChange={(e) => updateRow(row.localId, { assignmentSemester: e.target.value })}
+                    placeholder="e.g. I Semester"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Student Pass %</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={row.passPercentage ?? ""}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      updateRow(row.localId, { passPercentage: raw === "" ? undefined : Math.min(100, Math.max(0, Number(raw))) });
-                    }}
-                    placeholder="0-100"
-                  />
-                </div>
+                {row.isPast && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Student Pass %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={row.passPercentage ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        updateRow(row.localId, { passPercentage: raw === "" ? undefined : Math.min(100, Math.max(0, Number(raw))) });
+                      }}
+                      placeholder="0-100"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -398,7 +427,5 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
             )}
           </div>
         );
-      })}
-    </div>
-  );
+  }
 }
