@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
@@ -26,16 +27,20 @@ export default function EditDepartmentPage() {
   const [assignedYears, setAssignedYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addingYear, setAddingYear] = useState(false);
 
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
     reset,
     formState: { errors },
   } = useForm<DepartmentFormData>({
     resolver: zodResolver(departmentSchema),
   });
+
+  const hodUid = watch("hodUid");
 
   useEffect(() => {
     async function load() {
@@ -68,6 +73,58 @@ export default function EditDepartmentPage() {
 
   function toggleAssignedYear(year: number, checked: boolean) {
     setAssignedYears((prev) => (checked ? [...prev, year].sort() : prev.filter((y) => y !== year)));
+  }
+
+  async function handleAddYear() {
+    setAddingYear(true);
+    try {
+      const res = await fetch("/api/college/academic-years", { method: "POST" });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to add year");
+
+      const yearsRes = await fetch("/api/college/academic-years");
+      const data = await yearsRes.json() as { academicYears: AcademicYear[] };
+      setOpenYears((data.academicYears ?? []).filter((y) => y.isActive));
+      toast({ variant: "success", title: "Academic year added" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add year" });
+    } finally {
+      setAddingYear(false);
+    }
+  }
+
+  async function handleHodCreated(uid: string) {
+    if (!department) return;
+    try {
+      const res = await fetch("/api/college/users?role=HOD");
+      const data = await res.json() as { users: FMSUser[] };
+      const freshHods = data.users ?? [];
+      setHods(freshHods);
+      const newHod = freshHods.find((h) => h.uid === uid);
+
+      const patchRes = await fetch("/api/college/departments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deptId: department.id,
+          name: department.name,
+          code: department.code,
+          hodUid: uid,
+          hodName: newHod?.name ?? "",
+          assignedYears,
+        }),
+      });
+      if (!patchRes.ok) {
+        const json = await patchRes.json() as { error?: string };
+        throw new Error(json.error ?? "Failed to assign HOD");
+      }
+
+      setValue("hodUid", uid);
+      setDepartment({ ...department, hodUid: uid, hodName: newHod?.name ?? "" });
+      toast({ variant: "success", title: "HOD created and assigned" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to assign HOD" });
+    }
   }
 
   const onSubmit = async (data: DepartmentFormData) => {
@@ -146,10 +203,13 @@ export default function EditDepartmentPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Assign HOD</Label>
+              <div className="flex items-center justify-between">
+                <Label>Assign HOD</Label>
+                <CreateHodDialog department={department?.name} onCreated={handleHodCreated} />
+              </div>
               {hods.length > 0 ? (
                 <Select
-                  defaultValue={department?.hodUid ?? ""}
+                  value={hodUid || "none"}
                   onValueChange={(v) => setValue("hodUid", v === "none" ? "" : v)}
                 >
                   <SelectTrigger>
@@ -166,16 +226,21 @@ export default function EditDepartmentPage() {
                 </Select>
               ) : (
                 <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No HODs yet — create an HOD account first
+                  No HODs yet — create one above
                 </p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label>Years Taught</Label>
+              <div className="flex items-center justify-between">
+                <Label>Years Taught</Label>
+                <Button type="button" variant="outline" size="sm" onClick={handleAddYear} loading={addingYear}>
+                  + Add Year
+                </Button>
+              </div>
               {openYears.length === 0 ? (
                 <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No academic years are added for this college yet — ask your Location Admin to add years first.
+                  No academic years added yet for this college — use &quot;+ Add Year&quot; above.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import type { FMSUser } from "@/types";
@@ -30,11 +31,26 @@ export default function NewDepartmentPage() {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<DepartmentFormData>({
     resolver: zodResolver(departmentSchema),
     defaultValues: { name: "", code: "", hodUid: "" },
   });
+
+  const hodUid = watch("hodUid");
+  const nameValue = watch("name");
+
+  async function handleHodCreated(uid: string) {
+    try {
+      const res = await fetch("/api/college/users?role=HOD");
+      const data = await res.json() as { users: FMSUser[] };
+      setHods(data.users ?? []);
+    } catch {
+      toast({ variant: "destructive", title: "Created, but failed to refresh HOD list" });
+    }
+    setValue("hodUid", uid);
+  }
 
   const onSubmit = async (data: DepartmentFormData) => {
     setIsSubmitting(true);
@@ -101,9 +117,15 @@ export default function NewDepartmentPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Assign HOD</Label>
+              <div className="flex items-center justify-between">
+                <Label>Assign HOD</Label>
+                <CreateHodDialog department={nameValue || undefined} onCreated={handleHodCreated} />
+              </div>
               {hods.length > 0 ? (
-                <Select onValueChange={(v) => setValue("hodUid", v === "none" ? "" : v)}>
+                <Select
+                  value={hodUid || "none"}
+                  onValueChange={(v) => setValue("hodUid", v === "none" ? "" : v)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select HOD (optional)" />
                   </SelectTrigger>
@@ -118,7 +140,7 @@ export default function NewDepartmentPage() {
                 </Select>
               ) : (
                 <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No HODs yet — create an HOD account first
+                  No HODs yet — create one above
                 </p>
               )}
             </div>
