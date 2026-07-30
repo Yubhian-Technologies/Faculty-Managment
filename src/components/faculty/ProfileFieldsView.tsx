@@ -3,6 +3,7 @@ import type { FacultyProfileFields } from "@/types";
 interface Props {
   profile: Partial<FacultyProfileFields> | undefined;
   includeTeachingAssignment?: boolean;
+  hideFinancialModule?: boolean;
 }
 
 function Section({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
@@ -44,7 +45,7 @@ function DegreeView({ label, degree }: { label: string; degree: FacultyProfileFi
   );
 }
 
-export function ProfileFieldsView({ profile, includeTeachingAssignment = true }: Props) {
+export function ProfileFieldsView({ profile, includeTeachingAssignment = true, hideFinancialModule = false }: Props) {
   const p = profile ?? {};
   const teaching = p.teachingAssignment;
   const patents = p.patents;
@@ -235,22 +236,24 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true }:
         <Field label="Notable Awards" value={p.notableAwards} />
       </Section>
 
-      <Section number={6} title="Financial Standing & Budgetary Impact">
-        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-          <SubLabel>Current Financial Standing</SubLabel>
-          <div className="mt-2">
-            <Field label="Present Salary (₹)" value={p.presentSalary} />
+      {!hideFinancialModule && (
+        <Section number={6} title="Financial Standing & Budgetary Impact">
+          <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+            <SubLabel>Current Financial Standing</SubLabel>
+            <div className="mt-2">
+              <Field label="Present Salary (₹)" value={p.presentSalary} />
+            </div>
           </div>
-        </div>
-        <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
-          <SubLabel>Budgetary Impact</SubLabel>
-          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Field label="Gross Annual CTC (₹)" value={p.grossAnnualCTC} />
-            <Field label="Increments Awarded" value={p.incrementsAwarded} />
-            <Field label="Funding/Consultancy Revenue (₹)" value={p.fundingConsultancyRevenue} />
+          <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
+            <SubLabel>Budgetary Impact</SubLabel>
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Field label="Gross Annual CTC (₹)" value={p.grossAnnualCTC} />
+              <Field label="Increments Awarded" value={p.incrementsAwarded} />
+              <Field label="Funding/Consultancy Revenue (₹)" value={p.fundingConsultancyRevenue} />
+            </div>
           </div>
-        </div>
-      </Section>
+        </Section>
+      )}
 
       <Section number={7} title="Others">
         <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "—"}</p>
