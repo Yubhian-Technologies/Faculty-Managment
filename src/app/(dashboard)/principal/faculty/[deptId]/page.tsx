@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/shared/Avatar";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { Department, Designation, FacultyMember, FacultyStatus } from "@/types";
+import type { Department, Designation, FacultyMember, FacultyStatus, FMSUser } from "@/types";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
@@ -42,6 +42,15 @@ export default function PrincipalDepartmentFacultyPage() {
         .then((d) => d.departments ?? []),
   });
   const department = departments.find((d) => d.id === deptId);
+
+  const { data: hod } = useQuery({
+    queryKey: ["principal-dept-hod", department?.hodUid],
+    queryFn: () =>
+      fetch("/api/college/users?role=HOD")
+        .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
+        .then((d) => d.users?.find((u) => u.uid === department?.hodUid) ?? null),
+    enabled: !!department?.hodUid,
+  });
 
   const { data: faculty = [], isLoading } = useQuery({
     queryKey: ["principal-dept-faculty", department?.name, statusFilter],
@@ -107,6 +116,25 @@ export default function PrincipalDepartmentFacultyPage() {
           </Button>
         }
       />
+
+      {department && (
+        <div className="rounded-lg border p-4 flex items-center gap-3">
+          {hod ? (
+            <>
+              <Avatar name={hod.name} photoUrl={hod.profilePhotoUrl} size="sm" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium leading-tight">{hod.name}</p>
+                  <Badge variant="secondary">Head of Department</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{hod.email}{hod.phone ? ` · ${hod.phone}` : ""}</p>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-orange-500">No HOD assigned to this department yet</p>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2 flex-wrap">
         {STATUS_TABS.map((tab) => (
