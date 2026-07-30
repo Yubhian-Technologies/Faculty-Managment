@@ -151,7 +151,7 @@ export default function EditFacultyPage() {
   useEffect(() => {
     fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(facultyId)}`)
       .then((r) => r.json() as Promise<{
-        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number; isPast?: boolean; pastAcademicYear?: string; pastSemester?: string; passPercentage?: number }>;
+        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number; isPast?: boolean; assignmentAcademicYear?: string; assignmentSemester?: string; passPercentage?: number }>;
         timetableSlots: Array<{ id: string; assignmentId: string; day: StagedTeachingRow["slots"][number]["day"]; periodNumber: number }>;
       }>)
       .then((d) => {
@@ -169,8 +169,8 @@ export default function EditFacultyPage() {
           hoursPerWeek: a.hoursPerWeek,
           subjectHoursPerWeek: a.hoursPerWeek,
           isPast: a.isPast,
-          pastAcademicYear: a.pastAcademicYear,
-          pastSemester: a.pastSemester,
+          assignmentAcademicYear: a.assignmentAcademicYear,
+          assignmentSemester: a.assignmentSemester,
           passPercentage: a.passPercentage,
           slots: (d.timetableSlots ?? [])
             .filter((s) => s.assignmentId === a.id)
@@ -435,8 +435,8 @@ export default function EditFacultyPage() {
                 subjectCode: r.subjectCode,
                 hoursPerWeek: r.hoursPerWeek,
                 isPast: r.isPast,
-                pastAcademicYear: r.pastAcademicYear,
-                pastSemester: r.pastSemester,
+                assignmentAcademicYear: r.assignmentAcademicYear,
+                assignmentSemester: r.assignmentSemester,
                 passPercentage: r.passPercentage,
               })),
               staticCourses: academicProfile.teachingAssignment?.courses,

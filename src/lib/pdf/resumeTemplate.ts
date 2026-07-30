@@ -203,9 +203,9 @@ export interface ResumeData {
     subjectName?: string;
     subjectCode?: string;
     hoursPerWeek?: number;
+    assignmentAcademicYear?: string;
+    assignmentSemester?: string;
     isPast?: boolean;
-    pastAcademicYear?: string;
-    pastSemester?: string;
     passPercentage?: number;
   }[];
 }
@@ -455,7 +455,10 @@ export function getResumeHTML(data: ResumeData): string {
   const personalBody = detailTable(
     detail("Status", statusLabel) +
     detail("Employment Type", employmentTypeLabel) +
-    detail("Date of Joining", data.joiningDate ? formatDate(data.joiningDate as Parameters<typeof formatDate>[0]) : "") +
+    detail(
+      data.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining",
+      data.joiningDate ? formatDate(data.joiningDate as Parameters<typeof formatDate>[0]) : ""
+    ) +
     detail("Date of Birth", data.dateOfBirth ? formatDate(data.dateOfBirth as Parameters<typeof formatDate>[0]) : "") +
     detail("Gender", data.gender) +
     detail("Blood Group", data.bloodGroup) +
@@ -502,7 +505,7 @@ export function getResumeHTML(data: ResumeData): string {
      the top/bottom breathing room supplied per-page via page.pdf()'s margin. */
   .page { width: 210mm; background: #ffffff; padding: 0 15mm; }
 
-  .resume-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
+  .resume-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
   .header-left { display: flex; align-items: center; gap: 14px; }
   .avatar { width: 66px; height: 66px; border-radius: 50%; object-fit: cover; border: 1.5px solid #111827; flex-shrink: 0; }
   .avatar-fallback { width: 66px; height: 66px; border-radius: 50%; background: #111827; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; flex-shrink: 0; }
@@ -511,7 +514,11 @@ export function getResumeHTML(data: ResumeData): string {
   .college { font-size: 12px; color: #4b5563; margin-top: 2px; }
   .contact-block { text-align: right; font-size: 11.5px; line-height: 1.6; white-space: nowrap; }
 
-  .section-title { text-align: center; font-weight: bold; font-size: 13px; letter-spacing: 0.6px; text-transform: uppercase; border-top: 1px solid #111827; border-bottom: 1px solid #111827; padding: 3px 0; margin: 14px 0 8px; break-after: avoid-page; }
+  /* Centered with flexbox (not padding + line-height) — html2canvas approximates
+     font baseline position with a measurement heuristic that isn't always exact,
+     so text drifts within symmetric padding instead of sitting truly centered.
+     Flex centering is geometric, not font-metric-based, so it renders correctly. */
+  .section-title { display: flex; align-items: center; justify-content: center; padding: 12px 0; line-height: 1; font-weight: bold; font-size: 13px; letter-spacing: 0.6px; text-transform: uppercase; border-top: 1px solid #111827; border-bottom: 1px solid #111827; margin: 14px 0 8px; break-after: avoid-page; }
 
   .entry { margin-bottom: 6px; break-inside: avoid-page; }
   .entry-row { display: flex; justify-content: space-between; gap: 10px; font-weight: bold; font-size: 12.5px; color: #000000; }
@@ -529,10 +536,15 @@ export function getResumeHTML(data: ResumeData): string {
   .empty-note { font-size: 12px; color: #6b7280; font-style: italic; margin: 3px 0 8px; }
 
   /* Compact 2-up key/value grid — used for personal/financial facts, which are
-     simple label:value pairs rather than narrative achievements. */
-  .fgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 3px; margin: 3px 0 10px; }
-  .fitem { font-size: 12px; padding: 2.5px 0; border-bottom: 1px dotted #d1d5db; break-inside: avoid-page; }
-  .fitem-wide { grid-column: 1 / -1; }
+     simple label:value pairs rather than narrative achievements. Built with
+     flexbox + explicit width/margin (not CSS Grid) — html2canvas 1.x only
+     recognizes display:grid as a display-type flag and never actually lays
+     out grid tracks, so a real grid here would collapse to a single column
+     (misaligned) in the generated PDF even though it looks fine in a browser. */
+  .fgrid { display: flex; flex-wrap: wrap; margin: 3px 0 10px; }
+  .fitem { width: 48%; margin: 0 4% 6px 0; font-size: 12px; padding: 2.5px 0; break-inside: avoid-page; }
+  .fitem:nth-child(2n) { margin-right: 0; }
+  .fitem-wide { width: 100%; margin-right: 0; }
   .fitem .fk { color: #4b5563; font-weight: 600; }
   .fitem .fk::after { content: ": "; }
   .fitem .fv { color: #111827; }

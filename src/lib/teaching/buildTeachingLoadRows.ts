@@ -23,12 +23,14 @@ interface CurrentAssignmentLike {
   subjectName?: string;
   subjectCode?: string;
   hoursPerWeek?: number;
-  // Set on structured past teaching assignments (added via "Add Past Teaching
-  // Assignment" in the Current Teaching Assignments editor) — distinct from the
-  // free-text Module 8 tenure records below, but shown in the same table.
+  // Every assignment (current or past) carries which academic year/semester it
+  // belongs to. `isPast` additionally marks a structured past teaching assignment
+  // (added via "Add Past Teaching Assignment" in the Current Teaching Assignments
+  // editor) — distinct from the free-text Module 8 tenure records below, but shown
+  // in the same table — which is the only thing that unlocks `passPercentage`.
+  assignmentAcademicYear?: string;
+  assignmentSemester?: string;
   isPast?: boolean;
-  pastAcademicYear?: string;
-  pastSemester?: string;
   passPercentage?: number;
 }
 
@@ -57,11 +59,11 @@ export function buildTeachingLoadRows(input: {
   const current: TeachingLoadRow[] = (input.currentAssignments ?? [])
     .filter((a) => a.courseName || a.subjectName)
     .map((a) => ({
-      academicYear: a.isPast ? a.pastAcademicYear : undefined,
+      academicYear: a.assignmentAcademicYear,
       courseName: a.courseName,
       year: a.year,
       section: a.sectionName,
-      semester: a.isPast ? a.pastSemester : undefined,
+      semester: a.assignmentSemester,
       subject: a.subjectCode ? `${a.subjectName ?? ""} (${a.subjectCode})`.trim() : a.subjectName,
       hoursPerWeek: a.hoursPerWeek,
       passPercentage: a.isPast ? a.passPercentage : undefined,

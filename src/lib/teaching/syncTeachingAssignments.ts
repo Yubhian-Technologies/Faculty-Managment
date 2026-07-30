@@ -49,10 +49,10 @@ export async function syncTeachingAssignments(
           subjectId: row.subjectId,
           hoursPerWeek: row.hoursPerWeek,
           slots: row.slots.map((s) => ({ day: s.day, periodNumber: s.periodNumber })),
+          assignmentAcademicYear: row.assignmentAcademicYear ?? "",
+          assignmentSemester: row.assignmentSemester ?? "",
           ...(row.isPast ? {
             isPast: true,
-            pastAcademicYear: row.pastAcademicYear ?? "",
-            pastSemester: row.pastSemester ?? "",
             ...(row.passPercentage != null ? { passPercentage: row.passPercentage } : {}),
           } : {}),
         }),
@@ -64,11 +64,11 @@ export async function syncTeachingAssignments(
     const original = originalRows.find((o) => o.id === row.id);
 
     if (row.isPast) {
-      // Past rows have no weekly schedule to diff — just persist the past-record
-      // fields (academic year/semester/pass %) if they've changed.
+      // Past rows have no weekly schedule to diff — just persist the record's
+      // fields (academic year/semester/hours/pass %) if they've changed.
       if (
-        original?.pastAcademicYear !== row.pastAcademicYear ||
-        original?.pastSemester !== row.pastSemester ||
+        original?.assignmentAcademicYear !== row.assignmentAcademicYear ||
+        original?.assignmentSemester !== row.assignmentSemester ||
         original?.passPercentage !== row.passPercentage ||
         original?.hoursPerWeek !== row.hoursPerWeek
       ) {
@@ -77,14 +77,28 @@ export async function syncTeachingAssignments(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             hoursPerWeek: row.hoursPerWeek,
-            pastAcademicYear: row.pastAcademicYear ?? "",
-            pastSemester: row.pastSemester ?? "",
+            assignmentAcademicYear: row.assignmentAcademicYear ?? "",
+            assignmentSemester: row.assignmentSemester ?? "",
             passPercentage: row.passPercentage ?? null,
           }),
         });
         if (!res.ok) errors.push(`Updating past record for ${row.subjectName}: ${await parseError(res)}`);
       }
       continue;
+    }
+
+    // Current (non-past) rows: academic year/semester can still change even
+    // though there's no pass % — persist those independently of the slot diffing below.
+    if (original?.assignmentAcademicYear !== row.assignmentAcademicYear || original?.assignmentSemester !== row.assignmentSemester) {
+      const res = await fetch(`/api/college/teaching-assignments/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assignmentAcademicYear: row.assignmentAcademicYear ?? "",
+          assignmentSemester: row.assignmentSemester ?? "",
+        }),
+      });
+      if (!res.ok) errors.push(`Updating academic year/semester for ${row.subjectName}: ${await parseError(res)}`);
     }
 
     const originalSlots = original?.slots ?? [];

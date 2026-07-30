@@ -15,6 +15,7 @@ import type { FacultyMember, FacultyStatus } from "@/types";
 import { formatDate } from "@/lib/utils";
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  INTERVIEW_DONE: "outline",
   ACTIVE: "default",
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
@@ -64,7 +65,7 @@ export default function PrincipalFacultyProfilePage() {
               <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{faculty.phone || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{faculty.department}</p></div>
               <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{DESIGNATION_LABELS[faculty.designation]}</p></div>
-              <div><p className="text-xs text-muted-foreground">Date of Joining</p><p className="text-sm font-medium">{faculty.joiningDate ? formatDate(faculty.joiningDate) : "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">{faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}</p><p className="text-sm font-medium">{faculty.joiningDate ? formatDate(faculty.joiningDate) : "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Qualification</p><p className="text-sm font-medium">{faculty.qualification || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Specialization</p><p className="text-sm font-medium">{faculty.specialization || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Experience (yrs)</p><p className="text-sm font-medium">{faculty.experienceYears}</p></div>

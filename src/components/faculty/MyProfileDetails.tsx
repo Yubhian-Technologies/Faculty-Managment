@@ -13,6 +13,7 @@ import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { FacultyMember, FacultyStatus, TeachingAssignment } from "@/types";
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  INTERVIEW_DONE: "outline",
   ACTIVE: "default",
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
@@ -77,7 +78,10 @@ export function MyProfileDetails() {
           <Fact label="Phone" value={profile.phone} />
           <Fact label="Department" value={profile.department} />
           <Fact label="Designation" value={profile.designation ? DESIGNATION_LABELS[profile.designation] : undefined} />
-          <Fact label="Date of Joining" value={profile.joiningDate ? formatDate(profile.joiningDate) : undefined} />
+          <Fact
+            label={profile.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}
+            value={profile.joiningDate ? formatDate(profile.joiningDate) : undefined}
+          />
           <Fact label="Qualification" value={profile.qualification} />
           <Fact label="Specialization" value={profile.specialization} />
           <Fact label="Experience (yrs)" value={profile.experienceYears} />
