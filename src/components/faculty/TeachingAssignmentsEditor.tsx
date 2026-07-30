@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, BookOpen } from "lucide-react";
+import { Plus, Trash2, BookOpen, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Course, Section, Subject, CourseYearTiming, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
@@ -28,6 +29,13 @@ export interface StagedTeachingRow {
   subjectCode: string;
   hoursPerWeek: number;
   slots: StagedSlot[];
+  // Past teaching assignments — same course/year/section/subject picker, but no
+  // weekly schedule (historical, nothing left to book) and instead carry the
+  // academic year/semester it was taught in plus the students' pass %.
+  isPast?: boolean;
+  pastAcademicYear?: string;
+  pastSemester?: string;
+  passPercentage?: number;
 }
 
 const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -37,7 +45,7 @@ function newLocalId() {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `local_${Date.now()}_${Math.random()}`;
 }
 
-function emptyRow(): StagedTeachingRow {
+function emptyRow(isPast = false): StagedTeachingRow {
   return {
     localId: newLocalId(),
     courseId: "", courseName: "", year: 0,
@@ -45,6 +53,7 @@ function emptyRow(): StagedTeachingRow {
     subjectId: "", subjectName: "", subjectCode: "",
     hoursPerWeek: 0,
     slots: [],
+    ...(isPast ? { isPast: true, pastAcademicYear: "", pastSemester: "", passPercentage: undefined } : {}),
   };
 }
 
@@ -99,7 +108,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   useEffect(() => {
     for (const row of value) {
       if (row.courseId && row.year) void ensureCourseYearData(row.courseId, row.year);
-      if (row.sectionId) void ensureOccupied(row.sectionId);
+      if (row.sectionId && !row.isPast) void ensureOccupied(row.sectionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -108,8 +117,8 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
     onChange(value.map((r) => (r.localId === localId ? { ...r, ...patch } : r)));
   }
 
-  function addRow() {
-    onChange([...value, emptyRow()]);
+  function addRow(isPast = false) {
+    onChange([...value, emptyRow(isPast)]);
   }
 
   function removeRow(localId: string) {
@@ -133,7 +142,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
     const key = `${row.courseId}_${row.year}`;
     const section = (sectionsCache[key] ?? []).find((s) => s.id === sectionId);
     updateRow(row.localId, { sectionId, sectionName: section?.name ?? "", slots: [] });
-    await ensureOccupied(sectionId);
+    if (!row.isPast) await ensureOccupied(sectionId);
   }
 
   function handleSubjectChange(row: StagedTeachingRow, subjectId: string) {
@@ -166,11 +175,16 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
   return (
     <div className="space-y-3 rounded-lg border p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Teaching Assignments</p>
-        <Button type="button" variant="outline" size="sm" onClick={addRow}>
-          <Plus className="h-3.5 w-3.5 mr-1" />Add Course
-        </Button>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Teaching Assignments</p>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => addRow(false)}>
+            <Plus className="h-3.5 w-3.5 mr-1" />Add Course
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => addRow(true)}>
+            <History className="h-3.5 w-3.5 mr-1" />Add Past Teaching Assignment
+          </Button>
+        </div>
       </div>
 
       {value.length === 0 && <p className="text-xs text-muted-foreground">No teaching assignments added yet.</p>}
@@ -192,15 +206,24 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
             .filter((r) => r.localId !== row.localId)
             .flatMap((r) => r.slots.map((s) => `${s.day}_${s.periodNumber}`))
         );
-        // Subjects this faculty is already assigned to in another row shouldn't be offered
-        // again — picking the same subject twice would just duplicate the assignment.
+        // Subjects this faculty is already CURRENTLY assigned to in another row shouldn't be
+        // offered again — picking the same subject twice would just duplicate the live
+        // assignment. Past rows are exempt on both sides: a subject taught in a prior year
+        // legitimately may be taught again now, and past rows themselves don't conflict.
         const subjectsUsedElsewhere = new Set(
-          value.filter((r) => r.localId !== row.localId).map((r) => r.subjectId).filter(Boolean)
+          value.filter((r) => r.localId !== row.localId && !r.isPast).map((r) => r.subjectId).filter(Boolean)
         );
-        const availableSubjects = subjects.filter((s) => s.id === row.subjectId || !subjectsUsedElsewhere.has(s.id));
+        const availableSubjects = row.isPast
+          ? subjects
+          : subjects.filter((s) => s.id === row.subjectId || !subjectsUsedElsewhere.has(s.id));
 
         return (
           <div key={row.localId} className="space-y-3 rounded-md bg-muted/30 p-3">
+            {row.isPast && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                <History className="h-3 w-3" />Past Teaching Assignment
+              </span>
+            )}
             <div className="flex items-start gap-2">
               <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
@@ -263,7 +286,42 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
               </div>
             )}
 
-            {row.sectionId && row.subjectId && (
+            {row.isPast && row.subjectId && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Academic Year</Label>
+                  <Input
+                    value={row.pastAcademicYear ?? ""}
+                    onChange={(e) => updateRow(row.localId, { pastAcademicYear: e.target.value })}
+                    placeholder="e.g. 2023-2024"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Semester</Label>
+                  <Input
+                    value={row.pastSemester ?? ""}
+                    onChange={(e) => updateRow(row.localId, { pastSemester: e.target.value })}
+                    placeholder="e.g. II Semester"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Student Pass %</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={row.passPercentage ?? ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      updateRow(row.localId, { passPercentage: raw === "" ? undefined : Math.min(100, Math.max(0, Number(raw))) });
+                    }}
+                    placeholder="0-100"
+                  />
+                </div>
+              </div>
+            )}
+
+            {!row.isPast && row.sectionId && row.subjectId && (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />

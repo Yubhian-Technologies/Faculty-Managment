@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, TenurePastRecord, TenurePresentRecord } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -146,6 +146,27 @@ function authoredBooks(row: ImportRow): AuthoredBook[] {
     .filter((b) => b.title || b.publisher);
 }
 
+function tenurePastRecords(row: ImportRow): TenurePastRecord[] {
+  return [1, 2, 3]
+    .map((i) => ({
+      academicYear: row[`tenurePast${i}_academicYear`]?.trim() ?? "",
+      semester: row[`tenurePast${i}_semester`]?.trim() ?? "",
+      subject: row[`tenurePast${i}_subject`]?.trim() ?? "",
+      studentPassPercentage: num(row[`tenurePast${i}_passPercentage`]),
+    }))
+    .filter((r) => r.academicYear || r.subject);
+}
+
+function tenurePresentRecords(row: ImportRow): TenurePresentRecord[] {
+  return [1, 2, 3]
+    .map((i) => ({
+      academicYear: row[`tenurePresent${i}_academicYear`]?.trim() ?? "",
+      semester: row[`tenurePresent${i}_semester`]?.trim() ?? "",
+      subject: row[`tenurePresent${i}_subject`]?.trim() ?? "",
+    }))
+    .filter((r) => r.academicYear || r.subject);
+}
+
 function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefined {
   const profile: Record<string, unknown> = {
     highestQualification: row.highestQualification?.trim() ?? "",
@@ -200,6 +221,8 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     professionalBodyMemberships: row.professionalBodyMemberships?.trim() || undefined,
     authoredBooks: authoredBooks(row),
     notableAwards: row.notableAwards?.trim() || undefined,
+    tenurePastRecords: tenurePastRecords(row),
+    tenurePresentRecords: tenurePresentRecords(row),
   };
   for (const key of Object.keys(profile)) {
     if (profile[key] === undefined) delete profile[key];

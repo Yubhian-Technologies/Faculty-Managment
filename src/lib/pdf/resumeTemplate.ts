@@ -1,5 +1,6 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS } from "@/types";
+import { buildTeachingLoadRows, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -202,6 +203,10 @@ export interface ResumeData {
     subjectName?: string;
     subjectCode?: string;
     hoursPerWeek?: number;
+    isPast?: boolean;
+    pastAcademicYear?: string;
+    pastSemester?: string;
+    passPercentage?: number;
   }[];
 }
 
@@ -252,6 +257,22 @@ function detail(label: string, value: unknown, wide = false): string {
 function detailTable(rows: string): string {
   if (!rows.trim()) return "";
   return `<div class="fgrid">${rows}</div>`;
+}
+
+/** Renders the unified Teaching Load table — Academic Year / Course Name /
+ *  Year(Class) / Section / Semester / Subject / Hr-Week / Pass % — leaving
+ *  cells blank where a given row's source doesn't carry that field (e.g. a
+ *  live current assignment has no academic year, a past tenure record has no
+ *  section). Pass % only ever appears for past-teaching rows. */
+function renderTeachingLoadTable(rows: TeachingLoadRow[]): string {
+  if (!rows.length) return "";
+  const body = rows
+    .map(
+      (r) =>
+        `<tr><td>${esc(r.academicYear)}</td><td>${esc(r.courseName)}</td><td>${esc(r.year)}</td><td>${esc(r.section)}</td><td>${esc(r.semester)}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td><td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td></tr>`
+    )
+    .join("");
+  return `<table class="data-table"><tr><th>Academic Year</th><th>Course Name</th><th>Year (Class)</th><th>Section</th><th>Semester</th><th>Subject</th><th>Hr/Week</th><th>Pass %</th></tr>${body}</table>`;
 }
 
 /** Renders a section's heading + body together, or nothing at all when the
@@ -352,20 +373,19 @@ export function getResumeHTML(data: ResumeData): string {
   const experienceBody = experienceEntry + experienceBullets + previousInstitutionEntries;
 
   // ── Teaching load ────────────────────────────────────────────────────────
+  // One unified table — current course/section assignments, the Module 2 course
+  // summary, and Module 8's present/past tenure records (past rows carry a pass %).
   const teachingLoadBullets = bullets([
     ap?.teachingAssignment?.primaryTeachingRole && `Primary Teaching Role: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
   ]);
-  const teachingCourses = ap?.teachingAssignment?.courses?.length
-    ? `<table class="data-table"><tr><th>Code</th><th>Course</th><th>Weekly Credit Hours</th></tr>${ap.teachingAssignment.courses
-        .map((c) => `<tr><td>${esc(c.code)}</td><td>${esc(c.name)}</td><td>${esc(c.weeklyCreditHours)}</td></tr>`)
-        .join("")}</table>`
-    : "";
-  const currentTeachingAssignmentsTable = data.teachingAssignments?.length
-    ? `<table class="data-table"><tr><th>Course</th><th>Year</th><th>Section</th><th>Subject</th><th>Hours/Week</th></tr>${data.teachingAssignments
-        .map((t) => `<tr><td>${esc(t.courseName)}</td><td>${esc(t.year)}</td><td>${esc(t.sectionName)}</td><td>${esc(t.subjectName)}${t.subjectCode ? ` (${esc(t.subjectCode)})` : ""}</td><td>${esc(t.hoursPerWeek)}</td></tr>`)
-        .join("")}</table>`
-    : "";
-  const teachingLoadBody = teachingLoadBullets + teachingCourses + currentTeachingAssignmentsTable;
+  const teachingLoadRows = buildTeachingLoadRows({
+    currentAssignments: data.teachingAssignments,
+    staticCourses: ap?.teachingAssignment?.courses,
+    tenurePresentRecords: ap?.tenurePresentRecords,
+    tenurePastRecords: ap?.tenurePastRecords,
+  });
+  const teachingLoadTable = renderTeachingLoadTable(teachingLoadRows);
+  const teachingLoadBody = teachingLoadBullets + teachingLoadTable;
 
   // ── Research publications ───────────────────────────────────────────────
   const publicationStatsBullets = bullets([
@@ -468,34 +488,6 @@ export function getResumeHTML(data: ResumeData): string {
   // ── Other information ────────────────────────────────────────────────────
   const otherInfoBody = ap?.otherInformation ? `<p class="summary-text">${esc(ap.otherInformation)}</p>` : "";
 
-  // ── Tenure & Load (Past / Present) ──────────────────────────────────────
-  const tenurePastEntries = ap?.tenurePastRecords?.length
-    ? `<div class="subheading">Past</div>` +
-      ap.tenurePastRecords
-        .map((r) =>
-          detailTable(
-            detail("Academic Year", r.academicYear) +
-            detail("Semester", r.semester) +
-            detail("Subject", r.subject) +
-            detail("Student Pass %", r.studentPassPercentage)
-          )
-        )
-        .join("")
-    : "";
-  const tenurePresentEntries = ap?.tenurePresentRecords?.length
-    ? `<div class="subheading">Present</div>` +
-      ap.tenurePresentRecords
-        .map((r) =>
-          detailTable(
-            detail("Academic Year", r.academicYear) +
-            detail("Semester", r.semester) +
-            detail("Subject", r.subject)
-          )
-        )
-        .join("")
-    : "";
-  const tenureLoadBody = tenurePastEntries + tenurePresentEntries;
-
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -573,15 +565,14 @@ export function getResumeHTML(data: ResumeData): string {
 
   ${renderSection("Personal & Contact Details", personalBody)}
   ${renderSection("Education", educationBody)}
-  ${renderSection("Teaching Load", teachingLoadBody)}
   ${renderSection("Professional Experience", experienceBody)}
+  ${renderSection("Teaching Load", teachingLoadBody)}
   ${renderSection("Research Publications", publicationsBody)}
   ${renderSection("Projects, Grants & Consultancy", grantsBody)}
   ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
   ${renderSection("Certifications & Professional Memberships", certificationsBody)}
   ${renderSection("Other Information", otherInfoBody)}
   ${renderSection("Financial Standing", financialBody)}
-  ${renderSection("Tenure & Load", tenureLoadBody)}
 
   <div class="footer">Generated on ${esc(formatDate(new Date()))} — Confidential, for internal institutional use only.</div>
 </div>

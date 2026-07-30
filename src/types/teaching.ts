@@ -63,6 +63,16 @@ export interface TeachingAssignment {
   assignedByName: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // Course/section-scoped rows only — marks a historical assignment (no weekly
+  // schedule/timetable slots) so it can be surfaced on the resume/Teaching Load
+  // table alongside a pass %. Named distinctly from `academicYear`/`semester`
+  // above (which belong to the independent semester-scoped shape this collection
+  // also stores) to keep the two shapes unambiguous.
+  isPast?: boolean;
+  pastAcademicYear?: string;
+  pastSemester?: string;
+  passPercentage?: number;
 }
 
 // ─── Timetable Slot ───────────────────────────────────────────────────────────

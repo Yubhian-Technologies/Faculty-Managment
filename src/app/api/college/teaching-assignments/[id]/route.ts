@@ -11,7 +11,12 @@ export async function PATCH(
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
-    const body = (await request.json()) as { hoursPerWeek?: number };
+    const body = (await request.json()) as {
+      hoursPerWeek?: number;
+      pastAcademicYear?: string;
+      pastSemester?: string;
+      passPercentage?: number;
+    };
 
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("teachingAssignments").doc(id);
@@ -20,6 +25,9 @@ export async function PATCH(
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.hoursPerWeek != null) updates.hoursPerWeek = Number(body.hoursPerWeek);
+    if (body.pastAcademicYear != null) updates.pastAcademicYear = body.pastAcademicYear;
+    if (body.pastSemester != null) updates.pastSemester = body.pastSemester;
+    if (body.passPercentage != null) updates.passPercentage = Number(body.passPercentage);
 
     await ref.update(updates);
     return NextResponse.json({ success: true });

@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
+import { getUserById } from "@/lib/firestore/users";
 import type { FacultyProfileFields } from "@/types";
 
 export default function EditPrincipalProfilePage() {
@@ -92,7 +93,13 @@ export default function EditPrincipalProfilePage() {
       });
       if (!res.ok) throw new Error();
 
-      if (user) setUser({ ...user, ...body });
+      // Re-fetch rather than hand-merge `body` into the store: `body` carries
+      // dateOfBirth/ratificationDate as date-input strings for the form, while
+      // FMSUser expects them as Firestore Timestamps.
+      if (user) {
+        const freshProfile = await getUserById(user.collegeId, user.uid);
+        if (freshProfile) setUser(freshProfile);
+      }
       toast({ variant: "success", title: "Profile updated" });
       router.push("/principal/profile");
     } catch {

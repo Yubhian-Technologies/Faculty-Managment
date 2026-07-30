@@ -1,4 +1,5 @@
 import { auth } from "@/lib/firebase/client";
+import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
 
 export async function downloadResumePdf(record: Record<string, unknown>, filenameHint: string): Promise<void> {
   // Distinct from the app's httpOnly session cookie that gates every page/API
@@ -23,13 +24,10 @@ export async function downloadResumePdf(record: Record<string, unknown>, filenam
     throw new Error(body?.error ?? `Resume generation failed (${res.status})`);
   }
 
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
+  // The route returns the resume as HTML (see AGENTS.md — no headless-browser
+  // dependency server-side); it's converted into a real, downloadable PDF here
+  // in the browser instead.
+  const html = await res.text();
   const safeHint = filenameHint.replace(/[^a-zA-Z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "resume";
-  // Falls back to an .html download when puppeteer isn't available server-side (see AGENTS.md).
-  link.download = `resume-${safeHint}.${blob.type.includes("pdf") ? "pdf" : "html"}`;
-  link.click();
-  URL.revokeObjectURL(url);
+  await renderHtmlToPdf(html, `resume-${safeHint}.pdf`);
 }
