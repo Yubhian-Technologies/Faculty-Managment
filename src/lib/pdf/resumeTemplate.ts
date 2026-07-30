@@ -259,20 +259,32 @@ function detailTable(rows: string): string {
   return `<div class="fgrid">${rows}</div>`;
 }
 
-/** Renders the unified Teaching Load table — Academic Year / Course Name /
- *  Year(Class) / Section / Semester / Subject / Hr-Week / Pass % — leaving
- *  cells blank where a given row's source doesn't carry that field (e.g. a
- *  live current assignment has no academic year, a past tenure record has no
- *  section). Pass % only ever appears for past-teaching rows. */
-function renderTeachingLoadTable(rows: TeachingLoadRow[]): string {
+/** Renders one Teaching Load table — Academic Year / Course Name / Year(Class) /
+ *  Section / Semester / Subject / Hr-Week (+ Pass % when `showPassPercentage`) —
+ *  leaving cells blank where a given row's source doesn't carry that field. */
+function renderTeachingLoadTable(rows: TeachingLoadRow[], showPassPercentage: boolean): string {
   if (!rows.length) return "";
   const body = rows
     .map(
       (r) =>
-        `<tr><td>${esc(r.academicYear)}</td><td>${esc(r.courseName)}</td><td>${esc(r.year)}</td><td>${esc(r.section)}</td><td>${esc(r.semester)}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td><td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td></tr>`
+        `<tr><td>${esc(r.academicYear)}</td><td>${esc(r.courseName)}</td><td>${esc(r.year)}</td><td>${esc(r.section)}</td><td>${esc(r.semester)}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td>${showPassPercentage ? `<td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td>` : ""}</tr>`
     )
     .join("");
-  return `<table class="data-table"><tr><th>Academic Year</th><th>Course Name</th><th>Year (Class)</th><th>Section</th><th>Semester</th><th>Subject</th><th>Hr/Week</th><th>Pass %</th></tr>${body}</table>`;
+  const passHeader = showPassPercentage ? "<th>Pass %</th>" : "";
+  return `<table class="data-table"><tr><th>Academic Year</th><th>Course Name</th><th>Year (Class)</th><th>Section</th><th>Semester</th><th>Subject</th><th>Hr/Week</th>${passHeader}</tr>${body}</table>`;
+}
+
+/** Renders the Current / Past Teaching Assignments tables under their own
+ *  labeled subheadings, kept visually separate rather than intermixed —
+ *  Pass % only ever applies to (and is only shown on) the Past table. */
+function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }): string {
+  const currentBlock = groups.current.length
+    ? `<div class="subheading">Current Teaching Assignments</div>${renderTeachingLoadTable(groups.current, false)}`
+    : "";
+  const pastBlock = groups.past.length
+    ? `<div class="subheading">Past Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`
+    : "";
+  return currentBlock + pastBlock;
 }
 
 /** Renders a section's heading + body together, or nothing at all when the
@@ -373,19 +385,21 @@ export function getResumeHTML(data: ResumeData): string {
   const experienceBody = experienceEntry + experienceBullets + previousInstitutionEntries;
 
   // ── Teaching load ────────────────────────────────────────────────────────
-  // One unified table — current course/section assignments, the Module 2 course
-  // summary, and Module 8's present/past tenure records (past rows carry a pass %).
+  // Current and past assignments/tenure records, kept as two separate tables —
+  // current course/section assignments + the Module 2 course summary + Module 8's
+  // present tenure records vs. structured past assignments + Module 8's past
+  // tenure records (past rows carry a pass %, current ones never do).
   const teachingLoadBullets = bullets([
     ap?.teachingAssignment?.primaryTeachingRole && `Primary Teaching Role: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
   ]);
-  const teachingLoadRows = buildTeachingLoadRows({
+  const teachingLoadGroups = buildTeachingLoadRows({
     currentAssignments: data.teachingAssignments,
     staticCourses: ap?.teachingAssignment?.courses,
     tenurePresentRecords: ap?.tenurePresentRecords,
     tenurePastRecords: ap?.tenurePastRecords,
   });
-  const teachingLoadTable = renderTeachingLoadTable(teachingLoadRows);
-  const teachingLoadBody = teachingLoadBullets + teachingLoadTable;
+  const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups);
+  const teachingLoadBody = teachingLoadBullets + teachingLoadTables;
 
   // ── Research publications ───────────────────────────────────────────────
   const publicationStatsBullets = bullets([

@@ -201,7 +201,22 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
       {value.length === 0 && <p className="text-xs text-muted-foreground">No teaching assignments added yet.</p>}
 
-      {value.map((row) => {
+      {value.filter((r) => !r.isPast).length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Current</p>
+          {value.filter((r) => !r.isPast).map(renderRow)}
+        </div>
+      )}
+      {value.filter((r) => r.isPast).length > 0 && (
+        <div className="space-y-3 border-t pt-3">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Past</p>
+          {value.filter((r) => r.isPast).map(renderRow)}
+        </div>
+      )}
+    </div>
+  );
+
+  function renderRow(row: StagedTeachingRow) {
         const course = courses.find((c) => c.id === row.courseId) ?? null;
         const yearOptions = course ? Array.from({ length: course.durationYears }, (_, i) => i + 1) : [];
         const key = `${row.courseId}_${row.year}`;
@@ -412,7 +427,5 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
             )}
           </div>
         );
-      })}
-    </div>
-  );
+  }
 }

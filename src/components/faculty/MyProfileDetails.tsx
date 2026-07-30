@@ -98,7 +98,7 @@ export function MyProfileDetails() {
 
       <SectionCard icon={BookOpen} title="Teaching Load" accent="amber">
         <TeachingLoadTable
-          rows={buildTeachingLoadRows({
+          groups={buildTeachingLoadRows({
             currentAssignments: teachingAssignments,
             staticCourses: profile.academicProfile?.teachingAssignment?.courses,
             tenurePresentRecords: profile.academicProfile?.tenurePresentRecords,

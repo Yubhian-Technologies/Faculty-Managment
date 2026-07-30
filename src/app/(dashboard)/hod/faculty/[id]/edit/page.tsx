@@ -426,7 +426,7 @@ export default function EditFacultyPage() {
         <CardHeader><CardTitle className="text-base">Teaching Load Summary</CardTitle></CardHeader>
         <CardContent>
           <TeachingLoadTable
-            rows={buildTeachingLoadRows({
+            groups={buildTeachingLoadRows({
               currentAssignments: teachingRows.map((r) => ({
                 courseName: r.courseName,
                 year: r.year,
