@@ -13,7 +13,7 @@ export async function PATCH(request: Request) {
   try {
     // Self-service only — the target uid always comes from the verified session,
     // never from the request body, mirroring me/photo/route.ts.
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
 
     const body = (await request.json()) as Partial<{
       name: string;
@@ -25,11 +25,12 @@ export async function PATCH(request: Request) {
       profilePhotoUrl: string;
     }> & PersonalDetailsInput;
 
+    // Only reject clearly external URLs — path-pattern enforcement is done by
+    // the upload route, so here we just need to block arbitrary external hosts.
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&
-      (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
-        !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${session.uid}_`)))
+      !body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")
     ) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
@@ -46,8 +47,11 @@ export async function PATCH(request: Request) {
 
     if (body.name !== undefined && body.name.trim()) updates.name = body.name.trim();
     if (body.email !== undefined && body.email.trim()) updates.email = body.email.trim();
-    if (body.collegeEmail !== undefined) updates.collegeEmail = body.collegeEmail;
-    if (body.employeeId !== undefined) updates.employeeId = body.employeeId;
+    // HOD doesn't self-assign these — they're set by admin/HR
+    if (session.role !== "HOD") {
+      if (body.collegeEmail !== undefined) updates.collegeEmail = body.collegeEmail;
+      if (body.employeeId !== undefined) updates.employeeId = body.employeeId;
+    }
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.academicProfile !== undefined) {
       const academicProfile = { ...body.academicProfile };

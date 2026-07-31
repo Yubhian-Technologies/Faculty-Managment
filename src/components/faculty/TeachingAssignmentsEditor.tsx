@@ -37,6 +37,7 @@ export interface StagedTeachingRow {
   assignmentSemester?: string;
   isPast?: boolean;
   passPercentage?: number;
+  studentFeedback?: number;
 }
 
 const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -56,7 +57,7 @@ function emptyRow(isPast = false): StagedTeachingRow {
     slots: [],
     assignmentAcademicYear: "",
     assignmentSemester: "",
-    ...(isPast ? { isPast: true, passPercentage: undefined } : {}),
+    ...(isPast ? { isPast: true, passPercentage: undefined, studentFeedback: undefined } : {}),
   };
 }
 
@@ -342,6 +343,22 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                       onChange={(e) => {
                         const raw = e.target.value;
                         updateRow(row.localId, { passPercentage: raw === "" ? undefined : Math.min(100, Math.max(0, Number(raw))) });
+                      }}
+                      placeholder="0-100"
+                    />
+                  </div>
+                )}
+                {row.isPast && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Student Feedback %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={row.studentFeedback ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        updateRow(row.localId, { studentFeedback: raw === "" ? undefined : Math.min(100, Math.max(0, Number(raw))) });
                       }}
                       placeholder="0-100"
                     />

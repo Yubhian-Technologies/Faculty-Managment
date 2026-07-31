@@ -6,7 +6,7 @@ interface Props {
   groups: TeachingLoadGroups;
 }
 
-function LoadTable({ rows, showPassPercentage }: { rows: TeachingLoadRow[]; showPassPercentage: boolean }) {
+function LoadTable({ rows, showPastColumns }: { rows: TeachingLoadRow[]; showPastColumns: boolean }) {
   return (
     <div className="overflow-x-auto rounded-md border">
       <table className="w-full text-xs">
@@ -19,7 +19,8 @@ function LoadTable({ rows, showPassPercentage }: { rows: TeachingLoadRow[]; show
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Semester</th>
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Subject</th>
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Hr/Week</th>
-            {showPassPercentage && <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Pass %</th>}
+            {showPastColumns && <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Pass %</th>}
+            {showPastColumns && <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Student Feedback %</th>}
           </tr>
         </thead>
         <tbody>
@@ -32,7 +33,8 @@ function LoadTable({ rows, showPassPercentage }: { rows: TeachingLoadRow[]; show
               <td className="p-2 whitespace-nowrap">{r.semester ?? "—"}</td>
               <td className="p-2 whitespace-nowrap">{r.subject || "—"}</td>
               <td className="p-2 whitespace-nowrap">{r.hoursPerWeek ?? "—"}</td>
-              {showPassPercentage && <td className="p-2 whitespace-nowrap">{r.passPercentage != null ? `${r.passPercentage}%` : "—"}</td>}
+              {showPastColumns && <td className="p-2 whitespace-nowrap">{r.passPercentage != null ? `${r.passPercentage}%` : "—"}</td>}
+              {showPastColumns && <td className="p-2 whitespace-nowrap">{r.studentFeedback != null ? `${r.studentFeedback}%` : "—"}</td>}
             </tr>
           ))}
         </tbody>
@@ -54,13 +56,13 @@ export function TeachingLoadTable({ groups }: Props) {
       {groups.current.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Teaching Assignments</p>
-          <LoadTable rows={groups.current} showPassPercentage={false} />
+          <LoadTable rows={groups.current} showPastColumns={false} />
         </div>
       )}
       {groups.past.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Past Teaching Assignments</p>
-          <LoadTable rows={groups.past} showPassPercentage />
+          <LoadTable rows={groups.past} showPastColumns />
         </div>
       )}
     </div>
