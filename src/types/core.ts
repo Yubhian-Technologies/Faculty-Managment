@@ -437,9 +437,16 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
   PART_TIME: "Part-Time",
 };
 
-export type FacultyStatus = "ACTIVE" | "ON_LEAVE" | "RESIGNED" | "RETIRED";
+// INTERVIEW_DONE — set by provisionFacultyFromOffer the moment an offer letter is
+// sent (a FacultyMember + login already exist at that point, well before the
+// candidate has actually accepted or joined) and flipped to ACTIVE once the offer
+// is marked ACCEPTED (see offer-letters/[id]/route.ts PATCH). Faculty in this
+// status haven't joined yet, so their joiningDate is a proposed/expected date —
+// UI should read "Expected to join on <date>", not "Joined".
+export type FacultyStatus = "INTERVIEW_DONE" | "ACTIVE" | "ON_LEAVE" | "RESIGNED" | "RETIRED";
 
 export const FACULTY_STATUS_LABELS: Record<FacultyStatus, string> = {
+  INTERVIEW_DONE: "Interview Done",
   ACTIVE: "Active",
   ON_LEAVE: "On Leave",
   RESIGNED: "Resigned",
@@ -508,6 +515,9 @@ export interface FacultyMember {
   researchExperience?: number; // years of research experience
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile (Management dashboard / role-aware forms)
 
+  joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
+  appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
+
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -523,6 +533,7 @@ export interface DegreeDetail {
   universityOrInstitute: string;
   percentageOrDivision: string;
   yearOfCompletion: number;
+  certificateUrl?: string; // Google Drive public-view link for the degree/transcript certificate
 }
 
 export type PhdStatus = "AWARDED" | "PURSUING";
@@ -564,6 +575,7 @@ export interface Publication {
   journalOrConference: string;
   publicationYear: number;
   indexing?: string; // e.g. SCI, Scopus, WoS, UGC-CARE
+  driveLink?: string; // Google Drive public-view link for the published paper
 }
 
 export interface FundedProject {

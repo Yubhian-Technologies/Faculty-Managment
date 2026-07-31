@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { ExternalLink } from "lucide-react";
 import type { FacultyProfileFields } from "@/types";
 
 interface Props {
@@ -41,6 +45,62 @@ function DegreeView({ label, degree }: { label: string; degree: FacultyProfileFi
       <Field label="University / Institute" value={degree?.universityOrInstitute} />
       <Field label="Percentage / Division" value={degree?.percentageOrDivision} />
       <Field label="Year of Completion" value={degree?.yearOfCompletion} />
+      {degree?.certificateUrl && (
+        <div className="col-span-2 sm:col-span-4">
+          <a
+            href={degree.certificateUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />View Certificate
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PUBS_PREVIEW = 3;
+
+function PublicationsList({ publications }: { publications: NonNullable<FacultyProfileFields["publications"]> }) {
+  const [expanded, setExpanded] = useState(false);
+  const sorted = [...publications].sort((a, b) => (b.publicationYear ?? 0) - (a.publicationYear ?? 0));
+  const visible = expanded ? sorted : sorted.slice(0, PUBS_PREVIEW);
+  const hidden = sorted.length - PUBS_PREVIEW;
+
+  return (
+    <div className="space-y-2">
+      {visible.map((pub, i) => (
+        <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <Field label="Title" value={pub.title} />
+          <Field label="Co-Authors" value={pub.coAuthors} />
+          <Field label="Journal / Conference" value={pub.journalOrConference} />
+          <Field label="Year" value={pub.publicationYear} />
+          <Field label="Indexing" value={pub.indexing} />
+          {pub.driveLink && (
+            <div className="col-span-2 sm:col-span-5">
+              <a
+                href={pub.driveLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />View Publication
+              </a>
+            </div>
+          )}
+        </div>
+      ))}
+      {sorted.length > PUBS_PREVIEW && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-xs font-medium text-primary hover:underline mt-1"
+        >
+          {expanded ? "Show less" : `Show ${hidden} more`}
+        </button>
+      )}
     </div>
   );
 }
@@ -72,7 +132,7 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
         </div>
       </Section>
 
-      <Section number={2} title="Previous Institutions Worked">
+      <Section number={2} title="Previous Experience">
         <div className="space-y-2">
           <SubLabel>Previous Institutions Worked At</SubLabel>
           {(p.previousInstitutions ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
@@ -110,19 +170,10 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
       <Section number={3} title="Research Publications">
         <div className="space-y-2">
           <SubLabel>Publications</SubLabel>
-          {(p.publications ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-            <div className="space-y-2">
-              {p.publications?.map((pub, i) => (
-                <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  <Field label="Title" value={pub.title} />
-                  <Field label="Co-Authors" value={pub.coAuthors} />
-                  <Field label="Journal / Conference" value={pub.journalOrConference} />
-                  <Field label="Year" value={pub.publicationYear} />
-                  <Field label="Indexing" value={pub.indexing} />
-                </div>
-              ))}
-            </div>
-          )}
+          {(p.publications ?? []).length === 0
+            ? <p className="text-xs text-muted-foreground">None recorded.</p>
+            : <PublicationsList publications={p.publications!} />
+          }
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="First/Corresponding Author" value={p.publicationsFirstOrCorrespondingAuthor} />

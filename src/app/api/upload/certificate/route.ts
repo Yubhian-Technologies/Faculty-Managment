@@ -2,16 +2,28 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminStorage } from "@/lib/firebase/admin";
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+const MIME_TO_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "application/pdf": "pdf",
+};
+const EXT_TO_EXT: Record<string, string> = {
+  png: "png",
+  jpg: "jpg",
+  jpeg: "jpg",
+  pdf: "pdf",
+};
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember(
-      "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "ACCOUNTS", "SUPER_ADMIN"
+    const session = await requireRole(
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER",
+      "COLLEGE_OFFICE", "ADMINISTRATION", "SUPER_ADMIN"
     );
 
     const formData = await request.formData();
@@ -21,8 +33,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (file.type !== "application/pdf") {
-      return NextResponse.json({ error: "Only PDF files are accepted" }, { status: 400 });
+    // Prefer MIME type; fall back to filename extension when the multipart
+    // Content-Type header is missing (happens in some Node.js/Next.js versions).
+    const fileExt = (file as File).name?.split(".").pop()?.toLowerCase() ?? "";
+    const ext = MIME_TO_EXT[file.type] ?? EXT_TO_EXT[fileExt];
+    if (!ext) {
+      return NextResponse.json({ error: "Only PNG, JPEG, or PDF files are accepted" }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -30,16 +46,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "File exceeds 5 MB limit" }, { status: 400 });
     }
 
-    const filename = `${Date.now()}_${(file as File).name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const path = `colleges/${session.collegeId}/certificates/${filename}`;
-
     const downloadToken = randomUUID();
+    const path = `degree-certificates/${session.uid}/${randomUUID()}.${ext}`;
+
     const bucket = getAdminStorage().bucket();
     const fileRef = bucket.file(path);
 
+    const contentType = file.type || (ext === "pdf" ? "application/pdf" : ext === "png" ? "image/png" : "image/jpeg");
     await fileRef.save(buffer, {
       metadata: {
-        contentType: "application/pdf",
+        contentType,
         metadata: { firebaseStorageDownloadTokens: downloadToken },
       },
       resumable: false,

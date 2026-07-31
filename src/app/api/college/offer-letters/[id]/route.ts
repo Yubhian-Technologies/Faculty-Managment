@@ -35,7 +35,10 @@ export async function PATCH(
       provisioning = await provisionFacultyFromOffer(db, session.collegeId, id);
     }
 
-    // When candidate formally accepts, mark them APPROVED
+    // When candidate formally accepts, mark them APPROVED and flip the faculty
+    // record (provisioned as INTERVIEW_DONE when the offer was sent) to ACTIVE —
+    // they've now actually confirmed and are expected to join on the date already
+    // recorded on that record.
     if (body.status === "ACCEPTED") {
       const letterSnap = await db
         .collection("colleges")
@@ -51,6 +54,17 @@ export async function PATCH(
           .collection("candidates")
           .doc(candidateId)
           .update({ status: "APPROVED", updatedAt: now });
+
+        const facultySnap = await db
+          .collection("colleges")
+          .doc(session.collegeId)
+          .collection("facultyMembers")
+          .where("candidateId", "==", candidateId)
+          .limit(1)
+          .get();
+        if (!facultySnap.empty) {
+          await facultySnap.docs[0].ref.update({ status: "ACTIVE", updatedAt: now });
+        }
       }
     }
 

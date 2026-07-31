@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, IdCard, GraduationCap } from "lucide-react";
+import { ArrowLeft, User, IdCard, GraduationCap, FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import type { FacultyMember, FacultyStatus } from "@/types";
 import { formatDate } from "@/lib/utils";
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  INTERVIEW_DONE: "outline",
   ACTIVE: "default",
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
@@ -64,7 +65,7 @@ export default function PrincipalFacultyProfilePage() {
               <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{faculty.phone || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{faculty.department}</p></div>
               <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{DESIGNATION_LABELS[faculty.designation]}</p></div>
-              <div><p className="text-xs text-muted-foreground">Date of Joining</p><p className="text-sm font-medium">{faculty.joiningDate ? formatDate(faculty.joiningDate) : "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">{faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}</p><p className="text-sm font-medium">{faculty.joiningDate ? formatDate(faculty.joiningDate) : "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Qualification</p><p className="text-sm font-medium">{faculty.qualification || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Specialization</p><p className="text-sm font-medium">{faculty.specialization || "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Experience (yrs)</p><p className="text-sm font-medium">{faculty.experienceYears}</p></div>
@@ -78,6 +79,33 @@ export default function PrincipalFacultyProfilePage() {
           <SectionCard icon={GraduationCap} title="Academic Profile" accent="emerald">
             <ProfileFieldsView profile={faculty.academicProfile} includeTeachingAssignment />
           </SectionCard>
+
+          {(faculty.joiningLetterUrl || faculty.appointmentLetterUrl) && (
+            <SectionCard icon={FileText} title="Documents" accent="amber">
+              <div className="flex flex-wrap gap-4">
+                {faculty.joiningLetterUrl && (
+                  <a
+                    href={faculty.joiningLetterUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <FileText className="h-4 w-4" />Joining Letter
+                  </a>
+                )}
+                {faculty.appointmentLetterUrl && (
+                  <a
+                    href={faculty.appointmentLetterUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <FileText className="h-4 w-4" />Appointment Letter
+                  </a>
+                )}
+              </div>
+            </SectionCard>
+          )}
         </>
       )}
     </div>

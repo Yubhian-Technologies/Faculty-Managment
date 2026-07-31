@@ -13,9 +13,10 @@ export async function PATCH(
     const { id } = await params;
     const body = (await request.json()) as {
       hoursPerWeek?: number;
-      pastAcademicYear?: string;
-      pastSemester?: string;
-      passPercentage?: number;
+      assignmentAcademicYear?: string;
+      assignmentSemester?: string;
+      passPercentage?: number | null;
+      studentFeedback?: number | null;
     };
 
     const db = getAdminDb();
@@ -25,9 +26,12 @@ export async function PATCH(
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.hoursPerWeek != null) updates.hoursPerWeek = Number(body.hoursPerWeek);
-    if (body.pastAcademicYear != null) updates.pastAcademicYear = body.pastAcademicYear;
-    if (body.pastSemester != null) updates.pastSemester = body.pastSemester;
+    if (body.assignmentAcademicYear != null) updates.assignmentAcademicYear = body.assignmentAcademicYear;
+    if (body.assignmentSemester != null) updates.assignmentSemester = body.assignmentSemester;
     if (body.passPercentage != null) updates.passPercentage = Number(body.passPercentage);
+    else if (body.passPercentage === null) updates.passPercentage = null;
+    if (body.studentFeedback != null) updates.studentFeedback = Number(body.studentFeedback);
+    else if (body.studentFeedback === null) updates.studentFeedback = null;
 
     await ref.update(updates);
     return NextResponse.json({ success: true });

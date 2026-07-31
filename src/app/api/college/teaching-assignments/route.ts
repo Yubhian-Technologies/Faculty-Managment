@@ -100,9 +100,10 @@ export async function POST(request: Request) {
       totalHoursAllotted?: number;
       slots?: { day: string; periodNumber: number; classroom?: string }[];
       isPast?: boolean;
-      pastAcademicYear?: string;
-      pastSemester?: string;
+      assignmentAcademicYear?: string;
+      assignmentSemester?: string;
       passPercentage?: number;
+      studentFeedback?: number;
     };
 
     const { facultyId, facultyName, courseId, sectionId, subjectId } = body;
@@ -166,11 +167,12 @@ export async function POST(request: Request) {
         assignedByName: session.role,
         createdAt: now,
         updatedAt: now,
+        assignmentAcademicYear: body.assignmentAcademicYear ?? "",
+        assignmentSemester: body.assignmentSemester ?? "",
         ...(body.isPast ? {
           isPast: true,
-          pastAcademicYear: body.pastAcademicYear ?? "",
-          pastSemester: body.pastSemester ?? "",
           ...(body.passPercentage != null ? { passPercentage: Number(body.passPercentage) } : {}),
+          ...(body.studentFeedback != null ? { studentFeedback: Number(body.studentFeedback) } : {}),
         } : {}),
       });
 
