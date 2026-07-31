@@ -15,6 +15,7 @@ import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/s
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
+import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import {
@@ -80,6 +81,8 @@ export default function EditFacultyPage() {
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
+  const [joiningLetterUrl, setJoiningLetterUrl] = useState<string>("");
+  const [appointmentLetterUrl, setAppointmentLetterUrl] = useState<string>("");
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [teachingLoaded, setTeachingLoaded] = useState(false);
@@ -143,6 +146,8 @@ export default function EditFacultyPage() {
         setAcademicProfile((m.academicProfile as Partial<FacultyProfileFields>) ?? {});
         setPendingPreference((m.pendingTeachingPreference as PendingTeachingPreference | undefined) ?? null);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
+        setJoiningLetterUrl((m.joiningLetterUrl as string) ?? "");
+        setAppointmentLetterUrl((m.appointmentLetterUrl as string) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));
@@ -151,7 +156,7 @@ export default function EditFacultyPage() {
   useEffect(() => {
     fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(facultyId)}`)
       .then((r) => r.json() as Promise<{
-        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number; isPast?: boolean; assignmentAcademicYear?: string; assignmentSemester?: string; passPercentage?: number }>;
+        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number; isPast?: boolean; assignmentAcademicYear?: string; assignmentSemester?: string; passPercentage?: number; studentFeedback?: number }>;
         timetableSlots: Array<{ id: string; assignmentId: string; day: StagedTeachingRow["slots"][number]["day"]; periodNumber: number }>;
       }>)
       .then((d) => {
@@ -172,6 +177,7 @@ export default function EditFacultyPage() {
           assignmentAcademicYear: a.assignmentAcademicYear,
           assignmentSemester: a.assignmentSemester,
           passPercentage: a.passPercentage,
+          studentFeedback: a.studentFeedback,
           slots: (d.timetableSlots ?? [])
             .filter((s) => s.assignmentId === a.id)
             .map((s) => ({ localId: s.id, id: s.id, day: s.day, periodNumber: s.periodNumber })),
@@ -240,6 +246,8 @@ export default function EditFacultyPage() {
           ...personalDetails,
           academicProfile,
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
+          joiningLetterUrl,
+          appointmentLetterUrl,
         }),
       });
       if (res.status === 409) {
@@ -419,6 +427,29 @@ export default function EditFacultyPage() {
             </p>
           )}
           <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Documents</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">Upload signed copies of the joining letter and appointment order for this faculty member.</p>
+          <DocumentUploadField
+            label="Joining Letter"
+            value={joiningLetterUrl || undefined}
+            uploadEndpoint="/api/upload/faculty-document"
+            extraFields={{ facultyId, docType: "joining-letter" }}
+            onUploaded={(url) => setJoiningLetterUrl(url)}
+            onRemoved={() => setJoiningLetterUrl("")}
+          />
+          <DocumentUploadField
+            label="Appointment Letter"
+            value={appointmentLetterUrl || undefined}
+            uploadEndpoint="/api/upload/faculty-document"
+            extraFields={{ facultyId, docType: "appointment-letter" }}
+            onUploaded={(url) => setAppointmentLetterUrl(url)}
+            onRemoved={() => setAppointmentLetterUrl("")}
+          />
         </CardContent>
       </Card>
 

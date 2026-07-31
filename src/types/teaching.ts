@@ -75,6 +75,7 @@ export interface TeachingAssignment {
   assignmentAcademicYear?: string;
   assignmentSemester?: string;
   passPercentage?: number;
+  studentFeedback?: number;   // average student feedback rating for this teaching period, as a %
 }
 
 // ─── Timetable Slot ───────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ export interface TeachingLoadRow {
   subject?: string;
   hoursPerWeek?: number;
   passPercentage?: number;
+  studentFeedback?: number;
 }
 
 export interface TeachingLoadGroups {
@@ -38,6 +39,7 @@ interface CurrentAssignmentLike {
   assignmentSemester?: string;
   isPast?: boolean;
   passPercentage?: number;
+  studentFeedback?: number;
 }
 
 interface StaticCourseLike {
@@ -66,6 +68,7 @@ function toRow(a: CurrentAssignmentLike): TeachingLoadRow {
     subject: a.subjectCode ? `${a.subjectName ?? ""} (${a.subjectCode})`.trim() : a.subjectName,
     hoursPerWeek: a.hoursPerWeek,
     passPercentage: a.isPast ? a.passPercentage : undefined,
+    studentFeedback: a.isPast ? a.studentFeedback : undefined,
   };
 }
 

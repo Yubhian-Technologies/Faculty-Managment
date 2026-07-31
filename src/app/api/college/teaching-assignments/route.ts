@@ -103,6 +103,7 @@ export async function POST(request: Request) {
       assignmentAcademicYear?: string;
       assignmentSemester?: string;
       passPercentage?: number;
+      studentFeedback?: number;
     };
 
     const { facultyId, facultyName, courseId, sectionId, subjectId } = body;
@@ -171,6 +172,7 @@ export async function POST(request: Request) {
         ...(body.isPast ? {
           isPast: true,
           ...(body.passPercentage != null ? { passPercentage: Number(body.passPercentage) } : {}),
+          ...(body.studentFeedback != null ? { studentFeedback: Number(body.studentFeedback) } : {}),
         } : {}),
       });
 

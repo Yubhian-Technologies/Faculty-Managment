@@ -9,6 +9,7 @@ interface DegreeDetail {
   universityOrInstitute?: string;
   percentageOrDivision?: string;
   yearOfCompletion?: number;
+  certificateUrl?: string;
 }
 
 interface CourseAssignment {
@@ -47,6 +48,7 @@ interface Publication {
   journalOrConference?: string;
   publicationYear?: number;
   indexing?: string;
+  driveLink?: string;
 }
 
 interface FundedProject {
@@ -207,6 +209,7 @@ export interface ResumeData {
     assignmentSemester?: string;
     isPast?: boolean;
     passPercentage?: number;
+    studentFeedback?: number;
   }[];
 }
 
@@ -260,18 +263,18 @@ function detailTable(rows: string): string {
 }
 
 /** Renders one Teaching Load table — Academic Year / Course Name / Year(Class) /
- *  Section / Semester / Subject / Hr-Week (+ Pass % when `showPassPercentage`) —
+ *  Section / Semester / Subject / Hr-Week (+ Pass % + Student Feedback % for past) —
  *  leaving cells blank where a given row's source doesn't carry that field. */
-function renderTeachingLoadTable(rows: TeachingLoadRow[], showPassPercentage: boolean): string {
+function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boolean): string {
   if (!rows.length) return "";
   const body = rows
     .map(
       (r) =>
-        `<tr><td>${esc(r.academicYear)}</td><td>${esc(r.courseName)}</td><td>${esc(r.year)}</td><td>${esc(r.section)}</td><td>${esc(r.semester)}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td>${showPassPercentage ? `<td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td>` : ""}</tr>`
+        `<tr><td>${esc(r.academicYear)}</td><td>${esc(r.courseName)}</td><td>${esc(r.year)}</td><td>${esc(r.section)}</td><td>${esc(r.semester)}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td>${showPastColumns ? `<td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td><td>${r.studentFeedback != null ? `${esc(r.studentFeedback)}%` : ""}</td>` : ""}</tr>`
     )
     .join("");
-  const passHeader = showPassPercentage ? "<th>Pass %</th>" : "";
-  return `<table class="data-table"><tr><th>Academic Year</th><th>Course Name</th><th>Year (Class)</th><th>Section</th><th>Semester</th><th>Subject</th><th>Hr/Week</th>${passHeader}</tr>${body}</table>`;
+  const pastHeaders = showPastColumns ? "<th>Pass %</th><th>Student Feedback %</th>" : "";
+  return `<table class="data-table"><tr><th>Academic Year</th><th>Course Name</th><th>Year (Class)</th><th>Section</th><th>Semester</th><th>Subject</th><th>Hr/Week</th>${pastHeaders}</tr>${body}</table>`;
 }
 
 /** Renders the Current / Past Teaching Assignments tables under their own
@@ -282,7 +285,7 @@ function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: Te
     ? `<div class="subheading">Current Teaching Assignments</div>${renderTeachingLoadTable(groups.current, false)}`
     : "";
   const pastBlock = groups.past.length
-    ? `<div class="subheading">Past Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`
+    ? `<div class="subheading">Past Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Pass % + Feedback %
     : "";
   return currentBlock + pastBlock;
 }
@@ -296,11 +299,16 @@ function renderSection(title: string, body: string): string {
 
 function degreeEntry(label: string, d?: DegreeDetail): string {
   if (!d || (!d.degreeAndBranch && !d.universityOrInstitute)) return "";
-  return entry(
-    d.universityOrInstitute || label,
-    d.yearOfCompletion ? String(d.yearOfCompletion) : "",
-    `${label}${d.degreeAndBranch ? ` — ${d.degreeAndBranch}` : ""}`,
-    d.percentageOrDivision || ""
+  const certLink = d.certificateUrl
+    ? `<div class="doc-link"><a href="${esc(d.certificateUrl)}" target="_blank">View Certificate ↗</a></div>`
+    : "";
+  return (
+    entry(
+      d.universityOrInstitute || label,
+      d.yearOfCompletion ? String(d.yearOfCompletion) : "",
+      `${label}${d.degreeAndBranch ? ` — ${d.degreeAndBranch}` : ""}`,
+      d.percentageOrDivision || ""
+    ) + certLink
   );
 }
 
@@ -413,10 +421,25 @@ export function getResumeHTML(data: ResumeData): string {
     (ap?.totalCitations || ap?.hIndex || ap?.i10Index) &&
       `Citations: ${ap?.totalCitations ?? 0} · h-Index: ${ap?.hIndex ?? 0} · i10-Index: ${ap?.i10Index ?? 0}`,
   ]);
+  const publicationEntries = ap?.publications?.length
+    ? ap.publications
+        .filter((p) => p.title)
+        .map((p, i) => {
+          const meta = [p.coAuthors, p.journalOrConference].filter(Boolean).join(" · ");
+          const indexingAndYear = [p.indexing, p.publicationYear ? String(p.publicationYear) : ""].filter(Boolean).join(" · ");
+          const link = p.driveLink
+            ? `<div class="doc-link"><a href="${esc(p.driveLink)}" target="_blank">View Publication ↗</a></div>`
+            : "";
+          return (
+            entry(`${i + 1}. ${p.title}`, indexingAndYear, meta) + link
+          );
+        })
+        .join("")
+    : "";
   const booksEntries = ap?.authoredBooks?.length
     ? ap.authoredBooks.map((b) => entry(b.title || "Authored Book", b.year ? String(b.year) : "", b.publisher || "")).join("")
     : "";
-  const publicationsBody = publicationStatsBullets + booksEntries;
+  const publicationsBody = publicationEntries + publicationStatsBullets + booksEntries;
 
   // ── Projects, grants & consultancy ──────────────────────────────────────
   const fundedProjectEntries = ap?.fundedProjects?.length
@@ -568,6 +591,10 @@ export function getResumeHTML(data: ResumeData): string {
   table.data-table th { background: #e5e7eb; color: #111827; padding: 4px 8px; font-size: 11.5px; text-align: left; border: 1px solid #9ca3af; }
   table.data-table td { padding: 4px 8px; font-size: 11.5px; border: 1px solid #d1d5db; }
 
+  .doc-link { margin: 2px 0 6px; font-size: 11px; }
+  .doc-link a { color: #1d4ed8; text-decoration: none; }
+  .doc-link a:hover { text-decoration: underline; }
+
   .footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #d1d5db; font-size: 10px; color: #6b7280; text-align: center; }
 </style>
 </head>
@@ -591,7 +618,7 @@ export function getResumeHTML(data: ResumeData): string {
 
   ${renderSection("Personal & Contact Details", personalBody)}
   ${renderSection("Education", educationBody)}
-  ${renderSection("Professional Experience", experienceBody)}
+  ${renderSection("Previous Experience", experienceBody)}
   ${renderSection("Teaching Load", teachingLoadBody)}
   ${renderSection("Research Publications", publicationsBody)}
   ${renderSection("Projects, Grants & Consultancy", grantsBody)}
