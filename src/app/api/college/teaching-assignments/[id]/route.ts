@@ -15,7 +15,8 @@ export async function PATCH(
       hoursPerWeek?: number;
       assignmentAcademicYear?: string;
       assignmentSemester?: string;
-      passPercentage?: number;
+      passPercentage?: number | null;
+      studentFeedback?: number | null;
     };
 
     const db = getAdminDb();
@@ -28,6 +29,9 @@ export async function PATCH(
     if (body.assignmentAcademicYear != null) updates.assignmentAcademicYear = body.assignmentAcademicYear;
     if (body.assignmentSemester != null) updates.assignmentSemester = body.assignmentSemester;
     if (body.passPercentage != null) updates.passPercentage = Number(body.passPercentage);
+    else if (body.passPercentage === null) updates.passPercentage = null;
+    if (body.studentFeedback != null) updates.studentFeedback = Number(body.studentFeedback);
+    else if (body.studentFeedback === null) updates.studentFeedback = null;
 
     await ref.update(updates);
     return NextResponse.json({ success: true });

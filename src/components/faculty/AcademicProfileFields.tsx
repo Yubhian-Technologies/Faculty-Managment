@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { Plus, Trash2 } from "lucide-react";
 import type {
   FacultyProfileFields,
@@ -26,8 +27,8 @@ interface Props {
   hideFinancialModule?: boolean;
 }
 
-const EMPTY_DEGREE: DegreeDetail = { degreeAndBranch: "", universityOrInstitute: "", percentageOrDivision: "", yearOfCompletion: new Date().getFullYear() };
-const EMPTY_PUBLICATION: Publication = { title: "", coAuthors: "", journalOrConference: "", publicationYear: new Date().getFullYear(), indexing: "" };
+const EMPTY_DEGREE: DegreeDetail = { degreeAndBranch: "", universityOrInstitute: "", percentageOrDivision: "", yearOfCompletion: new Date().getFullYear(), certificateUrl: "" };
+const EMPTY_PUBLICATION: Publication = { title: "", coAuthors: "", journalOrConference: "", publicationYear: new Date().getFullYear(), indexing: "", driveLink: "" };
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
@@ -83,7 +84,7 @@ function TextInput({ label, value, onChange, placeholder }: { label: string; val
 function DegreeFields({ label, value, onChange }: { label: string; value: DegreeDetail | undefined; onChange: (v: DegreeDetail) => void }) {
   const v = value ?? EMPTY_DEGREE;
   return (
-    <div className="space-y-2 rounded-lg border p-3">
+    <div className="space-y-3 rounded-lg border p-3">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextInput label="Degree & Branch" value={v.degreeAndBranch} onChange={(x) => onChange({ ...v, degreeAndBranch: x })} />
@@ -91,6 +92,11 @@ function DegreeFields({ label, value, onChange }: { label: string; value: Degree
         <TextInput label="Percentage / Division" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
         <NumInput label="Year of Completion" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
       </div>
+      <CertificateUploadField
+        value={v.certificateUrl}
+        onUploaded={(url) => onChange({ ...v, certificateUrl: url })}
+        onRemoved={() => onChange({ ...v, certificateUrl: "" })}
+      />
     </div>
   );
 }
@@ -183,9 +189,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         <NumInput label="NET/SLET Qualification Year" value={value.netSletQualificationYear} onChange={(v) => set("netSletQualificationYear", v)} />
       </div>
 
-      <SectionTitle>Module 2 — Previous Institutions Worked</SectionTitle>
+      <SectionTitle>Module 2 — Previous Experience</SectionTitle>
       <RepeatingGroup
-        title="Previous Institutions Worked At"
+        title="Previous Experience"
         items={value.previousInstitutions}
         empty={EMPTY_PREVIOUS_INSTITUTION}
         onChange={(v) => set("previousInstitutions", v)}
@@ -226,6 +232,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             <TextInput label="Journal / Conference" value={item.journalOrConference} onChange={(v) => update({ journalOrConference: v })} />
             <NumInput label="Year of Publication" value={item.publicationYear} onChange={(v) => update({ publicationYear: v })} />
             <TextInput label="Indexing" value={item.indexing} onChange={(v) => update({ indexing: v })} placeholder="e.g. SCI, Scopus, WoS, UGC-CARE" />
+            <div className="sm:col-span-2">
+              <TextInput label="Publication Link" value={item.driveLink} onChange={(v) => update({ driveLink: v })} placeholder="Paste your Google Drive public view link" />
+            </div>
           </>
         )}
       />

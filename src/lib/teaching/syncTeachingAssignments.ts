@@ -54,6 +54,7 @@ export async function syncTeachingAssignments(
           ...(row.isPast ? {
             isPast: true,
             ...(row.passPercentage != null ? { passPercentage: row.passPercentage } : {}),
+            ...(row.studentFeedback != null ? { studentFeedback: row.studentFeedback } : {}),
           } : {}),
         }),
       });
@@ -70,6 +71,7 @@ export async function syncTeachingAssignments(
         original?.assignmentAcademicYear !== row.assignmentAcademicYear ||
         original?.assignmentSemester !== row.assignmentSemester ||
         original?.passPercentage !== row.passPercentage ||
+        original?.studentFeedback !== row.studentFeedback ||
         original?.hoursPerWeek !== row.hoursPerWeek
       ) {
         const res = await fetch(`/api/college/teaching-assignments/${row.id}`, {
@@ -80,6 +82,7 @@ export async function syncTeachingAssignments(
             assignmentAcademicYear: row.assignmentAcademicYear ?? "",
             assignmentSemester: row.assignmentSemester ?? "",
             passPercentage: row.passPercentage ?? null,
+            studentFeedback: row.studentFeedback ?? null,
           }),
         });
         if (!res.ok) errors.push(`Updating past record for ${row.subjectName}: ${await parseError(res)}`);

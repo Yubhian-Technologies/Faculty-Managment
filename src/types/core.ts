@@ -515,6 +515,9 @@ export interface FacultyMember {
   researchExperience?: number; // years of research experience
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile (Management dashboard / role-aware forms)
 
+  joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
+  appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
+
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -530,6 +533,7 @@ export interface DegreeDetail {
   universityOrInstitute: string;
   percentageOrDivision: string;
   yearOfCompletion: number;
+  certificateUrl?: string; // Google Drive public-view link for the degree/transcript certificate
 }
 
 export type PhdStatus = "AWARDED" | "PURSUING";
@@ -571,6 +575,7 @@ export interface Publication {
   journalOrConference: string;
   publicationYear: number;
   indexing?: string; // e.g. SCI, Scopus, WoS, UGC-CARE
+  driveLink?: string; // Google Drive public-view link for the published paper
 }
 
 export interface FundedProject {

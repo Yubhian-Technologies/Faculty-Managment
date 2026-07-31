@@ -115,6 +115,64 @@ function atomicRanges(container: HTMLElement): { top: number; bottom: number }[]
   return ranges;
 }
 
+interface PdfLinkAnnotation {
+  pageIndex: number;
+  x: number; y: number; w: number; h: number; // all in mm, relative to page top-left
+  url: string;
+}
+
+/** Walks every <a href> inside `container` and maps their rendered bounding
+ *  rectangles to PDF page coordinates (mm) so jsPDF can stamp invisible
+ *  clickable annotations on top of the rasterized JPEG pages.
+ *
+ *  Must be called while the container is still in the DOM (after html2canvas
+ *  capture but before the container is removed from the document). */
+function extractLinkAnnotations(
+  container: HTMLElement,
+  pxPerMm: number,
+  breaks: number[],
+): PdfLinkAnnotation[] {
+  const origin = container.getBoundingClientRect();
+  const annotations: PdfLinkAnnotation[] = [];
+
+  for (const a of Array.from(container.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+    const href = a.getAttribute("href");
+    if (!href || !href.startsWith("http")) continue;
+
+    const rect = a.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) continue;
+
+    // Canvas-pixel coords relative to the page container
+    const topPx  = (rect.top  - origin.top)  * RENDER_SCALE;
+    const leftPx = (rect.left - origin.left) * RENDER_SCALE;
+    const wPx    = rect.width  * RENDER_SCALE;
+    const hPx    = rect.height * RENDER_SCALE;
+
+    // Which PDF page does this link's top edge fall on?
+    let pageIndex = 0;
+    let pageStartPx = 0;
+    for (let i = 0; i < breaks.length; i++) {
+      const start = i === 0 ? 0 : breaks[i - 1];
+      if (topPx >= start && topPx < breaks[i]) {
+        pageIndex   = i;
+        pageStartPx = start;
+        break;
+      }
+    }
+
+    annotations.push({
+      pageIndex,
+      x: leftPx / pxPerMm,
+      y: (topPx - pageStartPx) / pxPerMm,
+      w: wPx / pxPerMm,
+      h: hPx / pxPerMm,
+      url: href,
+    });
+  }
+
+  return annotations;
+}
+
 /** Walks forward in page-height increments, pulling each proposed break back to
  *  just before any atomic element it would otherwise cut through. Falls back to
  *  cutting anyway if a single element is taller than a full page. */
@@ -178,6 +236,10 @@ export async function renderHtmlToPdf(html: string, filename: string): Promise<v
     const ranges = atomicRanges(target);
     const breaks = computePageBreaks(canvas.height, pageHeightPx, ranges);
 
+    // Extract link positions while the iframe is still in the DOM — after
+    // canvas capture so layout is stable, before the finally block removes it.
+    const linkAnnotations = extractLinkAnnotations(target, pxPerMm, breaks);
+
     const pdf = new jsPDF({ unit: "mm", format: "a4" });
     let cursor = 0;
     breaks.forEach((breakAt, i) => {
@@ -194,6 +256,14 @@ export async function renderHtmlToPdf(html: string, filename: string): Promise<v
       const imgData = sliceCanvas.toDataURL("image/jpeg", 0.95);
       if (i > 0) pdf.addPage();
       pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, sliceHeight / pxPerMm);
+
+      // Stamp invisible clickable hyperlink rectangles over each link on this page
+      for (const ann of linkAnnotations) {
+        if (ann.pageIndex === i) {
+          pdf.link(ann.x, ann.y, ann.w, ann.h, { url: ann.url });
+        }
+      }
+
       cursor = breakAt;
     });
 
