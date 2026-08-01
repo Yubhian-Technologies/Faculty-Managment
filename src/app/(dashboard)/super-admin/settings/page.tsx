@@ -8,10 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
 import { Plus, Trash2, Info } from "lucide-react";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
-import type { FacultyNorms, PositionNorm, RegulatoryBody } from "@/types";
+import type { FacultyNorms, PositionNorm, RegulatoryBody, College, UserRole, NavVisibilitySettings } from "@/types";
+import { ROLE_LABELS } from "@/types";
+import { getNavItemsForRole, groupNavItemsByModule, getRolesWithNavModules } from "@/components/layout/navConfig";
 
 const REGULATORY_BODIES: { value: RegulatoryBody; label: string }[] = [
   { value: "UGC", label: "UGC — University Grants Commission" },
@@ -358,11 +361,185 @@ export default function SuperAdminSettingsPage() {
       </Card>
 
       {/* Save */}
-      <div className="flex justify-end pb-8">
+      <div className="flex justify-end">
         <Button size="lg" onClick={handleSave} loading={isSaving}>
           Save Faculty Norms
         </Button>
       </div>
+
+      <NavVisibilitySection />
     </div>
+  );
+}
+
+// ─── Navigation Visibility ──────────────────────────────────────────────────
+// Per-college, per-role control over which sidebar modules (and individual
+// items within a module, e.g. HOD's "My Work") are visible. Backed by
+// colleges/{collegeId}/settings/navVisibility — see
+// src/app/api/admin/settings/nav-visibility/route.ts.
+
+// Computed once from NAV_ITEMS — any role with at least one `section`-grouped
+// item shows up here automatically, no manual list to keep in sync.
+const NAV_VISIBILITY_ROLES: UserRole[] = getRolesWithNavModules();
+
+function NavVisibilitySection() {
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [collegeId, setCollegeId] = useState<string>("");
+  const [role, setRole] = useState<UserRole>("HOD");
+  const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  const [hiddenItems, setHiddenItems] = useState<string[]>([]);
+  const [updatedMeta, setUpdatedMeta] = useState<Pick<NavVisibilitySettings, "updatedAt" | "updatedByName"> | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/colleges")
+      .then((r) => r.json() as Promise<{ colleges: College[] }>)
+      .then(({ colleges: c }) => {
+        setColleges(c);
+        if (c.length > 0) setCollegeId((prev) => prev || c[0].id);
+      })
+      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
+  }, []);
+
+  useEffect(() => {
+    if (!collegeId) return;
+    setIsLoading(true);
+    fetch(`/api/admin/settings/nav-visibility?collegeId=${collegeId}`)
+      .then((r) => r.json() as Promise<{ settings: NavVisibilitySettings }>)
+      .then(({ settings }) => {
+        setHiddenModules(settings.hiddenModules?.[role] ?? []);
+        setHiddenItems(settings.hiddenItems?.[role] ?? []);
+        setUpdatedMeta({ updatedAt: settings.updatedAt, updatedByName: settings.updatedByName });
+      })
+      .catch(() => toast({ variant: "destructive", title: "Failed to load navigation visibility" }))
+      .finally(() => setIsLoading(false));
+  }, [collegeId, role]);
+
+  const modules = groupNavItemsByModule(getNavItemsForRole(role));
+
+  function toggleModule(moduleName: string, hide: boolean) {
+    setHiddenModules((prev) => (hide ? [...prev, moduleName] : prev.filter((m) => m !== moduleName)));
+  }
+
+  function toggleItem(href: string, hide: boolean) {
+    setHiddenItems((prev) => (hide ? [...prev, href] : prev.filter((h) => h !== href)));
+  }
+
+  async function handleSave() {
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/admin/settings/nav-visibility", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collegeId, role, hiddenModules, hiddenItems }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Navigation visibility saved", description: `Applied to ${ROLE_LABELS[role]} at the selected college.` });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save" });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Navigation Visibility</CardTitle>
+        <CardDescription>
+          Hide unfinished modules (or individual items within a module) from a role&apos;s sidebar — per college, without a code change.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>College</Label>
+            <Select value={collegeId} onValueChange={setCollegeId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a college" />
+              </SelectTrigger>
+              <SelectContent>
+                {colleges.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Role</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {NAV_VISIBILITY_ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {updatedMeta?.updatedAt && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border bg-muted/40 px-3 py-2">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            Last updated {formatDate(updatedMeta.updatedAt)} by {updatedMeta.updatedByName ?? "Super Admin"}
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />)}
+          </div>
+        ) : modules.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            {ROLE_LABELS[role]} has no grouped modules to configure.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {modules.map((mod) => {
+              const moduleHidden = hiddenModules.includes(mod.name);
+              return (
+                <div key={mod.name} className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">{mod.name}</span>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                      <Checkbox
+                        checked={moduleHidden}
+                        onCheckedChange={(checked) => toggleModule(mod.name, checked === true)}
+                      />
+                      Hide entire module
+                    </label>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {mod.items.map((item) => (
+                      <label
+                        key={item.href}
+                        className={`flex items-center gap-2 text-sm px-2 py-1.5 rounded-md ${moduleHidden ? "opacity-50" : "cursor-pointer hover:bg-muted/50"}`}
+                      >
+                        <Checkbox
+                          disabled={moduleHidden}
+                          checked={moduleHidden || hiddenItems.includes(item.href)}
+                          onCheckedChange={(checked) => toggleItem(item.href, checked === true)}
+                        />
+                        {item.label}
+                        <code className="text-[10px] text-muted-foreground ml-auto">{item.href}</code>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex justify-end pt-2">
+          <Button onClick={handleSave} loading={isSaving} disabled={!collegeId || isLoading}>
+            Save Navigation Visibility
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
