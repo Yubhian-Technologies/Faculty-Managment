@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, TenurePastRecord, TenurePresentRecord } from "@/types";
+import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -95,6 +95,40 @@ function num(v: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+// Accepts the template's YYYY-MM-DD format, and falls back to DD-MM-YYYY /
+// DD/MM/YYYY (what Excel re-saves a date cell as under an Indian locale, even
+// when the column was originally filled in as YYYY-MM-DD) — otherwise a
+// malformed string silently becomes a JS "Invalid Date" object that isn't
+// caught by any `undefined` check and throws when Firestore serializes it,
+// failing the entire batch instead of just this row.
+//
+// The final generic-parse fallback is dangerously lenient: V8 happily accepts
+// e.g. a typo'd 5-digit-year "20110-04-15" as a *valid* Date (year 20110)
+// rather than rejecting it, since it's not NaN — but that's far outside
+// Firestore Timestamp's max (year 9999), and blows up batch.commit() for the
+// whole import. sane() rejects anything outside a plausible human-date range.
+function sane(d: Date): Date | undefined {
+  const year = d.getFullYear();
+  return Number.isFinite(d.getTime()) && year >= 1900 && year <= 2100 ? d : undefined;
+}
+
+function parseDate(v: string | undefined): Date | undefined {
+  const trimmed = v?.trim();
+  if (!trimmed) return undefined;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (iso) {
+    return sane(new Date(`${trimmed}T00:00:00`));
+  }
+  const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+  if (dmy) {
+    const [, dd, mm, yyyy] = dmy;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    // Guard against JS's silent day/month rollover (e.g. Feb 30 -> Mar 2).
+    return d.getMonth() === Number(mm) - 1 && d.getDate() === Number(dd) ? sane(d) : undefined;
+  }
+  return sane(new Date(trimmed));
+}
+
 function degree(row: ImportRow, prefix: string): DegreeDetail | undefined {
   const degreeAndBranch = row[`${prefix}_degreeAndBranch`]?.trim();
   const universityOrInstitute = row[`${prefix}_university`]?.trim();
@@ -144,27 +178,6 @@ function authoredBooks(row: ImportRow): AuthoredBook[] {
   return [1, 2, 3]
     .map((i) => ({ title: row[`book${i}_title`]?.trim() ?? "", publisher: row[`book${i}_publisher`]?.trim() ?? "", year: num(row[`book${i}_year`]) ?? 0 }))
     .filter((b) => b.title || b.publisher);
-}
-
-function tenurePastRecords(row: ImportRow): TenurePastRecord[] {
-  return [1, 2, 3]
-    .map((i) => ({
-      academicYear: row[`tenurePast${i}_academicYear`]?.trim() ?? "",
-      semester: row[`tenurePast${i}_semester`]?.trim() ?? "",
-      subject: row[`tenurePast${i}_subject`]?.trim() ?? "",
-      studentPassPercentage: num(row[`tenurePast${i}_passPercentage`]),
-    }))
-    .filter((r) => r.academicYear || r.subject);
-}
-
-function tenurePresentRecords(row: ImportRow): TenurePresentRecord[] {
-  return [1, 2, 3]
-    .map((i) => ({
-      academicYear: row[`tenurePresent${i}_academicYear`]?.trim() ?? "",
-      semester: row[`tenurePresent${i}_semester`]?.trim() ?? "",
-      subject: row[`tenurePresent${i}_subject`]?.trim() ?? "",
-    }))
-    .filter((r) => r.academicYear || r.subject);
 }
 
 function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefined {
@@ -221,8 +234,6 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     professionalBodyMemberships: row.professionalBodyMemberships?.trim() || undefined,
     authoredBooks: authoredBooks(row),
     notableAwards: row.notableAwards?.trim() || undefined,
-    tenurePastRecords: tenurePastRecords(row),
-    tenurePresentRecords: tenurePresentRecords(row),
   };
   for (const key of Object.keys(profile)) {
     if (profile[key] === undefined) delete profile[key];
@@ -261,6 +272,7 @@ export async function POST(request: Request) {
     const now = new Date();
     const created: string[] = [];
     const failed: { row: number; employeeId: string; error: string }[] = [];
+    const warnings: { row: number; employeeId: string; warning: string }[] = [];
 
     const batch = db.batch();
     let batchCount = 0;
@@ -268,6 +280,13 @@ export async function POST(request: Request) {
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
       const rowNum = i + 2; // 1-indexed + header row
+
+      // A value was provided but couldn't be parsed — record it was silently
+      // dropped instead of just proceeding, so a typo (e.g. a mistyped year)
+      // doesn't disappear without a trace the way it used to.
+      const dropped = (empId: string, label: string, raw: string | undefined) => {
+        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored — invalid value ("${raw?.trim()}")` });
+      };
 
       // Required field validation
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "—", error: "Employee ID is required" }); continue; }
@@ -294,9 +313,21 @@ export async function POST(request: Request) {
       const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
 
       // Parse dates
-      const joiningDate = row.joiningDate ? new Date(row.joiningDate) : now;
-      const dateOfBirth = row.dateOfBirth ? new Date(row.dateOfBirth) : undefined;
-      const ratificationDate = row.ratificationDate ? new Date(row.ratificationDate) : undefined;
+      const joiningDate = parseDate(row.joiningDate);
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date — use YYYY-MM-DD" }); continue; }
+      const dateOfBirth = parseDate(row.dateOfBirth);
+      if (row.dateOfBirth?.trim() && !dateOfBirth) dropped(empId, "Date of birth", row.dateOfBirth);
+      const ratificationDate = parseDate(row.ratificationDate);
+      if (row.ratificationDate?.trim() && !ratificationDate) dropped(empId, "Ratification date", row.ratificationDate);
+
+      // Parses a numeric field, warning (rather than silently zeroing/dropping
+      // it) when a non-empty value fails to parse.
+      const checkNum = (raw: string | undefined, label: string): number | undefined => {
+        if (!raw?.trim()) return undefined;
+        const n = parseFloat(raw);
+        if (!Number.isFinite(n)) { dropped(empId, label, raw); return undefined; }
+        return n;
+      };
 
       // Determine department
       const department = hodDept || "";
@@ -314,7 +345,7 @@ export async function POST(request: Request) {
         qualification: row.qualification?.trim() ?? "",
         specialization: row.specialization?.trim() ?? "",
         employmentType,
-        experienceYears: parseFloat(row.experienceYears ?? "0") || 0,
+        experienceYears: checkNum(row.experienceYears, "Total Experience") ?? 0,
         joiningDate,
         status,
         gender: row.gender?.trim() || undefined,
@@ -335,18 +366,18 @@ export async function POST(request: Request) {
         hasPHD: row.hasPHD ? row.hasPHD.trim().toLowerCase() === "yes" : undefined,
         maritalStatus: row.maritalStatus?.trim().toLowerCase().startsWith("married") ? "Married" : row.maritalStatus?.trim() ? "Single" : undefined,
         spouseName: row.spouseName?.trim() || undefined,
-        numberOfChildren: row.numberOfChildren ? parseFloat(row.numberOfChildren) || undefined : undefined,
+        numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
         referral: row.referral?.trim() || undefined,
         nativePlace: row.nativePlace?.trim() || undefined,
         bloodGroup: row.bloodGroup?.trim() || undefined,
         temporaryAddress: row.temporaryAddress?.trim() || undefined,
         permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
         permanentAddress: row.permanentAddress?.trim() || undefined,
-        internalExperience: row.internalExperience ? parseFloat(row.internalExperience) || undefined : undefined,
-        externalExperience: row.externalExperience ? parseFloat(row.externalExperience) || undefined : undefined,
-        inCampusExperience: row.inCampusExperience ? parseFloat(row.inCampusExperience) || undefined : undefined,
-        industryExperience: row.industryExperience ? parseFloat(row.industryExperience) || undefined : undefined,
-        researchExperience: row.researchExperience ? parseFloat(row.researchExperience) || undefined : undefined,
+        internalExperience: checkNum(row.internalExperience, "Internal Exp"),
+        externalExperience: checkNum(row.externalExperience, "External Exp"),
+        inCampusExperience: checkNum(row.inCampusExperience, "In Campus Exp"),
+        industryExperience: checkNum(row.industryExperience, "Industry Exp"),
+        researchExperience: checkNum(row.researchExperience, "Research Exp"),
         academicProfile: buildAcademicProfile(row),
         createdAt: now,
         updatedAt: now,
@@ -368,12 +399,13 @@ export async function POST(request: Request) {
 
     await batch.commit();
 
-    return NextResponse.json({ created: created.length, failed }, { status: 201 });
+    return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[faculty/import POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const detail = process.env.NODE_ENV !== "production" ? `: ${err instanceof Error ? err.message : String(err)}` : "";
+    return NextResponse.json({ error: `Internal error${detail}` }, { status: 500 });
   }
 }

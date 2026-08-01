@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ClipboardPlus,
-  Users,
-  Layers,
   Plus,
   ArrowRight,
   UsersRound,
@@ -24,6 +22,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import type { VacancyRequest, HiringBatch } from "@/types";
@@ -47,6 +47,14 @@ const PERSONAL_MODULES = [
 
 export default function HODDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
+  const visibleHodModules = HOD_MODULES.filter((m) => !isHidden(m.href));
+  const visiblePersonalModules = PERSONAL_MODULES.filter((m) => !isHidden(m.href));
+  // "/hod/vacancy", "/hod/vacancy/new" and "/hod/batches" aren't their own nav
+  // items — they're sub-pages of the "Hiring" module (whose nav entry is
+  // /hod/pipeline) — so gate them off that module's visibility instead.
+  const isHiringHidden = isHidden("/hod/pipeline");
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [batches, setBatches] = useState<HiringBatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,69 +77,29 @@ export default function HODDashboard() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const activeBatches = batches.filter((b) => b.status !== "REJECTED" && b.status !== "COMPLETED");
-
   return (
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name?.split(" ")[0] ?? "HOD"}`}
         description={`${user?.department ?? "Department"} — Department Portal`}
         actions={
-          <Button asChild>
-            <Link href="/hod/vacancy/new">
-              <Plus className="h-4 w-4 mr-1" />
-              New Vacancy
-            </Link>
-          </Button>
+          !isHiringHidden && (
+            <Button asChild>
+              <Link href="/hod/vacancy/new">
+                <Plus className="h-4 w-4 mr-1" />
+                New Vacancy
+              </Link>
+            </Button>
+          )
         }
       />
 
-      {/* Hiring Quick Stats */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          {[
-            {
-              label: "Hiring Requests",
-              value: isLoading ? "—" : vacancies.length,
-              icon: ClipboardPlus,
-              color: "text-blue-600 bg-blue-50",
-              href: "/hod/vacancy",
-            },
-            {
-              label: "Active Batches",
-              value: isLoading ? "—" : activeBatches.length,
-              icon: Layers,
-              color: "text-purple-600 bg-purple-50",
-              href: "/hod/batches",
-            },
-            {
-              label: "Total Candidates",
-              value: isLoading ? "—" : batches.reduce((acc, b) => acc + b.candidateIds.length, 0),
-              icon: Users,
-              color: "text-green-600 bg-green-50",
-              href: "/hod/candidates",
-            },
-          ].map((stat) => (
-            <Link key={stat.label} href={stat.href}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${stat.color}`}>
-                    <stat.icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">{stat.label}</p>
-                    <p className="text-xl font-bold">{stat.value}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-
       {/* HOD Management Modules */}
+      {visibleHodModules.length > 0 && (
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Department</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {HOD_MODULES.map((mod) => (
+          {visibleHodModules.map((mod) => (
             <Link key={mod.href} href={mod.href}>
               <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                 <CardContent className="p-4 flex flex-col gap-3">
@@ -149,12 +117,14 @@ export default function HODDashboard() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Personal Modules (as faculty) */}
+      {visiblePersonalModules.length > 0 && (
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">My Work</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {PERSONAL_MODULES.map((mod) => (
+          {visiblePersonalModules.map((mod) => (
             <Link key={mod.href} href={mod.href}>
               <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                 <CardContent className="p-4 flex flex-col gap-3">
@@ -172,8 +142,10 @@ export default function HODDashboard() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Recent Vacancies */}
+      {!isHiringHidden && (
       <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">Recent Hiring Requests</CardTitle>
@@ -210,8 +182,10 @@ export default function HODDashboard() {
             )}
           </CardContent>
         </Card>
+      )}
 
       {/* Active Batches */}
+      {!isHiringHidden && (
       <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">Active Hiring Batches</CardTitle>
@@ -246,6 +220,7 @@ export default function HODDashboard() {
             )}
           </CardContent>
         </Card>
+      )}
     </div>
   );
 }

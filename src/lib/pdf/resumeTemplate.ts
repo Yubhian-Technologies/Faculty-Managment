@@ -1,6 +1,6 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS } from "@/types";
-import { buildTeachingLoadRows, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
+import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -27,19 +27,6 @@ interface PreviousInstitution {
   institutionName?: string;
   designation?: string;
   yearsWorked?: number;
-}
-
-interface TenurePastRecord {
-  academicYear?: string;
-  semester?: string;
-  subject?: string;
-  studentPassPercentage?: number;
-}
-
-interface TenurePresentRecord {
-  academicYear?: string;
-  semester?: string;
-  subject?: string;
 }
 
 interface Publication {
@@ -138,9 +125,6 @@ interface FacultyProfileFieldsLike {
   fundingConsultancyRevenue?: number;
 
   otherInformation?: string;
-
-  tenurePastRecords?: TenurePastRecord[];
-  tenurePresentRecords?: TenurePresentRecord[];
 }
 
 export interface ResumeData {
@@ -262,19 +246,19 @@ function detailTable(rows: string): string {
   return `<div class="fgrid">${rows}</div>`;
 }
 
-/** Renders one Teaching Load table — Academic Year / Course Name / Year(Class) /
- *  Section / Semester / Subject / Hr-Week (+ Pass % + Student Feedback % for past) —
- *  leaving cells blank where a given row's source doesn't carry that field. */
+/** Renders one Teaching Load table — Academic Year / Year-Branch-Semester-Section /
+ *  Subject / Hr-Week (+ Pass % + Student Feedback % for past) — leaving cells
+ *  blank where a given row's source doesn't carry that field. */
 function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boolean): string {
   if (!rows.length) return "";
   const body = rows
     .map(
       (r) =>
-        `<tr><td>${esc(r.academicYear)}</td><td>${esc(r.courseName)}</td><td>${esc(r.year)}</td><td>${esc(r.section)}</td><td>${esc(r.semester)}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td>${showPastColumns ? `<td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td><td>${r.studentFeedback != null ? `${esc(r.studentFeedback)}%` : ""}</td>` : ""}</tr>`
+        `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td>${showPastColumns ? `<td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td><td>${r.studentFeedback != null ? `${esc(r.studentFeedback)}%` : ""}</td>` : ""}</tr>`
     )
     .join("");
   const pastHeaders = showPastColumns ? "<th>Pass %</th><th>Student Feedback %</th>" : "";
-  return `<table class="data-table"><tr><th>Academic Year</th><th>Course Name</th><th>Year (Class)</th><th>Section</th><th>Semester</th><th>Subject</th><th>Hr/Week</th>${pastHeaders}</tr>${body}</table>`;
+  return `<table class="data-table"><tr><th>Academic Year</th><th>Year / Branch / Semester / Section</th><th>Subject</th><th>Hr/Week</th>${pastHeaders}</tr>${body}</table>`;
 }
 
 /** Renders the Current / Past Teaching Assignments tables under their own
@@ -393,18 +377,16 @@ export function getResumeHTML(data: ResumeData): string {
   const experienceBody = experienceEntry + experienceBullets + previousInstitutionEntries;
 
   // ── Teaching load ────────────────────────────────────────────────────────
-  // Current and past assignments/tenure records, kept as two separate tables —
-  // current course/section assignments + the Module 2 course summary + Module 8's
-  // present tenure records vs. structured past assignments + Module 8's past
-  // tenure records (past rows carry a pass %, current ones never do).
+  // Current and past assignments, kept as two separate tables — current
+  // course/section assignments + the Module 2 course summary vs. structured
+  // past assignments (past rows carry a pass %, current ones never do).
   const teachingLoadBullets = bullets([
     ap?.teachingAssignment?.primaryTeachingRole && `Primary Teaching Role: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
   ]);
   const teachingLoadGroups = buildTeachingLoadRows({
     currentAssignments: data.teachingAssignments,
     staticCourses: ap?.teachingAssignment?.courses,
-    tenurePresentRecords: ap?.tenurePresentRecords,
-    tenurePastRecords: ap?.tenurePastRecords,
+    department: data.department,
   });
   const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups);
   const teachingLoadBody = teachingLoadBullets + teachingLoadTables;

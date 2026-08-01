@@ -569,19 +569,6 @@ export interface PreviousInstitution {
   yearsWorked: number;
 }
 
-export interface TenurePastRecord {
-  academicYear: string;
-  semester: string;
-  subject: string;
-  studentPassPercentage?: number; // optional, 0-100
-}
-
-export interface TenurePresentRecord {
-  academicYear: string;
-  semester: string;
-  subject: string; // subject currently teaching
-}
-
 export interface Publication {
   title: string;
   coAuthors: string;
@@ -685,10 +672,6 @@ export interface FacultyProfileFields {
 
   // Module 7 — Others
   otherInformation?: string;
-
-  // Module 8 — Tenure & Load
-  tenurePastRecords: TenurePastRecord[];
-  tenurePresentRecords: TenurePresentRecord[];
 }
 
 // PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object
@@ -861,6 +844,7 @@ export type AuditAction =
   | "VACANCY_REQUEST_CREATED"
   | "VACANCY_REQUEST_APPROVED"
   | "VACANCY_REQUEST_REJECTED"
+  | "VACANCY_REQUEST_DELETED"
   | "CANDIDATE_ADDED"
   | "CANDIDATE_SHORTLISTED"
   | "CANDIDATE_ARRIVED"

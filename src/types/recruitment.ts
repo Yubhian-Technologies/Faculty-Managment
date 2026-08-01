@@ -44,6 +44,7 @@ export interface VacancyRequest {
 
 export type CandidateSource = "WALK_IN" | "CAREERS_PAGE" | "ADVERTISEMENT" | "REFERRAL";
 export type ReferralType = "INTERNAL" | "EXTERNAL";
+export type ReferralInfluenceType = "NONE" | "MLA" | "MP" | "OTHER";
 
 export type CandidateStage =
   | "DEMO"
@@ -121,6 +122,10 @@ export interface Candidate {
   referralName?: string;
   referralPhone?: string;
   referralDescription?: string;
+  referralCollege?: string;         // internal referral: college the referrer works at
+  referralDesignation?: string;     // internal referral: referrer's designation
+  referralInfluenceType?: ReferralInfluenceType; // external referral: MLA/MP/other influential person
+  referralInfluenceOther?: string;
   residenceAddress?: string;
   permanentAddress?: string;
   sameAddress?: boolean;

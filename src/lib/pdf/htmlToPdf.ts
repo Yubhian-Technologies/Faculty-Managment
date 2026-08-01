@@ -16,7 +16,11 @@ const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const RENDER_SCALE = 2; // canvas px per CSS px — crisp text at print resolution
 
-const ATOMIC_SELECTOR = ".entry, .bullets li, table.data-table tr, .fitem, .section-title, .subheading";
+// .doc-link must stay atomic too: a page break landing inside it would visually
+// split "View Certificate ↗" across two pages, and — worse — extractLinkAnnotations
+// assigns the whole <a>'s bounding rect to a single page, so a straddling link
+// gets a corrupted (out-of-bounds) /Rect and stops being clickable entirely.
+const ATOMIC_SELECTOR = ".entry, .bullets li, table.data-table tr, .fitem, .section-title, .subheading, .doc-link";
 
 function waitForImages(doc: Document): Promise<void> {
   const imgs = Array.from(doc.images);

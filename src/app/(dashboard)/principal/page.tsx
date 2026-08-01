@@ -13,12 +13,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { formatDate } from "@/lib/utils";
 import type { VacancyRequest, HiringBatch } from "@/types";
 
 export default function PrincipalDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [pendingVacancies, setPendingVacancies] = useState<VacancyRequest[]>([]);
   const [pendingBatches, setPendingBatches] = useState<HiringBatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,7 +58,7 @@ export default function PrincipalDashboard() {
           { label: "Interview Plans", value: isLoading ? "—" : pendingBatches.length, icon: CalendarCheck, color: "text-blue-600 bg-blue-50", href: "/principal/interviews" },
           { label: "Hiring Decisions", value: "—", icon: UserCheck, color: "text-green-600 bg-green-50", href: "/principal/decisions" },
           { label: "Departments", value: "—", icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments" },
-        ].map((stat) => (
+        ].filter((stat) => !isHidden(stat.href)).map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-4 flex items-center gap-3">
@@ -71,6 +75,7 @@ export default function PrincipalDashboard() {
         ))}
       </div>
 
+      {!isHidden("/principal/vacancies") && (
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">Pending Hiring Requests</CardTitle>
@@ -108,8 +113,9 @@ export default function PrincipalDashboard() {
           )}
         </CardContent>
       </Card>
+      )}
 
-      {pendingBatches.length > 0 && (
+      {!isHidden("/principal/interviews") && pendingBatches.length > 0 && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">Pending Interview Plans</CardTitle>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, ClipboardList } from "lucide-react";
+import { Plus, ClipboardList, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/shared/DataTable";
@@ -21,6 +21,7 @@ export default function HODVacancyPage() {
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -34,6 +35,22 @@ export default function HODVacancyPage() {
         .catch(() => {}),
     ]).finally(() => setIsLoading(false));
   }, []);
+
+  async function deleteVacancy(v: VacancyRequest) {
+    if (!confirm(`Delete the hiring request for ${v.position}? This cannot be undone.`)) return;
+    setDeletingId(v.id);
+    try {
+      const res = await fetch(`/api/college/vacancy-requests/${v.id}`, { method: "DELETE" });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      toast({ variant: "success", title: "Hiring request deleted" });
+      setVacancies((prev) => prev.filter((r) => r.id !== v.id));
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to delete", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -74,6 +91,17 @@ export default function HODVacancyPage() {
                   { label: "Required", value: v.requiredCount },
                   { label: "Submitted", value: formatDate(v.createdAt) },
                 ]}
+                actions={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={deletingId === v.id}
+                    onClick={() => void deleteVacancy(v)}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" /> Delete
+                  </Button>
+                }
               />
             ))
           )}
@@ -106,6 +134,24 @@ export default function HODVacancyPage() {
                   <span className="text-xs text-muted-foreground">
                     {v.principalResponse.reason || "No notes"}
                   </span>
+                );
+              },
+            },
+            {
+              key: "actions",
+              header: "",
+              render: (row) => {
+                const v = row as unknown as VacancyRequest;
+                return (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={deletingId === v.id}
+                    onClick={(e) => { e.stopPropagation(); void deleteVacancy(v); }}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 );
               },
             },
