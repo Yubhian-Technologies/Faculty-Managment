@@ -1,6 +1,6 @@
 "use client";
 
-import type { TeachingLoadRow, TeachingLoadGroups } from "@/lib/teaching/buildTeachingLoadRows";
+import { formatClassColumn, type TeachingLoadRow, type TeachingLoadGroups } from "@/lib/teaching/buildTeachingLoadRows";
 
 interface Props {
   groups: TeachingLoadGroups;
@@ -13,10 +13,7 @@ function LoadTable({ rows, showPastColumns }: { rows: TeachingLoadRow[]; showPas
         <thead>
           <tr className="border-b bg-muted/40">
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Academic Year</th>
-            <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Course Name</th>
-            <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Year (Class)</th>
-            <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Section</th>
-            <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Semester</th>
+            <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Year / Branch / Semester / Section</th>
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Subject</th>
             <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Hr/Week</th>
             {showPastColumns && <th className="p-2 text-left font-medium text-muted-foreground whitespace-nowrap">Pass %</th>}
@@ -27,10 +24,7 @@ function LoadTable({ rows, showPastColumns }: { rows: TeachingLoadRow[]; showPas
           {rows.map((r, i) => (
             <tr key={i} className={`border-b last:border-b-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
               <td className="p-2 whitespace-nowrap">{r.academicYear || "—"}</td>
-              <td className="p-2 whitespace-nowrap">{r.courseName || "—"}</td>
-              <td className="p-2 whitespace-nowrap">{r.year ?? "—"}</td>
-              <td className="p-2 whitespace-nowrap">{r.section || "—"}</td>
-              <td className="p-2 whitespace-nowrap">{r.semester ?? "—"}</td>
+              <td className="p-2 whitespace-nowrap">{formatClassColumn(r) || "—"}</td>
               <td className="p-2 whitespace-nowrap">{r.subject || "—"}</td>
               <td className="p-2 whitespace-nowrap">{r.hoursPerWeek ?? "—"}</td>
               {showPastColumns && <td className="p-2 whitespace-nowrap">{r.passPercentage != null ? `${r.passPercentage}%` : "—"}</td>}

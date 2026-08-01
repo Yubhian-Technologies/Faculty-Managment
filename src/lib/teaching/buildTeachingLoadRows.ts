@@ -1,15 +1,16 @@
 // Unifies every source of "who teaches what" into two grouped table shapes —
-// current (the live current teaching assignments, the Module 2 static course
-// summary, and Module 8's present tenure records) and past (structured past
-// teaching assignments and Module 8's past tenure records, which carry a pass %
-// current rows never have). Used by both the resume (src/lib/pdf/resumeTemplate.ts)
-// and the Edit Faculty Details page (TeachingLoadTable) so the two always agree,
-// and both keep current/past visually separated rather than intermixed.
+// current (the live current teaching assignments + the Module 2 static course
+// summary) and past (structured past teaching assignments, which carry a
+// pass % current rows never have). Used by both the resume
+// (src/lib/pdf/resumeTemplate.ts) and the Edit Faculty Details page
+// (TeachingLoadTable) so the two always agree, and both keep current/past
+// visually separated rather than intermixed.
 
 export interface TeachingLoadRow {
   academicYear?: string;
-  courseName?: string;
-  year?: number; // which year/class within the course
+  courseName?: string; // the degree/program, e.g. "B.Tech" — NOT the branch
+  department?: string; // the branch, e.g. "CSE" — the faculty member's own department
+  year?: number; // which year/class within the course, e.g. 1..4
   section?: string;
   semester?: string | number;
   subject?: string;
@@ -23,6 +24,23 @@ export interface TeachingLoadGroups {
   past: TeachingLoadRow[];
 }
 
+// Combines Year / Branch / Semester / Section into one column instead of four,
+// for both the resume PDF and the Edit Faculty Details preview table. Branch
+// is the faculty member's department (e.g. "CSE"), not `courseName` — the
+// latter is the degree/program (e.g. "B.Tech"), which is the same for every
+// row and isn't a "branch". Falls back to courseName only for the Module 2
+// static course rows, which never carry a department and would otherwise show
+// nothing identifying in this column.
+export function formatClassColumn(row: TeachingLoadRow): string {
+  const parts = [
+    row.year != null ? `Year ${row.year}` : undefined,
+    row.department ?? row.courseName,
+    row.semester != null && row.semester !== "" ? String(row.semester) : undefined,
+    row.section || undefined,
+  ].filter((p): p is string => !!p);
+  return parts.join(" / ");
+}
+
 interface CurrentAssignmentLike {
   courseName?: string;
   year?: number;
@@ -31,10 +49,9 @@ interface CurrentAssignmentLike {
   subjectCode?: string;
   hoursPerWeek?: number;
   // Every assignment (current or past) carries which academic year/semester it
-  // belongs to. `isPast` additionally marks a structured past teaching assignment
-  // (added via "Add Past Teaching Assignment" in the Current Teaching Assignments
-  // editor) — distinct from the free-text Module 8 tenure records below, but shown
-  // in the same past group — which is the only thing that unlocks `passPercentage`.
+  // belongs to. `isPast` additionally marks a structured past teaching
+  // assignment (added via "Add Past Teaching Assignment" in the Current
+  // Teaching Assignments editor) — the only thing that unlocks `passPercentage`.
   assignmentAcademicYear?: string;
   assignmentSemester?: string;
   isPast?: boolean;
@@ -48,20 +65,11 @@ interface StaticCourseLike {
   weeklyCreditHours?: number;
 }
 
-interface TenurePresentLike {
-  academicYear?: string;
-  semester?: string;
-  subject?: string;
-}
-
-interface TenurePastLike extends TenurePresentLike {
-  studentPassPercentage?: number;
-}
-
-function toRow(a: CurrentAssignmentLike): TeachingLoadRow {
+function toRow(a: CurrentAssignmentLike, department?: string): TeachingLoadRow {
   return {
     academicYear: a.assignmentAcademicYear,
     courseName: a.courseName,
+    department,
     year: a.year,
     section: a.sectionName,
     semester: a.assignmentSemester,
@@ -75,12 +83,14 @@ function toRow(a: CurrentAssignmentLike): TeachingLoadRow {
 export function buildTeachingLoadRows(input: {
   currentAssignments?: CurrentAssignmentLike[];
   staticCourses?: StaticCourseLike[];
-  tenurePresentRecords?: TenurePresentLike[];
-  tenurePastRecords?: TenurePastLike[];
+  // The faculty member's own department (the "branch") — the same for every
+  // row, since a person's teaching assignments are all within their own
+  // department; not derived per-assignment (assignments don't track it).
+  department?: string;
 }): TeachingLoadGroups {
   const assignments = (input.currentAssignments ?? []).filter((a) => a.courseName || a.subjectName);
-  const currentAssignmentRows = assignments.filter((a) => !a.isPast).map(toRow);
-  const pastAssignmentRows = assignments.filter((a) => a.isPast).map(toRow);
+  const currentAssignmentRows = assignments.filter((a) => !a.isPast).map((a) => toRow(a, input.department));
+  const pastAssignmentRows = assignments.filter((a) => a.isPast).map((a) => toRow(a, input.department));
 
   const staticCourses: TeachingLoadRow[] = (input.staticCourses ?? [])
     .filter((c) => c.name || c.code)
@@ -89,25 +99,8 @@ export function buildTeachingLoadRows(input: {
       hoursPerWeek: c.weeklyCreditHours,
     }));
 
-  const present: TeachingLoadRow[] = (input.tenurePresentRecords ?? [])
-    .filter((r) => r.academicYear || r.subject)
-    .map((r) => ({
-      academicYear: r.academicYear,
-      semester: r.semester,
-      subject: r.subject,
-    }));
-
-  const past: TeachingLoadRow[] = (input.tenurePastRecords ?? [])
-    .filter((r) => r.academicYear || r.subject)
-    .map((r) => ({
-      academicYear: r.academicYear,
-      semester: r.semester,
-      subject: r.subject,
-      passPercentage: r.studentPassPercentage,
-    }));
-
   return {
-    current: [...currentAssignmentRows, ...staticCourses, ...present],
-    past: [...pastAssignmentRows, ...past],
+    current: [...currentAssignmentRows, ...staticCourses],
+    past: pastAssignmentRows,
   };
 }

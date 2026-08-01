@@ -309,40 +309,6 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
       <Section number={7} title="Others">
         <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "—"}</p>
       </Section>
-
-      <Section number={8} title="Tenure & Load">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 items-start">
-          <div className="rounded-lg border bg-muted/20 shadow-sm p-3 space-y-2">
-            <SubLabel>Past</SubLabel>
-            {(p.tenurePastRecords ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-              <div className="space-y-2">
-                {p.tenurePastRecords?.map((r, i) => (
-                  <div key={i} className="rounded-md border bg-background shadow-sm p-2 grid grid-cols-2 gap-2">
-                    <Field label="Academic Year" value={r.academicYear} />
-                    <Field label="Semester" value={r.semester} />
-                    <Field label="Subject" value={r.subject} />
-                    <Field label="Student Pass %" value={r.studentPassPercentage} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="rounded-lg border bg-muted/20 shadow-sm p-3 space-y-2">
-            <SubLabel>Present</SubLabel>
-            {(p.tenurePresentRecords ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-              <div className="space-y-2">
-                {p.tenurePresentRecords?.map((r, i) => (
-                  <div key={i} className="rounded-md border bg-background shadow-sm p-2 grid grid-cols-2 gap-2">
-                    <Field label="Academic Year" value={r.academicYear} />
-                    <Field label="Semester" value={r.semester} />
-                    <Field label="Subject" value={r.subject} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </Section>
     </div>
   );
 }

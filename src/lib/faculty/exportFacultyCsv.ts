@@ -6,7 +6,7 @@
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
 import { COLUMNS, TEACHING_SUMMARY_COLUMN } from "@/lib/faculty/csvColumns";
-import type { FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, TenurePastRecord, TenurePresentRecord } from "@/types";
+import type { FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -60,18 +60,6 @@ function labCells(labs: LabEstablished[] | undefined, i: number): [string, strin
 function bookCells(books: AuthoredBook[] | undefined, i: number): [string, string, string] {
   const b = books?.[i];
   return b ? [b.title ?? "", b.publisher ?? "", b.year ? String(b.year) : ""] : ["", "", ""];
-}
-
-function tenurePastCells(items: TenurePastRecord[] | undefined, i: number): [string, string, string, string] {
-  const r = items?.[i];
-  return r
-    ? [r.academicYear ?? "", r.semester ?? "", r.subject ?? "", r.studentPassPercentage != null ? String(r.studentPassPercentage) : ""]
-    : ["", "", "", ""];
-}
-
-function tenurePresentCells(items: TenurePresentRecord[] | undefined, i: number): [string, string, string] {
-  const r = items?.[i];
-  return r ? [r.academicYear ?? "", r.semester ?? "", r.subject ?? ""] : ["", "", ""];
 }
 
 function buildRow(faculty: FacultyMember, teachingSummary: string): Record<string, string> {
@@ -195,14 +183,6 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
 
     const [bookTitle, bookPublisher, bookYear] = bookCells(p.authoredBooks, n - 1);
     row[`book${n}_title`] = bookTitle; row[`book${n}_publisher`] = bookPublisher; row[`book${n}_year`] = bookYear;
-
-    const [pastYear, pastSemester, pastSubject, pastPass] = tenurePastCells(p.tenurePastRecords, n - 1);
-    row[`tenurePast${n}_academicYear`] = pastYear; row[`tenurePast${n}_semester`] = pastSemester;
-    row[`tenurePast${n}_subject`] = pastSubject; row[`tenurePast${n}_passPercentage`] = pastPass;
-
-    const [presentYear, presentSemester, presentSubject] = tenurePresentCells(p.tenurePresentRecords, n - 1);
-    row[`tenurePresent${n}_academicYear`] = presentYear; row[`tenurePresent${n}_semester`] = presentSemester;
-    row[`tenurePresent${n}_subject`] = presentSubject;
   });
 
   return row;

@@ -101,8 +101,7 @@ export function MyProfileDetails() {
           groups={buildTeachingLoadRows({
             currentAssignments: teachingAssignments,
             staticCourses: profile.academicProfile?.teachingAssignment?.courses,
-            tenurePresentRecords: profile.academicProfile?.tenurePresentRecords,
-            tenurePastRecords: profile.academicProfile?.tenurePastRecords,
+            department: profile.department,
           })}
         />
       </SectionCard>
