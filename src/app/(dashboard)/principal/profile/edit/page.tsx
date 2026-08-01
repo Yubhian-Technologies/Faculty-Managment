@@ -93,14 +93,23 @@ export default function EditPrincipalProfilePage() {
       });
       if (!res.ok) throw new Error();
 
+      toast({ variant: "success", title: "Profile updated" });
+
+      // Best-effort: refresh auth store so TopBar name/photo update immediately.
       // Re-fetch rather than hand-merge `body` into the store: `body` carries
       // dateOfBirth/ratificationDate as date-input strings for the form, while
-      // FMSUser expects them as Firestore Timestamps.
+      // FMSUser expects them as Firestore Timestamps. A stale client ID token
+      // can make this direct Firestore read fail even though the write above
+      // (server-side, admin-authenticated) already succeeded, so a failure
+      // here must not be reported as an update failure.
       if (user) {
-        const freshProfile = await getUserById(user.collegeId, user.uid);
-        if (freshProfile) setUser(freshProfile);
+        try {
+          const freshProfile = await getUserById(user.collegeId, user.uid);
+          if (freshProfile) setUser(freshProfile);
+        } catch {
+          // non-fatal — profile was saved; TopBar catches up on next load
+        }
       }
-      toast({ variant: "success", title: "Profile updated" });
       router.push("/principal/profile");
     } catch {
       toast({ variant: "destructive", title: "Failed to update profile" });
