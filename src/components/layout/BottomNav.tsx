@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
-import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { BOTTOM_NAV_ITEMS, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -18,13 +17,17 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
-export function BottomNav() {
+interface BottomNavProps {
+  hiddenModules: string[];
+  hiddenItems: string[];
+}
+
+export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
   const user = useAuthStore((s) => s.user);
   const pathname = usePathname();
   const { unreadCount } = useNotifications();
   const { setNotificationDrawerOpen } = useUIStore();
   const { hasInterviews } = useAssignedInterviews();
-  const { hiddenModules, hiddenItems } = useNavVisibility();
 
   if (!user || user.role === "STUDENT") return null;
 

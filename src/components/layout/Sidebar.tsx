@@ -10,7 +10,6 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
-import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { OrgScopeTree } from "./OrgScopeTree";
@@ -25,7 +24,12 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
-export function Sidebar() {
+interface SidebarProps {
+  hiddenModules: string[];
+  hiddenItems: string[];
+}
+
+export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const { logout } = useAuth();
   const { unreadCount } = useNotifications();
@@ -33,7 +37,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
-  const { hiddenModules, hiddenItems } = useNavVisibility();
 
   if (!user) return null;
 

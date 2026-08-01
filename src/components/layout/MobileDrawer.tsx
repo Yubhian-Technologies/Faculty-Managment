@@ -10,7 +10,6 @@ import { useUIStore } from "@/store/uiStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
-import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { ROLE_LABELS } from "@/types";
@@ -22,14 +21,18 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
-export function MobileDrawer() {
+interface MobileDrawerProps {
+  hiddenModules: string[];
+  hiddenItems: string[];
+}
+
+export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) {
   const user = useAuthStore((s) => s.user);
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const { logout } = useAuth();
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
-  const { hiddenModules, hiddenItems } = useNavVisibility();
 
   useEffect(() => {
     setSidebarOpen(false);
