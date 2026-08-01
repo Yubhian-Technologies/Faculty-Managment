@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
+import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MyProfileDetails } from "@/components/faculty/MyProfileDetails";
@@ -20,9 +21,12 @@ export default function HodProfilePage() {
         title="My Profile"
         description="Manage your profile photo and account details"
         actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href="/hod/profile/edit"><Pencil className="mr-2 h-4 w-4" />Edit Profile</Link>
-          </Button>
+          <>
+            <ChangePasswordDialog />
+            <Button asChild size="sm" variant="outline">
+              <Link href="/hod/profile/edit"><Pencil className="mr-2 h-4 w-4" />Edit Profile</Link>
+            </Button>
+          </>
         }
       />
       <Card>

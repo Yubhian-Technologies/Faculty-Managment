@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Pencil, IdCard, GraduationCap } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
+import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/shared/SectionCard";
@@ -23,9 +24,12 @@ export default function PrincipalProfilePage() {
         title="My Profile"
         description="Manage your profile photo and account details"
         actions={
-          <Button variant="outline" onClick={() => router.push("/principal/profile/edit")}>
-            <Pencil className="h-4 w-4 mr-2" />Edit
-          </Button>
+          <>
+            <ChangePasswordDialog />
+            <Button variant="outline" onClick={() => router.push("/principal/profile/edit")}>
+              <Pencil className="h-4 w-4 mr-2" />Edit
+            </Button>
+          </>
         }
       />
       <Card>
