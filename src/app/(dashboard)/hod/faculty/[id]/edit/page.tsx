@@ -77,6 +77,7 @@ export default function EditFacultyPage() {
   const [saving, setSaving] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
+  const [department, setDepartment] = useState("");
   const [form, setForm] = useState<EmploymentForm>(EMPTY_FORM);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
@@ -100,6 +101,7 @@ export default function EditFacultyPage() {
         const m = data.faculty;
         setEmployeeId((m.employeeId as string) ?? "");
         setEmail((m.email as string) ?? "");
+        setDepartment((m.department as string) ?? "");
         setForm({
           name: (m.name as string) ?? "",
           phone: (m.phone as string) ?? "",
@@ -471,8 +473,7 @@ export default function EditFacultyPage() {
                       passPercentage: r.passPercentage,
                     })),
                     staticCourses: academicProfile.teachingAssignment?.courses,
-                    tenurePresentRecords: academicProfile.tenurePresentRecords,
-                    tenurePastRecords: academicProfile.tenurePastRecords,
+                    department,
                   })}
                 />
               </CardContent>

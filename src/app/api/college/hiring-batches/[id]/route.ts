@@ -121,6 +121,7 @@ export async function PATCH(
       position: string;
       department: string;
       demoComplete?: boolean;
+      candidateIds?: string[];
     };
 
     const updates: Record<string, unknown> = { updatedAt: now };
@@ -172,6 +173,17 @@ export async function PATCH(
       .collection("hiringBatches")
       .doc(id)
       .update(updates);
+
+    // Rejected proposal: free up its candidates so the HOD can pick them
+    // again for a new interview session (they remain shortlisted).
+    if (body.status === "REJECTED" && batchData.candidateIds?.length) {
+      const releaseBatch = db.batch();
+      for (const cid of batchData.candidateIds) {
+        const cRef = db.collection("colleges").doc(session.collegeId).collection("candidates").doc(cid);
+        releaseBatch.update(cRef, { batchId: "", updatedAt: now });
+      }
+      await releaseBatch.commit();
+    }
 
     // Notifications based on what changed
     const notifBatch = db.batch();

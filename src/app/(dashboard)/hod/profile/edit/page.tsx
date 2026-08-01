@@ -87,11 +87,20 @@ export default function EditHodProfilePage() {
       });
       if (!res.ok) throw new Error();
 
-      if (user) {
-        const freshProfile = await getUserById(user.collegeId, user.uid);
-        if (freshProfile) setUser(freshProfile);
-      }
       toast({ variant: "success", title: "Profile updated" });
+
+      // Best-effort: refresh auth store so TopBar name/photo update immediately.
+      // A stale client ID token can make this direct Firestore read fail even
+      // though the write above (server-side, admin-authenticated) already
+      // succeeded, so a failure here must not be reported as an update failure.
+      if (user) {
+        try {
+          const freshProfile = await getUserById(user.collegeId, user.uid);
+          if (freshProfile) setUser(freshProfile);
+        } catch {
+          // non-fatal — profile was saved; TopBar catches up on next load
+        }
+      }
       router.push("/hod/profile");
     } catch {
       toast({ variant: "destructive", title: "Failed to update profile" });

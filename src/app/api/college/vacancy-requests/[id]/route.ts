@@ -153,3 +153,72 @@ export async function PATCH(
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const { id } = await params;
+    const db = getAdminDb();
+
+    const vacancyRef = db
+      .collection("colleges")
+      .doc(session.collegeId)
+      .collection("vacancyRequests")
+      .doc(id);
+    const vacancySnap = await vacancyRef.get();
+
+    if (!vacancySnap.exists) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const vacancy = vacancySnap.data() as { hodUid?: string; position?: string };
+
+    if (session.role === "HOD" && vacancy.hodUid !== session.uid) {
+      return NextResponse.json({ error: "You can only delete your own hiring requests" }, { status: 403 });
+    }
+
+    const [batchSnap, candidateSnap] = await Promise.all([
+      db.collection("colleges").doc(session.collegeId).collection("hiringBatches")
+        .where("vacancyId", "==", id).limit(1).get(),
+      db.collection("colleges").doc(session.collegeId).collection("candidates")
+        .where("vacancyId", "==", id).limit(1).get(),
+    ]);
+
+    if (!batchSnap.empty) {
+      return NextResponse.json(
+        { error: "Cannot delete — an interview process has already started for this request." },
+        { status: 400 }
+      );
+    }
+    if (!candidateSnap.empty) {
+      return NextResponse.json(
+        { error: "Cannot delete — candidates have already been added against this request." },
+        { status: 400 }
+      );
+    }
+
+    await vacancyRef.delete();
+
+    const actorName = await getUserName(db, session.collegeId, session.uid);
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "VACANCY_REQUEST_DELETED",
+      performedBy: session.uid,
+      performedByName: actorName,
+      targetId: id,
+      details: { position: vacancy.position },
+      timestamp: new Date(),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[vacancy-requests/[id] DELETE]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

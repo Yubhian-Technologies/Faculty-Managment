@@ -8,19 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { COLUMNS, HINTS } from "@/lib/faculty/csvColumns";
-import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
+import { COLUMNS, HINTS } from "@/lib/college/departmentsCsvColumns";
+import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Info } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
 type ImportResult = {
   created: number;
-  failed: { row: number; employeeId: string; error: string }[];
-  warnings: { row: number; employeeId: string; warning: string }[];
+  failed: { row: number; name: string; error: string }[];
+  warnings: { row: number; name: string; message: string }[];
 };
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-export default function FacultyImportPage() {
+export default function DepartmentsImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
@@ -30,7 +28,7 @@ export default function FacultyImportPage() {
   function downloadTemplate() {
     const headers = COLUMNS.map((c) => c.label);
     const sample1 = COLUMNS.map((c) => c.sample);
-    downloadCSV(toCSV([headers, sample1]), "faculty_import_template.csv");
+    downloadCSV(toCSV([headers, sample1]), "departments_import_template.csv");
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -53,21 +51,15 @@ export default function FacultyImportPage() {
       if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
 
       const headers = parsed[0].map((h) => h.trim());
-      // Map header labels to column keys — tolerant of case, punctuation, spacing,
-      // and common alternate wording (e.g. "DOJ" for "Joining Date").
       const keyMap = matchHeaders(headers, COLUMNS);
 
-      // Check header matching BEFORE counting data rows — if nothing in the
-      // header row matched, every row maps to an empty object and would
-      // otherwise surface as the misleading "no data rows" error instead of
-      // pointing at the real problem (wrong/missing header row).
       const mappedCount = Object.keys(keyMap).length;
       if (mappedCount === 0) {
-        setParseError("None of the columns in this file matched the template. Make sure the header row is the first row, and its wording is close to the template (e.g. \"Employee ID\", \"DOJ\").");
+        setParseError("None of the columns in this file matched the template. Make sure the header row is the first row, and its wording is close to the template (e.g. \"Department Name\", \"Short Code\").");
         return;
       }
-      if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("name")) {
-        setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
+      if (!Object.values(keyMap).includes("name")) {
+        setParseError("Couldn't find a \"Department Name\" column. Check your file's header row against the template.");
         return;
       }
 
@@ -95,7 +87,7 @@ export default function FacultyImportPage() {
     setIsImporting(true);
     setResult(null);
     try {
-      const res = await fetch("/api/college/faculty/import", {
+      const res = await fetch("/api/college/departments/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ records: rows }),
@@ -104,7 +96,7 @@ export default function FacultyImportPage() {
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
       setResult(json);
       if (json.created > 0) {
-        toast({ variant: "success", title: `${json.created} faculty imported successfully` });
+        toast({ variant: "success", title: `${json.created} department${json.created !== 1 ? "s" : ""} imported successfully` });
         setRows([]);
       }
     } catch {
@@ -120,13 +112,13 @@ export default function FacultyImportPage() {
     : false;
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <PageHeader
-        title="Import Faculty"
-        description="Bulk upload faculty records from a CSV file"
+        title="Import Departments"
+        description="Bulk add departments — with department codes and HOD emails — from a CSV file"
         actions={
           <Button variant="outline" asChild>
-            <Link href="/hod/faculty"><ArrowLeft className="h-4 w-4 mr-1" />Back to Faculty</Link>
+            <Link href="/principal/departments"><ArrowLeft className="h-4 w-4 mr-1" />Back to Departments</Link>
           </Button>
         }
       />
@@ -136,9 +128,9 @@ export default function FacultyImportPage() {
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Download the CSV template, fill in your faculty data, and upload it below. All date fields must be in <strong>YYYY-MM-DD</strong> format.
+            Download the CSV template, fill in your department data, and upload it below.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
+          <div className="grid grid-cols-1 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
           </div>
           <Button onClick={downloadTemplate} className="gap-2">
@@ -160,7 +152,7 @@ export default function FacultyImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. "DOJ" for Joining Date)</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. &quot;Dept Code&quot; for Short Code)</p>
             </div>
           </button>
           {parseError && (
@@ -197,7 +189,7 @@ export default function FacultyImportPage() {
                 <thead>
                   <tr className="border-b bg-muted/40">
                     <th className="text-left p-2 font-medium text-muted-foreground w-8">#</th>
-                    {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
+                    {COLUMNS.map((c) => (
                       <th key={c.key} className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">
                         {c.label}{c.required && <span className="text-red-500 ml-0.5">*</span>}
                       </th>
@@ -210,7 +202,7 @@ export default function FacultyImportPage() {
                     return (
                       <tr key={i} className={`border-b ${missing ? "bg-red-50" : i % 2 === 0 ? "" : "bg-muted/20"}`}>
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
-                        {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
+                        {COLUMNS.map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
                             {row[c.key] || <span className="text-muted-foreground/40">—</span>}
                           </td>
@@ -244,7 +236,7 @@ export default function FacultyImportPage() {
             <div className="flex gap-3">
               <Button onClick={() => void handleImport()} loading={isImporting} disabled={isImporting}>
                 <Upload className="h-4 w-4 mr-2" />
-                Import {rows.length} Record{rows.length !== 1 ? "s" : ""}
+                Import {rows.length} Department{rows.length !== 1 ? "s" : ""}
               </Button>
               <Button variant="outline" onClick={() => { setRows([]); setResult(null); }}>
                 Clear
@@ -264,12 +256,9 @@ export default function FacultyImportPage() {
                 : <XCircle className="h-6 w-6 text-red-600 shrink-0" />
               }
               <div>
-                <p className="font-semibold">{result.created} record{result.created !== 1 ? "s" : ""} imported successfully</p>
+                <p className="font-semibold">{result.created} department{result.created !== 1 ? "s" : ""} imported successfully</p>
                 {result.failed.length > 0 && (
                   <p className="text-sm text-muted-foreground">{result.failed.length} row{result.failed.length !== 1 ? "s" : ""} skipped</p>
-                )}
-                {result.warnings.length > 0 && (
-                  <p className="text-sm text-amber-700">{result.warnings.length} field{result.warnings.length !== 1 ? "s" : ""} ignored due to invalid values</p>
                 )}
               </div>
             </div>
@@ -279,7 +268,7 @@ export default function FacultyImportPage() {
                 <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                   {result.failed.map((f, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span className="text-muted-foreground">Row {f.row} · {f.employeeId}</span>
+                      <span className="text-muted-foreground">Row {f.row} · {f.name}</span>
                       <span className="text-red-600 text-xs">{f.error}</span>
                     </div>
                   ))}
@@ -288,12 +277,12 @@ export default function FacultyImportPage() {
             )}
             {result.warnings.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notes</p>
                 <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                   {result.warnings.map((w, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span className="text-muted-foreground">Row {w.row} · {w.employeeId}</span>
-                      <span className="text-amber-700 text-xs">{w.warning}</span>
+                    <div key={i} className="flex items-start gap-2 px-3 py-2 text-sm">
+                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600" />
+                      <span className="text-muted-foreground">Row {w.row} · {w.name} — {w.message}</span>
                     </div>
                   ))}
                 </div>
@@ -301,7 +290,7 @@ export default function FacultyImportPage() {
             )}
             {result.created > 0 && (
               <Button asChild variant="outline" size="sm">
-                <Link href="/hod/faculty">View Faculty List</Link>
+                <Link href="/principal/departments">View Departments</Link>
               </Button>
             )}
           </CardContent>

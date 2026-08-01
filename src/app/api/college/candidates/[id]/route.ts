@@ -92,6 +92,10 @@ export async function PATCH(
     if (status !== undefined) updates.status = status;
     if (stage !== undefined) updates.currentStage = stage;
     if (batchId !== undefined) updates.batchId = batchId;
+    // A final REJECTED decision means this candidate was not hired — free them
+    // from their batch so they're selectable again for a future interview
+    // round (they remain shortlisted, just no longer tied to this batch).
+    else if (status === "REJECTED") updates.batchId = "";
     if (resumeUrl !== undefined) updates.resumeUrl = resumeUrl;
     if (name !== undefined) updates.name = name;
     if (email !== undefined) updates.email = email;

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ExternalLink, MapPin, Monitor, Plus, UserCheck, UserX } from "lucide-react";
+import { ExternalLink, MapPin, Monitor, UserCheck, UserX } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -176,14 +175,6 @@ export default function HODCandidatesPage() {
       <PageHeader
         title="Candidates"
         description="Manage and shortlist candidates for interview"
-        actions={
-          <Button asChild>
-            <Link href="/hod/candidates/new">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Candidate
-            </Link>
-          </Button>
-        }
       />
 
       <DataTable
@@ -194,15 +185,7 @@ export default function HODCandidatesPage() {
         searchPlaceholder="Search candidates..."
         searchKeys={["name", "email", "position", "department"] as (keyof CandidateRow)[]}
         emptyTitle="No candidates yet"
-        emptyDescription="Add candidates manually or they will appear from the careers page"
-        emptyAction={
-          <Button asChild>
-            <Link href="/hod/candidates/new">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Candidate
-            </Link>
-          </Button>
-        }
+        emptyDescription="Add a candidate from a hiring request in the pipeline, or they will appear automatically from the careers page"
         csvFilename="candidates"
       />
     </div>

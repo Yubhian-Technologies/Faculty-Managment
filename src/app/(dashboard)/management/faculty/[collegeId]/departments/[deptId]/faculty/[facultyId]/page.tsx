@@ -104,8 +104,7 @@ export default function ManagementFacultyDetailPage() {
               groups={buildTeachingLoadRows({
                 currentAssignments: teachingAssignments,
                 staticCourses: faculty.academicProfile?.teachingAssignment?.courses,
-                tenurePresentRecords: faculty.academicProfile?.tenurePresentRecords,
-                tenurePastRecords: faculty.academicProfile?.tenurePastRecords,
+                department: faculty.department,
               })}
             />
           </SectionCard>
