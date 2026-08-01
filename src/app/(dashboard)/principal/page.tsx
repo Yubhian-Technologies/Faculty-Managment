@@ -6,14 +6,7 @@ import {
   ClipboardList,
   CalendarCheck,
   UserCheck,
-  Clock,
-  CalendarClock,
-  ClipboardCheck,
-  Wallet,
-  GraduationCap,
-  AlertCircle,
-  FolderOpen,
-  ChevronRight,
+  BookOpen,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,15 +16,6 @@ import { useAuthStore } from "@/store/authStore";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { formatDate } from "@/lib/utils";
 import type { VacancyRequest, HiringBatch } from "@/types";
-
-const ADMIN_MODULES = [
-  { label: "Leave Approvals", description: "Approve HOD leave requests", href: "/principal/leave", icon: CalendarClock, color: "bg-sky-50 text-sky-600" },
-  { label: "Attendance Report", description: "College-wide attendance", href: "/principal/attendance", icon: ClipboardCheck, color: "bg-violet-50 text-violet-600" },
-  { label: "Payroll", description: "All staff salary overview", href: "/principal/payslips", icon: Wallet, color: "bg-green-50 text-green-600" },
-  { label: "Training Approvals", description: "Sanction FDPs & workshops", href: "/principal/training", icon: GraduationCap, color: "bg-cyan-50 text-cyan-600" },
-  { label: "Grievance Desk", description: "Resolve escalated grievances", href: "/principal/grievance", icon: AlertCircle, color: "bg-red-50 text-red-600" },
-  { label: "Documents", description: "Official college documents", href: "/principal/documents", icon: FolderOpen, color: "bg-amber-50 text-amber-600" },
-];
 
 export default function PrincipalDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -69,7 +53,7 @@ export default function PrincipalDashboard() {
           { label: "Pending Vacancies", value: isLoading ? "—" : pendingVacancies.length, icon: ClipboardList, color: "text-yellow-600 bg-yellow-50", href: "/principal/vacancies" },
           { label: "Interview Plans", value: isLoading ? "—" : pendingBatches.length, icon: CalendarCheck, color: "text-blue-600 bg-blue-50", href: "/principal/interviews" },
           { label: "Hiring Decisions", value: "—", icon: UserCheck, color: "text-green-600 bg-green-50", href: "/principal/decisions" },
-          { label: "Avg. Process Time", value: "—", icon: Clock, color: "text-purple-600 bg-purple-50", href: "/principal/reports" },
+          { label: "Departments", value: "—", icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments" },
         ].map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
@@ -153,29 +137,6 @@ export default function PrincipalDashboard() {
           </CardContent>
         </Card>
       )}
-
-      {/* Administration Modules */}
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Administration</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {ADMIN_MODULES.map((mod) => (
-            <Link key={mod.href} href={mod.href}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
-                <CardContent className="p-4 flex flex-col gap-3">
-                  <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${mod.color}`}>
-                    <mod.icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">{mod.label}</p>
-                    <p className="text-xs text-muted-foreground">{mod.description}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto mt-auto" />
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

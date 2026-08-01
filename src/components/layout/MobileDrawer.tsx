@@ -10,7 +10,8 @@ import { useUIStore } from "@/store/uiStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
-import { getNavItemsForRole, isNavItemActive, type NavItem } from "./navConfig";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { ROLE_LABELS } from "@/types";
 
@@ -28,6 +29,7 @@ export function MobileDrawer() {
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
+  const { hiddenModules, hiddenItems } = useNavVisibility();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -35,7 +37,7 @@ export function MobileDrawer() {
 
   if (!user) return null;
 
-  const baseNavItems = getNavItemsForRole(user.role);
+  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems);
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];

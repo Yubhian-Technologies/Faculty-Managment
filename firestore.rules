@@ -98,6 +98,29 @@ service cloud.firestore {
       allow write: if false; // server-only via Admin SDK
     }
 
+    // Legacy super-admin registry, superseded by systemUsers — no code path
+    // writes here anymore, kept read-locked to its own owner for any leftover docs.
+    match /superAdmins/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false; // server-only via Admin SDK
+    }
+
+    // Root-level platform config singletons (e.g. platformConfig/facultyNorms),
+    // distinct from any college-scoped data — SUPER_ADMIN-managed, staff-readable
+    // per doc (see /api/admin/settings/faculty-norms).
+    match /platformConfig/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    // Root-level platform audit log (distinct from colleges/{id}/auditLogs below),
+    // written by admin-settings routes that have no college context.
+    match /auditLogs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
     // ─── Colleges ─────────────────────────────────────────────────────────────
 
     match /colleges/{collegeId} {
@@ -119,9 +142,45 @@ service cloud.firestore {
         allow delete: if isSuperAdmin();
       }
 
-      match /facultyNorms/{normId} {
+      // NOTE: faculty norms actually live at the root-level `platformConfig/facultyNorms`
+      // singleton (see /api/admin/settings/faculty-norms), not a per-college subcollection —
+      // there is no `colleges/{id}/facultyNorms` doc written by any code path.
+
+      // ─── [ ACADEMIC STRUCTURE ] ─────────────────────────────────────────────
+
+      match /academicSessions/{sessionId} {
         allow read: if isStaff(collegeId);
-        allow write: if isPrincipal(collegeId);
+        allow create, update, delete: if isPrincipal(collegeId);
+      }
+
+      match /academicYears/{yearId} {
+        allow read: if isStaff(collegeId);
+        allow create, delete: if isPrincipal(collegeId);
+      }
+
+      match /courses/{courseId} {
+        allow read: if isStaff(collegeId);
+        allow create, update, delete: if isPrincipal(collegeId);
+      }
+
+      match /courseAcademicYears/{docId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isPrincipal(collegeId);
+      }
+
+      match /courseYearTimings/{docId} {
+        allow read: if isStaff(collegeId);
+        allow create, update, delete: if isPrincipal(collegeId);
+      }
+
+      match /sections/{sectionId} {
+        allow read: if isStaff(collegeId);
+        allow create, update, delete: if isHODorAbove(collegeId);
+      }
+
+      match /students/{studentId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isHODorAbove(collegeId) || isPanelMember(collegeId);
       }
 
       // ─── [ FACULTY MODULE ] ─────────────────────────────────────────────────
@@ -159,6 +218,14 @@ service cloud.firestore {
         allow read: if isStaff(collegeId);
         allow create: if (isHOD(collegeId) || isPrincipal(collegeId)) && hasCollegeId(collegeId);
         allow update: if isHOD(collegeId) || isPrincipal(collegeId) || isFinance(collegeId) || isManagement();
+        allow delete: if isSuperAdmin();
+      }
+
+      // Budget cycles (submission windows HODs raise budgetRequests against) are
+      // defined by Principal/Finance, not HOD.
+      match /budgetCycles/{cycleId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isPrincipal(collegeId) || isFinance(collegeId);
         allow delete: if isSuperAdmin();
       }
 
@@ -249,6 +316,37 @@ service cloud.firestore {
       }
 
       match /leaveBalances/{balanceId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
+      }
+
+      // Newer leave engine (src/lib/leave/*) — leaveRequests/leaveApprovalSteps/
+      // leaveBalancesV2 supersede leaveApplications/leaveBalances above for staff
+      // who apply for their own leave regardless of role (not just PANEL_MEMBER).
+      match /employeeLeaveProfiles/{profileId} {
+        allow read: if isStaff(collegeId);
+        allow create: if (isHODorAbove(collegeId) || isCollegeOffice(collegeId) ||
+          (isStaff(collegeId) && request.resource.data.uid == request.auth.uid)) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) ||
+          (isStaff(collegeId) && resource.data.uid == request.auth.uid);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /leaveRequests/{requestId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) ||
+          (isStaff(collegeId) && resource.data.employeeId == request.auth.uid);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /leaveApprovalSteps/{stepId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
+        allow update, delete: if isSuperAdmin();
+      }
+
+      match /leaveBalancesV2/{balanceId} {
         allow read: if isStaff(collegeId);
         allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
       }

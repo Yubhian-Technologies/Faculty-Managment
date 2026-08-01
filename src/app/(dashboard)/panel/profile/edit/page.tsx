@@ -112,74 +112,82 @@ export default function EditFacultyProfilePage() {
 
   if (!loaded) {
     return (
-      <div className="max-w-xl">
+      <div>
         <PageHeader title="Edit Profile" description="Loading…" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-xl">
+    <div>
       <PageHeader title="Edit Profile" description="Update your account and profile details" />
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
-              <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
-                <Label>Profile Photo</Label>
-                <AvatarUploadField
-                  name={name || "?"}
-                  photoUrl={photoUrl}
-                  targetId={user?.uid ?? ""}
-                  onUploaded={setPhotoUrl}
-                  onDeleted={() => setPhotoUrl("")}
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          {/* Left column */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
+                  <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
+                    <Label>Profile Photo</Label>
+                    <AvatarUploadField
+                      name={name || "?"}
+                      photoUrl={photoUrl}
+                      targetId={user?.uid ?? ""}
+                      onUploaded={setPhotoUrl}
+                      onDeleted={() => setPhotoUrl("")}
+                    />
+                  </div>
+                  <div className="grid flex-1 grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <Label>Full Name *</Label>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. Ramesh Kumar" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone</Label>
+                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
+              <CardContent>
+                <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right column */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
+              <CardContent>
+                <AcademicProfileFields
+                  value={academicProfile}
+                  onChange={setAcademicProfile}
+                  includeTeachingAssignment={false}
+                  hideFinancialModule
                 />
-              </div>
-              <div className="grid flex-1 grid-cols-1 gap-4">
-                <div className="space-y-2">
-                  <Label>Full Name *</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. Ramesh Kumar" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" />
-                </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" />
-            </div>
-
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={saving}>Save Changes</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
-        <CardContent>
-          <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-        </CardContent>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-        <CardContent>
-          <AcademicProfileFields
-            value={academicProfile}
-            onChange={setAcademicProfile}
-            includeTeachingAssignment={false}
-            hideFinancialModule
-          />
-        </CardContent>
-      </Card>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end mt-6 pt-4 border-t">
+          <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+          <Button type="submit" loading={saving}>Save Changes</Button>
+        </div>
+      </form>
     </div>
   );
 }

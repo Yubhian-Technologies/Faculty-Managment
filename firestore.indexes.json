@@ -23,6 +23,12 @@
     { "collectionGroup": "leaveApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "fromDate", "order": "ASCENDING" }] },
     { "collectionGroup": "leaveApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
 
+    { "collectionGroup": "leaveRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
+    { "collectionGroup": "leaveRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "employeeId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "leaveBalancesV2", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "leaveBalancesV2", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "leaveTypeCode", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+
     { "collectionGroup": "permissionRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" }] },
     { "collectionGroup": "permissionRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
     { "collectionGroup": "onDutyRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "fromDate", "order": "DESCENDING" }] },
@@ -30,6 +36,16 @@
 
     { "collectionGroup": "attendanceRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" }] },
     { "collectionGroup": "attendanceRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" }] },
+
+    { "collectionGroup": "sections", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "courseId", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "sections", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "sections", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyInchargeUid", "order": "ASCENDING" }, { "fieldPath": "courseId", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "sections", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyInchargeUid", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "sections", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "courseId", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+
+    { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "section", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "section", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
+    { "collectionGroup": "students", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
 
     { "collectionGroup": "salaryRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "year", "order": "DESCENDING" }, { "fieldPath": "month", "order": "DESCENDING" }] },
     { "collectionGroup": "salaryRecords", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "year", "order": "DESCENDING" }] },
@@ -42,6 +58,7 @@
 
     { "collectionGroup": "teachingAssignments", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "academicYear", "order": "DESCENDING" }] },
     { "collectionGroup": "teachingAssignments", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "academicYear", "order": "ASCENDING" }, { "fieldPath": "semester", "order": "ASCENDING" }] },
+    { "collectionGroup": "teachingAssignments", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "courseId", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
 
     { "collectionGroup": "grievances", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
     { "collectionGroup": "grievances", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
