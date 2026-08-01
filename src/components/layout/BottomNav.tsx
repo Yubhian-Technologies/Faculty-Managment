@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
-import { BOTTOM_NAV_ITEMS, isNavItemActive, type NavItem } from "./navConfig";
+import { BOTTOM_NAV_ITEMS, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useUIStore } from "@/store/uiStore";
@@ -17,7 +17,12 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
-export function BottomNav() {
+interface BottomNavProps {
+  hiddenModules: string[];
+  hiddenItems: string[];
+}
+
+export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
   const user = useAuthStore((s) => s.user);
   const pathname = usePathname();
   const { unreadCount } = useNotifications();
@@ -26,7 +31,7 @@ export function BottomNav() {
 
   if (!user || user.role === "STUDENT") return null;
 
-  const baseItems = BOTTOM_NAV_ITEMS[user.role] ?? [];
+  const baseItems = filterVisibleNavItems(BOTTOM_NAV_ITEMS[user.role] ?? [], hiddenModules, hiddenItems);
   // Faculty: inject Interviews after Home when assigned, keep total ≤ 5 slots
   const items: NavItem[] =
     user.role === "PANEL_MEMBER" && hasInterviews

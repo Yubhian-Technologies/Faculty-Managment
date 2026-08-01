@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import type { AppNotification } from "@/types";
@@ -60,12 +60,5 @@ export function useNotifications() {
     });
   };
 
-  // Actionable, unresolved notifications — surfaced as a login popup by
-  // ActionableNotificationPopup until the linked workflow step is completed.
-  const actionablePending = useMemo(
-    () => notifications.filter((n) => n.actionable && !n.resolved),
-    [notifications]
-  );
-
-  return { notifications, unreadCount, loading, markRead, markAllRead, actionablePending };
+  return { notifications, unreadCount, loading, markRead, markAllRead };
 }

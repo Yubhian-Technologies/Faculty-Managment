@@ -394,6 +394,19 @@ export interface FacultyNorms {
   updatedByName?: string;
 }
 
+// ─── Nav visibility (Super Admin controlled module/item hiding) ───────────────
+// hiddenModules hides an entire `NavItem.section` group for a role (every item
+// whose nearest preceding `section` header matches); hiddenItems hides one
+// specific item by href regardless of its module — the mechanism the HOD "My
+// Work" submodules use to be hidden individually rather than as a whole group.
+// See computeItemModule / filterVisibleNavItems in components/layout/navConfig.ts.
+export interface NavVisibilitySettings {
+  hiddenModules: Partial<Record<UserRole, string[]>>;
+  hiddenItems: Partial<Record<UserRole, string[]>>;
+  updatedAt?: Timestamp;
+  updatedByName?: string;
+}
+
 // ─── Faculty Member (central entity across all modules) ───────────────────────
 // All leave, attendance, payroll, appraisal records reference facultyId
 
