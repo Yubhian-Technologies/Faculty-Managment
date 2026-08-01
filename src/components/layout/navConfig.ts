@@ -274,6 +274,26 @@ export function filterVisibleNavItems(
   });
 }
 
+// True if a role's Nav Visibility settings hide the item/module a pathname
+// belongs to. Mirrors isNavItemActive's exact-match-then-prefix resolution
+// so a hidden parent (e.g. a hidden "Budget" item) also hides its sub-routes.
+export function isPathHidden(
+  pathname: string,
+  role: UserRole,
+  hiddenModules: string[],
+  hiddenItems: string[]
+): boolean {
+  const items = getNavItemsForRole(role);
+  let idx = items.findIndex((item) => item.href === pathname);
+  if (idx === -1) {
+    idx = items.findIndex((item) => item.href !== "/" && pathname.startsWith(item.href + "/"));
+  }
+  if (idx === -1) return false;
+  const item = items[idx];
+  if (hiddenItems.includes(item.href)) return true;
+  return hiddenModules.includes(computeItemModule(items, idx));
+}
+
 export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   MANAGEMENT: [
     { label: "Dashboard", href: "/management/dashboard", iconName: "LayoutDashboard", roles: ["MANAGEMENT"] },
