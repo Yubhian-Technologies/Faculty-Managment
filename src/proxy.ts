@@ -3,7 +3,10 @@ import type { NextRequest } from "next/server";
 import { ROLE_DASHBOARD_PATHS, rolesInheritedBy } from "@/types/core";
 import type { UserRole } from "@/types/core";
 
-const PUBLIC_PATHS = ["/login", "/careers", "/feedback", "/api/auth", "/location-interview"];
+// "/" is public so signed-out visitors land on the marketing page (src/app/page.tsx)
+// instead of being force-redirected to /login before it can render; that page
+// still client-side redirects signed-in users to their dashboard as before.
+const PUBLIC_PATHS = ["/", "/login", "/careers", "/feedback", "/api/auth", "/location-interview"];
 
 // /panel/interviews is shared — any staff role can be added as a panel member
 const PANEL_INTERVIEWS_PATH = "/panel/interviews";
