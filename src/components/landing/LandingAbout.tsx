@@ -9,17 +9,14 @@ import {
   Trophy,
   HeartHandshake,
   Rocket,
-  Quote,
   ArrowUpRight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Reveal } from "./Reveal";
 
-/** Placeholder campus photo — swap for an official Vishnu campus shot when one
- *  is available. Loaded as a plain <img> to match the navbar/footer logo usage. */
-const ABOUT_IMAGE_URL =
-  "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=1200&q=80";
+/** Loaded as a plain <img> to match the navbar/footer logo usage. */
+const ABOUT_IMAGE_URL = "/about-team-illustration.png";
 
 const HIGHLIGHTS = [
   { icon: GraduationCap, value: "25K+", label: "Students", tile: "bg-blue-50 text-blue-600" },
@@ -136,23 +133,10 @@ export function LandingAbout() {
             <div className="relative">
               <img
                 src={ABOUT_IMAGE_URL}
-                alt="Students walking together on the Vishnu campus"
+                alt="Vishnu People team collaborating around institutional data and reports"
                 loading="lazy"
                 className="h-72 w-full rounded-2xl object-cover shadow-xl sm:h-96 lg:h-104"
               />
-
-              {/* Pull-quote: stacked under the photo on small screens, overlapping
-                  the photo's right edge from lg up as in the reference. */}
-              <Card className="mt-5 border-border/80 p-6 shadow-xl lg:absolute lg:-right-6 lg:top-1/2 lg:mt-0 lg:w-72 lg:-translate-y-1/2">
-                <Quote className="h-7 w-7 text-primary" aria-hidden />
-                <blockquote className="mt-3 space-y-1 text-base font-medium leading-relaxed text-foreground">
-                  <p>Together, we learn.</p>
-                  <p>Together, we grow.</p>
-                  <p>Together, we build a better tomorrow.</p>
-                </blockquote>
-                <div className="mt-5 h-0.5 w-10 rounded-full bg-primary" />
-                <p className="mt-3 text-sm font-semibold text-primary">Vishnu People</p>
-              </Card>
             </div>
           </Reveal>
         </div>
