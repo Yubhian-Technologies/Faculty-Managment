@@ -257,11 +257,22 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    // Resolve HOD's department
-    let hodDept = "";
-    if (session.role === "HOD") {
-      const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();
-      hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+    // Resolve HOD's department. This template has no Department column at
+    // all (see HINTS: "Department is auto-assigned from your HOD profile") —
+    // there's no per-row value to fall back on, so a caller this can't be
+    // resolved for (a non-HOD role reaching this route via the L0-L6 role
+    // inheritance that lets Principal/VP browse HOD pages, or an HOD whose
+    // own profile has no department set) must be rejected up front. Silently
+    // falling back to "" previously created faculty with no department at
+    // all — invisible on every department's Faculty list (including their
+    // own), since every list there is scoped by an exact department match.
+    if (session.role !== "HOD") {
+      return NextResponse.json({ error: "Only an HOD can bulk-import faculty — sign in as the HOD of the target department" }, { status: 403 });
+    }
+    const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();
+    const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+    if (!hodDept) {
+      return NextResponse.json({ error: "Your account has no department set — ask your Principal to assign one before importing faculty" }, { status: 400 });
     }
 
     // Load existing employeeIds to detect duplicates
@@ -329,14 +340,11 @@ export async function POST(request: Request) {
         return n;
       };
 
-      // Determine department
-      const department = hodDept || "";
-
       const docRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
 
       const payload: Record<string, unknown> = {
         collegeId,
-        department,
+        department: hodDept,
         employeeId: empId,
         name: row.name.trim(),
         email: row.email.trim().toLowerCase(),

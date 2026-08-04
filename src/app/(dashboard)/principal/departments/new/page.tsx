@@ -10,20 +10,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { FMSUser } from "@/types";
+import type { Department, FMSUser } from "@/types";
 
 export default function NewDepartmentPage() {
   const router = useRouter();
   const [hods, setHods] = useState<FMSUser[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasSubDepartments, setHasSubDepartments] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/users?role=HOD")
       .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
       .then((d) => setHods(d.users ?? []))
+      .catch(() => {});
+
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => setDepartments((d.departments ?? []).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => {});
   }, []);
 
@@ -52,6 +61,10 @@ export default function NewDepartmentPage() {
     setValue("hodUid", uid);
   }
 
+  function toggleSecondaryDepartment(name: string, checked: boolean) {
+    setSecondaryDepartments((prev) => (checked ? [...prev, name] : prev.filter((n) => n !== name)));
+  }
+
   const onSubmit = async (data: DepartmentFormData) => {
     setIsSubmitting(true);
     try {
@@ -61,6 +74,8 @@ export default function NewDepartmentPage() {
         code: data.code.toUpperCase(),
         hodUid: data.hodUid ?? "",
         hodName: selectedHod?.name ?? "",
+        hasSubDepartments,
+        secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
       };
       const res = await fetch("/api/college/departments", {
         method: "POST",
@@ -143,6 +158,50 @@ export default function NewDepartmentPage() {
                   No HODs yet — create one above
                 </p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Secondary Departments</Label>
+              {(() => {
+                const options = departments.filter((d) => d.name !== nameValue && !d.parentDepartmentId);
+                return options.length > 0 ? (
+                  <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+                    {options.map((d) => (
+                      <label key={d.id} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox
+                          checked={secondaryDepartments.includes(d.name)}
+                          onCheckedChange={(checked) => toggleSecondaryDepartment(d.name, !!checked)}
+                        />
+                        {d.name}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                    No other top-level departments yet
+                  </p>
+                );
+              })()}
+              <p className="text-xs text-muted-foreground">
+                Optional — every section College Office creates under this department will be cross-listed to all
+                selected departments, so each one&apos;s HOD gets automatic view-only access to its students,
+                roster, and assigned faculty (e.g. a shared first-year department feeding both CSE and ECE).
+              </p>
+            </div>
+
+            <div className="flex items-start gap-2 rounded-md border p-3">
+              <Checkbox
+                id="dept-has-subdepts"
+                checked={hasSubDepartments}
+                onCheckedChange={(v) => setHasSubDepartments(v === true)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
+                <p className="text-xs text-muted-foreground">
+                  Enable if this department splits into sub-branches (e.g. Basic Science → BS-Maths, BS-English).
+                  The HOD will get a &quot;Sub-Departments&quot; page to add sub-departments and assign sub-HODs.
+                </p>
+              </div>
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

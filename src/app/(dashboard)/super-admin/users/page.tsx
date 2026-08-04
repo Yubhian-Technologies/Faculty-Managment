@@ -375,9 +375,19 @@ export default function UsersPage() {
               Set a new password for <strong>{resetUser?.name as string}</strong>.
             </p>
             <div className="space-y-2">
-              <Label>New Password</Label>
+              <Label htmlFor="reset-new-password">New Password</Label>
               <Input
+                id="reset-new-password"
+                name="reset-new-password"
                 type="password"
+                // Without this, a field this generic (no name/id/autocomplete
+                // hint) is exactly what Chrome's password manager targets for
+                // an autofill suggestion — and since it can't know this sets
+                // *someone else's* password, it offers the one saved for this
+                // origin under the currently logged-in Super Admin's own
+                // account. "new-password" tells it this isn't a login field
+                // at all, so it won't offer to fill anyone's saved password.
+                autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Min 6 characters"

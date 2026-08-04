@@ -37,6 +37,7 @@ interface EmploymentForm {
   name: string;
   phone: string;
   collegeEmail: string;
+  apaarFacultyId: string;
   designation: Designation;
   qualification: string;
   specialization: string;
@@ -48,15 +49,17 @@ interface EmploymentForm {
   researchExperience: number;
   hasPHD: boolean;
   employmentType: EmploymentType;
+  aicteEligible: boolean;
   status: FacultyStatus;
   joiningDate: string;
+  dateOfJoiningDepartment: string;
 }
 
 const EMPTY_FORM: EmploymentForm = {
-  name: "", phone: "", collegeEmail: "", designation: "ASSISTANT_PROFESSOR", qualification: "",
+  name: "", phone: "", collegeEmail: "", apaarFacultyId: "", designation: "ASSISTANT_PROFESSOR", qualification: "",
   specialization: "", experienceYears: 0, internalExperience: 0, externalExperience: 0,
   inCampusExperience: 0, industryExperience: 0, researchExperience: 0, hasPHD: false,
-  employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
+  employmentType: "PERMANENT", aicteEligible: false, status: "ACTIVE", joiningDate: "", dateOfJoiningDepartment: "",
 };
 
 const EXPERIENCE_FIELDS: [keyof EmploymentForm, string][] = [
@@ -106,6 +109,7 @@ export default function EditFacultyPage() {
           name: (m.name as string) ?? "",
           phone: (m.phone as string) ?? "",
           collegeEmail: (m.collegeEmail as string) ?? "",
+          apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           designation: (m.designation as Designation) ?? "ASSISTANT_PROFESSOR",
           qualification: (m.qualification as string) ?? "",
           specialization: (m.specialization as string) ?? "",
@@ -117,8 +121,10 @@ export default function EditFacultyPage() {
           researchExperience: (m.researchExperience as number) ?? 0,
           hasPHD: (m.hasPHD as boolean) ?? false,
           employmentType: (m.employmentType as EmploymentType) ?? "PERMANENT",
+          aicteEligible: (m.aicteEligible as boolean) ?? false,
           status: (m.status as FacultyStatus) ?? "ACTIVE",
           joiningDate: toDateInputValue(m.joiningDate as never),
+          dateOfJoiningDepartment: toDateInputValue(m.dateOfJoiningDepartment as never),
         });
         setPersonalDetails({
           gender: (m.gender as string) ?? "",
@@ -311,6 +317,10 @@ export default function EditFacultyPage() {
                       <Label>Phone</Label>
                       <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
                     </div>
+                    <div className="space-y-2">
+                      <Label>APAAR Faculty ID</Label>
+                      <Input value={form.apaarFacultyId} onChange={(e) => set({ apaarFacultyId: e.target.value })} placeholder="NBA/AICTE APAAR ID" />
+                    </div>
                   </div>
                 </div>
 
@@ -396,9 +406,17 @@ export default function EditFacultyPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Joining Date *</Label>
+                    <Label>Date of Joining Institution *</Label>
                     <Input type="date" value={form.joiningDate} onChange={(e) => set({ joiningDate: e.target.value })} />
                   </div>
+                  <div className="space-y-2">
+                    <Label>Date of Joining Department</Label>
+                    <Input type="date" value={form.dateOfJoiningDepartment} onChange={(e) => set({ dateOfJoiningDepartment: e.target.value })} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="aicteEligible" checked={form.aicteEligible} onChange={(e) => set({ aicteEligible: e.target.checked })} className="h-4 w-4 rounded border-gray-300" />
+                  <Label htmlFor="aicteEligible" className="cursor-pointer">AICTE Eligible</Label>
                 </div>
               </CardContent>
             </Card>

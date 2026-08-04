@@ -21,24 +21,25 @@ import {
   DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS,
   TEACHING_DESIGNATIONS,
-  SUPPORTING_STAFF_DESIGNATIONS,
 } from "@/types";
-import type { Designation, EmploymentType, FacultyProfileFields } from "@/types";
+import type { FacultyProfileFields } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
+  apaarFacultyId: z.string().optional(),
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().optional(),
-  staffType: z.enum(["teaching", "supporting"]),
   designation: z.string().min(1, "Designation is required"),
   qualification: z.string().min(1, "Qualification is required"),
   specialization: z.string().optional(),
   experienceYears: z.number().min(0, "Cannot be negative"),
   joiningDate: z.string().min(1, "Joining date is required"),
+  dateOfJoiningDepartment: z.string().optional(),
   employmentType: z.string().min(1, "Employment type is required"),
+  aicteEligible: z.boolean().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -59,12 +60,12 @@ export default function NewFacultyPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "ASSISTANT_PROFESSOR", employmentType: "PERMANENT", password: "", staffType: "teaching" },
+    defaultValues: { experienceYears: 0, designation: "ASSISTANT_PROFESSOR", employmentType: "PERMANENT", password: "", aicteEligible: false },
   });
 
   const designation = watch("designation");
   const employmentType = watch("employmentType");
-  const staffType = watch("staffType");
+  const aicteEligible = watch("aicteEligible");
   const name = watch("name");
 
   const onSubmit = async (data: FormData) => {
@@ -134,6 +135,10 @@ export default function NewFacultyPage() {
                   <Input id="name" {...register("name")} placeholder="Dr. Priya Nair" />
                   {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="apaarFacultyId">APAAR Faculty ID</Label>
+                  <Input id="apaarFacultyId" {...register("apaarFacultyId")} placeholder="NBA/AICTE APAAR ID" />
+                </div>
               </div>
             </div>
 
@@ -164,36 +169,6 @@ export default function NewFacultyPage() {
               </p>
             </div>
 
-            {/* Staff Type */}
-            <div className="space-y-2">
-              <Label>Staff Type *</Label>
-              <div className="flex gap-3">
-                {(["teaching", "supporting"] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => {
-                      setValue("staffType", t, { shouldValidate: true });
-                      setValue("designation", t === "teaching" ? "ASSISTANT_PROFESSOR" : "TECHNICAL");
-                    }}
-                    className={`flex-1 rounded-lg border-2 py-3 text-sm font-medium transition-all capitalize ${
-                      staffType === t
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    {t === "teaching" ? "Teaching Staff" : "Supporting Staff"}
-                  </button>
-                ))}
-              </div>
-              {errors.staffType && <p className="text-sm text-destructive">{errors.staffType.message}</p>}
-              <p className="text-xs text-muted-foreground">
-                {staffType === "teaching"
-                  ? "Lecturers, professors — follow academic calendar, get vacation leave."
-                  : "Admin, lab, library, accounts — work year-round, higher EL entitlement."}
-              </p>
-            </div>
-
             {/* Academic profile */}
             <div className="pt-2 pb-1 border-t">
               <p className="text-sm font-medium text-muted-foreground">Academic Profile</p>
@@ -210,7 +185,7 @@ export default function NewFacultyPage() {
                     <SelectValue placeholder="Select designation" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(staffType === "teaching" ? TEACHING_DESIGNATIONS : SUPPORTING_STAFF_DESIGNATIONS).map((v) => (
+                    {TEACHING_DESIGNATIONS.map((v) => (
                       <SelectItem key={v} value={v}>{DESIGNATION_LABELS[v]}</SelectItem>
                     ))}
                   </SelectContent>
@@ -275,7 +250,7 @@ export default function NewFacultyPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="joiningDate">Joining Date *</Label>
+                <Label htmlFor="joiningDate">Date of Joining Institution *</Label>
                 <Input
                   id="joiningDate"
                   type="date"
@@ -283,6 +258,26 @@ export default function NewFacultyPage() {
                 />
                 {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="dateOfJoiningDepartment">Date of Joining Department</Label>
+                <Input
+                  id="dateOfJoiningDepartment"
+                  type="date"
+                  {...register("dateOfJoiningDepartment")}
+                />
+                <p className="text-xs text-muted-foreground">Leave blank if same as institution joining date.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="aicteEligible"
+                checked={aicteEligible ?? false}
+                onChange={(e) => setValue("aicteEligible", e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <Label htmlFor="aicteEligible" className="cursor-pointer">AICTE Eligible</Label>
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

@@ -3,6 +3,20 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+
+// A parent department's HOD only has view-only (secondary) access to a child
+// sub-department's assignments — only the assignment's own (primary) HOD may
+// edit or remove it.
+async function assertHodOwnsAssignment(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  uid: string,
+  assignmentDepartment: string
+): Promise<boolean> {
+  const scope = await getHodDepartmentScope(db, collegeId, uid);
+  return !!scope.departmentName && scope.departmentName === assignmentDepartment;
+}
 
 export async function PATCH(
   request: Request,
@@ -23,6 +37,13 @@ export async function PATCH(
     const ref = db.collection("colleges").doc(session.collegeId).collection("teachingAssignments").doc(id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (session.role === "HOD") {
+      const dept = (snap.data() as { department?: string }).department ?? "";
+      if (!(await assertHodOwnsAssignment(db, session.collegeId, session.uid, dept))) {
+        return NextResponse.json({ error: "You can only edit assignments in your own department" }, { status: 403 });
+      }
+    }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.hoursPerWeek != null) updates.hoursPerWeek = Number(body.hoursPerWeek);
@@ -57,6 +78,13 @@ export async function DELETE(
     const ref = collegeRef.collection("teachingAssignments").doc(id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (session.role === "HOD") {
+      const dept = (snap.data() as { department?: string }).department ?? "";
+      if (!(await assertHodOwnsAssignment(db, session.collegeId, session.uid, dept))) {
+        return NextResponse.json({ error: "You can only remove assignments in your own department" }, { status: 403 });
+      }
+    }
 
     const slotsSnap = await collegeRef.collection("timetableSlots").where("assignmentId", "==", id).get();
     const batch = db.batch();

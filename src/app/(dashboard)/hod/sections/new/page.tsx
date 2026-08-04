@@ -13,8 +13,6 @@ import type { Course } from "@/types";
 
 type FacultyOption = { id: string; name: string; designation: string };
 
-const STUDENT_FACULTY_RATIO = 15;
-
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
@@ -25,7 +23,6 @@ type SectionForm = {
   name: string;
   year: string;
   batch: string;
-  studentCount: number | "";
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
@@ -42,7 +39,6 @@ export default function NewSectionPage() {
     name: "",
     year: "",
     batch: "",
-    studentCount: "",
     facultyInchargeUid: "",
     facultyInchargeName: "",
   });
@@ -98,7 +94,6 @@ export default function NewSectionPage() {
           name: form.name,
           year: Number(form.year),
           batch: form.batch,
-          studentCount: form.studentCount === "" ? 0 : Number(form.studentCount),
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
         }),
@@ -173,22 +168,6 @@ export default function NewSectionPage() {
                 placeholder="e.g. 2023-2027"
               />
               <p className="text-xs text-muted-foreground">Admission year to passout year</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Student Intake</Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.studentCount}
-                onChange={(e) => setF({ studentCount: e.target.value === "" ? "" : Number(e.target.value) })}
-                placeholder="e.g. 60"
-              />
-              {form.studentCount !== "" && Number(form.studentCount) > 0 && (
-                <p className="text-xs text-blue-600 font-medium">
-                  Faculty required (1:{STUDENT_FACULTY_RATIO} ratio): {Math.ceil(Number(form.studentCount) / STUDENT_FACULTY_RATIO)}
-                </p>
-              )}
             </div>
 
             <div className="space-y-2">

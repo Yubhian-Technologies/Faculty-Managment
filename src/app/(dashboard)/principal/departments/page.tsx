@@ -120,6 +120,11 @@ export default function DepartmentsPage() {
                     ) : (
                       <p className="text-xs text-muted-foreground mt-1.5">No years assigned yet</p>
                     )}
+                    {dept.secondaryDepartments && dept.secondaryDepartments.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Cross-listed with <span className="text-foreground">{dept.secondaryDepartments.join(", ")}</span>
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <Button
