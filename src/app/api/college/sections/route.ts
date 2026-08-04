@@ -90,7 +90,13 @@ export async function GET(request: Request) {
     // `studentCount` used to be a manually-typed capacity estimate ("Student
     // Intake"); now that rosters are actually imported, overwrite it with the
     // real enrolled count per (department, section, year) instead of trusting
-    // the stored field, which nothing writes anymore.
+    // the stored field, which nothing writes anymore. The key also includes
+    // the section's own cross-listed department (or "" if none): two
+    // sections can otherwise share the exact same (department, name, year)
+    // when they're cross-listed to different branches — e.g. two "A"s under
+    // Basic Science, one feeding CSE and one ECE — and without this, both
+    // would be double-counted into a single merged total instead of their
+    // own real counts.
     const deptNames = Array.from(new Set(sections.map((s) => s.department as string).filter(Boolean)));
     if (deptNames.length > 0) {
       const chunks: string[][] = [];
@@ -107,14 +113,16 @@ export async function GET(request: Request) {
       const countMap = new Map<string, number>();
       for (const snap of studentSnaps) {
         for (const d of snap.docs) {
-          const s = d.data() as { department?: string; section?: string; year?: number };
-          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}`;
+          const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string };
+          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}`;
           countMap.set(key, (countMap.get(key) ?? 0) + 1);
         }
       }
 
       for (const sec of sections) {
-        const key = `${sec.department as string}|${sec.name as string}|${sec.year as number}`;
+        const secondaryDepts = sec.secondaryDepartments as string[] | undefined;
+        const secondary = secondaryDepts?.length === 1 ? secondaryDepts[0].toLowerCase() : "";
+        const key = `${sec.department as string}|${sec.name as string}|${sec.year as number}|${secondary}`;
         sec.studentCount = countMap.get(key) ?? 0;
       }
     }
