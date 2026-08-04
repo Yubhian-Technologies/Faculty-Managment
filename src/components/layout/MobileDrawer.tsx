@@ -10,6 +10,8 @@ import { useUIStore } from "@/store/uiStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
+import { useIncomingStudents } from "@/hooks/useIncomingStudents";
+import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { ROLE_LABELS } from "@/types";
@@ -33,6 +35,8 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
+  const { hasIncomingStudents } = useIncomingStudents();
+  const { isSubDepartment } = useIsSubDepartmentHod();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -40,7 +44,9 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
 
   if (!user) return null;
 
-  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems);
+  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
+    .filter((item) => hasIncomingStudents || item.href !== "/hod/students/incoming")
+    .filter((item) => !isSubDepartment || item.href !== "/hod/settings/sub-departments");
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];

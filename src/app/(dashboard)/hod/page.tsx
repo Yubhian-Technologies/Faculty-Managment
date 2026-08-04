@@ -26,7 +26,7 @@ import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
-import type { VacancyRequest, HiringBatch } from "@/types";
+import type { Department, VacancyRequest, HiringBatch } from "@/types";
 
 const HOD_MODULES = [
   { label: "Faculty", description: "Department faculty list", href: "/hod/faculty", icon: UsersRound, color: "bg-blue-50 text-blue-600" },
@@ -58,6 +58,7 @@ export default function HODDashboard() {
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [batches, setBatches] = useState<HiringBatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [parentDeptName, setParentDeptName] = useState<string | null>(null);
 
   useEffect(() => {
     setIsLoading(true);
@@ -75,13 +76,23 @@ export default function HODDashboard() {
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
-  }, []);
+
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => {
+        const departments = d.departments ?? [];
+        const own = departments.find((dept) => dept.name === user?.department);
+        const parent = own?.parentDepartmentId ? departments.find((dept) => dept.id === own.parentDepartmentId) : null;
+        setParentDeptName(parent?.name ?? null);
+      })
+      .catch(() => {});
+  }, [user?.department]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name?.split(" ")[0] ?? "HOD"}`}
-        description={`${user?.department ?? "Department"} — Department Portal`}
+        description={`${user?.department ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""} — Department Portal`}
         actions={
           !isHiringHidden && (
             <Button asChild>

@@ -10,6 +10,8 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
+import { useIncomingStudents } from "@/hooks/useIncomingStudents";
+import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { OrgScopeTree } from "./OrgScopeTree";
@@ -37,10 +39,21 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
+  const { hasIncomingStudents } = useIncomingStudents();
+  const { isSubDepartment } = useIsSubDepartmentHod();
 
   if (!user) return null;
 
-  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems);
+  // "Incoming Students" is only ever relevant once the office has actually
+  // pre-registered a student to this department while enrolling them
+  // elsewhere — hide the link entirely until there's at least one, instead
+  // of leaving a permanently-empty page in every HOD's sidebar.
+  // "Sub-Departments" is hidden for an HOD whose own department already is a
+  // sub-department — sub-departments are one level deep only, so that page
+  // can never do anything for them.
+  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
+    .filter((item) => hasIncomingStudents || item.href !== "/hod/students/incoming")
+    .filter((item) => !isSubDepartment || item.href !== "/hod/settings/sub-departments");
 
   // Inject dynamic nav items based on panel assignments (any role can be a panel member)
   let navItems = baseNavItems;

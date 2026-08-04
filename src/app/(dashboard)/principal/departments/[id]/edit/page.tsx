@@ -22,9 +22,12 @@ export default function EditDepartmentPage() {
   const { id } = useParams<{ id: string }>();
 
   const [department, setDepartment] = useState<Department | null>(null);
+  const [allDepartments, setAllDepartments] = useState<Department[]>([]);
   const [hods, setHods] = useState<FMSUser[]>([]);
   const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
   const [assignedYears, setAssignedYears] = useState<number[]>([]);
+  const [hasSubDepartments, setHasSubDepartments] = useState(false);
+  const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addingYear, setAddingYear] = useState(false);
@@ -58,9 +61,12 @@ export default function EditDepartmentPage() {
           return;
         }
         setDepartment(dept);
+        setAllDepartments(deptRes.departments ?? []);
         setHods(hodRes.users ?? []);
         setOpenYears((yearsRes.academicYears ?? []).filter((y) => y.isActive));
         setAssignedYears(dept.assignedYears ?? []);
+        setHasSubDepartments(dept.hasSubDepartments ?? false);
+        setSecondaryDepartments(dept.secondaryDepartments ?? []);
         reset({ name: dept.name, code: dept.code, hodUid: dept.hodUid ?? "" });
       } catch {
         toast({ variant: "destructive", title: "Failed to load department" });
@@ -73,6 +79,10 @@ export default function EditDepartmentPage() {
 
   function toggleAssignedYear(year: number, checked: boolean) {
     setAssignedYears((prev) => (checked ? [...prev, year].sort() : prev.filter((y) => y !== year)));
+  }
+
+  function toggleSecondaryDepartment(name: string, checked: boolean) {
+    setSecondaryDepartments((prev) => (checked ? [...prev, name] : prev.filter((n) => n !== name)));
   }
 
   async function handleAddYear() {
@@ -112,6 +122,7 @@ export default function EditDepartmentPage() {
           hodUid: uid,
           hodName: newHod?.name ?? "",
           assignedYears,
+          hasSubDepartments,
         }),
       });
       if (!patchRes.ok) {
@@ -139,6 +150,8 @@ export default function EditDepartmentPage() {
         hodUid: data.hodUid ?? "",
         hodName: selectedHod?.name ?? "",
         assignedYears,
+        hasSubDepartments,
+        secondaryDepartments,
       };
       const res = await fetch("/api/college/departments", {
         method: "PATCH",
@@ -257,6 +270,52 @@ export default function EditDepartmentPage() {
               )}
               <p className="text-xs text-muted-foreground">Which years of study this department currently teaches. HODs can only create sections for these years.</p>
             </div>
+
+            <div className="space-y-2">
+              <Label>Secondary Departments</Label>
+              {(() => {
+                const options = allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId);
+                return options.length > 0 ? (
+                  <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+                    {options.map((d) => (
+                      <label key={d.id} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox
+                          checked={secondaryDepartments.includes(d.name)}
+                          onCheckedChange={(checked) => toggleSecondaryDepartment(d.name, !!checked)}
+                        />
+                        {d.name}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                    No other top-level departments yet
+                  </p>
+                );
+              })()}
+              <p className="text-xs text-muted-foreground">
+                Optional — every section College Office creates under this department will be cross-listed to all
+                selected departments, so each one&apos;s HOD gets automatic view-only access to its students,
+                roster, and assigned faculty (e.g. a shared first-year department feeding both CSE and ECE).
+              </p>
+            </div>
+
+            {!department?.parentDepartmentId && (
+              <div className="flex items-start gap-2 rounded-md border p-3">
+                <Checkbox
+                  id="dept-has-subdepts"
+                  checked={hasSubDepartments}
+                  onCheckedChange={(v) => setHasSubDepartments(v === true)}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Enable if this department splits into sub-branches (e.g. Basic Science → BS-Maths, BS-English).
+                    The HOD will get a &quot;Sub-Departments&quot; page to add sub-departments and assign sub-HODs.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>

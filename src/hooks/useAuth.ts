@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onIdTokenChanged, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { getUserById } from "@/lib/firestore/users";
 import { useAuthStore } from "@/store/authStore";
@@ -13,7 +13,12 @@ export function useAuth() {
     useAuthStore();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+    // onIdTokenChanged (not onAuthStateChanged) — it also re-fires whenever
+    // the Firebase SDK silently refreshes the ID token in the background
+    // (roughly hourly), which is what lets the block below keep the
+    // server-side fms-session cookie's embedded expiry current for as long
+    // as the client stays signed in.
+    const unsub = onIdTokenChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         logout();
         return;
@@ -53,6 +58,20 @@ export function useAuth() {
               serverProfile = data.profile ?? null;
             }
           } catch { /* non-fatal */ }
+        } else {
+          // Role already resolved from JWT claims, so the fast path below
+          // never touches /api/auth/session — but that route is also what
+          // (re)sets the httpOnly fms-session cookie, and that cookie's
+          // embedded `exp` is the Firebase ID token's own ~1h expiry, not a
+          // fixed 24h one. Without this, the cookie goes stale ~1h after
+          // login and every server route starts 401ing while the client
+          // still looks signed in. Fire-and-forget: just refreshes the
+          // cookie, doesn't affect local state.
+          fetch("/api/auth/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token }),
+          }).catch(() => {});
         }
 
         if (role === "SUPER_ADMIN") {

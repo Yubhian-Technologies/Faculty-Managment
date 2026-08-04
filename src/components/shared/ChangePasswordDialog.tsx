@@ -76,7 +76,17 @@ export function ChangePasswordDialog() {
         <DialogHeader>
           <DialogTitle>Change Password</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form
+          // See CreateHodDialog.tsx — DialogContent renders through a Portal,
+          // but React's synthetic "submit" event still bubbles through the
+          // component tree, so without this it would also submit any
+          // page-level <form> this dialog happens to be rendered inside.
+          onSubmit={(e) => {
+            e.stopPropagation();
+            void handleSubmit(onSubmit)(e);
+          }}
+          className="space-y-4"
+        >
           <div className="space-y-2">
             <Label htmlFor="current-password">Current Password *</Label>
             <Input id="current-password" type="password" autoComplete="current-password" {...register("currentPassword")} />

@@ -74,7 +74,20 @@ export function CreateHodDialog({ department, onCreated }: CreateHodDialogProps)
         <DialogHeader>
           <DialogTitle>Create HOD Account</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            // DialogContent renders through a Portal (to document.body), but
+            // React's synthetic events bubble through the *component* tree,
+            // not the DOM tree — so without this, submitting this form also
+            // bubbles up and fires whatever page-level <form onSubmit> this
+            // dialog happens to be rendered inside (e.g. the Edit/Add
+            // Department form), prematurely saving *that* form and
+            // navigating away before this dialog's own async work finishes.
+            e.stopPropagation();
+            void handleSubmit(onSubmit)(e);
+          }}
+          className="space-y-4"
+        >
           <div className="space-y-2">
             <Label htmlFor="hod-name">Full Name *</Label>
             <Input id="hod-name" {...register("name")} placeholder="Dr. Ramesh Kumar" />
@@ -82,12 +95,12 @@ export function CreateHodDialog({ department, onCreated }: CreateHodDialogProps)
           </div>
           <div className="space-y-2">
             <Label htmlFor="hod-email">Email *</Label>
-            <Input id="hod-email" type="email" {...register("email")} placeholder="hod@college.edu" />
+            <Input id="hod-email" type="email" autoComplete="off" {...register("email")} placeholder="hod@college.edu" />
             {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="hod-password">Temporary Password *</Label>
-            <Input id="hod-password" type="password" {...register("password")} placeholder="Min 8 characters" />
+            <Input id="hod-password" type="password" autoComplete="new-password" {...register("password")} placeholder="Min 8 characters" />
             {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
             <p className="text-xs text-muted-foreground">Share this with the HOD to log in for the first time.</p>
           </div>

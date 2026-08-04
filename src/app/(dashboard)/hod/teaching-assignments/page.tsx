@@ -9,7 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import type { Course, Section, Subject, TeachingAssignment, FacultyMember } from "@/types";
+import type { Course, SectionListItem, Subject, TeachingAssignment, FacultyMember } from "@/types";
+
+type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
+type FacultyRow = FacultyMember & { accessLevel?: "primary" | "secondary" };
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -18,14 +21,14 @@ function ordinalYear(year: number) {
 
 export default function TeachingAssignmentsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [faculty, setFaculty] = useState<FacultyMember[]>([]);
-  const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
+  const [faculty, setFaculty] = useState<FacultyRow[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Shared course/year context for both the staffing-gap finder and the assign-faculty form.
   const [courseId, setCourseId] = useState("");
   const [year, setYear] = useState("");
-  const [sectionsCache, setSectionsCache] = useState<Record<string, Section[]>>({});
+  const [sectionsCache, setSectionsCache] = useState<Record<string, SectionListItem[]>>({});
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
 
   const [assignForm, setAssignForm] = useState({ sectionId: "", subjectId: "", facultyId: "" });
@@ -35,8 +38,8 @@ export default function TeachingAssignmentsPage() {
     setIsLoading(true);
     Promise.all([
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)))),
-      fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>).then((d) => setFaculty(d.faculty ?? [])),
-      fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>).then((d) => setAssignments(d.assignments ?? [])),
+      fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty(d.faculty ?? [])),
+      fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>).then((d) => setAssignments(d.assignments ?? [])),
     ])
       .catch(() => toast({ variant: "destructive", title: "Failed to load teaching data" }))
       .finally(() => setIsLoading(false));
@@ -45,7 +48,13 @@ export default function TeachingAssignmentsPage() {
   useEffect(() => { load(); }, []);
 
   const key = `${courseId}_${year}`;
-  const sections = useMemo(() => sectionsCache[key] ?? [], [sectionsCache, key]);
+  // Sub-department sections are view-only for a parent HOD — exclude them here
+  // so both the staffing-gap finder and the assign-faculty form only ever
+  // operate on sections this HOD can actually edit.
+  const sections = useMemo(
+    () => (sectionsCache[key] ?? []).filter((s) => s.accessLevel !== "secondary"),
+    [sectionsCache, key]
+  );
   const subjects = useMemo(() => subjectsCache[key] ?? [], [subjectsCache, key]);
   const course = courses.find((c) => c.id === courseId) ?? null;
   const yearOptions = course ? Array.from({ length: course.durationYears }, (_, i) => i + 1) : [];
@@ -54,7 +63,7 @@ export default function TeachingAssignmentsPage() {
     const k = `${cId}_${y}`;
     if (!(k in sectionsCache)) {
       const res = await fetch(`/api/college/sections?courseId=${encodeURIComponent(cId)}&year=${y}`);
-      const d = await res.json() as { sections: Section[] };
+      const d = await res.json() as { sections: SectionListItem[] };
       setSectionsCache((c) => ({ ...c, [k]: d.sections ?? [] }));
     }
     if (!(k in subjectsCache)) {
@@ -145,8 +154,8 @@ export default function TeachingAssignmentsPage() {
   // missing that context (shouldn't happen going forward, but data can be old) falls into
   // its own bucket rather than silently disappearing.
   const { groups, ungrouped } = useMemo(() => {
-    const map = new Map<string, { courseName: string; year: number; sectionName: string; items: TeachingAssignment[] }>();
-    const ungrouped: TeachingAssignment[] = [];
+    const map = new Map<string, { courseName: string; year: number; sectionName: string; items: AssignmentRow[] }>();
+    const ungrouped: AssignmentRow[] = [];
     for (const a of assignments) {
       if (!a.courseId || a.year == null || !a.sectionId) { ungrouped.push(a); continue; }
       const k = `${a.courseId}_${a.year}_${a.sectionId}`;
@@ -264,7 +273,11 @@ export default function TeachingAssignmentsPage() {
                   >
                     <SelectTrigger><SelectValue placeholder={faculty.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
                     <SelectContent>
-                      {faculty.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                      {faculty.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -302,12 +315,17 @@ export default function TeachingAssignmentsPage() {
                     {g.items.map((a) => (
                       <div key={a.id} className="flex items-center justify-between py-2.5 px-3">
                         <div>
-                          <p className="text-sm font-medium">{a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span></p>
+                          <p className="text-sm font-medium flex items-center gap-1.5">
+                            {a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span>
+                            {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
+                          </p>
                           <p className="text-xs text-muted-foreground">{a.facultyName} · {a.hoursPerWeek} hrs/wk</p>
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => void handleRemove(a.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {a.accessLevel !== "secondary" && (
+                          <Button size="sm" variant="ghost" onClick={() => void handleRemove(a.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -321,7 +339,10 @@ export default function TeachingAssignmentsPage() {
                     {ungrouped.map((a) => (
                       <div key={a.id} className="flex items-center justify-between py-2.5 px-3">
                         <div>
-                          <p className="text-sm font-medium">{a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span></p>
+                          <p className="text-sm font-medium flex items-center gap-1.5">
+                            {a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span>
+                            {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {a.facultyName}
                             {a.academicYear ? ` · ${a.academicYear}` : ""}
@@ -330,9 +351,11 @@ export default function TeachingAssignmentsPage() {
                             {" "}· {a.hoursPerWeek} hrs/wk
                           </p>
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => void handleRemove(a.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {a.accessLevel !== "secondary" && (
+                          <Button size="sm" variant="ghost" onClick={() => void handleRemove(a.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>

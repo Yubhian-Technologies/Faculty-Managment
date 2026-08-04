@@ -1,21 +1,34 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
-import { Plus, Trash2 } from "lucide-react";
+import {
+  SectionTitle, NumInput, TextInput, DegreeFields, RepeatingGroup,
+} from "@/components/shared/ProfileFieldPrimitives";
 import type {
   FacultyProfileFields,
-  DegreeDetail,
   Publication,
   FundedProject,
   ConsultancyProject,
   LabEstablished,
   AuthoredBook,
   PreviousInstitution,
+  PromotionRecord,
+  TrainingEntry,
+  TrainingEntryType,
+  ProfessionalMembership,
+  ProfessionalBody,
+  AdminResponsibilityEntry,
+  AdminResponsibilityCategory,
+  AwardEntry,
+  AwardCategory,
+  CourseFileEntry,
+} from "@/types";
+import {
+  TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
+  ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
 } from "@/types";
 
 interface Props {
@@ -25,93 +38,18 @@ interface Props {
   hideFinancialModule?: boolean;
 }
 
-const EMPTY_DEGREE: DegreeDetail = { degreeAndBranch: "", universityOrInstitute: "", percentageOrDivision: "", yearOfCompletion: new Date().getFullYear(), certificateUrl: "" };
 const EMPTY_PUBLICATION: Publication = { title: "", coAuthors: "", journalOrConference: "", publicationYear: new Date().getFullYear(), indexing: "", driveLink: "" };
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
 const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
 const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "", yearsWorked: 0 };
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <div className="pt-2 pb-1 border-t"><p className="text-sm font-medium text-muted-foreground">{children}</p></div>;
-}
-
-function NumInput({ label, value, onChange }: { label: string; value: number | undefined; onChange: (v: number) => void }) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Input type="number" value={value ?? 0} onChange={(e) => onChange(Number(e.target.value))} />
-    </div>
-  );
-}
-
-function TextInput({ label, value, onChange, placeholder }: { label: string; value: string | undefined; onChange: (v: string) => void; placeholder?: string }) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Input value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
-    </div>
-  );
-}
-
-function DegreeFields({ label, value, onChange }: { label: string; value: DegreeDetail | undefined; onChange: (v: DegreeDetail) => void }) {
-  const v = value ?? EMPTY_DEGREE;
-  return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <TextInput label="Degree & Branch" value={v.degreeAndBranch} onChange={(x) => onChange({ ...v, degreeAndBranch: x })} />
-        <TextInput label="University / Institute" value={v.universityOrInstitute} onChange={(x) => onChange({ ...v, universityOrInstitute: x })} />
-        <TextInput label="Percentage / Division" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
-        <NumInput label="Year of Completion" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
-      </div>
-      <CertificateUploadField
-        value={v.certificateUrl}
-        onUploaded={(url) => onChange({ ...v, certificateUrl: url })}
-        onRemoved={() => onChange({ ...v, certificateUrl: "" })}
-      />
-    </div>
-  );
-}
-
-function RepeatingGroup<T>({
-  title, items, empty, onChange, renderRow, addLabel = "Add",
-}: {
-  title: string;
-  items: T[] | undefined;
-  empty: T;
-  onChange: (next: T[]) => void;
-  renderRow: (item: T, update: (patch: Partial<T>) => void) => React.ReactNode;
-  addLabel?: string;
-}) {
-  const list = items ?? [];
-  return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, empty])}>
-          <Plus className="h-3.5 w-3.5 mr-1" />{addLabel}
-        </Button>
-      </div>
-      {list.length === 0 && <p className="text-xs text-muted-foreground">None added yet.</p>}
-      {list.map((item, i) => (
-        <div key={i} className="flex items-start gap-2 rounded-md bg-muted/30 p-3">
-          <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {renderRow(item, (patch) => {
-              const next = [...list];
-              next[i] = { ...next[i], ...patch };
-              onChange(next);
-            })}
-          </div>
-          <Button type="button" variant="ghost" size="sm" onClick={() => onChange(list.filter((_, idx) => idx !== i))}>
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
-        </div>
-      ))}
-    </div>
-  );
-}
+const EMPTY_PROMOTION: PromotionRecord = { fromDesignation: "", toDesignation: "", effectiveYear: new Date().getFullYear() };
+const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "", year: new Date().getFullYear() };
+const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
+const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COORDINATOR", description: "" };
+const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", title: "", awardingBody: "", year: new Date().getFullYear() };
+const EMPTY_COURSE_FILE: CourseFileEntry = { courseCode: "", courseName: "", academicYear: "" };
 
 export function AcademicProfileFields({ value, onChange, includeTeachingAssignment = true, hideFinancialModule = false }: Props) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
@@ -131,6 +69,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       <DegreeFields label="UG Details" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
       <DegreeFields label="PG Details" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
       <DegreeFields label="PhD Details" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
+      <DegreeFields label="Post-Doctoral Details" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Ph.D. Status</Label>
@@ -174,6 +113,35 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
             <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
             <NumInput label="Years Worked" value={item.yearsWorked} onChange={(v) => update({ yearsWorked: v })} />
+            <div className="sm:col-span-2">
+              <Label className="text-xs">Experience Certificate</Label>
+              <CertificateUploadField
+                value={item.experienceCertificateUrl}
+                onUploaded={(url) => update({ experienceCertificateUrl: url })}
+                onRemoved={() => update({ experienceCertificateUrl: "" })}
+              />
+            </div>
+          </>
+        )}
+      />
+      <RepeatingGroup
+        title="Promotion History"
+        items={value.promotionHistory}
+        empty={EMPTY_PROMOTION}
+        onChange={(v) => set("promotionHistory", v)}
+        renderRow={(item, update) => (
+          <>
+            <TextInput label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
+            <TextInput label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
+            <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
+            <div className="sm:col-span-2">
+              <Label className="text-xs">Promotion Order</Label>
+              <CertificateUploadField
+                value={item.orderUrl}
+                onUploaded={(url) => update({ orderUrl: url })}
+                onRemoved={() => update({ orderUrl: "" })}
+              />
+            </div>
           </>
         )}
       />
@@ -225,6 +193,11 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         <NumInput label="H-Index" value={value.hIndex} onChange={(v) => set("hIndex", v)} />
         <NumInput label="i10-Index" value={value.i10Index} onChange={(v) => set("i10Index", v)} />
       </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <TextInput label="Google Scholar ID" value={value.googleScholarId} onChange={(v) => set("googleScholarId", v)} />
+        <TextInput label="Scopus Author ID" value={value.scopusAuthorId} onChange={(v) => set("scopusAuthorId", v)} />
+        <TextInput label="ORCID iD" value={value.orcidId} onChange={(v) => set("orcidId", v)} />
+      </div>
 
       {/* Module 4 */}
       <SectionTitle>Module 4 — Grants, Consultancy &amp; IP</SectionTitle>
@@ -240,6 +213,16 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             <NumInput label="Grant Amount (₹L)" value={item.grantAmountLakhs} onChange={(v) => update({ grantAmountLakhs: v })} />
             <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
             <TextInput label="Status" value={item.status} onChange={(v) => update({ status: v })} />
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={item.piOrCoPi ?? ""} onValueChange={(v) => update({ piOrCoPi: v as FundedProject["piOrCoPi"] })}>
+                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PI">PI</SelectItem>
+                  <SelectItem value="CO_PI">Co-PI</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </>
         )}
       />
@@ -308,20 +291,98 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           </>
         )}
       />
-      <div className="space-y-2">
-        <Label>Administrative Responsibilities Held (+ notable achievements)</Label>
-        <Textarea value={value.administrativeResponsibilities ?? ""} onChange={(e) => set("administrativeResponsibilities", e.target.value)} />
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Certifications / FDPs (NPTEL/Coursera/AICTE)</Label>
-          <Textarea value={value.certificationsAndFdps ?? ""} onChange={(e) => set("certificationsAndFdps", e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label>Professional Body Memberships (IEEE/ACM/CSI)</Label>
-          <Textarea value={value.professionalBodyMemberships ?? ""} onChange={(e) => set("professionalBodyMemberships", e.target.value)} />
-        </div>
-      </div>
+      <RepeatingGroup
+        title="Administrative Responsibilities"
+        items={value.adminResponsibilityEntries}
+        empty={EMPTY_ADMIN_RESPONSIBILITY}
+        onChange={(v) => set("adminResponsibilityEntries", v)}
+        renderRow={(item, update) => (
+          <>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={item.category} onValueChange={(v) => update({ category: v as AdminResponsibilityCategory })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ADMIN_RESPONSIBILITY_CATEGORY_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <TextInput label="Description" value={item.description} onChange={(v) => update({ description: v })} />
+            <NumInput label="From Year" value={item.fromYear} onChange={(v) => update({ fromYear: v })} />
+            <NumInput label="To Year (blank = ongoing)" value={item.toYear} onChange={(v) => update({ toYear: v })} />
+          </>
+        )}
+      />
+      {value.administrativeResponsibilities && (
+        <p className="text-xs text-muted-foreground italic">Legacy note: {value.administrativeResponsibilities}</p>
+      )}
+      <RepeatingGroup
+        title="FDPs, Workshops, MOOCs & Certifications"
+        items={value.trainingEntries}
+        empty={EMPTY_TRAINING}
+        onChange={(v) => set("trainingEntries", v)}
+        renderRow={(item, update) => (
+          <>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={item.type} onValueChange={(v) => update({ type: v as TrainingEntryType })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TRAINING_ENTRY_TYPE_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Organizer" value={item.organizer} onChange={(v) => update({ organizer: v })} />
+            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
+            <NumInput label="Duration (days)" value={item.durationDays} onChange={(v) => update({ durationDays: v })} />
+            <div className="sm:col-span-2">
+              <Label className="text-xs">Certificate</Label>
+              <CertificateUploadField
+                value={item.certificateUrl}
+                onUploaded={(url) => update({ certificateUrl: url })}
+                onRemoved={() => update({ certificateUrl: "" })}
+              />
+            </div>
+          </>
+        )}
+      />
+      {value.certificationsAndFdps && (
+        <p className="text-xs text-muted-foreground italic">Legacy note: {value.certificationsAndFdps}</p>
+      )}
+      <RepeatingGroup
+        title="Professional Body Memberships"
+        items={value.professionalMemberships}
+        empty={EMPTY_MEMBERSHIP}
+        onChange={(v) => set("professionalMemberships", v)}
+        renderRow={(item, update) => (
+          <>
+            <div className="space-y-2">
+              <Label>Body</Label>
+              <Select value={item.body} onValueChange={(v) => update({ body: v as ProfessionalBody })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PROFESSIONAL_BODY_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {item.body === "OTHER" && (
+              <TextInput label="Body Name" value={item.otherName} onChange={(v) => update({ otherName: v })} />
+            )}
+            <TextInput label="Membership ID" value={item.membershipId} onChange={(v) => update({ membershipId: v })} />
+            <NumInput label="Member Since (Year)" value={item.sinceYear} onChange={(v) => update({ sinceYear: v })} />
+          </>
+        )}
+      />
+      {value.professionalBodyMemberships && (
+        <p className="text-xs text-muted-foreground italic">Legacy note: {value.professionalBodyMemberships}</p>
+      )}
       <RepeatingGroup
         title="Authored Books"
         items={value.authoredBooks}
@@ -335,10 +396,41 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           </>
         )}
       />
-      <div className="space-y-2">
-        <Label>Notable Awards</Label>
-        <Textarea value={value.notableAwards ?? ""} onChange={(e) => set("notableAwards", e.target.value)} />
-      </div>
+      <RepeatingGroup
+        title="Awards & Recognition"
+        items={value.awardEntries}
+        empty={EMPTY_AWARD}
+        onChange={(v) => set("awardEntries", v)}
+        renderRow={(item, update) => (
+          <>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={item.category} onValueChange={(v) => update({ category: v as AwardCategory })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(AWARD_CATEGORY_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
+            <TextInput label="Awarding Body" value={item.awardingBody} onChange={(v) => update({ awardingBody: v })} />
+            <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
+            <div className="sm:col-span-2">
+              <Label className="text-xs">Certificate</Label>
+              <CertificateUploadField
+                value={item.certificateUrl}
+                onUploaded={(url) => update({ certificateUrl: url })}
+                onRemoved={() => update({ certificateUrl: "" })}
+              />
+            </div>
+          </>
+        )}
+      />
+      {value.notableAwards && (
+        <p className="text-xs text-muted-foreground italic">Legacy note: {value.notableAwards}</p>
+      )}
 
       {/* Module 6 */}
       {!hideFinancialModule && (
@@ -373,6 +465,38 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           rows={4}
         />
       </div>
+
+      {/* Module 8 */}
+      <SectionTitle>Module 8 — Teaching Documentation (NBA/AICTE)</SectionTitle>
+      <RepeatingGroup
+        title="Course Files & CO-PO Mapping"
+        items={value.courseFilesAndCoPoMapping}
+        empty={EMPTY_COURSE_FILE}
+        onChange={(v) => set("courseFilesAndCoPoMapping", v)}
+        renderRow={(item, update) => (
+          <>
+            <TextInput label="Course Code" value={item.courseCode} onChange={(v) => update({ courseCode: v })} />
+            <TextInput label="Course Name" value={item.courseName} onChange={(v) => update({ courseName: v })} />
+            <TextInput label="Academic Year" value={item.academicYear} onChange={(v) => update({ academicYear: v })} placeholder="e.g. 2025-26" />
+            <div className="space-y-1">
+              <Label className="text-xs">Course File</Label>
+              <CertificateUploadField
+                value={item.courseFileUrl}
+                onUploaded={(url) => update({ courseFileUrl: url })}
+                onRemoved={() => update({ courseFileUrl: "" })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">CO-PO Mapping</Label>
+              <CertificateUploadField
+                value={item.coPoMappingUrl}
+                onUploaded={(url) => update({ coPoMappingUrl: url })}
+                onRemoved={() => update({ coPoMappingUrl: "" })}
+              />
+            </div>
+          </>
+        )}
+      />
     </div>
   );
 }

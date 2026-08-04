@@ -2,63 +2,19 @@
 
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import {
+  Section, SubLabel, Field, DegreeView, DocLink,
+} from "@/components/shared/ProfileFieldPrimitives";
+import {
+  TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
+  ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
+} from "@/types";
 import type { FacultyProfileFields } from "@/types";
 
 interface Props {
   profile: Partial<FacultyProfileFields> | undefined;
   includeTeachingAssignment?: boolean;
   hideFinancialModule?: boolean;
-}
-
-function Section({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-3 pt-5 border-t first:border-t-0 first:pt-0">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-          {number}
-        </span>
-        <p className="text-sm font-semibold">{title}</p>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function SubLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{children}</p>;
-}
-
-function Field({ label, value }: { label: string; value: string | number | undefined | null }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value === undefined || value === null || value === "" ? "—" : value}</p>
-    </div>
-  );
-}
-
-function DegreeView({ label, degree }: { label: string; degree: FacultyProfileFields["ugDetails"] }) {
-  return (
-    <div className="rounded-lg border bg-muted/20 shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <p className="col-span-2 sm:col-span-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-      <Field label="Degree & Branch" value={degree?.degreeAndBranch} />
-      <Field label="University / Institute" value={degree?.universityOrInstitute} />
-      <Field label="Percentage / Division" value={degree?.percentageOrDivision} />
-      <Field label="Year of Completion" value={degree?.yearOfCompletion} />
-      {degree?.certificateUrl && (
-        <div className="col-span-2 sm:col-span-4">
-          <a
-            href={degree.certificateUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />View Certificate
-          </a>
-        </div>
-      )}
-    </div>
-  );
 }
 
 const PUBS_PREVIEW = 3;
@@ -114,10 +70,11 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
     <div className="space-y-5">
       <Section number={1} title="General & Academic Profile">
         <Field label="Highest Qualification Earned" value={p.highestQualification} />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <DegreeView label="UG" degree={p.ugDetails} />
           <DegreeView label="PG" degree={p.pgDetails} />
           <DegreeView label="PhD" degree={p.phdDetails} />
+          <DegreeView label="Post-Doctoral" degree={p.postDoctoralDetails} />
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Field label="Ph.D. Status" value={p.phdStatus} />
@@ -142,6 +99,30 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
                   <Field label="Institution" value={inst.institutionName} />
                   <Field label="Designation" value={inst.designation} />
                   <Field label="Years Worked" value={inst.yearsWorked} />
+                  {inst.experienceCertificateUrl && (
+                    <div className="col-span-2 sm:col-span-3">
+                      <DocLink url={inst.experienceCertificateUrl} label="View Experience Certificate" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <SubLabel>Promotion History</SubLabel>
+          {(p.promotionHistory ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            <div className="space-y-2">
+              {p.promotionHistory?.map((promo, i) => (
+                <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <Field label="From" value={promo.fromDesignation} />
+                  <Field label="To" value={promo.toDesignation} />
+                  <Field label="Effective Year" value={promo.effectiveYear} />
+                  {promo.orderUrl && (
+                    <div className="col-span-2 sm:col-span-3">
+                      <DocLink url={promo.orderUrl} label="View Promotion Order" />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -188,6 +169,11 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
           <Field label="H-Index" value={p.hIndex} />
           <Field label="i10-Index" value={p.i10Index} />
         </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Google Scholar ID" value={p.googleScholarId} />
+          <Field label="Scopus Author ID" value={p.scopusAuthorId} />
+          <Field label="ORCID iD" value={p.orcidId} />
+        </div>
       </Section>
 
       <Section number={4} title="Grants, Consultancy & IP">
@@ -202,6 +188,7 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
                   <Field label="Grant (₹L)" value={proj.grantAmountLakhs} />
                   <Field label="Year" value={proj.year} />
                   <Field label="Status" value={proj.status} />
+                  <Field label="Role" value={proj.piOrCoPi === "CO_PI" ? "Co-PI" : proj.piOrCoPi} />
                 </div>
               ))}
             </div>
@@ -267,11 +254,60 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
             ))
           )}
         </div>
-        <Field label="Administrative Responsibilities Held" value={p.administrativeResponsibilities} />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Certifications / FDPs" value={p.certificationsAndFdps} />
-          <Field label="Professional Body Memberships" value={p.professionalBodyMemberships} />
+
+        <div className="space-y-2">
+          <SubLabel>Administrative Responsibilities</SubLabel>
+          {(p.adminResponsibilityEntries ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            p.adminResponsibilityEntries?.map((r, i) => (
+              <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Field label="Category" value={ADMIN_RESPONSIBILITY_CATEGORY_LABELS[r.category]} />
+                <Field label="Description" value={r.description} />
+                <Field label="From" value={r.fromYear} />
+                <Field label="To" value={r.toYear ?? "Ongoing"} />
+              </div>
+            ))
+          )}
+          {p.administrativeResponsibilities && (
+            <p className="text-xs text-muted-foreground italic">Legacy note: {p.administrativeResponsibilities}</p>
+          )}
         </div>
+
+        <div className="space-y-2">
+          <SubLabel>FDPs, Workshops, MOOCs &amp; Certifications</SubLabel>
+          {(p.trainingEntries ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            p.trainingEntries?.map((t, i) => (
+              <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Field label="Type" value={TRAINING_ENTRY_TYPE_LABELS[t.type]} />
+                <Field label="Title" value={t.title} />
+                <Field label="Organizer" value={t.organizer} />
+                <Field label="Year" value={t.year} />
+                {t.certificateUrl && (
+                  <div className="col-span-2 sm:col-span-4"><DocLink url={t.certificateUrl} label="View Certificate" /></div>
+                )}
+              </div>
+            ))
+          )}
+          {p.certificationsAndFdps && (
+            <p className="text-xs text-muted-foreground italic">Legacy note: {p.certificationsAndFdps}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <SubLabel>Professional Body Memberships</SubLabel>
+          {(p.professionalMemberships ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            p.professionalMemberships?.map((m, i) => (
+              <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <Field label="Body" value={m.body === "OTHER" ? m.otherName : PROFESSIONAL_BODY_LABELS[m.body]} />
+                <Field label="Membership ID" value={m.membershipId} />
+                <Field label="Since" value={m.sinceYear} />
+              </div>
+            ))
+          )}
+          {p.professionalBodyMemberships && (
+            <p className="text-xs text-muted-foreground italic">Legacy note: {p.professionalBodyMemberships}</p>
+          )}
+        </div>
+
         <div className="space-y-2">
           <SubLabel>Authored Books</SubLabel>
           {(p.authoredBooks ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
@@ -284,7 +320,26 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
             ))
           )}
         </div>
-        <Field label="Notable Awards" value={p.notableAwards} />
+
+        <div className="space-y-2">
+          <SubLabel>Awards &amp; Recognition</SubLabel>
+          {(p.awardEntries ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            p.awardEntries?.map((a, i) => (
+              <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Field label="Category" value={AWARD_CATEGORY_LABELS[a.category]} />
+                <Field label="Title" value={a.title} />
+                <Field label="Awarding Body" value={a.awardingBody} />
+                <Field label="Year" value={a.year} />
+                {a.certificateUrl && (
+                  <div className="col-span-2 sm:col-span-4"><DocLink url={a.certificateUrl} label="View Certificate" /></div>
+                )}
+              </div>
+            ))
+          )}
+          {p.notableAwards && (
+            <p className="text-xs text-muted-foreground italic">Legacy note: {p.notableAwards}</p>
+          )}
+        </div>
       </Section>
 
       {!hideFinancialModule && (
@@ -308,6 +363,25 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
 
       <Section number={7} title="Others">
         <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "—"}</p>
+      </Section>
+
+      <Section number={8} title="Teaching Documentation (NBA/AICTE)">
+        <div className="space-y-2">
+          <SubLabel>Course Files &amp; CO-PO Mapping</SubLabel>
+          {(p.courseFilesAndCoPoMapping ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
+            p.courseFilesAndCoPoMapping?.map((c, i) => (
+              <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <Field label="Course Code" value={c.courseCode} />
+                <Field label="Course Name" value={c.courseName} />
+                <Field label="Academic Year" value={c.academicYear} />
+                <div className="col-span-2 sm:col-span-3 flex gap-4">
+                  <DocLink url={c.courseFileUrl} label="View Course File" />
+                  <DocLink url={c.coPoMappingUrl} label="View CO-PO Mapping" />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </Section>
     </div>
   );

@@ -1,18 +1,36 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MyProfileDetails } from "@/components/faculty/MyProfileDetails";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABELS } from "@/types";
+import type { Department } from "@/types";
 
 export default function HodProfilePage() {
   const { user } = useAuth();
+  const [parentDeptName, setParentDeptName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.department) return;
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => {
+        const departments = d.departments ?? [];
+        const own = departments.find((dept) => dept.name === user.department);
+        const parent = own?.parentDepartmentId ? departments.find((dept) => dept.id === own.parentDepartmentId) : null;
+        setParentDeptName(parent?.name ?? null);
+      })
+      .catch(() => {});
+  }, [user?.department]);
+
   if (!user) return null;
 
   return (
@@ -48,7 +66,10 @@ export default function HodProfilePage() {
             {user.department && (
               <div>
                 <p className="text-xs text-muted-foreground">Department</p>
-                <p className="text-sm font-medium">{user.department}</p>
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  {user.department}
+                  {parentDeptName && <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName}</Badge>}
+                </p>
               </div>
             )}
           </div>
