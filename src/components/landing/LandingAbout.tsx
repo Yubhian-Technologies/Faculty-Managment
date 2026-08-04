@@ -63,7 +63,7 @@ export function LandingAbout() {
   return (
     <section id="about">
       {/* ── Intro: copy + highlights on the left, campus photo & pull-quote right ── */}
-      <div className="relative overflow-hidden bg-gradient-to-b from-muted/50 via-background to-background py-20 sm:py-24">
+      <div className="relative overflow-hidden bg-gradient-to-b from-muted/50 via-background to-background pt-20 pb-12 sm:pt-24 sm:pb-14">
         {/* Dotted texture echoing the mock's top-right corner detail */}
         <div
           aria-hidden
@@ -78,15 +78,13 @@ export function LandingAbout() {
 
         <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:px-8">
           <Reveal>
-            <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-              About Vishnu People
-            </span>
-
-            <h2 className="mt-6 text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl lg:text-5xl">
-              Building a Community that{" "}
-              <span className="text-primary">Inspires, Innovates</span> and{" "}
-              <span className="text-primary">Impact Lives</span>
+            <h2 className="text-3xl font-bold uppercase tracking-wide text-primary sm:text-4xl">
+              About
             </h2>
+
+            <h3 className="mt-4 text-xl font-bold leading-tight tracking-tight text-foreground sm:text-2xl lg:text-3xl">
+              Building a Community that Inspires, Innovates and Impact Lives
+            </h3>
 
             <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
               Vishnu People is more than a platform — it&apos;s a thriving community where
@@ -146,7 +144,7 @@ export function LandingAbout() {
       </div>
 
       {/* ── Our Pillars ────────────────────────────────────────────────────────── */}
-      <div className="py-20 sm:py-24">
+      <div className="pt-12 pb-20 sm:pt-14 sm:pb-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
