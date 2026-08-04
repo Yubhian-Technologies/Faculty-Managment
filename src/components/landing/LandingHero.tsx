@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import {
   ArrowRight,
   LayoutGrid,
@@ -13,10 +12,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import KineticGrid from "@/components/ui/kinetic-grid";
 import { cn } from "@/lib/utils";
+import { LOGIN_URL } from "./constants";
 
 function scrollToNextSection() {
-  document.getElementById("stats")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("about")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // Rotates through each word every 2.2s — the h1 always carries the full, current
@@ -184,74 +185,62 @@ function DashboardCards({ variant }: { variant: "floating" | "grid" }) {
 
 export function LandingHero() {
   return (
-    <section
-      id="home"
-      className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-background to-indigo-100 pt-32 pb-24 sm:pt-40 sm:pb-32"
+    <KineticGrid
+      globalColor="light"
+      className="min-h-[unset] pt-32 pb-24 sm:pt-40 sm:pb-32"
     >
-      {/* Layered decorative background */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="landing-grid-mesh absolute inset-0" />
-        <div className="landing-blob absolute -left-24 top-10 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
-        <div
-          className="landing-blob absolute -right-16 top-40 h-80 w-80 rounded-full bg-indigo-400/15 blur-3xl"
-          style={{ animationDelay: "3s" }}
-        />
-        <div
-          className="landing-blob absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-blue-300/10 blur-3xl"
-          style={{ animationDelay: "6s" }}
-        />
-      </div>
+      <section id="home" className="relative">
+        <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
+          <div className="landing-enter text-center lg:text-left">
+            <RotatingHeadline />
+            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg lg:mx-0">
+              Streamline academics, administration, communication, approvals, and campus
+              operations through one secure digital workspace built for students, faculty,
+              parents, and administrators.
+            </p>
+            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
+              <Button
+                asChild
+                size="lg"
+                className="w-full transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:w-auto"
+              >
+                <a href={LOGIN_URL}>
+                  Login
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="w-full transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:w-auto"
+              >
+                <button type="button" onClick={scrollToNextSection}>
+                  Learn More
+                </button>
+              </Button>
+            </div>
+          </div>
 
-      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
-        <div className="landing-enter text-center lg:text-left">
-          <RotatingHeadline />
-          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg lg:mx-0">
-            Streamline academics, administration, communication, approvals, and campus
-            operations through one secure digital workspace built for students, faculty,
-            parents, and administrators.
-          </p>
-          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
-            <Button
-              asChild
-              size="lg"
-              className="w-full transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:w-auto"
-            >
-              <Link href="/login">
-                Login
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="w-full transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:w-auto"
-            >
-              <button type="button" onClick={scrollToNextSection}>
-                Learn More
-              </button>
-            </Button>
+          {/* Large screens: layered floating dashboard-card composition (decorative) */}
+          <div
+            aria-hidden
+            className="landing-enter relative mx-auto hidden h-[460px] w-full max-w-lg lg:block"
+            style={{ animationDelay: "150ms" }}
+          >
+            <DashboardCards variant="floating" />
+          </div>
+
+          {/* Tablet & mobile: simplified static preview so nothing crops or overflows */}
+          <div
+            aria-hidden
+            className="landing-enter mx-auto w-full max-w-md sm:max-w-lg lg:hidden"
+            style={{ animationDelay: "150ms" }}
+          >
+            <DashboardCards variant="grid" />
           </div>
         </div>
-
-        {/* Large screens: layered floating dashboard-card composition (decorative) */}
-        <div
-          aria-hidden
-          className="landing-enter relative mx-auto hidden h-[460px] w-full max-w-lg lg:block"
-          style={{ animationDelay: "150ms" }}
-        >
-          <DashboardCards variant="floating" />
-        </div>
-
-        {/* Tablet & mobile: simplified static preview so nothing crops or overflows */}
-        <div
-          aria-hidden
-          className="landing-enter mx-auto w-full max-w-md sm:max-w-lg lg:hidden"
-          style={{ animationDelay: "150ms" }}
-        >
-          <DashboardCards variant="grid" />
-        </div>
-      </div>
-    </section>
+      </section>
+    </KineticGrid>
   );
 }

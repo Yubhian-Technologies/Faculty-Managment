@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { NAV_SECTIONS, VISHNU_LOGO_URL } from "./constants";
+import { LOGIN_URL, NAV_SECTIONS, VISHNU_LOGO_URL } from "./constants";
 
 function scrollToSection(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -90,7 +89,7 @@ export function LandingNavbar() {
 
         <div className="hidden md:block">
           <Button asChild>
-            <Link href="/login">Login</Link>
+            <a href={LOGIN_URL}>Login</a>
           </Button>
         </div>
 
@@ -128,7 +127,7 @@ export function LandingNavbar() {
             </button>
           ))}
           <Button asChild className="mt-2">
-            <Link href="/login">Login</Link>
+            <a href={LOGIN_URL}>Login</a>
           </Button>
         </div>
       </div>
