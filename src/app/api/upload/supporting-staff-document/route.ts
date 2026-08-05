@@ -19,7 +19,7 @@ const EXT_TO_EXT: Record<string, string> = { pdf: "pdf", png: "png", jpg: "jpg",
 
 export async function POST(request: Request) {
   try {
-    await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    await requireCollegeMember("HOD", "COLLEGE_OFFICE", "SUPER_ADMIN");
 
     const formData = await request.formData();
     const file = formData.get("file");

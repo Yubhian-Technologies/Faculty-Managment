@@ -16,10 +16,10 @@ import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import {
   EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
-  TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
+  TECHNICAL_STAFF_DESIGNATION_LABELS,
 } from "@/types";
 import type {
-  EmploymentType, FacultyStatus, SupportingStaffCategory, SupportingStaffDesignation,
+  EmploymentType, FacultyStatus, SupportingStaffDesignation,
   SupportingStaffProfileFields as ProfileFieldsType,
 } from "@/types";
 
@@ -27,7 +27,6 @@ interface StaffForm {
   name: string;
   phone: string;
   collegeEmail: string;
-  staffCategory: SupportingStaffCategory;
   designation: SupportingStaffDesignation;
   otherDesignationTitle: string;
   experienceYears: number;
@@ -37,7 +36,7 @@ interface StaffForm {
 }
 
 const EMPTY_FORM: StaffForm = {
-  name: "", phone: "", collegeEmail: "", staffCategory: "TECHNICAL", designation: "LAB_ASSISTANT",
+  name: "", phone: "", collegeEmail: "", designation: "LAB_ASSISTANT",
   otherDesignationTitle: "", experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
 };
 
@@ -73,7 +72,6 @@ export default function EditSupportingStaffPage() {
           name: (m.name as string) ?? "",
           phone: (m.phone as string) ?? "",
           collegeEmail: (m.collegeEmail as string) ?? "",
-          staffCategory: (m.staffCategory as SupportingStaffCategory) ?? "TECHNICAL",
           designation: (m.designation as SupportingStaffDesignation) ?? "LAB_ASSISTANT",
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
           experienceYears: (m.experienceYears as number) ?? 0,
@@ -118,8 +116,6 @@ export default function EditSupportingStaffPage() {
   function set(patch: Partial<StaffForm>) {
     setForm((f) => ({ ...f, ...patch }));
   }
-
-  const designationLabels = form.staffCategory === "TECHNICAL" ? TECHNICAL_STAFF_DESIGNATION_LABELS : NON_TECHNICAL_STAFF_DESIGNATION_LABELS;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -167,14 +163,14 @@ export default function EditSupportingStaffPage() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Edit Supporting Staff" description="Loading…" />
+        <PageHeader title="Edit Technical Staff" description="Loading…" />
       </div>
     );
   }
 
   return (
     <div>
-      <PageHeader title="Edit Supporting Staff" description={`Employee ID: ${employeeId} · ${email}`} />
+      <PageHeader title="Edit Technical Staff" description={`Employee ID: ${employeeId} · ${email}`} />
 
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
@@ -221,21 +217,11 @@ export default function EditSupportingStaffPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Staff Category *</Label>
-                    <Select value={form.staffCategory} onValueChange={(v) => set({ staffCategory: v as SupportingStaffCategory, designation: v === "TECHNICAL" ? "LAB_ASSISTANT" : "OFFICE_STAFF" })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="TECHNICAL">Technical Staff</SelectItem>
-                        <SelectItem value="NON_TECHNICAL">Non-Technical Staff</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
                     <Label>Designation *</Label>
                     <Select value={form.designation} onValueChange={(v) => set({ designation: v as SupportingStaffDesignation })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(designationLabels).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        {Object.entries(TECHNICAL_STAFF_DESIGNATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -319,7 +305,7 @@ export default function EditSupportingStaffPage() {
             <Card>
               <CardHeader><CardTitle className="text-base">Profile</CardTitle></CardHeader>
               <CardContent>
-                <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory={form.staffCategory} />
+                <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory="TECHNICAL" />
               </CardContent>
             </Card>
           </div>

@@ -60,9 +60,6 @@ export const NAV_ITEMS: NavItem[] = [
   // Admin Office
   { label: "Dashboard", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
 
-  // Office
-  { label: "Dashboard", href: "/office", iconName: "LayoutDashboard", roles: ["OFFICE"] },
-
   // Placement Department
   { label: "Dashboard", href: "/placement-dept", iconName: "LayoutDashboard", roles: ["PLACEMENT_DEPT"] },
 
@@ -144,6 +141,7 @@ export const NAV_ITEMS: NavItem[] = [
   // College Office
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
   { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"], section: "Students" },
+  { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   { label: "Documents", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
 
@@ -332,9 +330,6 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ADMIN_OFFICE: [
     { label: "Home", href: "/admin-office", iconName: "LayoutDashboard", roles: ["ADMIN_OFFICE"] },
   ],
-  OFFICE: [
-    { label: "Home", href: "/office", iconName: "LayoutDashboard", roles: ["OFFICE"] },
-  ],
   PLACEMENT_DEPT: [
     { label: "Home", href: "/placement-dept", iconName: "LayoutDashboard", roles: ["PLACEMENT_DEPT"] },
   ],
@@ -370,6 +365,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   COLLEGE_OFFICE: [
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
     { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"] },
+    { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"] },
     { label: "Documents", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"] },
     { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
   ],

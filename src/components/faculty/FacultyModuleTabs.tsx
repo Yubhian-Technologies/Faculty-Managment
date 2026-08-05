@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Supporting Staff lives under the Faculty module now — no separate sidebar
-// entry (see navConfig.ts) — this tab strip is how Principal/HOD move between
-// the two sibling lists, which otherwise remain fully separate pages/routes.
+// Technical Staff lives under the Faculty module now — no separate sidebar
+// entry (see navConfig.ts) — this tab strip is how HOD moves between the two
+// sibling lists, which otherwise remain fully separate pages/routes.
+// (Non-Technical Staff has its own, unrelated module under College Office.)
 interface FacultyModuleTabsProps {
   facultyHref: string;
   supportingStaffHref: string;
@@ -17,7 +18,7 @@ export function FacultyModuleTabs({ facultyHref, supportingStaffHref }: FacultyM
 
   const tabs = [
     { href: facultyHref, label: "Teaching Faculty", active: !isSupportingStaff },
-    { href: supportingStaffHref, label: "Supporting Staff", active: isSupportingStaff },
+    { href: supportingStaffHref, label: "Technical Staff", active: isSupportingStaff },
   ];
 
   return (

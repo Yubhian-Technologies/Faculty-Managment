@@ -138,6 +138,9 @@ export interface ResumeData {
   phone?: string;
   profilePhotoUrl?: string;
   collegeName?: string;
+  /** Uploaded Resume/CV file (Faculty edit page Documents section) — distinct
+   *  from this generated document, surfaced as a link when present. */
+  resumeUrl?: string;
 
   joiningDate?: TimestampLike;
   employmentType?: string;
@@ -332,6 +335,7 @@ export function getResumeHTML(data: ResumeData): string {
     data.collegeName ? `College: ${esc(data.collegeName)}` : "",
     data.phone ? `Mobile: ${esc(data.phone)}` : "",
     data.employeeId ? `Employee ID: ${esc(data.employeeId)}` : "",
+    data.resumeUrl ? `<a href="${esc(data.resumeUrl)}" target="_blank" style="color:#1d4ed8;text-decoration:none;">View Uploaded Resume ↗</a>` : "",
   ].filter(Boolean);
 
   // ── Education ────────────────────────────────────────────────────────────

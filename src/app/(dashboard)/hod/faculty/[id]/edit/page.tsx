@@ -87,6 +87,7 @@ export default function EditFacultyPage() {
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [joiningLetterUrl, setJoiningLetterUrl] = useState<string>("");
   const [appointmentLetterUrl, setAppointmentLetterUrl] = useState<string>("");
+  const [resumeUrl, setResumeUrl] = useState<string>("");
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [teachingLoaded, setTeachingLoaded] = useState(false);
@@ -156,6 +157,7 @@ export default function EditFacultyPage() {
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
         setJoiningLetterUrl((m.joiningLetterUrl as string) ?? "");
         setAppointmentLetterUrl((m.appointmentLetterUrl as string) ?? "");
+        setResumeUrl((m.resumeUrl as string) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));
@@ -256,6 +258,7 @@ export default function EditFacultyPage() {
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
           joiningLetterUrl,
           appointmentLetterUrl,
+          resumeUrl,
         }),
       });
       if (res.status === 409) {
@@ -447,6 +450,14 @@ export default function EditFacultyPage() {
                   extraFields={{ facultyId, docType: "appointment-letter" }}
                   onUploaded={(url) => setAppointmentLetterUrl(url)}
                   onRemoved={() => setAppointmentLetterUrl("")}
+                />
+                <DocumentUploadField
+                  label="Resume / CV"
+                  value={resumeUrl || undefined}
+                  uploadEndpoint="/api/upload/faculty-document"
+                  extraFields={{ facultyId, docType: "resume" }}
+                  onUploaded={(url) => setResumeUrl(url)}
+                  onRemoved={() => setResumeUrl("")}
                 />
               </CardContent>
             </Card>

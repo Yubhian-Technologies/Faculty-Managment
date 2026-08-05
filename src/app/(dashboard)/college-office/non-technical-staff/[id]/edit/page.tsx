@@ -16,18 +16,17 @@ import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import {
   EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
-  TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
+  NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
 } from "@/types";
 import type {
-  Department, EmploymentType, FacultyStatus, SupportingStaffCategory, SupportingStaffDesignation,
-  SupportingStaffProfileFields as ProfileFieldsType,
+  EmploymentType, FacultyStatus, SupportingStaffDesignation,
+  SupportingStaffProfileFields as ProfileFieldsType, Department,
 } from "@/types";
 
 interface StaffForm {
   name: string;
   phone: string;
   collegeEmail: string;
-  staffCategory: SupportingStaffCategory;
   designation: SupportingStaffDesignation;
   otherDesignationTitle: string;
   department: string;
@@ -38,11 +37,11 @@ interface StaffForm {
 }
 
 const EMPTY_FORM: StaffForm = {
-  name: "", phone: "", collegeEmail: "", staffCategory: "TECHNICAL", designation: "LAB_ASSISTANT",
-  otherDesignationTitle: "", department: "", experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
+  name: "", phone: "", collegeEmail: "", designation: "OFFICE_STAFF", otherDesignationTitle: "",
+  department: "", experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
 };
 
-export default function EditSupportingStaffPage() {
+export default function EditNonTechnicalStaffPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
@@ -52,18 +51,18 @@ export default function EditSupportingStaffPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
   const [form, setForm] = useState<StaffForm>(EMPTY_FORM);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [profile, setProfile] = useState<Partial<ProfileFieldsType>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [joiningLetterUrl, setJoiningLetterUrl] = useState<string>("");
   const [appointmentLetterUrl, setAppointmentLetterUrl] = useState<string>("");
-  const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments((d.departments ?? []).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => {});
+      .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
+      .catch(() => { /* department assignment is optional */ });
   }, []);
 
   useEffect(() => {
@@ -72,7 +71,7 @@ export default function EditSupportingStaffPage() {
       .then((data) => {
         if (!data.staff) {
           toast({ variant: "destructive", title: "Staff record not found" });
-          router.push("/principal/supporting-staff");
+          router.push("/college-office/non-technical-staff");
           return;
         }
         const m = data.staff;
@@ -82,8 +81,7 @@ export default function EditSupportingStaffPage() {
           name: (m.name as string) ?? "",
           phone: (m.phone as string) ?? "",
           collegeEmail: (m.collegeEmail as string) ?? "",
-          staffCategory: (m.staffCategory as SupportingStaffCategory) ?? "TECHNICAL",
-          designation: (m.designation as SupportingStaffDesignation) ?? "LAB_ASSISTANT",
+          designation: (m.designation as SupportingStaffDesignation) ?? "OFFICE_STAFF",
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
           department: (m.department as string) ?? "",
           experienceYears: (m.experienceYears as number) ?? 0,
@@ -129,8 +127,6 @@ export default function EditSupportingStaffPage() {
     setForm((f) => ({ ...f, ...patch }));
   }
 
-  const designationLabels = form.staffCategory === "TECHNICAL" ? TECHNICAL_STAFF_DESIGNATION_LABELS : NON_TECHNICAL_STAFF_DESIGNATION_LABELS;
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!employeeId.trim()) {
@@ -166,7 +162,7 @@ export default function EditSupportingStaffPage() {
       if (!res.ok) throw new Error();
 
       toast({ variant: "success", title: "Staff record updated" });
-      router.push("/principal/supporting-staff");
+      router.push("/college-office/non-technical-staff");
     } catch {
       toast({ variant: "destructive", title: "Failed to update" });
     } finally {
@@ -177,14 +173,14 @@ export default function EditSupportingStaffPage() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Edit Supporting Staff" description="Loading…" />
+        <PageHeader title="Edit Non-Technical Staff" description="Loading…" />
       </div>
     );
   }
 
   return (
     <div>
-      <PageHeader title="Edit Supporting Staff" description={`Employee ID: ${employeeId} · ${email}`} />
+      <PageHeader title="Edit Non-Technical Staff" description={`Employee ID: ${employeeId} · ${email}`} />
 
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
@@ -231,21 +227,21 @@ export default function EditSupportingStaffPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Staff Category *</Label>
-                    <Select value={form.staffCategory} onValueChange={(v) => set({ staffCategory: v as SupportingStaffCategory, designation: v === "TECHNICAL" ? "LAB_ASSISTANT" : "OFFICE_STAFF" })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="TECHNICAL">Technical Staff</SelectItem>
-                        <SelectItem value="NON_TECHNICAL">Non-Technical Staff</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
                     <Label>Designation *</Label>
                     <Select value={form.designation} onValueChange={(v) => set({ designation: v as SupportingStaffDesignation })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(designationLabels).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        {Object.entries(NON_TECHNICAL_STAFF_DESIGNATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Department</Label>
+                    <Select value={form.department || "__none__"} onValueChange={(v) => set({ department: v === "__none__" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Centrally managed" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Centrally managed (no department)</SelectItem>
+                        {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -256,18 +252,6 @@ export default function EditSupportingStaffPage() {
                     <Input value={form.otherDesignationTitle} onChange={(e) => set({ otherDesignationTitle: e.target.value })} placeholder="e.g. Store Keeper" />
                   </div>
                 )}
-
-                <div className="space-y-2">
-                  <Label>Department</Label>
-                  <Select value={form.department || "none"} onValueChange={(v) => set({ department: v === "none" ? "" : v })}>
-                    <SelectTrigger><SelectValue placeholder="Not assigned (centrally managed)" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— Not assigned —</SelectItem>
-                      {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Years of Experience</Label>
@@ -341,7 +325,7 @@ export default function EditSupportingStaffPage() {
             <Card>
               <CardHeader><CardTitle className="text-base">Profile</CardTitle></CardHeader>
               <CardContent>
-                <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory={form.staffCategory} />
+                <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory="NON_TECHNICAL" />
               </CardContent>
             </Card>
           </div>

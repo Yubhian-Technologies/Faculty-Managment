@@ -16,11 +16,11 @@ import type { Department, UserRole } from "@/types";
 // src/app/api/college/users/route.ts.
 const CREATABLE_ROLES: UserRole[] = [
   "HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF",
-  "OFFICE", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+  "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
 ];
 
 // One holder per college — matches COLLEGE_SINGLETON_ROLES on the API route.
-const SINGLETON_ROLES: UserRole[] = ["OFFICE", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
 
 export default function NewStaffPage() {
   const router = useRouter();

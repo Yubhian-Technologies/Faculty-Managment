@@ -17,11 +17,10 @@ import { SupportingStaffProfileFields } from "@/components/supportingStaff/Suppo
 import { toast } from "@/hooks/useToast";
 import {
   EMPLOYMENT_TYPE_LABELS,
-  STAFF_CATEGORY_LABELS,
   TECHNICAL_STAFF_DESIGNATION_LABELS,
-  NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
 } from "@/types";
-import type { EmploymentType, SupportingStaffCategory, SupportingStaffProfileFields as ProfileFieldsType } from "@/types";
+import type { SupportingStaffProfileFields as ProfileFieldsType } from "@/types";
+import type { EmploymentType } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -30,7 +29,7 @@ const schema = z.object({
   collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().optional(),
-  staffCategory: z.enum(["TECHNICAL", "NON_TECHNICAL"]),
+  staffCategory: z.literal("TECHNICAL"),
   designation: z.string().min(1, "Designation is required"),
   otherDesignationTitle: z.string().optional(),
   experienceYears: z.number().min(0, "Cannot be negative"),
@@ -58,12 +57,9 @@ export default function NewSupportingStaffPage() {
     defaultValues: { experienceYears: 0, staffCategory: "TECHNICAL", designation: "LAB_ASSISTANT", employmentType: "PERMANENT", password: "" },
   });
 
-  const staffCategory = watch("staffCategory") as SupportingStaffCategory;
   const designation = watch("designation");
   const employmentType = watch("employmentType");
   const name = watch("name");
-
-  const designationLabels = staffCategory === "TECHNICAL" ? TECHNICAL_STAFF_DESIGNATION_LABELS : NON_TECHNICAL_STAFF_DESIGNATION_LABELS;
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -98,8 +94,8 @@ export default function NewSupportingStaffPage() {
   return (
     <div className="max-w-2xl">
       <PageHeader
-        title="Add Supporting Staff"
-        description="Add a Technical or Non-Technical staff member to your department"
+        title="Add Technical Staff"
+        description="Add a Technical staff member to your department"
       />
 
       <Card>
@@ -152,43 +148,13 @@ export default function NewSupportingStaffPage() {
               <p className="text-xs text-muted-foreground">Share this with the staff member so they can log in with their college email.</p>
             </div>
 
-            {/* Staff Category */}
-            <div className="space-y-2">
-              <Label>Staff Category *</Label>
-              <div className="flex gap-3">
-                {(["TECHNICAL", "NON_TECHNICAL"] as const).map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => {
-                      setValue("staffCategory", c, { shouldValidate: true });
-                      setValue("designation", c === "TECHNICAL" ? "LAB_ASSISTANT" : "OFFICE_STAFF");
-                    }}
-                    className={`flex-1 rounded-lg border-2 py-3 text-sm font-medium transition-all ${
-                      staffCategory === c
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    {STAFF_CATEGORY_LABELS[c]}
-                  </button>
-                ))}
-              </div>
-              {errors.staffCategory && <p className="text-sm text-destructive">{errors.staffCategory.message}</p>}
-              <p className="text-xs text-muted-foreground">
-                {staffCategory === "TECHNICAL"
-                  ? "Lab Assistant, Programmer, System Administrator, Network Engineer."
-                  : "Office Staff, Accountant, Librarian, Clerk, Attender, Office Assistant."}
-              </p>
-            </div>
-
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Designation *</Label>
                 <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(designationLabels).map(([v, l]) => (
+                    {Object.entries(TECHNICAL_STAFF_DESIGNATION_LABELS).map(([v, l]) => (
                       <SelectItem key={v} value={v}>{l}</SelectItem>
                     ))}
                   </SelectContent>
@@ -233,7 +199,7 @@ export default function NewSupportingStaffPage() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Department auto-fills from your own department. Principal/VP can leave it unassigned for centrally-managed staff.
+              Department auto-fills from your own department.
             </p>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
@@ -254,7 +220,7 @@ export default function NewSupportingStaffPage() {
       <Card className="mt-6">
         <CardHeader><CardTitle className="text-base">Profile</CardTitle></CardHeader>
         <CardContent>
-          <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory={staffCategory} />
+          <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory="TECHNICAL" />
         </CardContent>
       </Card>
     </div>
