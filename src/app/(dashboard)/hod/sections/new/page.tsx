@@ -180,7 +180,7 @@ export default function NewSectionPage() {
                   <SelectValue placeholder="Select faculty incharge" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">— Not assigned —</SelectItem>
+                  <SelectItem value="none">- Not assigned -</SelectItem>
                   {facultyList.map((f) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}

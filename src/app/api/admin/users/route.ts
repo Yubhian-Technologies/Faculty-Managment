@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const db = getAdminDb();
 
     if (scope === "global") {
-      // System-wide users (e.g. MANAGEMENT) have no college/location scope — they live only in systemUsers.
+      // System-wide users (e.g. MANAGEMENT) have no college/location scope - they live only in systemUsers.
       const snap = await db.collection("systemUsers").where("role", "in", GLOBAL_ROLES).get();
       const users = snap.docs
         .map((d) => ({ uid: d.id, ...d.data() }))
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   }
 }
 
-// Roles a Super Admin can create — the level L1–L3 set. Each role's write target
+// Roles a Super Admin can create - the level L1–L3 set. Each role's write target
 // (systemUsers / locationUsers / college users) is derived from ROLE_SCOPE, so the
 // single source of truth stays in core.ts. L4–L6 (HOD, Office, Faculty, Student) are
 // provisioned by Principals/HODs via their own routes, not here.
@@ -60,10 +60,10 @@ const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
   "PRINCIPAL", "VICE_PRINCIPAL",              // L3 · COLLEGE
 ];
-// Global-scoped subset — used by the GET ?scope=global (System-Wide) listing.
+// Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");
 
-// MANAGEMENT (L1) can appoint Administrators/Accounts to a location — the
+// MANAGEMENT (L1) can appoint Administrators/Accounts to a location - the
 // LOCATION-scoped slice of SUPER_ADMIN_CREATABLE.
 const MANAGEMENT_CREATABLE: UserRole[] = ["ADMINISTRATION", "ACCOUNTS"];
 
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     let uid: string;
 
     if (scope === "GLOBAL") {
-      // MANAGEMENT / FINANCE / PURCHASE_DEPT: no college/location scope — systemUsers only.
+      // MANAGEMENT / FINANCE / PURCHASE_DEPT: no college/location scope - systemUsers only.
       uid = await createFirebaseUser(email, password, name);
       await db.collection("systemUsers").doc(uid).set({
         uid, role, email, name, phone: phone ?? "", collegeId: "",

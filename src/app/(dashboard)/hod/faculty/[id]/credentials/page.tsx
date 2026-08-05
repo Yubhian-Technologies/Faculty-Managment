@@ -81,7 +81,7 @@ export default function FacultyCredentialsPage() {
   return (
     <div className="max-w-xl">
       <PageHeader
-        title={`Create Login — ${facultyName}`}
+        title={`Create Login - ${facultyName}`}
         description="This will create a system login account for this faculty member. They can sign in as a Panel Member."
       />
 

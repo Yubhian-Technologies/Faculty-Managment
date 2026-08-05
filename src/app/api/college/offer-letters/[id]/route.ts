@@ -36,7 +36,7 @@ export async function PATCH(
     }
 
     // When candidate formally accepts, mark them APPROVED and flip the faculty
-    // record (provisioned as INTERVIEW_DONE when the offer was sent) to ACTIVE —
+    // record (provisioned as INTERVIEW_DONE when the offer was sent) to ACTIVE -
     // they've now actually confirmed and are expected to join on the date already
     // recorded on that record.
     if (body.status === "ACCEPTED") {

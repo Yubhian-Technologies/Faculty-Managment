@@ -69,7 +69,7 @@ export async function PATCH(
 
     const db = getAdminDb();
 
-    // Reset Password only ever sends { collegeId, newPassword } — this was
+    // Reset Password only ever sends { collegeId, newPassword } - this was
     // previously silently dropped (not in this destructure at all), so the
     // dialog showed "Password reset successfully" while the Auth password
     // never actually changed. Firebase Auth is the actual credential store;
@@ -155,7 +155,7 @@ export async function DELETE(
     const db = getAdminDb();
 
     // Prefer the collegeId the caller already knows (e.g. from the scoped list
-    // it fetched the user from) — systemUsers can be missing/stale for users
+    // it fetched the user from) - systemUsers can be missing/stale for users
     // created outside the normal creation flow, which previously left the
     // college-scoped user doc undeleted while still reporting success.
     const { searchParams } = new URL(request.url);
@@ -173,7 +173,7 @@ export async function DELETE(
     await db.collection("systemUsers").doc(uid).delete();
 
     // Best-effort: delete from Firebase Auth via Admin SDK
-    // If it fails we still return success — the user is deactivated in Firestore
+    // If it fails we still return success - the user is deactivated in Firestore
     try {
       const { getAdminAuth } = await import("@/lib/firebase/admin");
       const auth = await getAdminAuth();

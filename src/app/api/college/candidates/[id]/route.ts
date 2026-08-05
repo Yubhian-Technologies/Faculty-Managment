@@ -92,7 +92,7 @@ export async function PATCH(
     if (status !== undefined) updates.status = status;
     if (stage !== undefined) updates.currentStage = stage;
     if (batchId !== undefined) updates.batchId = batchId;
-    // A final REJECTED decision means this candidate was not hired — free them
+    // A final REJECTED decision means this candidate was not hired - free them
     // from their batch so they're selectable again for a future interview
     // round (they remain shortlisted, just no longer tied to this batch).
     else if (status === "REJECTED") updates.batchId = "";
@@ -175,8 +175,8 @@ export async function PATCH(
 
     const candidateData = candidateSnap.data() as { name?: string; batchId?: string };
 
-    // Final Principal decision: notify the HOD, log it, and — if every other
-    // candidate in the batch already has a decision — close out the batch
+    // Final Principal decision: notify the HOD, log it, and - if every other
+    // candidate in the batch already has a decision - close out the batch
     // server-side instead of relying on the client to notice and follow up.
     if ((status === "APPROVED" || status === "REJECTED") && candidateData.batchId) {
       const batchRef = db
@@ -215,7 +215,7 @@ export async function PATCH(
               collegeId: session.collegeId,
               toUid: coDoc.id,
               type: "GENERAL",
-              title: "Candidate Approved — Document Verification Required",
+              title: "Candidate Approved - Document Verification Required",
               message: `${candidateData.name ?? "A candidate"} for ${batch.position ?? "the position"} has been approved. Please verify their documents.`,
               link: `/college-office/candidates`,
               read: false,

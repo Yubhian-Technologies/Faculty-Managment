@@ -19,7 +19,7 @@ import {
   balanceDocId,
 } from "@/lib/leave/balanceEngine";
 
-// ─── GET — list leave requests for current user ───────────────────────────────
+// ─── GET - list leave requests for current user ───────────────────────────────
 
 export async function GET(request: Request) {
   try {
@@ -80,7 +80,7 @@ export async function GET(request: Request) {
   }
 }
 
-// ─── POST — submit a new leave request ───────────────────────────────────────
+// ─── POST - submit a new leave request ───────────────────────────────────────
 
 export async function POST(request: Request) {
   try {
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
 
-    // Load leave type config (from Firestore or seed fallback) — skipped for "Others" requests,
+    // Load leave type config (from Firestore or seed fallback) - skipped for "Others" requests,
     // where the HOD picks the actual type at approval time.
     let leaveType: LeaveTypeFull | null = null;
     if (!isOtherRequest) {
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
           holidayDates.add(`${y}-${m}-${day}`);
         }
       });
-    } catch { /* non-fatal — proceed without holidays */ }
+    } catch { /* non-fatal - proceed without holidays */ }
 
     const computedDays = body.isHalfDay
       ? 0.5
@@ -242,7 +242,7 @@ export async function POST(request: Request) {
       updatedAt: now,
     });
 
-    // Reserve pending days in balance (if balance exists) — not applicable for
+    // Reserve pending days in balance (if balance exists) - not applicable for
     // "Others" requests, which reserve balance once the HOD assigns a type.
     if (balSnap?.exists) {
       const balRef = LEAVE_COL(session.collegeId, db).doc(balanceDocId(session.uid, leaveTypeCode as LeaveTypeCodeV2, year));

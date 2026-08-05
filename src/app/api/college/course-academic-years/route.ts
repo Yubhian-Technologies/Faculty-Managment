@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   }
 }
 
-// Upsert — one doc per (courseId, year). First call for a course-year just records
+// Upsert - one doc per (courseId, year). First call for a course-year just records
 // the label (no side effects). A call against an *existing* doc is treated as an
 // "advance": every ACTIVE faculty member with a teaching assignment in this course-year
 // gets experienceYears and internalExperience bumped by 1.

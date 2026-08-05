@@ -58,7 +58,7 @@ export default function PurchaseIndentDetailPage() {
     // Org-wide views (By Category, By Goods/Non-Goods) link here with the
     // indent's own collegeId in the URL, since the previously-selected
     // college in the sidebar (if any) may belong to a different indent
-    // entirely — sync it into the store before fetching, same as
+    // entirely - sync it into the store before fetching, same as
     // /purchase/browse/[locationId]/[collegeId] already does.
     const collegeId = searchParams.get("collegeId");
     if (collegeId) setSelectedCollegeId(collegeId);
@@ -123,7 +123,7 @@ export default function PurchaseIndentDetailPage() {
         throw new Error(err.error ?? "Failed to save receipt");
       }
 
-      toast({ variant: "success", title: "Receipt uploaded — indent completed" });
+      toast({ variant: "success", title: "Receipt uploaded - indent completed" });
       setReceiptFile(null);
       load();
     } catch (err) {
@@ -153,7 +153,7 @@ export default function PurchaseIndentDetailPage() {
 
       <PageHeader
         title={request.title}
-        description={`${request.department} — raised by ${request.hodName} on ${formatDate(request.createdAt)}`}
+        description={`${request.department} - raised by ${request.hodName} on ${formatDate(request.createdAt)}`}
         actions={<IndentStatusBadge status={request.status} className="text-sm" />}
       />
 
@@ -241,7 +241,7 @@ export default function PurchaseIndentDetailPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p className="text-muted-foreground">
-              Purchased and receipt submitted to Finance by {request.receiptUploadedByName} on {request.receiptUploadedAt ? formatDate(request.receiptUploadedAt) : "—"}.
+              Purchased and receipt submitted to Finance by {request.receiptUploadedByName} on {request.receiptUploadedAt ? formatDate(request.receiptUploadedAt) : "-"}.
             </p>
             <div className="flex items-center gap-3">
               <span className="font-medium">{formatCurrency(request.receiptAmount ?? 0)}</span>

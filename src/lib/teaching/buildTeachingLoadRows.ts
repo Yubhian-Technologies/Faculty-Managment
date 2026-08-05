@@ -1,4 +1,4 @@
-// Unifies every source of "who teaches what" into two grouped table shapes —
+// Unifies every source of "who teaches what" into two grouped table shapes -
 // current (the live current teaching assignments + the Module 2 static course
 // summary) and past (structured past teaching assignments, which carry a
 // pass % current rows never have). Used by both the resume
@@ -8,8 +8,8 @@
 
 export interface TeachingLoadRow {
   academicYear?: string;
-  courseName?: string; // the degree/program, e.g. "B.Tech" — NOT the branch
-  department?: string; // the branch, e.g. "CSE" — the faculty member's own department
+  courseName?: string; // the degree/program, e.g. "B.Tech" - NOT the branch
+  department?: string; // the branch, e.g. "CSE" - the faculty member's own department
   year?: number; // which year/class within the course, e.g. 1..4
   section?: string;
   semester?: string | number;
@@ -26,7 +26,7 @@ export interface TeachingLoadGroups {
 
 // Combines Year / Branch / Semester / Section into one column instead of four,
 // for both the resume PDF and the Edit Faculty Details preview table. Branch
-// is the faculty member's department (e.g. "CSE"), not `courseName` — the
+// is the faculty member's department (e.g. "CSE"), not `courseName` - the
 // latter is the degree/program (e.g. "B.Tech"), which is the same for every
 // row and isn't a "branch". Falls back to courseName only for the Module 2
 // static course rows, which never carry a department and would otherwise show
@@ -51,7 +51,7 @@ interface CurrentAssignmentLike {
   // Every assignment (current or past) carries which academic year/semester it
   // belongs to. `isPast` additionally marks a structured past teaching
   // assignment (added via "Add Past Teaching Assignment" in the Current
-  // Teaching Assignments editor) — the only thing that unlocks `passPercentage`.
+  // Teaching Assignments editor) - the only thing that unlocks `passPercentage`.
   assignmentAcademicYear?: string;
   assignmentSemester?: string;
   isPast?: boolean;
@@ -83,7 +83,7 @@ function toRow(a: CurrentAssignmentLike, department?: string): TeachingLoadRow {
 export function buildTeachingLoadRows(input: {
   currentAssignments?: CurrentAssignmentLike[];
   staticCourses?: StaticCourseLike[];
-  // The faculty member's own department (the "branch") — the same for every
+  // The faculty member's own department (the "branch") - the same for every
   // row, since a person's teaching assignments are all within their own
   // department; not derived per-assignment (assignments don't track it).
   department?: string;

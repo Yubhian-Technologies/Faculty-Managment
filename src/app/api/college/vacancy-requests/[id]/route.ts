@@ -189,13 +189,13 @@ export async function DELETE(
 
     if (!batchSnap.empty) {
       return NextResponse.json(
-        { error: "Cannot delete — an interview process has already started for this request." },
+        { error: "Cannot delete - an interview process has already started for this request." },
         { status: 400 }
       );
     }
     if (!candidateSnap.empty) {
       return NextResponse.json(
-        { error: "Cannot delete — candidates have already been added against this request." },
+        { error: "Cannot delete - candidates have already been added against this request." },
         { status: 400 }
       );
     }

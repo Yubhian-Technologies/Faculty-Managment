@@ -57,10 +57,10 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div><p className="text-xs text-muted-foreground">Name</p><p className="text-sm font-medium">{profile.name}</p></div>
               <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium">{profile.email}</p></div>
-              <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{profile.phone || "—"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Employee ID</p><p className="text-sm font-medium">{profile.employeeId || "—"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{profile.designation || "—"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{profile.department || "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{profile.phone || "-"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Employee ID</p><p className="text-sm font-medium">{profile.employeeId || "-"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{profile.designation || "-"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{profile.department || "-"}</p></div>
             </div>
           </SectionCard>
 

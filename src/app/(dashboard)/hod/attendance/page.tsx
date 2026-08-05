@@ -170,7 +170,7 @@ export default function HODAttendancePage() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              Daily Records — {MONTH_NAMES[month - 1]} {year}
+              Daily Records - {MONTH_NAMES[month - 1]} {year}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -211,7 +211,7 @@ export default function HODAttendancePage() {
                     <div className="text-right shrink-0">
                       {rec.checkIn || rec.checkOut ? (
                         <p className="text-xs text-muted-foreground">
-                          {rec.checkIn ?? "—"} – {rec.checkOut ?? "—"}
+                          {rec.checkIn ?? "-"} – {rec.checkOut ?? "-"}
                         </p>
                       ) : null}
                       {rec.remarks ? (
@@ -228,7 +228,7 @@ export default function HODAttendancePage() {
         </Card>
       )}
 
-      {/* Empty state — month loaded but no records */}
+      {/* Empty state - month loaded but no records */}
       {!isLoading && !noData && records.length === 0 && (
         <Card>
           <CardContent className="py-16 text-center">

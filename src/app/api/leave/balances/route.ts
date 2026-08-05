@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     const targetUid = searchParams.get("uid") ?? session.uid;
     const targetCollegeId = session.collegeId;
 
-    // Fetch employee profile — needed for balance initialization
+    // Fetch employee profile - needed for balance initialization
     const profileSnap = await PROFILES_COL(targetCollegeId, db).doc(targetUid).get();
     const profile = profileSnap.exists
       ? ({ id: profileSnap.id, ...profileSnap.data() } as EmployeeLeaveProfile)

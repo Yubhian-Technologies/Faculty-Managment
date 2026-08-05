@@ -225,7 +225,7 @@ function PipelineCard({
       ? "Process complete"
       : batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
       ? "Awaiting hiring results"
-      : "—";
+      : "-";
 
   const accentColor =
     vacancy.status === "REJECTED"
@@ -270,7 +270,7 @@ function PipelineCard({
         </div>
       </div>
 
-      {/* 4-step pipeline — vertical on mobile, horizontal on sm+ */}
+      {/* 4-step pipeline - vertical on mobile, horizontal on sm+ */}
       <div className="px-5 py-3">
         <div className="flex flex-col sm:flex-row sm:items-start gap-0 sm:gap-0">
           <Step step={1} label="Request" sub={stage1Sub} state={stateFor(1)} />
@@ -381,15 +381,15 @@ function PipelineCard({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Venue</p>
-                  <p className="font-medium">{batch.interviewVenue ?? "—"}</p>
+                  <p className="font-medium">{batch.interviewVenue ?? "-"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Demo Room</p>
-                  <p className="font-medium">{batch.demoClassroom ?? "—"}</p>
+                  <p className="font-medium">{batch.demoClassroom ?? "-"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Coordinator</p>
-                  <p className="font-medium">{batch.coordinatorName ?? "—"}</p>
+                  <p className="font-medium">{batch.coordinatorName ?? "-"}</p>
                 </div>
               </div>
               <div className="mt-2">
@@ -442,8 +442,8 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         setSentCandidateIds(new Set(letters.map((l) => l.candidateId)));
         // A candidate's batch (if any) is the authority on which vacancy they
         // actually belong to. Without this, a candidate lacking a vacancyId
-        // (legacy data) would loosely position/department-match — and get
-        // double-counted under — every other vacancy that happens to share
+        // (legacy data) would loosely position/department-match - and get
+        // double-counted under - every other vacancy that happens to share
         // the same position and department, even once they're already
         // committed to a specific one via a batch.
         const vacancyIdByBatchId = new Map(batches.map((b) => [b.id, b.vacancyId]));
@@ -455,7 +455,7 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
             return c.position === v.position && c.department === v.department;
           }),
           // A rejected proposal shouldn't block the HOD from starting a fresh
-          // interview session for the same vacancy — treat it as no batch yet.
+          // interview session for the same vacancy - treat it as no batch yet.
           batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
         }));
         built.sort(

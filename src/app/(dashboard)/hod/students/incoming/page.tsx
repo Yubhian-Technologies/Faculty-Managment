@@ -32,7 +32,7 @@ export default function IncomingStudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Incoming Students"
-        description="Students who've pre-registered your department while primarily enrolled elsewhere (e.g. 1st years under Basic Science) — view only until they're promoted into your department"
+        description="Students who've pre-registered your department while primarily enrolled elsewhere (e.g. 1st years under Basic Science) - view only until they're promoted into your department"
       />
 
       <Card>
@@ -65,7 +65,7 @@ export default function IncomingStudentsPage() {
                       <td className="px-4 py-2.5 font-mono">{s.rollNumber}</td>
                       <td className="px-4 py-2.5 font-medium">{s.name}</td>
                       <td className="px-4 py-2.5">
-                        <Badge variant="secondary" className="text-xs">{s.department} — Section {s.section}</Badge>
+                        <Badge variant="secondary" className="text-xs">{s.department} - Section {s.section}</Badge>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">{ordinalYear(s.year)}</td>
                       <td className="px-4 py-2.5">

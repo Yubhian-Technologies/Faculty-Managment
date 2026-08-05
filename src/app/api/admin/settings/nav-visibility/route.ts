@@ -9,7 +9,7 @@ const DEFAULT_SETTINGS: NavVisibilitySettings = {
   hiddenModules: {},
   hiddenItems: {
     // These pages are still placeholder ("coming soon") screens across every
-    // role that has one — keep them hidden by default until each is actually
+    // role that has one - keep them hidden by default until each is actually
     // built out, per college.
     HOD: ["/hod/payslips", "/hod/appraisal", "/hod/training", "/hod/grievance", "/hod/documents"],
     PRINCIPAL: ["/principal/attendance", "/principal/training", "/principal/grievance", "/principal/payslips", "/principal/documents"],

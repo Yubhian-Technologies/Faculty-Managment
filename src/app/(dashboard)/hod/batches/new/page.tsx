@@ -33,11 +33,11 @@ export default function NewBatchPage() {
 
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  // Always-included locked panel members (Principal, VP — fetched)
+  // Always-included locked panel members (Principal, VP - fetched)
   const [defaultMembers, setDefaultMembers] = useState<FMSUser[]>([]);
   // Selectable: other HODs + PANEL_MEMBER
   const [staffList, setStaffList] = useState<FMSUser[]>([]);
-  // Faculty Details records in this department with no login account yet —
+  // Faculty Details records in this department with no login account yet -
   // shown so it's clear who's missing and why, instead of just vanishing
   const [loginlessFaculty, setLoginlessFaculty] = useState<FacultyRecord[]>([]);
 
@@ -188,7 +188,7 @@ export default function NewBatchPage() {
             {vacancies.length === 0 ? (
               <p className="text-sm text-muted-foreground">No approved hiring requests. Get a hiring request approved first.</p>
             ) : prefilledVacancyId ? (
-              // Locked card — came from pipeline; show vacancy details once loaded
+              // Locked card - came from pipeline; show vacancy details once loaded
               <div className="flex items-center justify-between rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
                 {selectedVacancy ? (
                   <div>
@@ -210,7 +210,7 @@ export default function NewBatchPage() {
                 <SelectContent>
                   {vacancies.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
-                      {v.position} — {v.department} ({v.requiredCount} positions)
+                      {v.position} - {v.department} ({v.requiredCount} positions)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -298,13 +298,13 @@ export default function NewBatchPage() {
           </CardHeader>
           <CardContent className="space-y-3">
 
-            {/* HOD — locked */}
+            {/* HOD - locked */}
             <DefaultMemberRow
               name={user?.name ?? "You"}
               subtitle={`Head of Department${user?.department ? ` · ${user.department}` : ""}`}
             />
 
-            {/* Principal + VP — locked */}
+            {/* Principal + VP - locked */}
             {defaultMembers.map((m) => (
               <DefaultMemberRow
                 key={m.uid}
@@ -341,7 +341,7 @@ export default function NewBatchPage() {
                   </div>
                 ))}
 
-                {/* Faculty with no login account yet — shown so it's clear why
+                {/* Faculty with no login account yet - shown so it's clear why
                     they can't be picked, instead of silently disappearing */}
                 {loginlessFaculty.map((f) => (
                   <div key={`nf-${f.id}`} className="flex items-center gap-3 p-2 border border-dashed rounded-lg opacity-60">

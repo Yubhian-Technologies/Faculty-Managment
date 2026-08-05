@@ -6,7 +6,7 @@ import { verifySession } from "@/lib/auth/verifySession";
 // Firebase Storage has no CORS policy for this app's origin, so html2canvas
 // (used by src/lib/pdf/htmlToPdf.ts to render the resume to a real PDF) can't
 // read profile-photo pixel data cross-origin even though the underlying HTTP
-// fetch succeeds — the browser just blocks JS from using the response. This
+// fetch succeeds - the browser just blocks JS from using the response. This
 // route re-fetches the image server-side (not subject to browser CORS) so the
 // client can inline it as a data: URI before capture. Restricted to the
 // Firebase Storage host only, to avoid being an open proxy for arbitrary URLs.

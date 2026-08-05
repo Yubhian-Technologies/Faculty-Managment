@@ -27,7 +27,7 @@ interface CategoryGroupCardProps {
   onRemove: () => void;
   removable: boolean;
   department?: string;
-  // HOD's own Create Budget Request form only — see BudgetCategorySection.
+  // HOD's own Create Budget Request form only - see BudgetCategorySection.
   showPriority?: boolean;
 }
 
@@ -162,13 +162,13 @@ interface BudgetCategorySectionProps {
   onChange?: (groups: BudgetCategoryGroup[]) => void;
   readOnly?: boolean;
   department?: string;
-  // Finance's review view only — see BudgetItemsTable.
+  // Finance's review view only - see BudgetItemsTable.
   selectable?: boolean;
   selectedIds?: Set<string>;
   onToggleItem?: (itemId: string, label: string) => void;
   itemReasons?: Record<string, string>;
   onReasonChange?: (itemId: string, reason: string) => void;
-  // HOD's own Create Budget Request form/view only — see CategoryGroupCard.
+  // HOD's own Create Budget Request form/view only - see CategoryGroupCard.
   showPriority?: boolean;
 }
 

@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["puppeteer", "puppeteer-core", "@sparticuz/chromium", "firebase-admin"],
   // Ships @sparticuz/chromium's compressed Chromium binary into the serverless function
-  // bundle for the PDF route — Vercel's file tracer doesn't always pick up native/binary
+  // bundle for the PDF route - Vercel's file tracer doesn't always pick up native/binary
   // assets on its own. See src/lib/pdf/renderPdf.ts for how it's used.
   outputFileTracingIncludes: {
     "/api/pdf/generate": ["./node_modules/@sparticuz/chromium/bin/**"],

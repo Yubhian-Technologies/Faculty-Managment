@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// PATCH — Super Admin approves or rejects a General Admin vacancy request
+// PATCH - Super Admin approves or rejects a General Admin vacancy request
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

@@ -12,14 +12,14 @@ function toMillis(value: unknown): number {
   return value ? new Date(value as string).getTime() : 0;
 }
 
-// Cross-college view for PURCHASE_DEPT, FINANCE, and MANAGEMENT — all GLOBAL
+// Cross-college view for PURCHASE_DEPT, FINANCE, and MANAGEMENT - all GLOBAL
 // roles that serve every college across every location, so their "all
 // requests" view needs to fan out over every college's indentRequests +
 // financePurchaseClearance subcollections instead of the single-collegeId
 // scope every other /api/college/* route uses. MANAGEMENT is read-only here
-// (this route only implements GET) — used for the org-wide "View" tab.
+// (this route only implements GET) - used for the org-wide "View" tab.
 //
-// Deliberately NOT a collectionGroup(...) query — see the identical precedent/
+// Deliberately NOT a collectionGroup(...) query - see the identical precedent/
 // rationale in src/app/api/management/emergency-budget-requests/route.ts:
 // collection-group scope needs an explicitly deployed index per queried field,
 // which indentRequests/financePurchaseClearance never had, so that query would

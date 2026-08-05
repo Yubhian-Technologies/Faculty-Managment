@@ -8,15 +8,15 @@ import type { UserRole } from "@/types";
 
 // L2 roles Management may optionally staff onto a new location alongside the
 // mandatory Administrator. Kept identical to MANAGEMENT_CREATABLE (minus
-// ADMINISTRATION, which is mandatory) in admin/users/route.ts — Management
+// ADMINISTRATION, which is mandatory) in admin/users/route.ts - Management
 // only ever directly appoints Administration/Accounts; the rest of L2
 // (HR Admin, Admin Office, Dept Head) is Administration's own hire.
 const OPTIONAL_L2_ROLES: UserRole[] = ["ACCOUNTS"];
 
-// SUPER_ADMIN (L0) and MANAGEMENT (L1, global) can both view/create locations —
+// SUPER_ADMIN (L0) and MANAGEMENT (L1, global) can both view/create locations -
 // Management gained location-creation rights so it can act as a real L1 role
 // per the org hierarchy (creates locations, assigns Administrators to them).
-// PURCHASE_DEPT and FINANCE are read-only here — they only need the list to
+// PURCHASE_DEPT and FINANCE are read-only here - they only need the list to
 // populate their Location → College → Department browse views.
 export async function GET() {
   try {
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     }
 
     // Management must staff the location with an Administrator in the same
-    // request — Super Admin may still create a bare location (existing flow).
+    // request - Super Admin may still create a bare location (existing flow).
     if (session.role === "MANAGEMENT") {
       if (!administrationUser?.name || !administrationUser?.email || !administrationUser?.password) {
         return NextResponse.json(
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
         provisioned.push({ role: u.role, uid });
       }
     } catch (provisionErr) {
-      // Location was created but a nested user failed — surface partial success
+      // Location was created but a nested user failed - surface partial success
       // rather than silently losing the location, so the caller can retry just
       // the missing user via admin/users instead of re-creating the location.
       const msg = provisionErr instanceof Error ? provisionErr.message : String(provisionErr);

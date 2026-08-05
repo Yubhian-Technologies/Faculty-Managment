@@ -74,8 +74,8 @@ export default function CourseAcademicYearPage() {
       toast({
         variant: "success",
         title: json.advanced
-          ? `Advanced to ${label.trim()} — ${json.facultyUpdated ?? 0} faculty member${json.facultyUpdated === 1 ? "" : "s"} updated`
-          : `Academic year set for ${course?.name ?? "course"} — Year ${yearNum}`,
+          ? `Advanced to ${label.trim()} - ${json.facultyUpdated ?? 0} faculty member${json.facultyUpdated === 1 ? "" : "s"} updated`
+          : `Academic year set for ${course?.name ?? "course"} - Year ${yearNum}`,
       });
       router.push(`/principal/departments/${id}`);
     } catch (err) {
@@ -96,7 +96,7 @@ export default function CourseAcademicYearPage() {
   return (
     <div className="max-w-xl">
       <PageHeader
-        title={`${course?.name ?? "Course"} — Year ${yearNum} Academic Year`}
+        title={`${course?.name ?? "Course"} - Year ${yearNum} Academic Year`}
         description={existing ? "Advance the academic year for this course-year" : "Set the academic year for this course-year"}
       />
 
@@ -112,12 +112,12 @@ export default function CourseAcademicYearPage() {
             {existing ? (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
                 Currently <strong>{existing.label}</strong>. Saving a new label here
-                will be treated as advancing the academic year — every active faculty member with a teaching assignment in this course/year will have
+                will be treated as advancing the academic year - every active faculty member with a teaching assignment in this course/year will have
                 their Total Experience and Internal Experience increased by 1 year.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                First-time setup — this just records the current academic year for this course/year. No experience will be changed.
+                First-time setup - this just records the current academic year for this course/year. No experience will be changed.
               </p>
             )}
             <div className="space-y-2">

@@ -240,7 +240,7 @@ export default function LeaveApplicationDetailPage() {
               </div>
             </div>
 
-            {/* Stage 1 — for "Others" requests the Principal reviews first;
+            {/* Stage 1 - for "Others" requests the Principal reviews first;
                 for everything else the HOD reviews first. */}
             {(() => {
               const stage1Label = request.isOtherRequest ? "Principal" : "HOD";
@@ -252,7 +252,7 @@ export default function LeaveApplicationDetailPage() {
                     <div>
                       <p className="text-sm font-medium">
                         {roleLabel(step1.approverRole)} {step1.action === "APPROVED" ? "Approved" : "Rejected"}
-                        {step1.approverName && ` — ${step1.approverName}`}
+                        {step1.approverName && ` - ${step1.approverName}`}
                       </p>
                       {step1.actedOn && (
                         <p className="text-xs text-muted-foreground">
@@ -276,7 +276,7 @@ export default function LeaveApplicationDetailPage() {
               );
             })()}
 
-            {/* Stage 2 — only reached once stage 1 approves. For "Others" requests
+            {/* Stage 2 - only reached once stage 1 approves. For "Others" requests
                 this is the HOD picking the actual leave type; for everything else
                 it's Principal ratification, which only applies to a few leave types. */}
             {(() => {

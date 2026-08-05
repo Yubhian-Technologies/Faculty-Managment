@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 // Activate/deactivate a location-scoped user (ADMINISTRATION / ACCOUNTS / etc).
 // MANAGEMENT gets this alongside Super Admin because it can already create these
-// users (POST /api/admin/users) — this closes the loop so it can also offboard
+// users (POST /api/admin/users) - this closes the loop so it can also offboard
 // or re-enable them without hard-deleting the account.
 export async function PATCH(
   request: Request,

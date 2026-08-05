@@ -101,7 +101,7 @@ export default function HodOffersPage() {
     }
   }
 
-  // Candidate address and interview date aren't stored on the OfferLetter row itself —
+  // Candidate address and interview date aren't stored on the OfferLetter row itself -
   // fetch them from the candidate/batch docs at generation time (both the download and
   // email flows need the same extras for the letter body).
   async function fetchLetterExtras(letter: OfferRow): Promise<{ candidateAddress?: string; candidateEmail?: string; interviewDate?: string }> {
@@ -338,7 +338,7 @@ export default function HodOffersPage() {
             <DialogTitle>Faculty Account Created</DialogTitle>
             <DialogDescription>
               A login was created for <strong>{revealedPassword?.name}</strong>
-              {revealedPassword?.employeeId ? ` (${revealedPassword.employeeId})` : ""}. Share this temporary password with them securely — it will not be shown again.
+              {revealedPassword?.employeeId ? ` (${revealedPassword.employeeId})` : ""}. Share this temporary password with them securely - it will not be shown again.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border bg-muted/40 p-3 font-mono text-sm text-center select-all">

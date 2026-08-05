@@ -70,7 +70,7 @@ export async function PATCH(
       cycleTitle = cycle.title;
       cycleFinancialYear = cycle.financialYear;
 
-      // Firestore transactions require ALL reads before ANY writes — the
+      // Firestore transactions require ALL reads before ANY writes - the
       // departments query must happen here, before the tx.update/tx.set
       // calls below, not after them.
       const deptsSnap = nextStatus === "APPROVED"
@@ -106,14 +106,14 @@ export async function PATCH(
       // Seed a PENDING_SUBMISSION budgetRequests stub for every active
       // department. Deterministic doc id (`${cycleId}_${deptId}`) + tx.create()
       // means a retried/duplicate transaction attempt can never double-create
-      // a department's budget — Firestore rejects create() over an existing
+      // a department's budget - Firestore rejects create() over an existing
       // doc. Note: Firestore transactions cap at 500 writes; this is expected
       // to comfortably cover this app's department counts.
       const budgetRequestsColl = db.collection("colleges").doc(session.collegeId).collection("budgetRequests");
       const seeded: { id: string; hodUid: string }[] = [];
       for (const deptDoc of deptsSnap.docs) {
         const dept = deptDoc.data() as { name?: string; hodUid?: string; hodName?: string };
-        if (!dept.hodUid) continue; // no HOD assigned yet — nothing to notify/own this budget
+        if (!dept.hodUid) continue; // no HOD assigned yet - nothing to notify/own this budget
         const stubRef = budgetRequestsColl.doc(`${id}_${deptDoc.id}`);
         tx.create(stubRef, {
           collegeId: session.collegeId,
@@ -136,7 +136,7 @@ export async function PATCH(
       seededDepartments = seeded;
     });
 
-    // The Principal/VP has now acted on this cycle either way — clears their
+    // The Principal/VP has now acted on this cycle either way - clears their
     // "awaiting approval" login popup (emitted in the POST above), regardless
     // of which of the three outcomes this was.
     await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetCycle", entityId: id });

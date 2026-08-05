@@ -55,7 +55,7 @@ export default function FinanceReceiptsPage() {
         <a href={row.fileUrl} target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-1 text-xs">
           View <ExternalLink className="h-3 w-3" />
         </a>
-      ) : "—",
+      ) : "-",
     },
     {
       key: "verified", header: "Status",

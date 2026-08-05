@@ -193,7 +193,7 @@ export default function NewNonTechnicalStaffPage() {
                   {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Optional — leave unassigned for centrally-managed roles like Librarian or Accountant.</p>
+              <p className="text-xs text-muted-foreground">Optional - leave unassigned for centrally-managed roles like Librarian or Accountant.</p>
             </div>
 
             {/* Employment */}

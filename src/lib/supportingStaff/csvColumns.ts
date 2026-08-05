@@ -1,13 +1,13 @@
-// Supporting Staff CSV column definitions — used by the bulk-import
+// Supporting Staff CSV column definitions - used by the bulk-import
 // template/preview on both the HOD (Technical) and College Office
 // (Non-Technical) import pages, mirroring src/lib/faculty/csvColumns.ts for
-// the Teaching Faculty import. Each caller is locked to its own category —
+// the Teaching Faculty import. Each caller is locked to its own category -
 // mismatched rows are rejected by the API
 // (src/app/api/college/supporting-staff/import/route.ts). Personal/employment
 // columns are shared; Qualifications/Training/Achievements are shared
 // *structures* but populated separately per caller; skills/responsibilities/
 // certifications are entirely disjoint between categories (see
-// TechnicalProfile/NonTechnicalProfile in src/types/supportingStaff.ts) — so
+// TechnicalProfile/NonTechnicalProfile in src/types/supportingStaff.ts) - so
 // getSupportingStaffColumns()/getSupportingStaffHints() compose the final
 // column list per category rather than sharing one flat array.
 
@@ -146,7 +146,7 @@ export function getSupportingStaffColumns(category: SupportingStaffCategory): Su
 export function getSupportingStaffHints(category: SupportingStaffCategory): string[] {
   const isTechnical = category === "TECHNICAL";
   return [
-    `Staff Category: only ${isTechnical ? "Technical" : "Non-Technical"} staff can be imported here — mismatched rows are skipped`,
+    `Staff Category: only ${isTechnical ? "Technical" : "Non-Technical"} staff can be imported here - mismatched rows are skipped`,
     isTechnical
       ? "Technical Designation: Lab Assistant, Programmer, System Administrator, Network Engineer, Other"
       : "Non-Technical Designation: Office Staff, Accountant, Librarian, Clerk, Attender, Office Assistant, Other",
@@ -156,20 +156,20 @@ export function getSupportingStaffHints(category: SupportingStaffCategory): stri
     "Marital Status: Single, Married",
     "Dates must be in YYYY-MM-DD format (e.g. 2020-06-01)",
     isTechnical
-      ? "Qualification Level: Diploma, B.Tech, B.Sc, M.Tech, MCA, etc. — up to 2 qualifications"
-      : "Qualification Level: SSC, Intermediate, Degree, PG, etc. — up to 2 qualifications",
+      ? "Qualification Level: Diploma, B.Tech, B.Sc, M.Tech, MCA, etc. - up to 2 qualifications"
+      : "Qualification Level: SSC, Intermediate, Degree, PG, etc. - up to 2 qualifications",
     isTechnical
-      ? "Responsibilities: Lab Maintenance, Equipment Maintenance, Software Installation, Network Administration, Lab Stock Maintenance, Student Support, Practical Sessions, Other — comma-separate multiple values"
-      : "Responsibilities: Office Administration, Student Records, File Management, Accounts, Purchase, Examination Work, Admission Support, Documentation, Other — comma-separate multiple values",
+      ? "Responsibilities: Lab Maintenance, Equipment Maintenance, Software Installation, Network Administration, Lab Stock Maintenance, Student Support, Practical Sessions, Other - comma-separate multiple values"
+      : "Responsibilities: Office Administration, Student Records, File Management, Accounts, Purchase, Examination Work, Admission Support, Documentation, Other - comma-separate multiple values",
     isTechnical
       ? "Certification Vendor: Cisco, Microsoft, AWS, RedHat, Oracle, Google, VMware, Other"
-      : "Computer Skills: MS Office, ERP, Excel, Email, Document Management, Other — comma-separate multiple values",
+      : "Computer Skills: MS Office, ERP, Excel, Email, Document Management, Other - comma-separate multiple values",
     "Training Type: FDP, Workshop, MOOC, Certification, Skill Development, Administrative, ERP, Office Automation, Other",
     "Achievement Category: match whatever categories your college's Awards list uses (e.g. Best Employee, Appreciation)",
     isTechnical
-      ? "Department is optional — leave blank for centrally-managed roles or for it to default to your own department"
-      : "Department is optional — leave blank for centrally-managed roles, or set it to assign this staff member to a specific department",
-    "Department accepts either the full name (e.g. \"Computer Science\") or the short Code (e.g. \"CSE\") — it must already exist under Departments, otherwise it's ignored",
-    "Imported records aren't given login access — use \"Add Staff\" instead for staff members who need to log in",
+      ? "Department is optional - leave blank for centrally-managed roles or for it to default to your own department"
+      : "Department is optional - leave blank for centrally-managed roles, or set it to assign this staff member to a specific department",
+    "Department accepts either the full name (e.g. \"Computer Science\") or the short Code (e.g. \"CSE\") - it must already exist under Departments, otherwise it's ignored",
+    "Imported records aren't given login access - use \"Add Staff\" instead for staff members who need to log in",
   ];
 }

@@ -145,7 +145,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
   useEffect(() => { void load(); }, [id]);
 
   // Batch phase can change server-side (HOD submits for review) while this tab
-  // sits open — refetch on refocus so Approve/Reject doesn't stay stuck behind
+  // sits open - refetch on refocus so Approve/Reject doesn't stay stuck behind
   // a stale "Scoring in progress" snapshot.
   useEffect(() => {
     function onFocus() { void load(); }
@@ -422,13 +422,13 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                 {decision ? (
                   <div className="pt-3 border-t text-sm text-muted-foreground">
                     {decision.action === "APPROVED"
-                      ? "Candidate approved — moved to Document Verification."
+                      ? "Candidate approved - moved to Document Verification."
                       : "Candidate rejected."}
                   </div>
                 ) : batch.currentPhase !== "PRINCIPAL_FINAL_REVIEW" ? (
                   <div className="pt-3 border-t text-sm text-muted-foreground flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5 shrink-0" />
-                    Scoring in progress — decisions open once the HOD submits this batch for final review.
+                    Scoring in progress - decisions open once the HOD submits this batch for final review.
                   </div>
                 ) : (
                   <div className="pt-3 border-t space-y-3">

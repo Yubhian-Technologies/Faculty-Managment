@@ -1,4 +1,4 @@
-// Full-detail staff (FMSUser) CSV export column definitions — mirrors the shape of
+// Full-detail staff (FMSUser) CSV export column definitions - mirrors the shape of
 // src/lib/faculty/csvColumns.ts but for Principal-managed staff (HOD / Vice Principal /
 // College Office), whose personal-detail and academic-profile fields share the same
 // names/types as FacultyMember.
@@ -44,7 +44,7 @@ export const STAFF_COLUMNS: StaffCsvColumn[] = [
   { key: "permanentSameAsTemporary",         label: "Permanent Same as Temporary (Yes/No)" },
   { key: "permanentAddress",                  label: "Permanent Address" },
 
-  // ─── Academic Profile (Modules 1-5) — shown for HOD / Vice Principal ────
+  // ─── Academic Profile (Modules 1-5) - shown for HOD / Vice Principal ────
   { key: "highestQualification",   label: "Highest Qualification Earned" },
   { key: "ug_degreeAndBranch",     label: "UG Degree & Branch" },
   { key: "ug_university",          label: "UG University/Institute" },

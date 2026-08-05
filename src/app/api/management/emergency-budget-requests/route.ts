@@ -12,7 +12,7 @@ function toMillis(value: unknown): number {
   return value ? new Date(value as string).getTime() : 0;
 }
 
-// MANAGEMENT is read-only — this route only implements GET. Cross-college view of
+// MANAGEMENT is read-only - this route only implements GET. Cross-college view of
 // emergency budget requests awaiting Management approval.
 //
 // Deliberately NOT a collectionGroup("budgetRequests") query: collection-group scope
@@ -20,7 +20,7 @@ function toMillis(value: unknown): number {
 // which "status" on budgetRequests never was, so that query throws FAILED_PRECONDITION
 // in production. Querying each college's budgetRequests subcollection directly is a
 // plain collection-scoped equality filter, which Firestore indexes automatically with
-// zero deployment needed — same idiom already proven by college/budget-requests/route.ts.
+// zero deployment needed - same idiom already proven by college/budget-requests/route.ts.
 export async function GET() {
   try {
     await requireManagement();

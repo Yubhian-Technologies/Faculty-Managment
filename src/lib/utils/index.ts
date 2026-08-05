@@ -22,7 +22,7 @@ export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | nu
 
 export function formatDate(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): string {
   const date = toDate(timestamp);
-  if (!date) return "—";
+  if (!date) return "-";
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -32,7 +32,7 @@ export function formatDate(timestamp: Timestamp | Date | FirestoreTimestampLike 
 
 export function formatDateTime(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): string {
   const date = toDate(timestamp);
-  if (!date) return "—";
+  if (!date) return "-";
   return date.toLocaleString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -120,7 +120,7 @@ export function truncate(str: string, length: number): string {
 }
 
 // Strips leading zeros from a numeric <input> string as the user types
-// (e.g. "05" -> "5", "00" -> "0", "0.5" untouched) — for number inputs whose
+// (e.g. "05" -> "5", "00" -> "0", "0.5" untouched) - for number inputs whose
 // value is kept as a raw string (custom per-item "extra fields", etc.)
 // rather than parsed through Number() on every keystroke, native browser
 // number inputs don't self-correct this, so it has to be done explicitly.

@@ -1,5 +1,5 @@
 // Converts a print-ready HTML document (as produced by src/lib/pdf/*Template.ts)
-// into a real, multi-page A4 PDF entirely in the browser — no headless-Chrome
+// into a real, multi-page A4 PDF entirely in the browser - no headless-Chrome
 // dependency on the server (see AGENTS.md's PDF generation notes: puppeteer is
 // deliberately not a server dependency here so this works on any serverless host).
 //
@@ -14,10 +14,10 @@ import html2canvas from "html2canvas";
 
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
-const RENDER_SCALE = 2; // canvas px per CSS px — crisp text at print resolution
+const RENDER_SCALE = 2; // canvas px per CSS px - crisp text at print resolution
 
 // .doc-link must stay atomic too: a page break landing inside it would visually
-// split "View Certificate ↗" across two pages, and — worse — extractLinkAnnotations
+// split "View Certificate ↗" across two pages, and - worse - extractLinkAnnotations
 // assigns the whole <a>'s bounding rect to a single page, so a straddling link
 // gets a corrupted (out-of-bounds) /Rect and stops being clickable entirely.
 const ATOMIC_SELECTOR = ".entry, .bullets li, table.data-table tr, .fitem, .section-title, .subheading, .doc-link";
@@ -50,7 +50,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
  *  `targetWidth`x`targetHeight` (device pixels). html2canvas never implements
  *  `object-fit` (it just draws the raw image into the element's box), so a
  *  non-square source photo would otherwise render squashed/stretched instead of
- *  cropped — this makes the image itself already the right aspect ratio, so
+ *  cropped - this makes the image itself already the right aspect ratio, so
  *  there's nothing left for html2canvas to get wrong. */
 async function cropToCover(blob: Blob, targetWidth: number, targetHeight: number): Promise<string> {
   const width = Math.max(1, Math.round(targetWidth));
@@ -80,13 +80,13 @@ async function cropToCover(blob: Blob, targetWidth: number, targetHeight: number
   }
 }
 
-// Firebase Storage profile photos have no CORS policy for this app's origin —
+// Firebase Storage profile photos have no CORS policy for this app's origin -
 // html2canvas can't read their pixel data cross-origin (the HTTP fetch succeeds,
 // but the browser blocks JS from using the response), so it silently drops them
 // from the capture. Routing through our own same-origin proxy and inlining as a
 // data: URI sidesteps CORS entirely, instead of depending on Storage bucket config.
 // Along the way, any image styled with `object-fit: cover` (e.g. the avatar) gets
-// pre-cropped to its rendered box's aspect ratio — see cropToCover above.
+// pre-cropped to its rendered box's aspect ratio - see cropToCover above.
 async function inlineCrossOriginImages(doc: Document): Promise<void> {
   const imgs = Array.from(doc.images).filter((img) => img.src.startsWith("https://firebasestorage.googleapis.com/"));
   await Promise.all(
@@ -101,13 +101,13 @@ async function inlineCrossOriginImages(doc: Document): Promise<void> {
           ? await cropToCover(blob, rect.width * RENDER_SCALE, rect.height * RENDER_SCALE)
           : await blobToDataUrl(blob);
       } catch {
-        // Leave the original (cross-origin) src — html2canvas will just skip it as before.
+        // Leave the original (cross-origin) src - html2canvas will just skip it as before.
       }
     })
   );
 }
 
-/** Canvas-pixel [top, bottom] ranges for every atomic element, sorted by top —
+/** Canvas-pixel [top, bottom] ranges for every atomic element, sorted by top -
  *  used to nudge page-break offsets so they never land inside one of them. */
 function atomicRanges(container: HTMLElement): { top: number; bottom: number }[] {
   const originTop = container.getBoundingClientRect().top;
@@ -240,7 +240,7 @@ export async function renderHtmlToPdf(html: string, filename: string): Promise<v
     const ranges = atomicRanges(target);
     const breaks = computePageBreaks(canvas.height, pageHeightPx, ranges);
 
-    // Extract link positions while the iframe is still in the DOM — after
+    // Extract link positions while the iframe is still in the DOM - after
     // canvas capture so layout is stable, before the finally block removes it.
     const linkAnnotations = extractLinkAnnotations(target, pxPerMm, breaks);
 

@@ -23,7 +23,7 @@ import { toast } from "@/hooks/useToast";
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/wrong-password": "Current password is incorrect.",
   "auth/invalid-credential": "Current password is incorrect.",
-  "auth/weak-password": "New password is too weak — use at least 8 characters.",
+  "auth/weak-password": "New password is too weak - use at least 8 characters.",
   "auth/requires-recent-login": "Please log out and log back in, then try again.",
   "auth/too-many-requests": "Too many attempts. Please try again later.",
   "auth/network-request-failed": "Network error. Please check your connection.",
@@ -77,7 +77,7 @@ export function ChangePasswordDialog() {
           <DialogTitle>Change Password</DialogTitle>
         </DialogHeader>
         <form
-          // See CreateHodDialog.tsx — DialogContent renders through a Portal,
+          // See CreateHodDialog.tsx - DialogContent renders through a Portal,
           // but React's synthetic "submit" event still bubbles through the
           // component tree, so without this it would also submit any
           // page-level <form> this dialog happens to be rendered inside.

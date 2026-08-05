@@ -129,7 +129,7 @@ export default function HODLeaveProfileEditPage() {
   return (
     <div className="max-w-lg">
       <PageHeader
-        title={`Leave Profile — ${faculty?.name ?? uid}`}
+        title={`Leave Profile - ${faculty?.name ?? uid}`}
         description={hasProfile ? "Edit this faculty member's leave profile" : "Set up a leave profile for this faculty member"}
       />
 

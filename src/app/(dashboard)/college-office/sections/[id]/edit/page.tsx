@@ -103,7 +103,7 @@ export default function EditSectionOfficePage() {
     setF({ facultyInchargeUid: facultyId, facultyInchargeName: f?.name ?? "" });
   }
 
-  // A sub-department never has courses of its own — it borrows its parent's —
+  // A sub-department never has courses of its own - it borrows its parent's -
   // so the course dropdown must include both, same as the Add Section form.
   const coursesInDepartment = useMemo(() => {
     if (!section?.department) return [];
@@ -236,7 +236,7 @@ export default function EditSectionOfficePage() {
                   <SelectValue placeholder="Select faculty incharge" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">— Not assigned —</SelectItem>
+                  <SelectItem value="none">- Not assigned -</SelectItem>
                   {facultyList.map((f) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}

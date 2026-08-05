@@ -16,7 +16,7 @@ import { ROLE_LABELS, ROLE_LEVEL, ROLE_SCOPE, LEVEL_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
 import type { College, Location, FacultyProfileFields, UserRole } from "@/types";
 
-// Roles a Super Admin creates — the level L1–L3 set. Scope (GLOBAL/LOCATION/COLLEGE)
+// Roles a Super Admin creates - the level L1–L3 set. Scope (GLOBAL/LOCATION/COLLEGE)
 // is read from ROLE_SCOPE, which drives which tenant picker is shown and what the
 // provisioning route (api/admin/users) writes. Must match SUPER_ADMIN_CREATABLE there.
 const CREATABLE_ROLES: UserRole[] = [
@@ -143,7 +143,7 @@ export default function NewUserPage() {
               <Input value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
 
-            {/* Role — grouped by level (L1–L3) */}
+            {/* Role - grouped by level (L1–L3) */}
             <div className="space-y-2">
               <Label>Role <span className="text-destructive">*</span></Label>
               <Select value={role} onValueChange={(v) => { setRole(v as UserRole); setCollegeId(""); setLocationId(""); }}>
@@ -163,14 +163,14 @@ export default function NewUserPage() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 {scope === "GLOBAL"
-                  ? "Global role — not tied to any location or college."
+                  ? "Global role - not tied to any location or college."
                   : scope === "LOCATION"
-                    ? "Location-scoped role — choose a location."
-                    : "College-scoped role — choose a location, then a college."}
+                    ? "Location-scoped role - choose a location."
+                    : "College-scoped role - choose a location, then a college."}
               </p>
             </div>
 
-            {/* Scope pickers — driven by ROLE_SCOPE[role] */}
+            {/* Scope pickers - driven by ROLE_SCOPE[role] */}
             {scope === "GLOBAL" ? (
               <div className="space-y-2">
                 <Label>Phone</Label>
@@ -241,14 +241,14 @@ export default function NewUserPage() {
         </>
       ) : (
         <Card className="mt-6">
-          <CardHeader><CardTitle className="text-base">Module 6 — Others</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Module 6 - Others</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-2">
               <Label>Other Information</Label>
               <Textarea
                 value={academicProfile.otherInformation ?? ""}
                 onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
-                placeholder="Anything not covered above — add it here"
+                placeholder="Anything not covered above - add it here"
                 rows={4}
               />
             </div>

@@ -1,4 +1,4 @@
-// Full-detail staff (FMSUser) CSV export — flattens a staff member (+ academicProfile)
+// Full-detail staff (FMSUser) CSV export - flattens a staff member (+ academicProfile)
 // into the column set defined in src/lib/faculty/staffCsvColumns.ts, so Principal's
 // "Export All Details" covers every field shown on the staff edit page.
 

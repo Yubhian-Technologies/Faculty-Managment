@@ -96,7 +96,7 @@ export default function HODSubjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Subjects"
-        description="Manage subjects offered for each year of your department's courses — common to all sections of that year"
+        description="Manage subjects offered for each year of your department's courses - common to all sections of that year"
       />
 
       {isLoading ? (

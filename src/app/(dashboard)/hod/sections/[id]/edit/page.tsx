@@ -318,7 +318,7 @@ export default function EditSectionPage() {
                   <SelectValue placeholder="Select faculty incharge" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">— Not assigned —</SelectItem>
+                  <SelectItem value="none">- Not assigned -</SelectItem>
                   {facultyList.map((f) => (
                     <SelectItem key={f.id} value={f.id}>
                       {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
@@ -357,7 +357,7 @@ export default function EditSectionPage() {
                           <SelectValue placeholder="Assign faculty" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">— Unassigned —</SelectItem>
+                          <SelectItem value="none">- Unassigned -</SelectItem>
                           {facultyList.map((f) => (
                             <SelectItem key={f.id} value={f.id}>
                               {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}

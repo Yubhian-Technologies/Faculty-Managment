@@ -32,7 +32,7 @@ export async function GET(
 
     const req = normalizeBudgetRequest({ id: snap.id, ...snap.data() } as BudgetRequest);
     // Ownership (hodUid === session.uid) is strictly narrower than department
-    // membership — an HOD can only ever view a request they authored, so this
+    // membership - an HOD can only ever view a request they authored, so this
     // already fully prevents cross-department access without a separate check.
     if (session.role === "HOD" && req.hodUid !== session.uid) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -126,7 +126,7 @@ export async function PATCH(
         updatedAt: now,
       });
 
-      // Clears whichever actionable "your turn" popup the HOD had pending —
+      // Clears whichever actionable "your turn" popup the HOD had pending -
       // either "department budget due" (from Budget Cycle approval) or
       // "returned to you, please fix" (from a Principal/Finance return).
       await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
@@ -152,7 +152,7 @@ export async function PATCH(
 
     // ── Emergency request owner (Principal/VP) edits and resubmits a returned
     // request. Checked before the reviewer branch below since both key off the
-    // same roles — req.hodUid === session.uid (the owner resubmitting their own
+    // same roles - req.hodUid === session.uid (the owner resubmitting their own
     // emergency request) is what separates this from "I'm reviewing someone
     // else's request" in that branch. A VICE_PRINCIPAL who raised the emergency
     // request is never the same person reviewing a normal HOD request.
@@ -270,7 +270,7 @@ export async function PATCH(
         timestamp: now,
       });
 
-      // The Principal/VP has now acted — clears their own "awaiting your
+      // The Principal/VP has now acted - clears their own "awaiting your
       // review" popup regardless of which of the three outcomes this was.
       await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
 
@@ -291,7 +291,7 @@ export async function PATCH(
           });
         }
       } else if (nextStatus === "RETURNED_TO_HOD") {
-        // Actionable — the HOD needs to fix and resubmit (resolved above,
+        // Actionable - the HOD needs to fix and resubmit (resolved above,
         // in the HOD-resubmit branch, when that happens).
         await emitWorkflowNotification({
           db, collegeId: session.collegeId, toUid: req.hodUid,
@@ -304,7 +304,7 @@ export async function PATCH(
           dedupeKey: `budget-request-fix:${id}:${req.hodUid}:${round}`,
         });
       } else {
-        // PRINCIPAL_REJECTED — terminal, nothing further for the HOD to do.
+        // PRINCIPAL_REJECTED - terminal, nothing further for the HOD to do.
         await notify(
           db, session.collegeId, req.hodUid,
           "BUDGET_REQUEST_REJECTED", "Budget Request Rejected",
@@ -436,7 +436,7 @@ export async function PATCH(
             timestamp: now,
           });
 
-          // Auto-create a linked Purchase Finance Clearance request — but only
+          // Auto-create a linked Purchase Finance Clearance request - but only
           // for an emergency GOODS request, which has no HOD Indent Request to
           // fall back on and needs to reach Purchase Dept immediately. Normal
           // (non-emergency) budget requests do NOT get one here: approving a
@@ -446,12 +446,12 @@ export async function PATCH(
           // should reach Purchase Dept for the regular flow.
           //
           // Emergency NON_GOODS requests are also skipped: those have no
-          // further downstream step by design — Finance attaches a report
+          // further downstream step by design - Finance attaches a report
           // instead (separate branch above), not a purchase clearance.
           //
           // pre-filled and pre-linked via budgetId, attributed to whoever
           // raised the budget request (their uid/name are already on
-          // `req.hodUid`/`req.hodName` — for an emergency request that's a
+          // `req.hodUid`/`req.hodName` - for an emergency request that's a
           // Principal/VP, not an HOD, so isEmergency is carried over too and
           // the GRN step must route to them at /principal/purchase-clearance
           // instead of /hod/*). Starts at PENDING_PURCHASE_REVIEW so it goes
@@ -508,13 +508,13 @@ export async function PATCH(
         });
       });
 
-      // Finance has now acted — clears their own "ready for review" popup
+      // Finance has now acted - clears their own "ready for review" popup
       // regardless of which of the three outcomes this was.
       await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
 
       const recipientLink = req.isEmergency ? "/principal/budget" : "/hod/budget";
       if (nextStatus === "RETURNED_TO_HOD" || nextStatus === "RETURNED_TO_PRINCIPAL") {
-        // Actionable — the owner needs to fix and resubmit (resolved in the
+        // Actionable - the owner needs to fix and resubmit (resolved in the
         // HOD/emergency-owner resubmit branches above, when that happens).
         await emitWorkflowNotification({
           db, collegeId: session.collegeId, toUid: req.hodUid,
@@ -527,7 +527,7 @@ export async function PATCH(
           dedupeKey: `budget-request-fix:${id}:${req.hodUid}:${(req.history ?? []).length}`,
         });
       } else {
-        // FINANCE_APPROVED / FINANCE_REJECTED — terminal, nothing further to do.
+        // FINANCE_APPROVED / FINANCE_REJECTED - terminal, nothing further to do.
         await notify(
           db, session.collegeId, req.hodUid,
           nextStatus === "FINANCE_APPROVED" ? "BUDGET_REQUEST_APPROVED" : "BUDGET_REQUEST_REJECTED",

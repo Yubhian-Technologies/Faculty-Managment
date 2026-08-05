@@ -180,7 +180,7 @@ export default function InterviewDetailPage() {
             </div>
           ) : null}
 
-          {/* Action section — only for PENDING */}
+          {/* Action section - only for PENDING */}
           {isPending && (
             <div className="border-t pt-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Action</p>
@@ -229,7 +229,7 @@ export default function InterviewDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Quick approve confirm (from table row buttons — deep-linked with ?action=approve) */}
+      {/* Quick approve confirm (from table row buttons - deep-linked with ?action=approve) */}
       <ConfirmDialog
         open={action === "approve" && !!detailBatch && !detailCandidates.length && !loadingCandidates}
         onOpenChange={(open) => { if (!open) { setAction(null); } }}

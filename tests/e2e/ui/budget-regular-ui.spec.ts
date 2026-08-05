@@ -1,6 +1,6 @@
 // UI smoke test for Flow A (BUD-A-27 in the QA plan): HOD submits a budget
 // request through the real form, Principal verifies it through the real
-// detail dialog, Finance approves it through the real approvals card — and
+// detail dialog, Finance approves it through the real approvals card - and
 // the status pill is checked at each stop. Uses cookie injection (see
 // tests/e2e/support/session.ts) to switch role per browser context instead
 // of three real Firebase logins, since the login path itself is already
@@ -23,7 +23,7 @@ test("HOD -> Principal -> Finance happy path is reflected correctly in the UI", 
   await hodPage.getByLabel("Budget Title *").fill(title);
   await hodPage.getByLabel("Academic Year *").fill("2026-27");
 
-  // First category group defaults to a select — pick a Non-Recurring category.
+  // First category group defaults to a select - pick a Non-Recurring category.
   await hodPage.getByLabel("Category *").first().selectOption({ label: "Lab Equipment" });
   const firstRow = hodPage.locator("table tbody tr").first();
   await firstRow.getByPlaceholder("e.g. Oscilloscope").fill("Playwright Oscilloscope");

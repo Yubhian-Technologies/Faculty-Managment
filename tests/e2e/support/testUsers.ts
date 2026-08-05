@@ -3,7 +3,7 @@
 // full list of variables and how to seed a matching test college.
 //
 // Every budget/indent lifecycle test needs at least: HOD, PRINCIPAL (or
-// VICE_PRINCIPAL), FINANCE, PURCHASE_DEPT, MANAGEMENT — all sharing one
+// VICE_PRINCIPAL), FINANCE, PURCHASE_DEPT, MANAGEMENT - all sharing one
 // TEST_COLLEGE_ID so requests raised by one role are visible to the next.
 
 export type TestRole =
@@ -49,7 +49,7 @@ function buildUser(prefix: string, role: TestRole): TestUser {
   };
 }
 
-// Lazily constructed — importing this module must not throw just because a
+// Lazily constructed - importing this module must not throw just because a
 // suite that doesn't need every role is running (e.g. a Non-Goods-only spec
 // file shouldn't require TEST_PURCHASE_DEPT_UID to be set).
 export const testUsers = {
@@ -63,7 +63,7 @@ export const testUsers = {
     return buildUser("TEST_VICE_PRINCIPAL", "VICE_PRINCIPAL");
   },
   get finance(): TestUser {
-    // FINANCE is a GLOBAL role — collegeId is not on its own session, but we
+    // FINANCE is a GLOBAL role - collegeId is not on its own session, but we
     // still stamp TEST_COLLEGE_ID here so the auth fixture's ?collegeId=
     // query-param fallback (requireCollegeContext) has something to send.
     return { ...buildUser("TEST_FINANCE", "FINANCE"), collegeId: optionalEnv("TEST_COLLEGE_ID") };

@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
       const name = row.name?.trim();
       const code = row.code?.trim().toUpperCase();
-      if (!name) { failed.push({ row: rowNum, name: "—", error: "Department name is required" }); continue; }
+      if (!name) { failed.push({ row: rowNum, name: "-", error: "Department name is required" }); continue; }
       if (!code) { failed.push({ row: rowNum, name, error: "Short code is required" }); continue; }
       if (code.length > 10) { failed.push({ row: rowNum, name, error: "Short code must be 10 characters or fewer" }); continue; }
       if (existingCodes.has(code)) { failed.push({ row: rowNum, name, error: `Code "${code}" already exists` }); continue; }
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
           hodUid = match.uid;
           hodName = match.name;
         } else {
-          warnings.push({ row: rowNum, name, message: `No HOD account found for "${row.hodEmail}" — department added without an HOD` });
+          warnings.push({ row: rowNum, name, message: `No HOD account found for "${row.hodEmail}" - department added without an HOD` });
         }
       }
 
