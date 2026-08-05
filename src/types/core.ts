@@ -17,7 +17,6 @@ export type UserRole =
   | "HOD"
   | "COLLEGE_OFFICE"
   | "COLLEGE_STAFF"
-  | "OFFICE"
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
@@ -40,7 +39,6 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   HOD: "Head of Department",
   COLLEGE_OFFICE: "College Office",
   COLLEGE_STAFF: "College Staff",
-  OFFICE: "Office",
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
@@ -64,7 +62,6 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   HOD: "/hod",
   COLLEGE_OFFICE: "/college-office",
   COLLEGE_STAFF: "/college-staff",
-  OFFICE: "/office",
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
@@ -98,7 +95,6 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   HOD: 4,
   COLLEGE_OFFICE: 4,
   COLLEGE_STAFF: 4,
-  OFFICE: 4,
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
@@ -138,7 +134,6 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   HOD: "COLLEGE",
   COLLEGE_OFFICE: "COLLEGE",
   COLLEGE_STAFF: "COLLEGE",
-  OFFICE: "COLLEGE",
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
@@ -558,6 +553,7 @@ export interface FacultyMember {
 
   joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
+  resumeUrl?: string;              // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
 
   createdAt: Timestamp;
   updatedAt: Timestamp;

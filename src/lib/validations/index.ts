@@ -34,7 +34,6 @@ export const createUserSchema = z.object({
     "HOD",
     "COLLEGE_OFFICE",
     "COLLEGE_STAFF",
-    "OFFICE",
     "PLACEMENT_DEPT",
     "LIBRARY",
     "EXAM_CELL",

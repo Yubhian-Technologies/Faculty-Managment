@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { SUPPORTING_STAFF_ROLE_CATEGORY, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
 import {
   TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
 } from "@/types";
@@ -20,10 +21,10 @@ function designationLabel(category: SupportingStaffCategory, designation: Suppor
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("HOD", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const { searchParams } = new URL(request.url);
-    const categoryFilter = searchParams.get("staffCategory");
     const statusFilter = searchParams.get("status");
+    const categoryFilter = SUPPORTING_STAFF_ROLE_CATEGORY[session.role] ?? searchParams.get("staffCategory");
 
     const db = getAdminDb();
     const staffColl = db.collection("colleges").doc(session.collegeId).collection("supportingStaff");
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "COLLEGE_OFFICE");
 
     const body = (await request.json()) as {
       employeeId: string;
@@ -86,6 +87,13 @@ export async function POST(request: Request) {
     if (!employeeId || !name || !collegeEmail || !password || !staffCategory || !designation || !employmentType || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
+    if (requiredCategory && staffCategory !== requiredCategory) {
+      return NextResponse.json(
+        { error: `${session.role === "HOD" ? "HOD" : "College Office"} can only add ${supportingStaffCategoryLabel(requiredCategory)} staff` },
+        { status: 403 }
+      );
+    }
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
@@ -95,7 +103,7 @@ export async function POST(request: Request) {
 
     // Department is optional — many Supporting Staff roles (Librarian, Accountant,
     // centrally-hired staff) aren't owned by any single department. Only an HOD
-    // caller auto-fills their own department; Principal/VP may leave it blank.
+    // caller auto-fills their own department; College Office may leave it blank.
     let department = body.department?.trim() ?? "";
     if (session.role === "HOD" && !department) {
       const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();

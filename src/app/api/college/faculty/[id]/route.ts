@@ -93,6 +93,7 @@ export async function PATCH(
       profilePhotoUrl: string;
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
+      resumeUrl: string;
     }>;
 
     const db = getAdminDb();
@@ -180,8 +181,8 @@ export async function PATCH(
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
-    // Letter URL fields — validate they are Firebase Storage URLs or empty (clear)
-    for (const field of ["joiningLetterUrl", "appointmentLetterUrl"] as const) {
+    // Letter/resume URL fields — validate they are Firebase Storage URLs or empty (clear)
+    for (const field of ["joiningLetterUrl", "appointmentLetterUrl", "resumeUrl"] as const) {
       if (body[field] !== undefined) {
         if (body[field] !== "" && !body[field].startsWith("https://firebasestorage.googleapis.com/")) {
           return NextResponse.json({ error: `Invalid ${field}` }, { status: 400 });

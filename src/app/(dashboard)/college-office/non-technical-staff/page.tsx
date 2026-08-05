@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Pencil, Trash2, Eye, Upload } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,11 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import { toast } from "@/hooks/useToast";
 import {
-  STAFF_CATEGORY_LABELS, TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
+  NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
 } from "@/types";
 import type {
-  SupportingStaffMember, SupportingStaffCategory, SupportingStaffDesignation,
+  SupportingStaffMember, SupportingStaffDesignation,
   EmploymentType, FacultyStatus,
 } from "@/types";
 
@@ -29,34 +29,32 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
   RETIRED: "secondary",
 };
 
-function designationLabel(category: SupportingStaffCategory, designation: SupportingStaffDesignation): string {
-  const labels = category === "TECHNICAL" ? TECHNICAL_STAFF_DESIGNATION_LABELS : NON_TECHNICAL_STAFF_DESIGNATION_LABELS;
-  return (labels as Record<string, string>)[designation] ?? designation;
+function designationLabel(designation: SupportingStaffDesignation): string {
+  return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
 }
 
-export default function PrincipalSupportingStaffPage() {
+export default function CollegeOfficeNonTechnicalStaffPage() {
   const router = useRouter();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
 
   const [deleteTarget, setDeleteTarget] = useState<StaffRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  async function load(category: string) {
+  async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/college/supporting-staff${category ? `?staffCategory=${category}` : ""}`);
+      const res = await fetch("/api/college/supporting-staff");
       const data = await res.json() as { staff: StaffRow[] };
       setStaff(data.staff ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load supporting staff" });
+      toast({ variant: "destructive", title: "Failed to load non-technical staff" });
     } finally {
       setIsLoading(false);
     }
   }
 
-  useEffect(() => { void load(categoryFilter); }, [categoryFilter]);
+  useEffect(() => { void load(); }, []);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -66,19 +64,13 @@ export default function PrincipalSupportingStaffPage() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
       setDeleteTarget(null);
-      void load(categoryFilter);
+      void load();
     } catch {
       toast({ variant: "destructive", title: "Failed to delete staff record" });
     } finally {
       setIsDeleting(false);
     }
   }
-
-  const CATEGORY_TABS = [
-    { key: "", label: "All" },
-    { key: "TECHNICAL", label: "Technical" },
-    { key: "NON_TECHNICAL", label: "Non-Technical" },
-  ];
 
   const columns: Column<StaffRow>[] = [
     {
@@ -96,23 +88,19 @@ export default function PrincipalSupportingStaffPage() {
       ),
     },
     {
-      key: "department",
-      header: "Department",
-      render: (row) => row.department
-        ? <Badge variant="outline">{row.department}</Badge>
-        : <span className="text-xs text-muted-foreground italic">Not assigned</span>,
-    },
-    {
       key: "designation",
       header: "Role",
       render: (row) => (
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">
-            {row.designation === "OTHER" && row.otherDesignationTitle ? row.otherDesignationTitle : designationLabel(row.staffCategory, row.designation)}
-          </p>
-          <Badge variant="outline" className="text-xs">{STAFF_CATEGORY_LABELS[row.staffCategory]}</Badge>
-        </div>
+        <p className="text-sm font-medium">
+          {row.designation === "OTHER" && row.otherDesignationTitle ? row.otherDesignationTitle : designationLabel(row.designation)}
+        </p>
       ),
+    },
+    {
+      key: "department",
+      header: "Department",
+      hideOnMobile: true,
+      render: (row) => <span className="text-sm text-muted-foreground">{row.department || "Centrally managed"}</span>,
     },
     {
       key: "employmentType",
@@ -134,10 +122,7 @@ export default function PrincipalSupportingStaffPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/principal/supporting-staff/${row.id}`); }}>
-            <Eye className="h-3.5 w-3.5" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/principal/supporting-staff/${row.id}/edit`); }}>
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/college-office/non-technical-staff/${row.id}/edit`); }}>
             <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
           </Button>
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -152,39 +137,30 @@ export default function PrincipalSupportingStaffPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Supporting Staff"
-        description="Technical and Non-Technical staff records across the college"
+        title="Non-Technical Staff"
+        description="Non-Technical staff records for your college"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => router.push("/principal/supporting-staff/import")}>
+            <Button variant="outline" onClick={() => router.push("/college-office/non-technical-staff/import")}>
               <Upload className="h-4 w-4 mr-2" />Import
             </Button>
-            <Button onClick={() => router.push("/principal/supporting-staff/new")}>
+            <Button onClick={() => router.push("/college-office/non-technical-staff/new")}>
               <UserPlus className="h-4 w-4 mr-2" />Add Staff
             </Button>
           </div>
         }
       />
 
-      <div className="flex gap-2 flex-wrap">
-        {CATEGORY_TABS.map((tab) => (
-          <button key={tab.key} onClick={() => setCategoryFilter(tab.key)}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${categoryFilter === tab.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       <DataTable
         data={staff}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
-        searchPlaceholder="Search by name, email, employee ID, department..."
-        searchKeys={["name", "email", "employeeId", "department"] as (keyof StaffRow)[]}
-        emptyTitle="No supporting staff records yet"
-        emptyDescription="Add Technical or Non-Technical staff to build college-wide records"
-        emptyAction={<Button onClick={() => router.push("/principal/supporting-staff/new")}><UserPlus className="h-4 w-4 mr-2" />Add Staff</Button>}
+        searchPlaceholder="Search by name, email, employee ID..."
+        searchKeys={["name", "email", "employeeId"] as (keyof StaffRow)[]}
+        emptyTitle="No non-technical staff records yet"
+        emptyDescription="Add Non-Technical staff to build your college's records"
+        emptyAction={<Button onClick={() => router.push("/college-office/non-technical-staff/new")}><UserPlus className="h-4 w-4 mr-2" />Add Staff</Button>}
       />
 
       <ConfirmDialog
