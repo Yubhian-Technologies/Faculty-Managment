@@ -12,11 +12,11 @@ import { Avatar } from "@/components/shared/Avatar";
 import { FacultyModuleTabs } from "@/components/faculty/FacultyModuleTabs";
 import { toast } from "@/hooks/useToast";
 import {
-  STAFF_CATEGORY_LABELS, TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
+  TECHNICAL_STAFF_DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
 } from "@/types";
 import type {
-  SupportingStaffMember, SupportingStaffCategory, SupportingStaffDesignation,
+  SupportingStaffMember, SupportingStaffDesignation,
   EmploymentType, FacultyStatus,
 } from "@/types";
 
@@ -30,34 +30,32 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
   RETIRED: "secondary",
 };
 
-function designationLabel(category: SupportingStaffCategory, designation: SupportingStaffDesignation): string {
-  const labels = category === "TECHNICAL" ? TECHNICAL_STAFF_DESIGNATION_LABELS : NON_TECHNICAL_STAFF_DESIGNATION_LABELS;
-  return (labels as Record<string, string>)[designation] ?? designation;
+function designationLabel(designation: SupportingStaffDesignation): string {
+  return (TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
 }
 
 export default function HODSupportingStaffPage() {
   const router = useRouter();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
 
   const [deleteTarget, setDeleteTarget] = useState<StaffRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  async function load(category: string) {
+  async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/college/supporting-staff${category ? `?staffCategory=${category}` : ""}`);
+      const res = await fetch("/api/college/supporting-staff");
       const data = await res.json() as { staff: StaffRow[] };
       setStaff(data.staff ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load supporting staff" });
+      toast({ variant: "destructive", title: "Failed to load technical staff" });
     } finally {
       setIsLoading(false);
     }
   }
 
-  useEffect(() => { void load(categoryFilter); }, [categoryFilter]);
+  useEffect(() => { void load(); }, []);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -67,19 +65,13 @@ export default function HODSupportingStaffPage() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
       setDeleteTarget(null);
-      void load(categoryFilter);
+      void load();
     } catch {
       toast({ variant: "destructive", title: "Failed to delete staff record" });
     } finally {
       setIsDeleting(false);
     }
   }
-
-  const CATEGORY_TABS = [
-    { key: "", label: "All" },
-    { key: "TECHNICAL", label: "Technical" },
-    { key: "NON_TECHNICAL", label: "Non-Technical" },
-  ];
 
   const columns: Column<StaffRow>[] = [
     {
@@ -100,12 +92,9 @@ export default function HODSupportingStaffPage() {
       key: "designation",
       header: "Role",
       render: (row) => (
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">
-            {row.designation === "OTHER" && row.otherDesignationTitle ? row.otherDesignationTitle : designationLabel(row.staffCategory, row.designation)}
-          </p>
-          <Badge variant="outline" className="text-xs">{STAFF_CATEGORY_LABELS[row.staffCategory]}</Badge>
-        </div>
+        <p className="text-sm font-medium">
+          {row.designation === "OTHER" && row.otherDesignationTitle ? row.otherDesignationTitle : designationLabel(row.designation)}
+        </p>
       ),
     },
     {
@@ -143,8 +132,8 @@ export default function HODSupportingStaffPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Supporting Staff"
-        description="Technical and Non-Technical staff records for your department"
+        title="Technical Staff"
+        description="Technical staff records for your department"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => router.push("/hod/supporting-staff/import")}>
@@ -159,15 +148,6 @@ export default function HODSupportingStaffPage() {
 
       <FacultyModuleTabs facultyHref="/hod/faculty" supportingStaffHref="/hod/supporting-staff" />
 
-      <div className="flex gap-2 flex-wrap">
-        {CATEGORY_TABS.map((tab) => (
-          <button key={tab.key} onClick={() => setCategoryFilter(tab.key)}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${categoryFilter === tab.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       <DataTable
         data={staff}
         columns={columns}
@@ -175,8 +155,8 @@ export default function HODSupportingStaffPage() {
         keyExtractor={(r) => r.id}
         searchPlaceholder="Search by name, email, employee ID..."
         searchKeys={["name", "email", "employeeId"] as (keyof StaffRow)[]}
-        emptyTitle="No supporting staff records yet"
-        emptyDescription="Add Technical or Non-Technical staff to build your department's records"
+        emptyTitle="No technical staff records yet"
+        emptyDescription="Add Technical staff to build your department's records"
         emptyAction={<Button onClick={() => router.push("/hod/supporting-staff/new")}><UserPlus className="h-4 w-4 mr-2" />Add Staff</Button>}
       />
 

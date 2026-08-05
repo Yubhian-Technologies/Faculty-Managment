@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { COLUMNS, HINTS } from "@/lib/supportingStaff/csvColumns";
+import { getSupportingStaffColumns, getSupportingStaffHints } from "@/lib/supportingStaff/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
@@ -17,6 +17,9 @@ type ImportResult = {
   failed: { row: number; employeeId: string; error: string }[];
   warnings: { row: number; employeeId: string; warning: string }[];
 };
+
+const COLUMNS = getSupportingStaffColumns("TECHNICAL");
+const HINTS = getSupportingStaffHints("TECHNICAL");
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -30,7 +33,7 @@ export default function HODSupportingStaffImportPage() {
   function downloadTemplate() {
     const headers = COLUMNS.map((c) => c.label);
     const sample1 = COLUMNS.map((c) => c.sample);
-    downloadCSV(toCSV([headers, sample1]), "supporting_staff_import_template.csv");
+    downloadCSV(toCSV([headers, sample1]), "technical_staff_import_template.csv");
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -116,8 +119,8 @@ export default function HODSupportingStaffImportPage() {
   return (
     <div className="max-w-5xl space-y-6">
       <PageHeader
-        title="Import Supporting Staff"
-        description="Bulk upload Technical and Non-Technical staff records from a CSV file"
+        title="Import Technical Staff"
+        description="Bulk upload Technical staff records from a CSV file"
         actions={
           <Button variant="outline" asChild>
             <Link href="/hod/supporting-staff"><ArrowLeft className="h-4 w-4 mr-1" />Back to Supporting Staff</Link>

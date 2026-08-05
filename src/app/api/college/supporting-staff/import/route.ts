@@ -3,7 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus } from "@/types";
+import { SUPPORTING_STAFF_ROLE_CATEGORY, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
+import type {
+  SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus,
+  SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
+  TechnicalResponsibility, NonTechnicalResponsibility, ComputerSkill, VendorCertification, VendorCertificationEntry,
+} from "@/types";
 
 // Same resolver as faculty/students CSV imports (src/app/api/college/
 // students/import-excel/route.ts) — accepts a department's short Code (e.g.
@@ -67,6 +72,76 @@ const STATUS_MAP: Record<string, FacultyStatus> = {
   "on leave": "ON_LEAVE",
   "resigned": "RESIGNED",
   "retired": "RETIRED",
+};
+
+const TRAINING_TYPE_MAP: Record<string, TrainingEntryType> = {
+  "fdp": "FDP",
+  "workshop": "WORKSHOP",
+  "mooc": "MOOC",
+  "certification": "CERTIFICATION",
+  "skill development": "SKILL_DEVELOPMENT",
+  "administrative": "ADMINISTRATIVE",
+  "administrative training": "ADMINISTRATIVE",
+  "erp": "ERP",
+  "erp training": "ERP",
+  "office automation": "OFFICE_AUTOMATION",
+  "office automation training": "OFFICE_AUTOMATION",
+  "other": "OTHER",
+};
+
+const AWARD_CATEGORY_MAP: Record<string, AwardCategory> = {
+  "best teacher award": "BEST_TEACHER",
+  "best teacher": "BEST_TEACHER",
+  "research award": "RESEARCH_AWARD",
+  "appreciation certificate": "APPRECIATION_CERTIFICATE",
+  "appreciation": "APPRECIATION_CERTIFICATE",
+  "other": "OTHER",
+};
+
+const TECHNICAL_RESPONSIBILITY_MAP: Record<string, TechnicalResponsibility> = {
+  "lab maintenance": "LAB_MAINTENANCE",
+  "equipment maintenance": "EQUIPMENT_MAINTENANCE",
+  "software installation": "SOFTWARE_INSTALLATION",
+  "network administration": "NETWORK_ADMINISTRATION",
+  "lab stock maintenance": "LAB_STOCK_MANAGEMENT",
+  "lab stock management": "LAB_STOCK_MANAGEMENT",
+  "student support": "STUDENT_SUPPORT",
+  "practical sessions": "PRACTICAL_SESSION_ASSISTANCE",
+  "practical session assistance": "PRACTICAL_SESSION_ASSISTANCE",
+  "other": "OTHER",
+};
+
+const NON_TECHNICAL_RESPONSIBILITY_MAP: Record<string, NonTechnicalResponsibility> = {
+  "office administration": "OFFICE_ADMINISTRATION",
+  "student records": "STUDENT_RECORDS",
+  "file management": "FILE_MANAGEMENT",
+  "accounts": "ACCOUNTS",
+  "purchase": "PURCHASE",
+  "examination work": "EXAMINATION_WORK",
+  "admission support": "ADMISSION_SUPPORT",
+  "documentation": "DOCUMENTATION",
+  "other": "OTHER",
+};
+
+const COMPUTER_SKILL_MAP: Record<string, ComputerSkill> = {
+  "ms office": "MS_OFFICE",
+  "erp": "ERP",
+  "excel": "EXCEL",
+  "email": "EMAIL",
+  "document management": "DOCUMENT_MANAGEMENT",
+  "other": "OTHER",
+};
+
+const VENDOR_CERTIFICATION_MAP: Record<string, VendorCertification> = {
+  "cisco": "CISCO",
+  "microsoft": "MICROSOFT",
+  "aws": "AWS",
+  "redhat": "REDHAT",
+  "red hat": "REDHAT",
+  "oracle": "ORACLE",
+  "google": "GOOGLE",
+  "vmware": "VMWARE",
+  "other": "OTHER",
 };
 
 type ImportRow = {
@@ -133,9 +208,155 @@ function parseDate(v: string | undefined): Date | undefined {
   return sane(new Date(trimmed));
 }
 
+function num(v: string | undefined): number | undefined {
+  if (!v?.trim()) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function parseList(raw: string | undefined): string[] {
+  return (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+// Comma-separated free text mapped against an enum's label vocabulary — items
+// that don't match anything in `map` are dropped with a warning rather than
+// silently discarded, same as every other unrecognized-value case in this route.
+function mapList<T extends string>(
+  raw: string | undefined,
+  map: Record<string, T>,
+  empId: string,
+  label: string,
+  dropped: (empId: string, label: string, raw: string | undefined) => void
+): T[] {
+  const items = parseList(raw);
+  const matched: T[] = [];
+  for (const item of items) {
+    const key = map[item.toLowerCase()];
+    if (key) matched.push(key);
+    else dropped(empId, label, item);
+  }
+  return matched;
+}
+
+function qualifications(row: ImportRow): StaffQualification[] {
+  return [1, 2]
+    .map((i) => ({
+      level: row[`qualification${i}_level`]?.trim() ?? "",
+      degreeAndBranch: row[`qualification${i}_degreeAndBranch`]?.trim() ?? "",
+      universityOrInstitute: row[`qualification${i}_university`]?.trim() ?? "",
+      percentageOrDivision: row[`qualification${i}_percentage`]?.trim() ?? "",
+      yearOfCompletion: num(row[`qualification${i}_year`]) ?? 0,
+    }))
+    .filter((q) => q.level || q.degreeAndBranch || q.universityOrInstitute);
+}
+
+function trainingEntries(row: ImportRow): TrainingEntry[] {
+  return [1, 2]
+    .map((i) => ({
+      type: TRAINING_TYPE_MAP[(row[`training${i}_type`] ?? "").trim().toLowerCase()] ?? "OTHER",
+      title: row[`training${i}_title`]?.trim() ?? "",
+      organizer: row[`training${i}_organizer`]?.trim() ?? "",
+      year: num(row[`training${i}_year`]) ?? 0,
+    }))
+    .filter((t) => t.title || t.organizer);
+}
+
+function achievementEntries(row: ImportRow): AwardEntry[] {
+  return [1, 2]
+    .map((i) => ({
+      category: AWARD_CATEGORY_MAP[(row[`achievement${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
+      title: row[`achievement${i}_title`]?.trim() ?? "",
+      awardingBody: row[`achievement${i}_awardingBody`]?.trim() ?? "",
+      year: num(row[`achievement${i}_year`]) ?? 0,
+    }))
+    .filter((a) => a.title || a.awardingBody);
+}
+
+function technicalCertifications(row: ImportRow, empId: string, dropped: (empId: string, label: string, raw: string | undefined) => void): VendorCertificationEntry[] {
+  return [1, 2]
+    .map((i): VendorCertificationEntry | undefined => {
+      const vendorRaw = row[`certification${i}_vendor`]?.trim();
+      const name = row[`certification${i}_name`]?.trim() ?? "";
+      const year = num(row[`certification${i}_year`]);
+      if (!vendorRaw && !name) return undefined;
+      const vendor = VENDOR_CERTIFICATION_MAP[(vendorRaw ?? "").toLowerCase()];
+      if (vendorRaw && !vendor) dropped(empId, `Certification ${i} Vendor`, vendorRaw);
+      return { vendor: vendor ?? "OTHER", ...(!vendor && vendorRaw ? { otherVendorName: vendorRaw } : {}), certificationName: name, ...(year !== undefined ? { year } : {}) };
+    })
+    .filter((c): c is VendorCertificationEntry => !!c);
+}
+
+// Builds the full SupportingStaffProfileFields object for a row — qualifications
+// are shared across both categories; technicalProfile/nonTechnicalProfile are
+// mutually exclusive, matching the manual "Add Staff" form's SupportingStaffProfileFields
+// shape (src/types/supportingStaff.ts) so import and manual entry stay compatible.
+function buildSupportingStaffProfile(
+  row: ImportRow,
+  category: SupportingStaffCategory,
+  empId: string,
+  dropped: (empId: string, label: string, raw: string | undefined) => void
+): SupportingStaffProfileFields | undefined {
+  const profile: SupportingStaffProfileFields = {
+    qualifications: qualifications(row),
+  };
+
+  if (category === "TECHNICAL") {
+    const responsibilities = mapList(row.responsibilities, TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
+    const skills = {
+      programmingLanguages: parseList(row.programmingLanguages),
+      operatingSystems: parseList(row.operatingSystems),
+      networking: parseList(row.networking),
+      databases: parseList(row.databases),
+      cloud: parseList(row.cloud),
+      hardware: parseList(row.hardware),
+      softwareTools: parseList(row.softwareTools),
+    };
+    const certifications = technicalCertifications(row, empId, dropped);
+    const training = trainingEntries(row);
+    const achievements = achievementEntries(row);
+    const hasContent = responsibilities.length || Object.values(skills).some((s) => s.length) || certifications.length || training.length || achievements.length || row.innovationsAndAutomation?.trim() || row.otherResponsibility?.trim();
+    if (hasContent) {
+      profile.technicalProfile = {
+        skills,
+        responsibilities,
+        ...(row.otherResponsibility?.trim() ? { otherResponsibility: row.otherResponsibility.trim() } : {}),
+        certifications,
+        training,
+        ...(row.innovationsAndAutomation?.trim() ? { innovationsAndAutomation: row.innovationsAndAutomation.trim() } : {}),
+        achievements,
+      };
+    }
+  } else {
+    const responsibilities = mapList(row.responsibilities, NON_TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
+    const computerSkills = mapList(row.computerSkills, COMPUTER_SKILL_MAP, empId, "Computer Skills", dropped);
+    const typingSpeedWpm = num(row.typingSpeedWpm);
+    const training = trainingEntries(row);
+    const achievements = achievementEntries(row);
+    const hasContent = responsibilities.length || computerSkills.length || typingSpeedWpm !== undefined || training.length || achievements.length || row.otherResponsibility?.trim() || row.otherComputerSkill?.trim();
+    if (hasContent) {
+      profile.nonTechnicalProfile = {
+        responsibilities,
+        ...(row.otherResponsibility?.trim() ? { otherResponsibility: row.otherResponsibility.trim() } : {}),
+        computerSkills,
+        ...(row.otherComputerSkill?.trim() ? { otherComputerSkill: row.otherComputerSkill.trim() } : {}),
+        ...(typingSpeedWpm !== undefined ? { typingSpeedWpm } : {}),
+        training,
+        achievements,
+      };
+    }
+  }
+
+  if (row.otherInformation?.trim()) profile.otherInformation = row.otherInformation.trim();
+
+  const hasQualifications = profile.qualifications.length > 0;
+  const hasCategoryProfile = !!profile.technicalProfile || !!profile.nonTechnicalProfile;
+  return hasQualifications || hasCategoryProfile || profile.otherInformation ? profile : undefined;
+}
+
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "COLLEGE_OFFICE");
+    const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
     const body = (await request.json()) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
@@ -190,8 +411,15 @@ export async function POST(request: Request) {
       }
 
       const categoryKey = (row.staffCategory ?? "").trim().toLowerCase();
-      const staffCategory: SupportingStaffCategory = CATEGORY_MAP[categoryKey] ?? "NON_TECHNICAL";
+      const staffCategory: SupportingStaffCategory = CATEGORY_MAP[categoryKey] ?? requiredCategory ?? "TECHNICAL";
       if (row.staffCategory?.trim() && !CATEGORY_MAP[categoryKey]) dropped(empId, "Staff Category", row.staffCategory);
+
+      // Each role can only import into its own category — Technical (HOD, per
+      // department) and Non-Technical (College Office, college-wide) are kept separate.
+      if (requiredCategory && staffCategory !== requiredCategory) {
+        failed.push({ row: rowNum, employeeId: empId, error: `${session.role === "HOD" ? "HOD" : "College Office"} can only import ${supportingStaffCategoryLabel(requiredCategory)} staff` });
+        continue;
+      }
 
       const designationKey = (row.designation ?? "").trim().toLowerCase();
       const designationMap = staffCategory === "TECHNICAL" ? TECHNICAL_DESIGNATION_MAP : NON_TECHNICAL_DESIGNATION_MAP;
@@ -273,7 +501,7 @@ export async function POST(request: Request) {
         temporaryAddress: row.temporaryAddress?.trim() || undefined,
         permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
         permanentAddress: row.permanentAddress?.trim() || undefined,
-        supportingStaffProfile: row.otherInformation?.trim() ? { qualifications: [], otherInformation: row.otherInformation.trim() } : undefined,
+        supportingStaffProfile: buildSupportingStaffProfile(row, staffCategory, empId, dropped),
         createdAt: now,
         updatedAt: now,
       };
