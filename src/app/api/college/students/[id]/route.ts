@@ -7,11 +7,11 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import type { Section, StudentRecord } from "@/types";
 
-// Move a single student to a different section (roster-management fix-up —
+// Move a single student to a different section (roster-management fix-up -
 // e.g. correcting a student who landed under the wrong one of two
 // identically-named, differently-cross-listed sections) and/or remove them
 // outright. Distinct from students/promote (Principal/VP-only, cohort-wide,
-// forces REGULAR + a fixed target for the whole group) — this is a
+// forces REGULAR + a fixed target for the whole group) - this is a
 // per-student correction available to whoever already manages this roster.
 
 async function loadStudentAndScope(
@@ -89,7 +89,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       secondaryDept = sectionSecondaryDepts[0];
     } else if (sectionSecondaryDepts.length > 1) {
       return NextResponse.json(
-        { error: `Section ${targetSection.name} is cross-listed to multiple departments (${sectionSecondaryDepts.join(", ")}) — specify which one` },
+        { error: `Section ${targetSection.name} is cross-listed to multiple departments (${sectionSecondaryDepts.join(", ")}) - specify which one` },
         { status: 400 }
       );
     }

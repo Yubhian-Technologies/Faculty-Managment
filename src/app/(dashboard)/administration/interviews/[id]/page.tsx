@@ -279,7 +279,7 @@ export default function AdminInterviewDetailPage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Panel Evaluation (70%) — 5 criteria, rated 1–5 · Student Feedback (30%) — 5 criteria, rated 1–5
+              Panel Evaluation (70%) - 5 criteria, rated 1–5 · Student Feedback (30%) - 5 criteria, rated 1–5
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -298,7 +298,7 @@ export default function AdminInterviewDetailPage() {
                     {already && (
                       <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 text-xs">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Score: {(already.overallScore ?? 0).toFixed(1)}/100 — click to update
+                        Score: {(already.overallScore ?? 0).toFixed(1)}/100 - click to update
                       </Badge>
                     )}
                   </div>
@@ -395,7 +395,7 @@ export default function AdminInterviewDetailPage() {
                         <div>
                           <span className="font-medium">{f.panelName}</span>
                           <span className="text-muted-foreground"> · {(f.overallScore ?? 0).toFixed(1)}/100 (Panel: {(f.panelScore ?? 0).toFixed(1)} + Student: {(f.studentScore ?? 0).toFixed(1)})</span>
-                          {f.remarks && <span className="text-muted-foreground"> — {f.remarks}</span>}
+                          {f.remarks && <span className="text-muted-foreground"> - {f.remarks}</span>}
                         </div>
                         <StatusBadge status={f.recommendation} />
                       </div>

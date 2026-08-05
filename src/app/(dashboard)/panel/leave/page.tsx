@@ -133,7 +133,7 @@ export default function FacultyLeavePage() {
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground truncate">{lt.label}</p>
                 <p className={`text-2xl font-bold mt-1 ${lt.color}`}>
-                  {loading ? "—" : bal !== null ? bal.available : "—"}
+                  {loading ? "-" : bal !== null ? bal.available : "-"}
                 </p>
                 <p className="text-xs text-muted-foreground">days available</p>
                 {bal && !loading && (bal.used > 0 || bal.pending > 0) && (
@@ -182,7 +182,7 @@ export default function FacultyLeavePage() {
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {req.isOtherRequest ? "Others" : (req.leaveTypeCode ? LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode : "—")}
+                        {req.isOtherRequest ? "Others" : (req.leaveTypeCode ? LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode : "-")}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {formatDate(req.fromDate as Parameters<typeof formatDate>[0])}

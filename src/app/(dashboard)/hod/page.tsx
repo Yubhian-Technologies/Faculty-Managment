@@ -52,8 +52,8 @@ export default function HODDashboard() {
   const visibleHodModules = HOD_MODULES.filter((m) => !isHidden(m.href));
   const visiblePersonalModules = PERSONAL_MODULES.filter((m) => !isHidden(m.href));
   // "/hod/vacancy", "/hod/vacancy/new" and "/hod/batches" aren't their own nav
-  // items — they're sub-pages of the "Hiring" module (whose nav entry is
-  // /hod/pipeline) — so gate them off that module's visibility instead.
+  // items - they're sub-pages of the "Hiring" module (whose nav entry is
+  // /hod/pipeline) - so gate them off that module's visibility instead.
   const isHiringHidden = isHidden("/hod/pipeline");
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [batches, setBatches] = useState<HiringBatch[]>([]);
@@ -92,7 +92,7 @@ export default function HODDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name?.split(" ")[0] ?? "HOD"}`}
-        description={`${user?.department ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""} — Department Portal`}
+        description={`${user?.department ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""} - Department Portal`}
         actions={
           !isHiringHidden && (
             <Button asChild>

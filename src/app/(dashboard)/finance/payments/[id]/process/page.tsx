@@ -74,7 +74,7 @@ export default function ProcessPaymentPage() {
     <div className="max-w-xl">
       <PageHeader
         title={title}
-        description={payment ? `${payment.payeeName} — ${payment.purpose}` : undefined}
+        description={payment ? `${payment.payeeName} - ${payment.purpose}` : undefined}
       />
 
       <Card>
@@ -84,7 +84,7 @@ export default function ProcessPaymentPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label>Payment Reference — UTR / cheque number</Label>
+              <Label>Payment Reference - UTR / cheque number</Label>
               <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UTR / cheque number" />
             </div>
 

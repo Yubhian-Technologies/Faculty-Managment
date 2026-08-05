@@ -41,7 +41,7 @@ export default function DepartmentsImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -71,7 +71,7 @@ export default function DepartmentsImportPage() {
         return row;
       }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
 
-      if (dataRows.length === 0) { setParseError("No data rows found after the header — check that your data starts on the row right after the header, with no blank rows in between."); return; }
+      if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }
       if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
 
       setRows(dataRows);
@@ -100,7 +100,7 @@ export default function DepartmentsImportPage() {
         setRows([]);
       }
     } catch {
-      toast({ variant: "destructive", title: "Network error — import failed" });
+      toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
     }
@@ -115,7 +115,7 @@ export default function DepartmentsImportPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Import Departments"
-        description="Bulk add departments — with department codes and HOD emails — from a CSV file"
+        description="Bulk add departments - with department codes and HOD emails - from a CSV file"
         actions={
           <Button variant="outline" asChild>
             <Link href="/principal/departments"><ArrowLeft className="h-4 w-4 mr-1" />Back to Departments</Link>
@@ -152,7 +152,7 @@ export default function DepartmentsImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. &quot;Dept Code&quot; for Short Code)</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;Dept Code&quot; for Short Code)</p>
             </div>
           </button>
           {parseError && (
@@ -204,7 +204,7 @@ export default function DepartmentsImportPage() {
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {COLUMNS.map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
-                            {row[c.key] || <span className="text-muted-foreground/40">—</span>}
+                            {row[c.key] || <span className="text-muted-foreground/40">-</span>}
                           </td>
                         ))}
                       </tr>
@@ -282,7 +282,7 @@ export default function DepartmentsImportPage() {
                   {result.warnings.map((w, i) => (
                     <div key={i} className="flex items-start gap-2 px-3 py-2 text-sm">
                       <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600" />
-                      <span className="text-muted-foreground">Row {w.row} · {w.name} — {w.message}</span>
+                      <span className="text-muted-foreground">Row {w.row} · {w.name} - {w.message}</span>
                     </div>
                   ))}
                 </div>

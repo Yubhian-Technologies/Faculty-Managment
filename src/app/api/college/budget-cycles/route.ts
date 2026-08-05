@@ -7,7 +7,7 @@ import type { BudgetCycle, BudgetType } from "@/types";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import type { Firestore } from "firebase-admin/firestore";
 
-// FINANCE is a GLOBAL role — its profile lives in systemUsers/{uid}, not
+// FINANCE is a GLOBAL role - its profile lives in systemUsers/{uid}, not
 // colleges/{collegeId}/users/{uid} (see src/lib/budget/departmentScope.ts's
 // resolveUserName, which only checks the latter and would return "Unknown"
 // here).
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    // Actionable (login-popup) notification — the Principal/VP is the next
+    // Actionable (login-popup) notification - the Principal/VP is the next
     // responsible party until they approve/reject/return it (resolved in
     // src/app/api/college/budget-cycles/[id]/route.ts on that action).
     const approversSnap = await db

@@ -20,7 +20,7 @@ export interface NewUserInput extends PersonalDetailsInput {
   profilePhotoUrl?: string;
 }
 
-// ADMINISTRATION / ACCOUNTS / HR_ADMIN / ADMIN_OFFICE / LOCATION_DEPT_HEAD — profile
+// ADMINISTRATION / ACCOUNTS / HR_ADMIN / ADMIN_OFFICE / LOCATION_DEPT_HEAD - profile
 // lives at locations/{id}/locationUsers/{uid}.
 export async function provisionLocationUser(
   db: FirebaseFirestore.Firestore,
@@ -46,7 +46,7 @@ export async function provisionLocationUser(
   return uid;
 }
 
-// PRINCIPAL / VICE_PRINCIPAL / HOD etc — profile lives at colleges/{id}/users/{uid}.
+// PRINCIPAL / VICE_PRINCIPAL / HOD etc - profile lives at colleges/{id}/users/{uid}.
 export async function provisionCollegeUser(
   db: FirebaseFirestore.Firestore,
   collegeId: string,

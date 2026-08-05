@@ -107,7 +107,7 @@ export default function EditFacultyProfilePage() {
           const freshProfile = await getUserById(user.collegeId, user.uid);
           if (freshProfile) setUser(freshProfile);
         } catch {
-          // non-fatal — profile was saved; TopBar catches up on next load
+          // non-fatal - profile was saved; TopBar catches up on next load
         }
       }
       router.push("/panel/profile");

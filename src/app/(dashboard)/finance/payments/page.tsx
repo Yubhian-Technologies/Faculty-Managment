@@ -47,7 +47,7 @@ export default function FinancePaymentsPage() {
     { key: "type", header: "Type", render: (row) => <Badge variant="secondary">{TYPE_LABELS[row.type]}</Badge> },
     { key: "purpose", header: "Purpose", hideOnMobile: true },
     { key: "amount", header: "Amount", render: (row) => formatCurrency(row.amount) },
-    { key: "paymentReference", header: "Reference", hideOnMobile: true, render: (row) => row.paymentReference ?? "—" },
+    { key: "paymentReference", header: "Reference", hideOnMobile: true, render: (row) => row.paymentReference ?? "-" },
     { key: "status", header: "Status", render: (row) => <Badge variant="outline" className={STATUS_COLOR[row.status]}>{row.status}</Badge> },
     {
       key: "actions", header: "", className: "text-right",

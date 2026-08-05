@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
     let primaryQuery: FirebaseFirestore.Query = facultyColl;
     // A parent department's HOD gets view-only access to its sub-departments'
-    // faculty too — needed so they can pick a sub-department specialist when
+    // faculty too - needed so they can pick a sub-department specialist when
     // assigning faculty to a shared/parent-owned subject (see teaching-assignments).
     let secondaryQuery: FirebaseFirestore.Query | null = null;
 
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     } else if (deptFilter) {
       // Office/Principal/VP picking faculty for a specific department (e.g.
       // a section's Faculty Incharge) also see faculty registered under that
-      // department's parent or sub-departments — a sub-department's own
+      // department's parent or sub-departments - a sub-department's own
       // faculty pool is often thin, and the main HOD's faculty may teach
       // there too.
       const relatedNames = await getRelatedDepartmentNames(db, session.collegeId, deptFilter);
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
     }
 
-    // College email is the login username — create the Firebase Auth user with it,
+    // College email is the login username - create the Firebase Auth user with it,
     // not the personal email (which is optional, contact-only).
     const uid = await createFirebaseUser(collegeEmail, password, name);
 

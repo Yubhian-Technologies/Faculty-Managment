@@ -11,7 +11,7 @@ import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, Al
 import { toCSV, parseCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 
 // ─── Template definition ───────────────────────────────────────────────────────
-// S.No is a convenience column for the sheet author only (not stored) — every
+// S.No is a convenience column for the sheet author only (not stored) - every
 // other required column is required so a single file can cover the whole
 // college's intake, across every department, in one go.
 
@@ -35,7 +35,7 @@ const HINTS = [
   "Department and Section must already exist (create the section first under Sections)",
   "Department and Secondary Department accept either the full name (e.g. \"Computer Science\") or the short Code (e.g. \"CSE\")",
   "A single file may mix multiple departments, sections, and years",
-  "Secondary Department is only for 1st-years who've pre-registered a core branch (e.g. CSE) while sitting under Basic Science — leave blank otherwise. That department's HOD gets view-only access until the student is promoted into it.",
+  "Secondary Department is only for 1st-years who've pre-registered a core branch (e.g. CSE) while sitting under Basic Science - leave blank otherwise. That department's HOD gets view-only access until the student is promoted into it.",
 ];
 
 type ParsedRow = Record<string, string>;
@@ -73,7 +73,7 @@ export default function OfficeStudentImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -86,7 +86,7 @@ export default function OfficeStudentImportPage() {
       // Tolerant of case, punctuation, spacing, and alternate wording (e.g. "DOB" for Date of Birth).
       const keyMap = matchHeaders(headers, COLUMNS);
 
-      // Check header matching BEFORE counting data rows — if nothing in the
+      // Check header matching BEFORE counting data rows - if nothing in the
       // header row matched, every row maps to an empty object and would
       // otherwise surface as the misleading "no data rows" error instead of
       // pointing at the real problem (wrong/missing header row).
@@ -104,7 +104,7 @@ export default function OfficeStudentImportPage() {
         return row;
       }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
 
-      if (dataRows.length === 0) { setParseError("No data rows found after the header — check that your data starts on the row right after the header, with no blank rows in between."); return; }
+      if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }
       if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
 
       setRows(dataRows);
@@ -134,7 +134,7 @@ export default function OfficeStudentImportPage() {
         setRows([]);
       }
     } catch {
-      toast({ variant: "destructive", title: "Network error — import failed" });
+      toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
     }
@@ -149,7 +149,7 @@ export default function OfficeStudentImportPage() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Import Students"
-        description="Bulk upload the student roster — across every department — from a CSV/Excel file"
+        description="Bulk upload the student roster - across every department - from a CSV/Excel file"
         actions={
           <Button variant="outline" asChild>
             <Link href="/college-office/sections"><ArrowLeft className="h-4 w-4 mr-1" />Back to Sections</Link>
@@ -184,7 +184,7 @@ export default function OfficeStudentImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. &quot;DOB&quot; for Date of Birth)</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;DOB&quot; for Date of Birth)</p>
             </div>
           </button>
           {parseError && (
@@ -235,7 +235,7 @@ export default function OfficeStudentImportPage() {
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
-                            {row[c.key] || <span className="text-muted-foreground/40">—</span>}
+                            {row[c.key] || <span className="text-muted-foreground/40">-</span>}
                           </td>
                         ))}
                       </tr>

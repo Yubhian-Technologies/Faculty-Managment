@@ -58,7 +58,7 @@ export default function NewHodOfferLetterPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load" }));
   }, []);
 
-  // Deep-linked from the pipeline's "Send Offer Letter" button — batch is already
+  // Deep-linked from the pipeline's "Send Offer Letter" button - batch is already
   // known, so skip the manual selection step once batches have loaded.
   useEffect(() => {
     if (presetBatchId && !form.batchId && batches.some((b) => b.id === presetBatchId)) {
@@ -154,7 +154,7 @@ export default function NewHodOfferLetterPage() {
                 <SelectContent>
                   {batches.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
-                      {b.position} — {b.department}
+                      {b.position} - {b.department}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -171,7 +171,7 @@ export default function NewHodOfferLetterPage() {
                   <SelectContent>
                     {candidates.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.name} — {c.email}
+                        {c.name} - {c.email}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -211,7 +211,7 @@ export default function NewHodOfferLetterPage() {
               <div className="space-y-2">
                 <Label>College Email *</Label>
                 <Input type="email" value={form.collegeEmail} onChange={(e) => setForm((f) => ({ ...f, collegeEmail: e.target.value }))} placeholder="name@vishnu.edu.in" />
-                <p className="text-xs text-muted-foreground">This becomes their login username — not the candidate&rsquo;s personal email.</p>
+                <p className="text-xs text-muted-foreground">This becomes their login username - not the candidate&rsquo;s personal email.</p>
               </div>
               <div className="space-y-2">
                 <Label>Password *</Label>

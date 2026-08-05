@@ -1,4 +1,4 @@
-// Request-body builders for the budget/indent APIs — kept in one place so
+// Request-body builders for the budget/indent APIs - kept in one place so
 // every spec file uses realistic, schema-valid payloads (matching the
 // validation in src/app/api/college/budget-requests/route.ts and
 // src/app/api/college/indent-requests/route.ts) without repeating the
@@ -55,7 +55,7 @@ export function emergencyBudgetRequestBody(
   return {
     isEmergency: true,
     department: "Mechanical Engineering",
-    emergencyReason: "Automated test — critical equipment failure",
+    emergencyReason: "Automated test - critical equipment failure",
     academicYear: "2026-27",
     title: `Playwright Emergency ${kind} ${unique()}`,
     nonRecurring: kind === "GOODS" ? [nonRecurringGroup()] : [],

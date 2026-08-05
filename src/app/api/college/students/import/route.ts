@@ -62,18 +62,18 @@ export async function POST(request: Request) {
     const batch = new ChunkedBatch(db);
 
     // This route's upload template has no per-row secondary-department column
-    // (unlike students/import-excel) — the section itself is the only source.
+    // (unlike students/import-excel) - the section itself is the only source.
     // Only auto-fill when the section cross-lists to exactly one department;
     // when it splits across several (e.g. a shared first-year section feeding
     // both CSE and ECE), there's no single default to apply, so leave it
-    // unset — use students/import-excel to set it per row instead.
+    // unset - use students/import-excel to set it per row instead.
     const secondaryDepartment = section.secondaryDepartments?.length === 1 ? section.secondaryDepartments[0] : "";
 
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
       const rowNum = i + 2;
 
-      if (!row.rollNumber?.trim()) { failed.push({ row: rowNum, rollNumber: "—", error: "Roll Number is required" }); continue; }
+      if (!row.rollNumber?.trim()) { failed.push({ row: rowNum, rollNumber: "-", error: "Roll Number is required" }); continue; }
       if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Name is required" }); continue; }
 
       const roll = row.rollNumber.trim();

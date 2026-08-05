@@ -21,7 +21,7 @@ export interface Subject {
   departmentId?: string;
   courseId?: string;
   courseName?: string;
-  year?: number;               // academic year within the course (1..course.durationYears) — common to all sections of that year
+  year?: number;               // academic year within the course (1..course.durationYears) - common to all sections of that year
   semester?: number;           // semester-scoped subjects only
   name: string;
   code: string;
@@ -48,7 +48,7 @@ export interface TeachingAssignment {
   departmentId?: string;
   courseId?: string;
   courseName?: string;
-  year?: number;                 // academic year within the course — course/section-scoped only
+  year?: number;                 // academic year within the course - course/section-scoped only
   sectionId?: string;
   sectionName?: string;
   academicYear?: string;         // semester-scoped only
@@ -64,11 +64,11 @@ export interface TeachingAssignment {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 
-  // Course/section-scoped rows only — every such row (current or past) carries
+  // Course/section-scoped rows only - every such row (current or past) carries
   // which academic year/semester it belongs to, for the resume/Teaching Load
   // table. Named distinctly from `academicYear`/`semester` above (which belong to
   // the independent semester-scoped shape this collection also stores, and are
-  // typed differently — semester there is a number) to keep the two shapes
+  // typed differently - semester there is a number) to keep the two shapes
   // unambiguous. `isPast` additionally marks a historical assignment (no weekly
   // schedule/timetable slots), which is the only thing that unlocks `passPercentage`.
   isPast?: boolean;

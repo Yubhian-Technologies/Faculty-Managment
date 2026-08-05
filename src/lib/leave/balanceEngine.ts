@@ -52,7 +52,7 @@ export function computeEntitlement(
 
   if (rules.accrualBasis === "none") return 0;
 
-  // Annual fixed — EL differs by staff category
+  // Annual fixed - EL differs by staff category
   if (leaveType.code === "EL") {
     return profile.staffCategory === "vacation" ? 6 : (rules.daysPerYear ?? 30);
   }

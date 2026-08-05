@@ -54,10 +54,10 @@ export default function PrincipalDashboard() {
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
-          { label: "Pending Vacancies", value: isLoading ? "—" : pendingVacancies.length, icon: ClipboardList, color: "text-yellow-600 bg-yellow-50", href: "/principal/vacancies" },
-          { label: "Interview Plans", value: isLoading ? "—" : pendingBatches.length, icon: CalendarCheck, color: "text-blue-600 bg-blue-50", href: "/principal/interviews" },
-          { label: "Hiring Decisions", value: "—", icon: UserCheck, color: "text-green-600 bg-green-50", href: "/principal/decisions" },
-          { label: "Departments", value: "—", icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments" },
+          { label: "Pending Vacancies", value: isLoading ? "-" : pendingVacancies.length, icon: ClipboardList, color: "text-yellow-600 bg-yellow-50", href: "/principal/vacancies" },
+          { label: "Interview Plans", value: isLoading ? "-" : pendingBatches.length, icon: CalendarCheck, color: "text-blue-600 bg-blue-50", href: "/principal/interviews" },
+          { label: "Hiring Decisions", value: "-", icon: UserCheck, color: "text-green-600 bg-green-50", href: "/principal/decisions" },
+          { label: "Departments", value: "-", icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments" },
         ].filter((stat) => !isHidden(stat.href)).map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
@@ -90,7 +90,7 @@ export default function PrincipalDashboard() {
             </div>
           ) : !pendingVacancies.length ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              No pending requests — you are all caught up!
+              No pending requests - you are all caught up!
             </p>
           ) : (
             <div className="space-y-3">

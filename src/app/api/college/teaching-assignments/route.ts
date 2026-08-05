@@ -30,11 +30,11 @@ export async function GET(request: Request) {
     let timetableSlots: (TimetableSlot & { id: string })[] = [];
 
     if (sectionId) {
-      // Section-scoped view (e.g. "assign faculty per subject" on the section edit page) —
+      // Section-scoped view (e.g. "assign faculty per subject" on the section edit page) -
       // all HOD/Principal/etc. roles above may view any section within their own college.
       assignmentQuery = assignmentQuery.where("sectionId", "==", sectionId);
     } else if (deptView && session.role === "HOD") {
-      // Resolve HOD's department scope, including any sub-departments — a
+      // Resolve HOD's department scope, including any sub-departments - a
       // parent HOD gets automatic view-only access to child assignments.
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.departmentName) assignmentQuery = assignmentQuery.where("department", "==", scope.departmentName);
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
           .where("department", "in", scope.childDepartmentNames);
       }
     } else {
-      // Viewing a specific faculty member's assignments — HOD/Principal/SuperAdmin may look up anyone;
+      // Viewing a specific faculty member's assignments - HOD/Principal/SuperAdmin may look up anyone;
       // everyone else (including a faculty viewing their own "Teaching Load") is restricted to themselves.
       const canViewOthers = ["HOD", "PRINCIPAL", "SUPER_ADMIN"].includes(session.role);
       const facultyId = requestedFacultyId && canViewOthers ? requestedFacultyId : session.uid;
@@ -95,9 +95,9 @@ export async function GET(request: Request) {
 }
 
 // Two independent creation shapes share this collection (see subjects/route.ts for
-// the same pattern): course/section-scoped (HOD Sections/Timetable flow — courseId +
+// the same pattern): course/section-scoped (HOD Sections/Timetable flow - courseId +
 // sectionId + subjectId, also stages timetable slots) and semester-scoped (HOD
-// Teaching Assignments page — academicYear + semester, no section link).
+// Teaching Assignments page - academicYear + semester, no section link).
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
@@ -143,10 +143,10 @@ export async function POST(request: Request) {
       const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
 
       // A parent department's HOD only has view-only access to a sub-department's
-      // sections — assigning faculty is an edit action, restricted to the section's
+      // sections - assigning faculty is an edit action, restricted to the section's
       // own (primary) HOD. The faculty being assigned may come from the HOD's own
       // department OR one of their sub-departments (e.g. a shared Basic Science
-      // section staffed with a BS-Physics specialist for the Physics subject) —
+      // section staffed with a BS-Physics specialist for the Physics subject) -
       // but nowhere else.
       if (session.role === "HOD") {
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
@@ -163,11 +163,11 @@ export async function POST(request: Request) {
       }
 
       // Conflict check: this faculty already teaching this exact section+subject?
-      // Only applies to current assignments — past ones are historical records and
+      // Only applies to current assignments - past ones are historical records and
       // may legitimately repeat the same section+subject across different years.
       if (!body.isPast) {
         // Firestore's "!=" excludes docs missing the field entirely, which every
-        // pre-existing current assignment does — so the isPast!==true filter has
+        // pre-existing current assignment does - so the isPast!==true filter has
         // to happen in application code, not the query, to still catch them.
         const existing = await collegeRef.collection("teachingAssignments")
           .where("facultyId", "==", facultyId)
@@ -210,7 +210,7 @@ export async function POST(request: Request) {
         } : {}),
       });
 
-      // Create any staged timetable slots (day + period) for this assignment —
+      // Create any staged timetable slots (day + period) for this assignment -
       // past rows never have any (no live schedule to book).
       const createdSlots: string[] = [];
       if (!body.isPast && body.slots?.length) {
@@ -228,7 +228,7 @@ export async function POST(request: Request) {
             }, { status: 409 });
           }
 
-          // A faculty member can't teach two classes at once — block regardless of section/year/course.
+          // A faculty member can't teach two classes at once - block regardless of section/year/course.
           const facultyConflict = await collegeRef.collection("timetableSlots")
             .where("facultyId", "==", facultyId)
             .where("day", "==", slot.day)
@@ -316,7 +316,7 @@ export async function POST(request: Request) {
 
       // Non-blocking ratio reference: surface whether this department is now
       // staffed at/beyond the 1:15 hiring-pipeline ratio, without preventing the
-      // assignment (HOD/Principal still decide) — see faculty-requirement route
+      // assignment (HOD/Principal still decide) - see faculty-requirement route
       // for the same STUDENT_FACULTY_RATIO used during hiring/vacancy sizing.
       let ratioWarning: string | undefined;
       const dept = subject.department ?? faculty.department ?? "";

@@ -129,7 +129,7 @@ export default function HODVacancyPage() {
               hideOnMobile: true,
               render: (row) => {
                 const v = row as unknown as VacancyRequest;
-                if (!v.principalResponse) return <span className="text-muted-foreground text-xs">—</span>;
+                if (!v.principalResponse) return <span className="text-muted-foreground text-xs">-</span>;
                 return (
                   <span className="text-xs text-muted-foreground">
                     {v.principalResponse.reason || "No notes"}

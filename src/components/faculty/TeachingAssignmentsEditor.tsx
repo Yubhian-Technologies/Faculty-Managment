@@ -29,7 +29,7 @@ export interface StagedTeachingRow {
   subjectCode: string;
   hoursPerWeek: number;
   slots: StagedSlot[];
-  // Which academic year/semester this assignment belongs to — captured for every
+  // Which academic year/semester this assignment belongs to - captured for every
   // row, current or past. Past rows use the same course/year/section/subject
   // picker but have no weekly schedule (historical, nothing left to book) and
   // additionally carry the students' pass %.
@@ -100,7 +100,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
         setTimingCache((c) => ({ ...c, [key]: timing }));
       }
     } catch {
-      // Non-critical — transient network hiccup (e.g. a dev-server reload mid-request).
+      // Non-critical - transient network hiccup (e.g. a dev-server reload mid-request).
       // The relevant dropdown just stays empty/disabled; picking the course/year again retries.
     }
   }
@@ -112,7 +112,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
       const d = await res.json() as { slots: { assignmentId: string; day: string; periodNumber: number }[] };
       setOccupiedCache((c) => ({ ...c, [sectionId]: d.slots ?? [] }));
     } catch {
-      // Non-critical — see ensureCourseYearData.
+      // Non-critical - see ensureCourseYearData.
     }
   }
 
@@ -179,7 +179,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
   function toggleSlot(row: StagedTeachingRow, day: DayOfWeek, periodNumber: number) {
     const exists = row.slots.find((s) => s.day === day && s.periodNumber === periodNumber);
-    if (!exists && row.slots.length >= row.hoursPerWeek) return; // cap reached — hours/week defines the slot count
+    if (!exists && row.slots.length >= row.hoursPerWeek) return; // cap reached - hours/week defines the slot count
     const slots = exists
       ? row.slots.filter((s) => !(s.day === day && s.periodNumber === periodNumber))
       : [...row.slots, { localId: newLocalId(), day, periodNumber }];
@@ -227,7 +227,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
         const occupied = occupiedCache[row.sectionId] ?? [];
         const periodNumbers = timing ? Array.from({ length: timing.numberOfPeriods }, (_, i) => i + 1) : [];
         // Periods this same faculty member is already teaching in any other row (any other
-        // section/year/course, including ones staged but not yet saved) — a teacher can't be
+        // section/year/course, including ones staged but not yet saved) - a teacher can't be
         // in two classes at once, so these must block regardless of which section they're in.
         const facultyBusyElsewhere = new Set(
           value
@@ -235,7 +235,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
             .flatMap((r) => r.slots.map((s) => `${s.day}_${s.periodNumber}`))
         );
         // Subjects this faculty is already CURRENTLY assigned to in another row shouldn't be
-        // offered again — picking the same subject twice would just duplicate the live
+        // offered again - picking the same subject twice would just duplicate the live
         // assignment. Past rows are exempt on both sides: a subject taught in a prior year
         // legitimately may be taught again now, and past rows themselves don't conflict.
         const subjectsUsedElsewhere = new Set(
@@ -287,7 +287,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                   <Select value={row.subjectId} onValueChange={(v) => handleSubjectChange(row, v)} disabled={!row.year}>
                     <SelectTrigger><SelectValue placeholder="Subject" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NO_SUBJECT}>None — leave periods empty</SelectItem>
+                      <SelectItem value={NO_SUBJECT}>None - leave periods empty</SelectItem>
                       {subjects.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects for this year</div>}
                       {subjects.length > 0 && availableSubjects.length === 0 && (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground">All subjects for this year are already assigned</div>
@@ -308,7 +308,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                   <Label className="text-xs">Hours to Allot / Week</Label>
                   <p className="text-sm font-medium">{row.hoursPerWeek}</p>
                   <p className="text-[10px] text-muted-foreground">
-                    Set on the subject — edit it from Subjects if this needs to change.
+                    Set on the subject - edit it from Subjects if this needs to change.
                   </p>
                 </div>
               </div>
@@ -372,13 +372,13 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
                   <Label className="text-xs">
-                    Weekly Schedule — pick day &amp; period for this subject/section
+                    Weekly Schedule - pick day &amp; period for this subject/section
                     {" "}({row.slots.length}/{row.hoursPerWeek} periods selected)
                   </Label>
                 </div>
                 {!timing ? (
                   <p className="text-xs text-amber-600">
-                    Timings not configured for {row.courseName} Year {row.year} yet — ask the Principal to set them up before scheduling periods.
+                    Timings not configured for {row.courseName} Year {row.year} yet - ask the Principal to set them up before scheduling periods.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -398,7 +398,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                             {DAYS.map((d) => {
                               const selected = row.slots.some((s) => s.day === d && s.periodNumber === p);
                               // Slots already belonging to this same assignment (loaded from the server)
-                              // are this row's own — deselecting one must free it, not lock it as "taken".
+                              // are this row's own - deselecting one must free it, not lock it as "taken".
                               const sectionConflict = occupied.some(
                                 (s) => s.day === d && s.periodNumber === p && s.assignmentId !== row.id
                               );
@@ -425,7 +425,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                                         : selfConflict
                                           ? "This faculty already teaches another class at this time (different section/year)"
                                           : capReached
-                                            ? "Hours/week limit reached — increase hours/week to select more periods"
+                                            ? "Hours/week limit reached - increase hours/week to select more periods"
                                             : undefined
                                     }
                                   >

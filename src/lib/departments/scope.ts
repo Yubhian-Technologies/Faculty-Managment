@@ -1,15 +1,15 @@
 // Resolves an HOD's department-scoping info, including sub-department (child
 // Department) awareness. Centralizes what used to be a duplicated per-route
-// `getHodDept()` — the difference here is `childDepartmentNames`, used to
+// `getHodDept()` - the difference here is `childDepartmentNames`, used to
 // grant a parent department's HOD automatic view-only ("secondary") access
 // to every sub-department's students/sections/assigned faculty.
 export interface HodDepartmentScope {
   departmentName: string;
   departmentId: string | null;
-  // Populated only when this HOD's own department has hasSubDepartments —
+  // Populated only when this HOD's own department has hasSubDepartments -
   // the names of its child departments, for cross-department queries.
   childDepartmentNames: string[];
-  // Same set, by id (same order) — needed wherever a route must validate a
+  // Same set, by id (same order) - needed wherever a route must validate a
   // *target* department id (e.g. reassigning a section to a sub-department)
   // rather than just querying by name.
   childDepartmentIds: string[];
@@ -40,7 +40,7 @@ export async function getHodDepartmentScope(
   let childDepartmentIds: string[] = [];
   if (dept.hasSubDepartments) {
     const childrenSnap = await deptsColl.where("parentDepartmentId", "==", deptDoc.id).get();
-    // Firestore `in` filters cap at 30 values — realistically a handful of sub-departments per parent.
+    // Firestore `in` filters cap at 30 values - realistically a handful of sub-departments per parent.
     const children = childrenSnap.docs
       .map((d) => ({ id: d.id, name: (d.data() as { name?: string }).name ?? "" }))
       .filter((d) => d.name)
@@ -54,7 +54,7 @@ export async function getHodDepartmentScope(
 
 // For a caller who names one specific department explicitly (Office/Principal/
 // VP picking a department for a section, faculty filter, etc.) rather than
-// resolving their own — returns that department plus its parent (if it's a
+// resolving their own - returns that department plus its parent (if it's a
 // sub-department) and its children (if it has sub-departments), so a faculty
 // member registered under either the main department or one of its
 // sub-departments shows up as assignable either way.

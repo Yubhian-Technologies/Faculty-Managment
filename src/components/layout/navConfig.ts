@@ -11,8 +11,8 @@ export interface NavItem {
   section?: string; // optional section header rendered above this item
 }
 
-// A nav item is "active" if its href exactly matches the current path, or —
-// only when no other item in the same list matches exactly — if it's a
+// A nav item is "active" if its href exactly matches the current path, or -
+// only when no other item in the same list matches exactly - if it's a
 // prefix of the path (so a detail/sub-page without its own nav entry still
 // highlights its parent). The exact-match guard prevents a shorter href
 // (e.g. "/super-admin/users") from also lighting up when a sibling item's
@@ -75,14 +75,14 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Candidates", href: "/location-dept-head/candidates", iconName: "Users", roles: ["LOCATION_DEPT_HEAD"] },
   { label: "My Interviews", href: "/location-dept-head/interviews", iconName: "CalendarCheck", roles: ["LOCATION_DEPT_HEAD"] },
 
-  // Vice Principal — own dashboard + General Admin Vacancies; everything else
+  // Vice Principal - own dashboard + General Admin Vacancies; everything else
   // is shared with Principal below (VICE_PRINCIPAL added to those roles arrays)
   // since the two roles carry equal authority per AGENTS.md.
   { label: "Dashboard", href: "/vice-principal", iconName: "LayoutDashboard", roles: ["VICE_PRINCIPAL"] },
   { label: "General Admin Vacancies", href: "/vice-principal/vacancies", iconName: "ClipboardPlus", roles: ["VICE_PRINCIPAL"], section: "Hiring" },
 
-  // Principal (shared with Vice Principal — see note above)
-  // Full module set — Super Admin controls which modules/items are actually
+  // Principal (shared with Vice Principal - see note above)
+  // Full module set - Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
@@ -109,7 +109,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
 
   // HOD
-  // Full module set — Super Admin controls which modules/items are actually
+  // Full module set - Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
@@ -148,8 +148,8 @@ export const NAV_ITEMS: NavItem[] = [
   // College Staff (dynamic-title roles: Dean, IQAC Coordinator, T&P, etc.)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
 
-  // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
-  // Full module set — Super Admin controls which modules/items are actually
+  // Faculty (PANEL_MEMBER) - My Interviews is injected dynamically in Sidebar when assigned
+  // Full module set - Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
   { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work" },
@@ -166,7 +166,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Accounts
   { label: "Dashboard", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
-  { label: "Hiring — Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
+  { label: "Hiring - Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
   { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
 
   // Finance
@@ -216,7 +216,7 @@ export interface NavModuleGroup {
   items: NavItem[];
 }
 
-// Every role that has at least one `section`-grouped item — i.e. every role
+// Every role that has at least one `section`-grouped item - i.e. every role
 // the Super Admin Nav Visibility settings can meaningfully control. Derived
 // from NAV_ITEMS directly so a newly-grouped role shows up automatically,
 // without maintaining a separate hardcoded list in the settings UI.
@@ -231,7 +231,7 @@ export function getRolesWithNavModules(): UserRole[] {
 }
 
 // Groups a role's full (unfiltered) item list by module, for the Super Admin
-// settings UI — always shows every module/item regardless of current hide state.
+// settings UI - always shows every module/item regardless of current hide state.
 export function groupNavItemsByModule(items: NavItem[]): NavModuleGroup[] {
   const groups: NavModuleGroup[] = [];
   items.forEach((item, i) => {
@@ -380,7 +380,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     // { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"] },
     // { label: "Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"] },
     // { label: "Payslips", href: "/panel/payslips", iconName: "Wallet", roles: ["PANEL_MEMBER"] },
-    // My Interviews injected dynamically when assigned — see Sidebar.tsx
+    // My Interviews injected dynamically when assigned - see Sidebar.tsx
   ],
   ACCOUNTS: [
     { label: "Home", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },

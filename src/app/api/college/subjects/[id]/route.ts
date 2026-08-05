@@ -39,7 +39,7 @@ export async function PATCH(
     await ref.update(updates);
 
     // hoursPerWeek is shown/edited from multiple places (the Subjects page and every
-    // faculty member's teaching-assignment editor) but is owned here — cascade it to every
+    // faculty member's teaching-assignment editor) but is owned here - cascade it to every
     // existing teaching assignment for this subject so all of them (and the period-count
     // cap in their editors) stay in sync.
     if (body.hoursPerWeek != null) {

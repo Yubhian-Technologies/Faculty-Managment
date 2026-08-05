@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   }
 }
 
-// Upsert — one doc per (courseId, year)
+// Upsert - one doc per (courseId, year)
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");

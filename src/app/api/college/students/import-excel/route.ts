@@ -10,7 +10,7 @@ import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Section } from "@/types";
 
 // Bulk, multi-section roster upload (HOD's Excel/CSV template, also used by
-// College Office) — unlike college/students/import (single sectionId for the
+// College Office) - unlike college/students/import (single sectionId for the
 // whole batch), each row here names its own Section + Academic Year so one
 // file can cover an entire department's (or the whole college's) intake in
 // one go. Office also uses this to set `secondaryDepartment` for 1st-year
@@ -19,7 +19,7 @@ type BulkImportRow = StudentImportRow & { section: string; year: number; departm
 
 // Office's template asks for Department (and Secondary Department) by name,
 // but typing a full department name for every row of a whole-college roster
-// is tedious — accept the department's short Code too (e.g. "CSE"), same as
+// is tedious - accept the department's short Code too (e.g. "CSE"), same as
 // how faculty/staff CSV imports already resolve codes. Returns the
 // department's canonical `name` so everything downstream (section lookup,
 // `secondaryDepartment` storage) stays keyed by the same full name the rest
@@ -40,7 +40,7 @@ function buildDepartmentResolver(
 }
 
 // A department with sub-departments (e.g. "BDS" split into "BDS - Analog",
-// "BDS - Digital") never itself owns a Section — every real section belongs
+// "BDS - Digital") never itself owns a Section - every real section belongs
 // to one specific (sub-)department. So typing the *parent's* name/code, which
 // is the natural thing for the office to do since that's the name on the
 // building, must still resolve to whichever of its children actually owns
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     const collegeId = session.collegeId;
 
     // Full scope (not just the department name) so an HOD whose department
-    // has sub-departments — like a Sub-HOD or the parent HOD themself — can
+    // has sub-departments - like a Sub-HOD or the parent HOD themself - can
     // still be matched against a section that actually lives one level down
     // the tree, consistent with how sections/[id]/route.ts already treats a
     // parent HOD as having full access to their own sub-departments' sections.
@@ -110,8 +110,8 @@ export async function POST(request: Request) {
       db.collection("colleges").doc(collegeId).collection("sections").get(),
       db.collection("colleges").doc(collegeId).collection("departments").get(),
     ]);
-    // Section name + year alone isn't unique college-wide — two different
-    // departments can each have a "Section A, Year 1" — so every name::year
+    // Section name + year alone isn't unique college-wide - two different
+    // departments can each have a "Section A, Year 1" - so every name::year
     // key keeps *all* matching sections, not just the last one seen, and a
     // department-qualified key is built alongside it to disambiguate whenever
     // a row does name its department. That department-qualified key isn't
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     // A department can also be named on a row via how it's cross-listed on
     // *another* department's sections (e.g. typing "CSE" for a row that
     // actually belongs to a "Basic Science"-owned section cross-listed to
-    // CSE) rather than via true parentDepartmentId hierarchy — those are two
+    // CSE) rather than via true parentDepartmentId hierarchy - those are two
     // separate relationships (see Department.secondaryDepartments vs
     // .parentDepartmentId in src/types/core.ts) and a department can use
     // either, or neither, to route rows to its sections. So this also needs
@@ -167,7 +167,7 @@ export async function POST(request: Request) {
       const row = body.records[i];
       const rowNum = i + 2;
 
-      if (!row.rollNumber?.trim()) { failed.push({ row: rowNum, rollNumber: "—", error: "Roll Number is required" }); continue; }
+      if (!row.rollNumber?.trim()) { failed.push({ row: rowNum, rollNumber: "-", error: "Roll Number is required" }); continue; }
       if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Name is required" }); continue; }
       if (!row.section?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Section is required" }); continue; }
       if (!row.year) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Academic Year is required" }); continue; }
@@ -187,7 +187,7 @@ export async function POST(request: Request) {
 
       // Resolved early (before section lookup) because it's also used to
       // pick between multiple same-named sections that only differ by which
-      // branch they're cross-listed to — see below.
+      // branch they're cross-listed to - see below.
       let requestedSecondaryDept: string | undefined;
       if (row.secondaryDepartment?.trim()) {
         requestedSecondaryDept = resolveDepartment(row.secondaryDepartment);
@@ -205,11 +205,11 @@ export async function POST(request: Request) {
       let section: Section | undefined;
       if (departmentName) {
         // Try the named department itself, then its true parent/children
-        // (hierarchy — a department with sub-departments never owns a
+        // (hierarchy - a department with sub-departments never owns a
         // section directly, so "BDS" must still find the section actually
         // filed under "BDS - Analog"), then any department whose sections
         // are merely cross-listed to it (e.g. "CSE" naming a section that's
-        // really owned by "Basic Science" but cross-lists to CSE) — these
+        // really owned by "Basic Science" but cross-lists to CSE) - these
         // are two independent relationships, and a row can rely on either.
         const tried = new Map<string, Section>();
         for (const name of relatedDepartmentNames(departmentName)) {
@@ -222,19 +222,19 @@ export async function POST(request: Request) {
         }
         let matches = Array.from(tried.values());
         if (matches.length === 0) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `No section named "${row.section}" (Year ${row.year}) found owned by or cross-listed to ${departmentName} — create the section first, or check the Department/Section spelling` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `No section named "${row.section}" (Year ${row.year}) found owned by or cross-listed to ${departmentName} - create the section first, or check the Department/Section spelling` });
           continue;
         }
         if (matches.length > 1) {
           // Same-named sections can coexist under one department when they're
           // cross-listed to different branches (e.g. two "Section A"s under
-          // Basic Science, one feeding CSE and one ECE) — the row's Secondary
+          // Basic Science, one feeding CSE and one ECE) - the row's Secondary
           // Department picks between them.
           const narrowed = requestedSecondaryDept ? matches.filter(isSecondaryMatch) : [];
           if (narrowed.length === 1) matches = narrowed;
         }
         if (matches.length > 1) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Multiple sections named "${row.section}" (Year ${row.year}) exist under ${departmentName} — add or correct this row's Secondary Department to say which one` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Multiple sections named "${row.section}" (Year ${row.year}) exist under ${departmentName} - add or correct this row's Secondary Department to say which one` });
           continue;
         }
         section = matches[0];
@@ -246,7 +246,7 @@ export async function POST(request: Request) {
         } else if (candidates.length === 1) {
           section = candidates[0];
         } else {
-          // Ambiguous across departments — an HOD's own template has no
+          // Ambiguous across departments - an HOD's own template has no
           // Department column, so narrow to their own department tree (own
           // department or one of its sub-departments) if that resolves it
           // uniquely, then to the row's Secondary Department if that does;
@@ -261,7 +261,7 @@ export async function POST(request: Request) {
           if (narrowed.length === 1) {
             section = narrowed[0];
           } else {
-            failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Multiple sections named "${row.section}" (Year ${row.year}) exist across departments — add a Department value to this row to disambiguate` });
+            failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Multiple sections named "${row.section}" (Year ${row.year}) exist across departments - add a Department value to this row to disambiguate` });
             continue;
           }
         }
@@ -272,7 +272,7 @@ export async function POST(request: Request) {
       }
 
       // Defaults from the section's own secondaryDepartments (inherited from
-      // its Department at creation) — a row can still override it. Only
+      // its Department at creation) - a row can still override it. Only
       // auto-fills when the section cross-lists to exactly one department;
       // when it splits across several (e.g. a shared first-year section
       // feeding both CSE and ECE), each row must say explicitly which one
@@ -282,7 +282,7 @@ export async function POST(request: Request) {
       if (!secondaryDept && sectionSecondaryDepts.length === 1) {
         secondaryDept = sectionSecondaryDepts[0];
       } else if (!secondaryDept && sectionSecondaryDepts.length > 1) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${section.name} is cross-listed to multiple departments (${sectionSecondaryDepts.join(", ")}) — add a Secondary Department value to this row to say which one` });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${section.name} is cross-listed to multiple departments (${sectionSecondaryDepts.join(", ")}) - add a Secondary Department value to this row to say which one` });
         continue;
       }
       if (secondaryDept && secondaryDept.toLowerCase() === section.department.trim().toLowerCase()) {
@@ -290,13 +290,13 @@ export async function POST(request: Request) {
         continue;
       }
       // The section a row resolves to (by name/department/year) can be a real
-      // match without actually being the right branch — e.g. a parent
+      // match without actually being the right branch - e.g. a parent
       // department search can land on a sibling sub-department's
       // identically-named section. Cross-check the two independently-derived
       // facts against each other: a section only "is" a given secondaryDept
       // if it's the section's own department or one it's cross-listed to.
       if (secondaryDept && !sectionSecondaryDepts.some((d) => d.toLowerCase() === secondaryDept.toLowerCase())) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${section.name} is not cross-listed to "${secondaryDept}" — check this row's Section/Department columns` });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${section.name} is not cross-listed to "${secondaryDept}" - check this row's Section/Department columns` });
         continue;
       }
 

@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       joiningDate: new Date(joiningDate),
       ctcAnnual,
       subjects: body.subjects ?? [],
-      // No separate draft/review step — HOD sends the offer in the same action.
+      // No separate draft/review step - HOD sends the offer in the same action.
       status: "SENT",
       generatedBy: actorName,
       generatedByUid: session.uid,

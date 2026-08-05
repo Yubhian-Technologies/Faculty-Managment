@@ -40,12 +40,12 @@ const INITIAL: ProfileForm = {
   livingChildrenCount: 0,
 };
 
-// Fields HR already set on the faculty record — pre-filled from there and
+// Fields HR already set on the faculty record - pre-filled from there and
 // locked so the faculty can't redefine them during self-service setup.
 type LockedField = "employmentType" | "gender" | "maritalStatus" | "dateOfJoining";
 
 // Firestore Timestamps cross the API as plain JSON (`{ _seconds, _nanoseconds }`),
-// not class instances — so `.toDate()` isn't available on the client.
+// not class instances - so `.toDate()` isn't available on the client.
 function timestampToDateInput(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -67,7 +67,7 @@ export default function LeaveProfileSetupPage() {
       .then((r) => r.json() as Promise<{ profile: EmployeeLeaveProfile | null; facultyDefaults: Partial<EmployeeLeaveProfile> | null }>)
       .then((d) => {
         if (d.profile) {
-          // Already set up — nothing to pre-fill here; the faculty page redirects away.
+          // Already set up - nothing to pre-fill here; the faculty page redirects away.
           return;
         }
         const fd = d.facultyDefaults;
@@ -86,7 +86,7 @@ export default function LeaveProfileSetupPage() {
         });
         setLocked(nextLocked);
       })
-      .catch(() => { /* non-fatal — faculty can still fill the form manually */ })
+      .catch(() => { /* non-fatal - faculty can still fill the form manually */ })
       .finally(() => setLoadingDefaults(false));
   }, []);
 

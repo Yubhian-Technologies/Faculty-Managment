@@ -294,7 +294,7 @@ export default function NewCandidatePage() {
               <p className="text-sm font-semibold">No approved hiring request available</p>
               <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                 Candidates can only be added against an approved hiring request. Raise a hiring
-                request first — once the Principal approves it, you can add candidates here.
+                request first - once the Principal approves it, you can add candidates here.
               </p>
               <Button asChild size="sm">
                 <Link href="/hod/vacancy/new">Create Hiring Request</Link>
@@ -325,7 +325,7 @@ export default function NewCandidatePage() {
               <div className="space-y-2">
                 <Label>Department</Label>
                 <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                  {user?.department || "—"}
+                  {user?.department || "-"}
                 </div>
                 {errors.department && <p className="text-sm text-destructive">{errors.department.message}</p>}
               </div>
@@ -517,7 +517,7 @@ export default function NewCandidatePage() {
               <div className="space-y-2">
                 <Label>Link to Hiring Request</Label>
 
-                {/* Locked: came from pipeline — just show the linked card, no picker */}
+                {/* Locked: came from pipeline - just show the linked card, no picker */}
                 {prefilledVacancyId ? (
                   (() => {
                     const linked = vacancies.find((v) => v.id === prefilledVacancyId);

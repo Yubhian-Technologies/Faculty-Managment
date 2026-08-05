@@ -40,7 +40,7 @@ export default function SectionRosterPage() {
           return null;
         }
         return Promise.all([
-          // Students API scopes by section NAME + year, not id — section names
+          // Students API scopes by section NAME + year, not id - section names
           // aren't unique across departments, so narrow client-side (same
           // caveat as the Principal promotions roster fetch).
           fetch(`/api/college/students?section=${encodeURIComponent(sec.name)}&year=${sec.year}`)
@@ -111,7 +111,7 @@ export default function SectionRosterPage() {
           <div className="flex flex-wrap gap-2">
             {assignments.map((a) => (
               <Badge key={a.id} variant="outline" className="text-xs font-normal">
-                {a.subjectName} — {a.facultyName || "Unassigned"}
+                {a.subjectName} - {a.facultyName || "Unassigned"}
               </Badge>
             ))}
           </div>
@@ -153,7 +153,7 @@ export default function SectionRosterPage() {
                         <td className="px-4 py-2.5">
                           {s.secondaryDepartment
                             ? <Badge variant="outline" className="text-xs">{s.secondaryDepartment}</Badge>
-                            : <span className="text-muted-foreground">—</span>}
+                            : <span className="text-muted-foreground">-</span>}
                         </td>
                       )}
                       <td className="px-4 py-2.5">
@@ -161,9 +161,9 @@ export default function SectionRosterPage() {
                           {s.status === "REGULAR" ? "Regular" : s.status === "DETAINED" ? "Detained" : "Graduated"}
                         </Badge>
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.email || "—"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.email || "-"}</td>
                     </tr>
                   ))}
                 </tbody>

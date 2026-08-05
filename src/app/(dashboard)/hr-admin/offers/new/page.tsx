@@ -89,7 +89,7 @@ export default function NewHROfferPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Create Offer Letter"
-        description="Prepare an offer letter for a selected candidate — Administration approval required"
+        description="Prepare an offer letter for a selected candidate - Administration approval required"
       />
 
       <Card>
@@ -107,7 +107,7 @@ export default function NewHROfferPage() {
                 <SelectContent>
                   {selectedCandidates.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name} — {c.department}
+                      {c.name} - {c.department}
                       {c.status === "SELECTED" ? " ✓" : " (shortlisted)"}
                     </SelectItem>
                   ))}

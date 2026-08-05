@@ -64,7 +64,7 @@ export function EmergencyBudgetRequests() {
       }
       toast({
         variant: "success",
-        title: action === "APPROVE" ? "Approved — sent to Finance" : action === "REJECT" ? "Request rejected" : "Request returned to requester",
+        title: action === "APPROVE" ? "Approved - sent to Finance" : action === "REJECT" ? "Request rejected" : "Request returned to requester",
       });
       setExpandedId(null);
       resetAction();
@@ -134,7 +134,7 @@ export function EmergencyBudgetRequests() {
                         <StatusBadge status={item.status} />
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {item.title} — {item.department} — AY {item.academicYear} — requested by {item.hodName}
+                        {item.title} - {item.department} - AY {item.academicYear} - requested by {item.hodName}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

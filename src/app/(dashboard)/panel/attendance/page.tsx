@@ -15,10 +15,10 @@ export default function FacultyAttendancePage() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Working Days", value: "—" },
-          { label: "Present", value: "—" },
-          { label: "Absent", value: "—" },
-          { label: "On Leave", value: "—" },
+          { label: "Working Days", value: "-" },
+          { label: "Present", value: "-" },
+          { label: "Absent", value: "-" },
+          { label: "On Leave", value: "-" },
         ].map((s) => (
           <Card key={s.label}>
             <CardContent className="p-4">

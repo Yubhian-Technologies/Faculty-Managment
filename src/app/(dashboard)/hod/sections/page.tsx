@@ -74,7 +74,7 @@ export default function HODSectionsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Own department + its sub-departments — the set a main HOD can reassign an
+  // Own department + its sub-departments - the set a main HOD can reassign an
   // existing section between (handing it to a Sub-HOD to run, or pulling it
   // back). Empty for a Sub-HOD (their department has no children of its own),
   // so the picker below simply doesn't render for them.
@@ -333,7 +333,7 @@ export default function HODSectionsPage() {
                         </div>
                       </div>
 
-                      {/* Department assignment — only rendered for a main HOD whose
+                      {/* Department assignment - only rendered for a main HOD whose
                           department has sub-departments; lets them hand this section
                           to a Sub-HOD (or pull it back) without recreating it. */}
                       {deptOptions.length > 1 && sec.accessLevel !== "secondary" && (

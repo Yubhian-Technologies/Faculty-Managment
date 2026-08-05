@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// MANAGEMENT, PURCHASE_DEPT, and FINANCE are all read-only here — Purchase Dept and
+// MANAGEMENT, PURCHASE_DEPT, and FINANCE are all read-only here - Purchase Dept and
 // Finance use this to populate the department level of their Location → College →
 // Department browse views.
 export async function GET(_request: Request, { params }: { params: Promise<{ collegeId: string }> }) {

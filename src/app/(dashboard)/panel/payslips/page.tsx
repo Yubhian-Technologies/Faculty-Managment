@@ -15,9 +15,9 @@ export default function PayslipsPage() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
-          { label: "Gross Salary", value: "—" },
-          { label: "Deductions", value: "—" },
-          { label: "Net Salary", value: "—" },
+          { label: "Gross Salary", value: "-" },
+          { label: "Deductions", value: "-" },
+          { label: "Net Salary", value: "-" },
         ].map((s) => (
           <Card key={s.label}>
             <CardContent className="p-4">

@@ -48,9 +48,9 @@ export default function CollegeOfficeDashboard() {
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
         {[
-          { label: "Docs Pending", value: isLoading ? "—" : pendingVerification.length, icon: Clock, color: "text-orange-600 bg-orange-50", href: "/college-office/candidates" },
-          { label: "Sent to Accounts", value: isLoading ? "—" : sentToAccounts.length, icon: CheckCircle, color: "text-blue-600 bg-blue-50", href: "/college-office/candidates" },
-          { label: "Total Candidates", value: isLoading ? "—" : candidates.length, icon: UserCog, color: "text-purple-600 bg-purple-50", href: "/college-office/candidates" },
+          { label: "Docs Pending", value: isLoading ? "-" : pendingVerification.length, icon: Clock, color: "text-orange-600 bg-orange-50", href: "/college-office/candidates" },
+          { label: "Sent to Accounts", value: isLoading ? "-" : sentToAccounts.length, icon: CheckCircle, color: "text-blue-600 bg-blue-50", href: "/college-office/candidates" },
+          { label: "Total Candidates", value: isLoading ? "-" : candidates.length, icon: UserCog, color: "text-purple-600 bg-purple-50", href: "/college-office/candidates" },
         ].map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">

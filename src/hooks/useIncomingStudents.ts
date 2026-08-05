@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 
 // "Incoming Students" (pre-registered secondaryDepartment students, plus
-// sub-department students — see the page's own accessLevel filter) is an
+// sub-department students - see the page's own accessLevel filter) is an
 // HOD-only concept, so every other role skips the fetch entirely rather than
 // hitting a route that either 401s for them or would just always be empty.
 export function useIncomingStudents() {

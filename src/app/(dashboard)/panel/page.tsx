@@ -138,7 +138,7 @@ export default function FacultyDashboard() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Upcoming Interviews</p>
-              <p className="text-xl font-bold">{isLoading ? "—" : upcomingInterviews.length}</p>
+              <p className="text-xl font-bold">{isLoading ? "-" : upcomingInterviews.length}</p>
             </div>
           </CardContent>
         </Card>
@@ -149,7 +149,7 @@ export default function FacultyDashboard() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Attendance (June)</p>
-              <p className="text-xl font-bold text-emerald-600">—</p>
+              <p className="text-xl font-bold text-emerald-600">-</p>
             </div>
           </CardContent>
         </Card>
@@ -160,7 +160,7 @@ export default function FacultyDashboard() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Leave Balance</p>
-              <p className="text-xl font-bold">—</p>
+              <p className="text-xl font-bold">-</p>
             </div>
           </CardContent>
         </Card>
@@ -171,7 +171,7 @@ export default function FacultyDashboard() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Subjects (Sem)</p>
-              <p className="text-xl font-bold">—</p>
+              <p className="text-xl font-bold">-</p>
             </div>
           </CardContent>
         </Card>
@@ -204,7 +204,7 @@ export default function FacultyDashboard() {
       </div>
       )}
 
-      {/* Interview Panel Assignments — only shown when assigned */}
+      {/* Interview Panel Assignments - only shown when assigned */}
       {(isLoading || batches.length > 0) && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">

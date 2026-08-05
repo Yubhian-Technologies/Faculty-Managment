@@ -82,12 +82,12 @@ export default function AdministrationVacanciesPage() {
           {vacancies.map((v) => (
             <MobileCard
               key={v.id}
-              title={`${v.position} — ${v.department}`}
+              title={`${v.position} - ${v.department}`}
               subtitle={`Requested by ${v.deptHeadName}${v.forwardedByName ? ` · Forwarded by ${v.forwardedByName}` : ""}`}
               badge={<StatusBadge status={v.status} />}
               fields={[
                 { label: "Count", value: v.requiredCount },
-                { label: "Qualification", value: v.qualification ?? "—" },
+                { label: "Qualification", value: v.qualification ?? "-" },
               ]}
               actions={
                 <>
@@ -113,8 +113,8 @@ export default function AdministrationVacanciesPage() {
             { key: "position", header: "Position" },
             { key: "department", header: "Department" },
             { key: "deptHeadName", header: "Requested By" },
-            { key: "forwardedByName", header: "Forwarded By", render: (r) => (r as unknown as LocationVacancy).forwardedByName ?? "—" },
-            { key: "qualification", header: "Qualification", render: (r) => (r as unknown as LocationVacancy).qualification ?? "—" },
+            { key: "forwardedByName", header: "Forwarded By", render: (r) => (r as unknown as LocationVacancy).forwardedByName ?? "-" },
+            { key: "qualification", header: "Qualification", render: (r) => (r as unknown as LocationVacancy).qualification ?? "-" },
             { key: "requiredCount", header: "Count", render: (r) => (r as unknown as LocationVacancy).requiredCount },
             { key: "status", header: "Status", render: (r) => <StatusBadge status={(r as unknown as LocationVacancy).status} /> },
             { key: "createdAt", header: "Date", render: (r) => formatDate((r as unknown as LocationVacancy).createdAt as Parameters<typeof formatDate>[0]) },
