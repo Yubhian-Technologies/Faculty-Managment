@@ -4,12 +4,13 @@ import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// PRINCIPAL/VICE_PRINCIPAL/HOD manage this for their own college; SUPER_ADMIN
+// PRINCIPAL/VICE_PRINCIPAL/HOD manage this for their own college; COLLEGE_OFFICE
+// reads it (read-only) to auto-fill a section's admission batch; SUPER_ADMIN
 // for any college (via `?collegeId=`). requireCollegeContext resolves collegeId
 // from the session (Principal) or the query param (Super Admin).
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
     const db = getAdminDb();
 
     const snap = await db

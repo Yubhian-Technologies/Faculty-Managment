@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, BookOpen } from "lucide-react";
+import { Plus, Trash2, BookOpen, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Course, Section, Subject, CourseYearTiming, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
@@ -28,6 +29,15 @@ export interface StagedTeachingRow {
   subjectCode: string;
   hoursPerWeek: number;
   slots: StagedSlot[];
+  // Which academic year/semester this assignment belongs to — captured for every
+  // row, current or past. Past rows use the same course/year/section/subject
+  // picker but have no weekly schedule (historical, nothing left to book) and
+  // additionally carry the students' pass %.
+  assignmentAcademicYear?: string;
+  assignmentSemester?: string;
+  isPast?: boolean;
+  passPercentage?: number;
+  studentFeedback?: number;
 }
 
 const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -37,7 +47,7 @@ function newLocalId() {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `local_${Date.now()}_${Math.random()}`;
 }
 
-function emptyRow(): StagedTeachingRow {
+function emptyRow(isPast = false): StagedTeachingRow {
   return {
     localId: newLocalId(),
     courseId: "", courseName: "", year: 0,
@@ -45,6 +55,9 @@ function emptyRow(): StagedTeachingRow {
     subjectId: "", subjectName: "", subjectCode: "",
     hoursPerWeek: 0,
     slots: [],
+    assignmentAcademicYear: "",
+    assignmentSemester: "",
+    ...(isPast ? { isPast: true, passPercentage: undefined, studentFeedback: undefined } : {}),
   };
 }
 
@@ -69,29 +82,38 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
   async function ensureCourseYearData(courseId: string, year: number) {
     const key = `${courseId}_${year}`;
-    if (!(key in sectionsCache)) {
-      const res = await fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${year}`);
-      const d = await res.json() as { sections: Section[] };
-      setSectionsCache((c) => ({ ...c, [key]: d.sections ?? [] }));
-    }
-    if (!(key in subjectsCache)) {
-      const res = await fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${year}`);
-      const d = await res.json() as { subjects: Subject[] };
-      setSubjectsCache((c) => ({ ...c, [key]: d.subjects ?? [] }));
-    }
-    if (!(key in timingCache)) {
-      const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`);
-      const d = await res.json() as { timings: CourseYearTiming[] };
-      const timing = (d.timings ?? []).find((t) => t.year === year) ?? null;
-      setTimingCache((c) => ({ ...c, [key]: timing }));
+    try {
+      if (!(key in sectionsCache)) {
+        const res = await fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${year}`);
+        const d = await res.json() as { sections: Section[] };
+        setSectionsCache((c) => ({ ...c, [key]: d.sections ?? [] }));
+      }
+      if (!(key in subjectsCache)) {
+        const res = await fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${year}`);
+        const d = await res.json() as { subjects: Subject[] };
+        setSubjectsCache((c) => ({ ...c, [key]: d.subjects ?? [] }));
+      }
+      if (!(key in timingCache)) {
+        const res = await fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`);
+        const d = await res.json() as { timings: CourseYearTiming[] };
+        const timing = (d.timings ?? []).find((t) => t.year === year) ?? null;
+        setTimingCache((c) => ({ ...c, [key]: timing }));
+      }
+    } catch {
+      // Non-critical — transient network hiccup (e.g. a dev-server reload mid-request).
+      // The relevant dropdown just stays empty/disabled; picking the course/year again retries.
     }
   }
 
   async function ensureOccupied(sectionId: string) {
     if (sectionId in occupiedCache) return;
-    const res = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}`);
-    const d = await res.json() as { slots: { assignmentId: string; day: string; periodNumber: number }[] };
-    setOccupiedCache((c) => ({ ...c, [sectionId]: d.slots ?? [] }));
+    try {
+      const res = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}`);
+      const d = await res.json() as { slots: { assignmentId: string; day: string; periodNumber: number }[] };
+      setOccupiedCache((c) => ({ ...c, [sectionId]: d.slots ?? [] }));
+    } catch {
+      // Non-critical — see ensureCourseYearData.
+    }
   }
 
   // Hydrate caches for rows that arrive pre-populated (e.g. loaded from the server when
@@ -99,7 +121,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   useEffect(() => {
     for (const row of value) {
       if (row.courseId && row.year) void ensureCourseYearData(row.courseId, row.year);
-      if (row.sectionId) void ensureOccupied(row.sectionId);
+      if (row.sectionId && !row.isPast) void ensureOccupied(row.sectionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -108,8 +130,8 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
     onChange(value.map((r) => (r.localId === localId ? { ...r, ...patch } : r)));
   }
 
-  function addRow() {
-    onChange([...value, emptyRow()]);
+  function addRow(isPast = false) {
+    onChange([...value, emptyRow(isPast)]);
   }
 
   function removeRow(localId: string) {
@@ -133,7 +155,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
     const key = `${row.courseId}_${row.year}`;
     const section = (sectionsCache[key] ?? []).find((s) => s.id === sectionId);
     updateRow(row.localId, { sectionId, sectionName: section?.name ?? "", slots: [] });
-    await ensureOccupied(sectionId);
+    if (!row.isPast) await ensureOccupied(sectionId);
   }
 
   function handleSubjectChange(row: StagedTeachingRow, subjectId: string) {
@@ -166,16 +188,36 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
   return (
     <div className="space-y-3 rounded-lg border p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Teaching Assignments</p>
-        <Button type="button" variant="outline" size="sm" onClick={addRow}>
-          <Plus className="h-3.5 w-3.5 mr-1" />Add Course
-        </Button>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Teaching Assignments</p>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => addRow(false)}>
+            <Plus className="h-3.5 w-3.5 mr-1" />Add Course
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => addRow(true)}>
+            <History className="h-3.5 w-3.5 mr-1" />Add Past Teaching Assignment
+          </Button>
+        </div>
       </div>
 
       {value.length === 0 && <p className="text-xs text-muted-foreground">No teaching assignments added yet.</p>}
 
-      {value.map((row) => {
+      {value.filter((r) => !r.isPast).length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Current</p>
+          {value.filter((r) => !r.isPast).map(renderRow)}
+        </div>
+      )}
+      {value.filter((r) => r.isPast).length > 0 && (
+        <div className="space-y-3 border-t pt-3">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Past</p>
+          {value.filter((r) => r.isPast).map(renderRow)}
+        </div>
+      )}
+    </div>
+  );
+
+  function renderRow(row: StagedTeachingRow) {
         const course = courses.find((c) => c.id === row.courseId) ?? null;
         const yearOptions = course ? Array.from({ length: course.durationYears }, (_, i) => i + 1) : [];
         const key = `${row.courseId}_${row.year}`;
@@ -192,15 +234,24 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
             .filter((r) => r.localId !== row.localId)
             .flatMap((r) => r.slots.map((s) => `${s.day}_${s.periodNumber}`))
         );
-        // Subjects this faculty is already assigned to in another row shouldn't be offered
-        // again — picking the same subject twice would just duplicate the assignment.
+        // Subjects this faculty is already CURRENTLY assigned to in another row shouldn't be
+        // offered again — picking the same subject twice would just duplicate the live
+        // assignment. Past rows are exempt on both sides: a subject taught in a prior year
+        // legitimately may be taught again now, and past rows themselves don't conflict.
         const subjectsUsedElsewhere = new Set(
-          value.filter((r) => r.localId !== row.localId).map((r) => r.subjectId).filter(Boolean)
+          value.filter((r) => r.localId !== row.localId && !r.isPast).map((r) => r.subjectId).filter(Boolean)
         );
-        const availableSubjects = subjects.filter((s) => s.id === row.subjectId || !subjectsUsedElsewhere.has(s.id));
+        const availableSubjects = row.isPast
+          ? subjects
+          : subjects.filter((s) => s.id === row.subjectId || !subjectsUsedElsewhere.has(s.id));
 
         return (
           <div key={row.localId} className="space-y-3 rounded-md bg-muted/30 p-3">
+            {row.isPast && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                <History className="h-3 w-3" />Past Teaching Assignment
+              </span>
+            )}
             <div className="flex items-start gap-2">
               <div className="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
@@ -263,7 +314,60 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
               </div>
             )}
 
-            {row.sectionId && row.subjectId && (
+            {row.subjectId && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Academic Year</Label>
+                  <Input
+                    value={row.assignmentAcademicYear ?? ""}
+                    onChange={(e) => updateRow(row.localId, { assignmentAcademicYear: e.target.value })}
+                    placeholder="e.g. 2025-2026"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Semester</Label>
+                  <Input
+                    value={row.assignmentSemester ?? ""}
+                    onChange={(e) => updateRow(row.localId, { assignmentSemester: e.target.value })}
+                    placeholder="e.g. I Semester"
+                  />
+                </div>
+                {row.isPast && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Student Pass %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={row.passPercentage ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        updateRow(row.localId, { passPercentage: raw === "" ? undefined : Math.min(100, Math.max(0, Number(raw))) });
+                      }}
+                      placeholder="0-100"
+                    />
+                  </div>
+                )}
+                {row.isPast && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Student Feedback %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={row.studentFeedback ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        updateRow(row.localId, { studentFeedback: raw === "" ? undefined : Math.min(100, Math.max(0, Number(raw))) });
+                      }}
+                      placeholder="0-100"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!row.isPast && row.sectionId && row.subjectId && (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
@@ -340,7 +444,5 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
             )}
           </div>
         );
-      })}
-    </div>
-  );
+  }
 }

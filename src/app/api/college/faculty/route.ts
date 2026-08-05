@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { getHodDepartmentScope, getRelatedDepartmentNames } from "@/lib/departments/scope";
 import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
@@ -15,39 +16,53 @@ export async function GET(request: Request) {
     const statusFilter = searchParams.get("status");
 
     const db = getAdminDb();
-    let coll = db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("facultyMembers") as FirebaseFirestore.Query;
+    const facultyColl = db.collection("colleges").doc(session.collegeId).collection("facultyMembers");
+    const withStatus = (q: FirebaseFirestore.Query): FirebaseFirestore.Query =>
+      statusFilter ? q.where("status", "==", statusFilter) : q;
 
-    // HOD sees only their department's faculty
+    let primaryQuery: FirebaseFirestore.Query = facultyColl;
+    // A parent department's HOD gets view-only access to its sub-departments'
+    // faculty too — needed so they can pick a sub-department specialist when
+    // assigning faculty to a shared/parent-owned subject (see teaching-assignments).
+    let secondaryQuery: FirebaseFirestore.Query | null = null;
+
     if (session.role === "HOD") {
-      const hodSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("users")
-        .doc(session.uid)
-        .get();
-      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-      if (hodDept) {
-        coll = coll.where("department", "==", hodDept);
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (scope.departmentName) primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
+      if (scope.childDepartmentNames.length > 0) {
+        secondaryQuery = withStatus(facultyColl.where("department", "in", scope.childDepartmentNames));
       }
     } else if (deptFilter) {
-      coll = coll.where("department", "==", deptFilter);
+      // Office/Principal/VP picking faculty for a specific department (e.g.
+      // a section's Faculty Incharge) also see faculty registered under that
+      // department's parent or sub-departments — a sub-department's own
+      // faculty pool is often thin, and the main HOD's faculty may teach
+      // there too.
+      const relatedNames = await getRelatedDepartmentNames(db, session.collegeId, deptFilter);
+      primaryQuery = relatedNames.length > 1
+        ? primaryQuery.where("department", "in", relatedNames)
+        : primaryQuery.where("department", "==", deptFilter);
     }
 
-    if (statusFilter) {
-      coll = coll.where("status", "==", statusFilter);
-    }
+    primaryQuery = withStatus(primaryQuery);
 
-    const snap = await coll.get();
-    const faculty = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => {
-        const an = (a as { name?: string }).name ?? "";
-        const bn = (b as { name?: string }).name ?? "";
-        return an.localeCompare(bn);
-      });
+    const [primarySnap, secondarySnap] = await Promise.all([
+      primaryQuery.get(),
+      secondaryQuery ? secondaryQuery.get() : Promise.resolve(null),
+    ]);
+
+    const faculty: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] =
+      primarySnap.docs.map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" }));
+    if (secondarySnap) {
+      for (const d of secondarySnap.docs) {
+        faculty.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
+      }
+    }
+    faculty.sort((a, b) => {
+      const an = (a.name as string | undefined) ?? "";
+      const bn = (b.name as string | undefined) ?? "";
+      return an.localeCompare(bn);
+    });
     return NextResponse.json({ faculty });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -64,6 +79,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       employeeId: string;
+      apaarFacultyId?: string;
       name: string;
       email?: string;
       collegeEmail: string;
@@ -74,7 +90,9 @@ export async function POST(request: Request) {
       specialization?: string;
       experienceYears: number;
       joiningDate: string;
+      dateOfJoiningDepartment?: string;
       employmentType: EmploymentType;
+      aicteEligible?: boolean;
       department?: string;
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
@@ -166,6 +184,7 @@ export async function POST(request: Request) {
       collegeId,
       department,
       employeeId,
+      ...(body.apaarFacultyId ? { apaarFacultyId: body.apaarFacultyId } : {}),
       name,
       collegeEmail,
       ...(body.email ? { email: body.email } : {}),
@@ -175,7 +194,9 @@ export async function POST(request: Request) {
       specialization: body.specialization ?? "",
       experienceYears: Number(experienceYears),
       joiningDate: new Date(joiningDate),
+      ...(body.dateOfJoiningDepartment ? { dateOfJoiningDepartment: new Date(body.dateOfJoiningDepartment) } : {}),
       employmentType,
+      ...(body.aicteEligible !== undefined ? { aicteEligible: body.aicteEligible } : {}),
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),

@@ -1,18 +1,52 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
+import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { MyProfileDetails } from "@/components/faculty/MyProfileDetails";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABELS } from "@/types";
+import type { Department } from "@/types";
 
 export default function HodProfilePage() {
   const { user } = useAuth();
+  const [parentDeptName, setParentDeptName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.department) return;
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => {
+        const departments = d.departments ?? [];
+        const own = departments.find((dept) => dept.name === user.department);
+        const parent = own?.parentDepartmentId ? departments.find((dept) => dept.id === own.parentDepartmentId) : null;
+        setParentDeptName(parent?.name ?? null);
+      })
+      .catch(() => {});
+  }, [user?.department]);
+
   if (!user) return null;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="My Profile" description="Manage your profile photo and account details" />
+      <PageHeader
+        title="My Profile"
+        description="Manage your profile photo and account details"
+        actions={
+          <>
+            <ChangePasswordDialog />
+            <Button asChild size="sm" variant="outline">
+              <Link href="/hod/profile/edit"><Pencil className="mr-2 h-4 w-4" />Edit Profile</Link>
+            </Button>
+          </>
+        }
+      />
       <Card>
         <CardContent className="p-6 space-y-6">
           <ProfilePhotoUpload name={user.name} photoUrl={user.profilePhotoUrl} />
@@ -32,12 +66,17 @@ export default function HodProfilePage() {
             {user.department && (
               <div>
                 <p className="text-xs text-muted-foreground">Department</p>
-                <p className="text-sm font-medium">{user.department}</p>
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  {user.department}
+                  {parentDeptName && <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName}</Badge>}
+                </p>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
+
+      <MyProfileDetails />
     </div>
   );
 }

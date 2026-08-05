@@ -22,6 +22,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
@@ -97,6 +99,8 @@ const INTERVIEW_MODULE = {
 
 export default function FacultyDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { hiddenModules, hiddenItems } = useNavVisibility();
+  const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [batches, setBatches] = useState<HiringBatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -113,9 +117,10 @@ export default function FacultyDashboard() {
   );
 
   // Only show interview module card when assigned to batches
-  const modules = batches.length > 0
+  const modules = (batches.length > 0
     ? [INTERVIEW_MODULE, ...STATIC_MODULES]
-    : STATIC_MODULES;
+    : STATIC_MODULES
+  ).filter((mod) => !isHidden(mod.href));
 
   return (
     <div className="space-y-6">
@@ -173,6 +178,7 @@ export default function FacultyDashboard() {
       </div>
 
       {/* Module Grid */}
+      {modules.length > 0 && (
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
           My Modules
@@ -196,6 +202,7 @@ export default function FacultyDashboard() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Interview Panel Assignments — only shown when assigned */}
       {(isLoading || batches.length > 0) && (

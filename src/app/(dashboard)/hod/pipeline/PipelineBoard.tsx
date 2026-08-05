@@ -13,6 +13,7 @@ import {
   MapPin,
   Monitor,
   UserCheck,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +88,7 @@ function getNextAction(entry: PipelineEntry, sentCandidateIds: Set<string>): Nex
       return { label: "View Offer Letter", href: "/hod/offers", variant: "outline" };
     }
     if (p === "PRINCIPAL_FINAL_REVIEW") {
-      return { label: "Awaiting Final Decision", href: "#", disabled: true };
+      return { label: "Awaiting Hiring Results", href: "#", disabled: true };
     }
     return { label: "View Results", href: `/hod/batches/${batch.id}`, variant: "outline" };
   }
@@ -164,9 +165,34 @@ function Step({
 
 // ─── Pipeline Card ────────────────────────────────────────────────────────────
 
-function PipelineCard({ entry, sentCandidateIds }: { entry: PipelineEntry; sentCandidateIds: Set<string> }) {
+function PipelineCard({
+  entry,
+  sentCandidateIds,
+  onDeleted,
+}: {
+  entry: PipelineEntry;
+  sentCandidateIds: Set<string>;
+  onDeleted: (vacancyId: string) => void;
+}) {
   const { vacancy, candidates, batch } = entry;
   const [expanded, setExpanded] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!confirm(`Delete the hiring request for ${vacancy.position}? This cannot be undone.`)) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/college/vacancy-requests/${vacancy.id}`, { method: "DELETE" });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      toast({ variant: "success", title: "Hiring request deleted" });
+      onDeleted(vacancy.id);
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to delete", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   const currentStage = getCurrentStage(vacancy, batch);
   const shortlisted = candidates.filter((c) => c.isShortlisted).length;
@@ -198,7 +224,7 @@ function PipelineCard({ entry, sentCandidateIds }: { entry: PipelineEntry; sentC
     batch?.currentPhase === "COMPLETED"
       ? "Process complete"
       : batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
-      ? "Awaiting decision"
+      ? "Awaiting hiring results"
       : "—";
 
   const accentColor =
@@ -250,7 +276,7 @@ function PipelineCard({ entry, sentCandidateIds }: { entry: PipelineEntry; sentC
           <Step step={1} label="Request" sub={stage1Sub} state={stateFor(1)} />
           <Step step={2} label="Candidates" sub={stage2Sub} state={stateFor(2)} />
           <Step step={3} label="Interview" sub={stage3Sub} state={stateFor(3)} />
-          <Step step={4} label="Decision" sub={stage4Sub} state={stateFor(4)} isLast />
+          <Step step={4} label="Hiring Results" sub={stage4Sub} state={stateFor(4)} isLast />
         </div>
       </div>
 
@@ -276,17 +302,29 @@ function PipelineCard({ entry, sentCandidateIds }: { entry: PipelineEntry; sentC
             </Button>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((e) => !e)}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {expanded ? (
-            <><ChevronUp className="h-4 w-4" /> Hide details</>
-          ) : (
-            <><ChevronDown className="h-4 w-4" /> Show details</>
-          )}
-        </button>
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            loading={isDeleting}
+            onClick={handleDelete}
+            className="text-destructive hover:text-destructive h-auto py-1 px-2"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+          </Button>
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? (
+              <><ChevronUp className="h-4 w-4" /> Hide details</>
+            ) : (
+              <><ChevronDown className="h-4 w-4" /> Show details</>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Expandable detail panel */}
@@ -402,12 +440,23 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
     ])
       .then(([vacancies, candidates, batches, letters]) => {
         setSentCandidateIds(new Set(letters.map((l) => l.candidateId)));
+        // A candidate's batch (if any) is the authority on which vacancy they
+        // actually belong to. Without this, a candidate lacking a vacancyId
+        // (legacy data) would loosely position/department-match — and get
+        // double-counted under — every other vacancy that happens to share
+        // the same position and department, even once they're already
+        // committed to a specific one via a batch.
+        const vacancyIdByBatchId = new Map(batches.map((b) => [b.id, b.vacancyId]));
         const built: PipelineEntry[] = vacancies.map((v) => ({
           vacancy: v,
-          candidates: candidates.filter(
-            (c) => c.vacancyId === v.id || (!c.vacancyId && c.position === v.position && c.department === v.department)
-          ),
-          batch: batches.find((b) => b.vacancyId === v.id) ?? null,
+          candidates: candidates.filter((c) => {
+            if (c.vacancyId) return c.vacancyId === v.id;
+            if (c.batchId) return vacancyIdByBatchId.get(c.batchId) === v.id;
+            return c.position === v.position && c.department === v.department;
+          }),
+          // A rejected proposal shouldn't block the HOD from starting a fresh
+          // interview session for the same vacancy — treat it as no batch yet.
+          batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
         }));
         built.sort(
           (a, b) => (toDate(b.vacancy.createdAt)?.getTime() ?? 0) - (toDate(a.vacancy.createdAt)?.getTime() ?? 0)
@@ -454,7 +503,12 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
   return (
     <div className="space-y-3">
       {visible.map((e) => (
-        <PipelineCard key={e.vacancy.id} entry={e} sentCandidateIds={sentCandidateIds} />
+        <PipelineCard
+          key={e.vacancy.id}
+          entry={e}
+          sentCandidateIds={sentCandidateIds}
+          onDeleted={(vacancyId) => setEntries((prev) => prev.filter((entry) => entry.vacancy.id !== vacancyId))}
+        />
       ))}
     </div>
   );

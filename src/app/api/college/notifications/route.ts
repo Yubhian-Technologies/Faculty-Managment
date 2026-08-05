@@ -1,14 +1,18 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember(
+    // requireCollegeContext (not requireCollegeMember) so GLOBAL roles like
+    // FINANCE/PURCHASE_DEPT/MANAGEMENT — whose collegeId comes from a query
+    // param, not the session — can fetch their own notifications too.
+    const session = await requireCollegeContext(
+      request,
       "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE",
-      "PANEL_MEMBER", "ACCOUNTS", "SUPER_ADMIN"
+      "PANEL_MEMBER", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "MANAGEMENT", "SUPER_ADMIN"
     );
 
     const db = getAdminDb();
@@ -34,9 +38,10 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    const session = await requireCollegeMember(
+    const session = await requireCollegeContext(
+      request,
       "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE",
-      "PANEL_MEMBER", "ACCOUNTS", "SUPER_ADMIN"
+      "PANEL_MEMBER", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "MANAGEMENT", "SUPER_ADMIN"
     );
     const body = (await request.json()) as { id?: string; markAll?: boolean };
 

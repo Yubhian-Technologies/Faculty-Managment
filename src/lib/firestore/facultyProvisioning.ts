@@ -138,7 +138,10 @@ export async function provisionFacultyFromOffer(
     experienceYears: 0,
     joiningDate,
     employmentType: "FULL_TIME",
-    status: "ACTIVE",
+    // Not ACTIVE yet — the offer has only just been sent, not accepted, so this
+    // faculty hasn't actually joined. Flipped to ACTIVE when the offer is marked
+    // ACCEPTED (see offer-letters/[id]/route.ts PATCH).
+    status: "INTERVIEW_DONE",
     userUid: uid,
     ...(candidate.courseId && candidate.preferredSubjectIds?.length
       ? {

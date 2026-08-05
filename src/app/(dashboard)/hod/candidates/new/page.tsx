@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,7 +17,7 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { FileText, MapPin, Monitor, UploadCloud, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import type { Department, VacancyRequest, Course, Subject } from "@/types";
+import type { VacancyRequest, Candidate } from "@/types";
 
 const ALL_DESIGNATIONS = [
   "Professor",
@@ -37,11 +38,15 @@ const schema = z.object({
   position: z.string().min(1, "Position required"),
   source: z.enum(["WALK_IN", "CAREERS_PAGE", "ADVERTISEMENT", "REFERRAL"]),
   interviewMode: z.enum(["ONLINE", "OFFLINE"]),
-  vacancyId: z.string().optional(),
+  vacancyId: z.string().min(1, "Select an approved hiring request to link this candidate to"),
   referralType: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
   referralName: z.string().optional(),
   referralPhone: z.string().optional(),
   referralDescription: z.string().optional(),
+  referralCollege: z.string().optional(),
+  referralDesignation: z.string().optional(),
+  referralInfluenceType: z.enum(["NONE", "MLA", "MP", "OTHER"]).optional(),
+  referralInfluenceOther: z.string().optional(),
   residenceAddress: z.string().optional(),
   permanentAddress: z.string().optional(),
 });
@@ -56,19 +61,14 @@ export default function NewCandidatePage() {
   const searchParams = useSearchParams();
   const prefilledVacancyId = searchParams.get("vacancyId") ?? "";
 
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
+  const [isLoadingVacancies, setIsLoadingVacancies] = useState(true);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [vacancyIdByBatchId, setVacancyIdByBatchId] = useState<Map<string, string>>(new Map());
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>("");
   const [selectedDesignation, setSelectedDesignation] = useState("");
   const [customPosition, setCustomPosition] = useState("");
   const [sameAddress, setSameAddress] = useState(false);
-
-  // Teaching assignment preference (optional — for teaching faculty candidates)
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [teachCourseId, setTeachCourseId] = useState("");
-  const [teachYear, setTeachYear] = useState("");
-  const [teachSubjects, setTeachSubjects] = useState<Subject[]>([]);
-  const [teachSelectedSubjectIds, setTeachSelectedSubjectIds] = useState<string[]>([]);
 
   // Resume upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,25 +81,19 @@ export default function NewCandidatePage() {
     const dept = user?.department ?? "";
 
     void Promise.all([
-      fetch("/api/college/departments")
-        .then((r) => r.json() as Promise<{ departments: Department[] }>)
-        .then((d) => setDepartments(d.departments ?? []))
-        .catch(() => {}),
-
-      fetch("/api/college/courses")
-        .then((r) => r.json() as Promise<{ courses: Course[] }>)
-        .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
-        .catch(() => {}),
-
-      Promise.all([
-        fetch("/api/college/vacancy-requests?status=APPROVED")
-          .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
-          .then((d) => d.vacancyRequests ?? []),
-        fetch("/api/college/hiring-batches")
-          .then((r) => r.json() as Promise<{ batches: { vacancyId: string; currentPhase: string }[] }>)
-          .then((d) => d.batches ?? [])
-          .catch(() => [] as { vacancyId: string; currentPhase: string }[]),
-      ]).then(([allVacancies, batches]) => {
+      fetch("/api/college/vacancy-requests?status=APPROVED")
+        .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
+        .then((d) => d.vacancyRequests ?? []),
+      fetch("/api/college/hiring-batches")
+        .then((r) => r.json() as Promise<{ batches: { id: string; vacancyId: string; currentPhase: string }[] }>)
+        .then((d) => d.batches ?? [])
+        .catch(() => [] as { id: string; vacancyId: string; currentPhase: string }[]),
+      fetch("/api/college/candidates")
+        .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
+        .then((d) => d.candidates ?? [])
+        .catch(() => [] as Candidate[]),
+    ])
+      .then(([allVacancies, batches, allCandidates]) => {
         const completedVacancyIds = new Set(
           batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
         );
@@ -109,6 +103,8 @@ export default function NewCandidatePage() {
           !completedVacancyIds.has(v.id)
         );
         setVacancies(filtered);
+        setCandidates(allCandidates);
+        setVacancyIdByBatchId(new Map(batches.map((b) => [b.id, b.vacancyId])));
 
         // Auto-select if vacancyId was passed in URL
         if (prefilledVacancyId) {
@@ -119,10 +115,19 @@ export default function NewCandidatePage() {
             syncDesignationFromVacancy(match.position);
           }
         }
-      }).catch(() => {}),
-    ]);
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingVacancies(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function linkedCandidatesFor(v: VacancyRequest): Candidate[] {
+    return candidates.filter((c) => {
+      if (c.vacancyId) return c.vacancyId === v.id;
+      if (c.batchId) return vacancyIdByBatchId.get(c.batchId) === v.id;
+      return c.position === v.position && c.department === v.department;
+    });
+  }
 
   const {
     register,
@@ -137,6 +142,7 @@ export default function NewCandidatePage() {
       source: "WALK_IN",
       interviewMode: "OFFLINE",
       referralType: "INTERNAL",
+      referralInfluenceType: "NONE",
     },
   });
 
@@ -185,32 +191,6 @@ export default function NewCandidatePage() {
     }
   }
 
-  const teachCourse = courses.find((c) => c.id === teachCourseId) ?? null;
-  const teachYearOptions = teachCourse ? Array.from({ length: teachCourse.durationYears }, (_, i) => i + 1) : [];
-
-  function handleTeachCourseChange(courseId: string) {
-    setTeachCourseId(courseId);
-    setTeachYear("");
-    setTeachSubjects([]);
-    setTeachSelectedSubjectIds([]);
-  }
-
-  function handleTeachYearChange(year: string) {
-    setTeachYear(year);
-    setTeachSelectedSubjectIds([]);
-    if (!teachCourseId || !year) { setTeachSubjects([]); return; }
-    fetch(`/api/college/subjects?courseId=${encodeURIComponent(teachCourseId)}&year=${encodeURIComponent(year)}`)
-      .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
-      .then((d) => setTeachSubjects(d.subjects ?? []))
-      .catch(() => setTeachSubjects([]));
-  }
-
-  function toggleTeachSubject(subjectId: string) {
-    setTeachSelectedSubjectIds((prev) =>
-      prev.includes(subjectId) ? prev.filter((id) => id !== subjectId) : [...prev, subjectId]
-    );
-  }
-
   function handleDesignationChange(val: string) {
     setSelectedDesignation(val);
     if (val !== "Others") {
@@ -249,19 +229,12 @@ export default function NewCandidatePage() {
     }
 
     try {
-      const selectedSubjects = teachSubjects.filter((s) => teachSelectedSubjectIds.includes(s.id));
       const res = await fetch("/api/college/candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
           resumeUrl: finalResumeUrl,
-          ...(teachCourseId ? { courseId: teachCourseId, courseName: teachCourse?.name ?? "" } : {}),
-          ...(teachYear ? { year: Number(teachYear) } : {}),
-          ...(selectedSubjects.length > 0 ? {
-            preferredSubjectIds: selectedSubjects.map((s) => s.id),
-            preferredSubjectNames: selectedSubjects.map((s) => s.name),
-          } : {}),
         }),
       });
       const json = await res.json() as { id?: string; error?: string };
@@ -279,6 +252,7 @@ export default function NewCandidatePage() {
   const source = watch("source");
   const interviewMode = watch("interviewMode");
   const referralType = watch("referralType");
+  const referralInfluenceType = watch("referralInfluenceType");
   const positionValue = watch("position");
   const isBusy = isSubmitting || isUploading;
 
@@ -313,6 +287,20 @@ export default function NewCandidatePage() {
           <CardTitle className="text-base">Candidate Details</CardTitle>
         </CardHeader>
         <CardContent>
+          {isLoadingVacancies ? (
+            <p className="text-sm text-muted-foreground">Loading hiring requests...</p>
+          ) : vacancies.length === 0 && !prefilledVacancyId ? (
+            <div className="text-center py-10 space-y-3">
+              <p className="text-sm font-semibold">No approved hiring request available</p>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                Candidates can only be added against an approved hiring request. Raise a hiring
+                request first — once the Principal approves it, you can add candidates here.
+              </p>
+              <Button asChild size="sm">
+                <Link href="/hod/vacancy/new">Create Hiring Request</Link>
+              </Button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name *</Label>
@@ -335,20 +323,10 @@ export default function NewCandidatePage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Department *</Label>
-                <Select
-                  defaultValue={user?.department ?? ""}
-                  onValueChange={(v) => setValue("department", v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Department</Label>
+                <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                  {user?.department || "—"}
+                </div>
                 {errors.department && <p className="text-sm text-destructive">{errors.department.message}</p>}
               </div>
               <div className="space-y-2">
@@ -376,66 +354,6 @@ export default function NewCandidatePage() {
                 {errors.position && <p className="text-sm text-destructive">{errors.position.message}</p>}
               </div>
             </div>
-
-            {courses.length > 0 && (
-              <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
-                <div>
-                  <p className="text-sm font-semibold">Teaching Assignment (optional)</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    If this candidate is being hired to teach a specific course, set it here — it will carry over to their faculty profile once hired.
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Course</Label>
-                    <Select value={teachCourseId} onValueChange={handleTeachCourseChange}>
-                      <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                      <SelectContent>
-                        {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Year</Label>
-                    <Select value={teachYear} onValueChange={handleTeachYearChange} disabled={!teachCourse}>
-                      <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-                      <SelectContent>
-                        {teachYearOptions.map((y) => <SelectItem key={y} value={String(y)}>Year {y}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {teachYear && (
-                  <div className="space-y-2">
-                    <Label>Preferred Subjects</Label>
-                    {teachSubjects.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No subjects set up for this year yet.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {teachSubjects.map((s) => {
-                          const selected = teachSelectedSubjectIds.includes(s.id);
-                          return (
-                            <button
-                              key={s.id}
-                              type="button"
-                              onClick={() => toggleTeachSubject(s.id)}
-                              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                                selected
-                                  ? "border-primary bg-primary/10 text-primary font-medium"
-                                  : "border-border hover:bg-muted"
-                              }`}
-                            >
-                              {s.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
 
             <div className="space-y-2">
               <Label>Source *</Label>
@@ -502,12 +420,65 @@ export default function NewCandidatePage() {
                   </div>
                 </div>
 
+                {referralType === "INTERNAL" && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="referralCollege">Referrer&apos;s College *</Label>
+                      <Input
+                        id="referralCollege"
+                        {...register("referralCollege")}
+                        placeholder="College the referrer works at"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="referralDesignation">Referrer&apos;s Designation *</Label>
+                      <Input
+                        id="referralDesignation"
+                        {...register("referralDesignation")}
+                        placeholder="e.g. Assistant Professor"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {referralType === "EXTERNAL" && (
+                  <div className="space-y-2">
+                    <Label>Is the referrer an influential person? *</Label>
+                    <div className="flex flex-wrap gap-3">
+                      {([
+                        { value: "NONE", label: "No" },
+                        { value: "MLA", label: "MLA" },
+                        { value: "MP", label: "MP" },
+                        { value: "OTHER", label: "Other" },
+                      ] as const).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setValue("referralInfluenceType", opt.value, { shouldValidate: true })}
+                          className={`flex-1 min-w-[5rem] rounded-lg border-2 py-2.5 text-sm font-medium transition-all ${
+                            referralInfluenceType === opt.value
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    {referralInfluenceType === "OTHER" && (
+                      <Input
+                        {...register("referralInfluenceOther")}
+                        placeholder="Specify who referred (e.g. MLC, Corporator, ...)"
+                      />
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="referralDescription">Description</Label>
                   <Textarea
                     id="referralDescription"
                     {...register("referralDescription")}
-                    placeholder="How did they hear about this position? Any relevant context..."
                     rows={2}
                   />
                 </div>
@@ -550,23 +521,32 @@ export default function NewCandidatePage() {
                 {prefilledVacancyId ? (
                   (() => {
                     const linked = vacancies.find((v) => v.id === prefilledVacancyId);
-                    return linked ? (
-                      <div className="flex items-center justify-between rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
-                        <div>
-                          <p className="text-sm font-semibold text-primary">{linked.position}</p>
-                          {linked.qualification && (
-                            <p className="text-xs text-muted-foreground">{linked.qualification}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground/60 mt-0.5">{linked.department}</p>
+                    if (!linked) return null;
+                    const alreadyLinked = linkedCandidatesFor(linked);
+                    return (
+                      <div className="rounded-lg border-2 border-primary bg-primary/5 px-4 py-3 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-primary">{linked.position}</p>
+                            {linked.qualification && (
+                              <p className="text-xs text-muted-foreground">{linked.qualification}</p>
+                            )}
+                            <p className="text-xs text-muted-foreground/60 mt-0.5">{linked.department}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
+                              {linked.availableCount ?? linked.requiredCount} posts open
+                            </span>
+                            <p className="text-[10px] text-primary font-medium mt-1">Auto-linked ✓</p>
+                          </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
-                            {linked.availableCount ?? linked.requiredCount} posts open
-                          </span>
-                          <p className="text-[10px] text-primary font-medium mt-1">Auto-linked ✓</p>
-                        </div>
+                        {alreadyLinked.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Already added: {alreadyLinked.map((c) => c.name).join(", ")}
+                          </p>
+                        )}
                       </div>
-                    ) : null;
+                    );
                   })()
                 ) : (
                 <div className="flex items-center justify-between">
@@ -596,8 +576,8 @@ export default function NewCandidatePage() {
                 <div className="space-y-2">
                   {(matchedVacancies.length > 0 ? matchedVacancies : vacancies).map((v) => {
                     const isSelected = selectedVacancyId === v.id;
-                    const refId = v.id.slice(-6).toUpperCase();
                     const isFiltered = positionValue?.trim() && matchedVacancies.length > 0;
+                    const alreadyLinked = linkedCandidatesFor(v);
                     return (
                       <button
                         key={v.id}
@@ -622,20 +602,21 @@ export default function NewCandidatePage() {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className={`text-sm font-medium ${isSelected ? "text-primary" : ""}`}>
-                                {v.position}
-                              </p>
-                              <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                #{refId}
-                              </span>
-                            </div>
+                            <p className={`text-sm font-medium ${isSelected ? "text-primary" : ""}`}>
+                              {v.position}
+                            </p>
                             {v.qualification && (
                               <p className="text-xs text-muted-foreground mt-0.5">{v.qualification}</p>
                             )}
                             <p className="text-xs text-muted-foreground/60 mt-1">
                               Raised {formatDate(v.createdAt)}
                             </p>
+                            {alreadyLinked.length > 0 && (
+                              <p className="text-xs text-muted-foreground/80 mt-1">
+                                {alreadyLinked.length} candidate{alreadyLinked.length !== 1 ? "s" : ""} already added:{" "}
+                                {alreadyLinked.map((c) => c.name).join(", ")}
+                              </p>
+                            )}
                           </div>
                           <div className="shrink-0 text-right">
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
@@ -653,6 +634,7 @@ export default function NewCandidatePage() {
                 <p className="text-xs text-muted-foreground">
                   Select a designation above to auto-filter matching hiring requests. Selecting a card also fills the designation.
                 </p>
+                {errors.vacancyId && <p className="text-sm text-destructive">{errors.vacancyId.message}</p>}
                 </div>}
               </div>
             )}
@@ -762,6 +744,7 @@ export default function NewCandidatePage() {
               <Button type="submit" loading={isBusy}>Add Candidate</Button>
             </div>
           </form>
+          )}
         </CardContent>
       </Card>
     </div>

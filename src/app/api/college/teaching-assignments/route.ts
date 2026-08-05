@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     let assignmentQuery: FirebaseFirestore.Query = collegeRef.collection("teachingAssignments");
+    let secondaryAssignmentQuery: FirebaseFirestore.Query | null = null;
     let timetableSlots: (TimetableSlot & { id: string })[] = [];
 
     if (sectionId) {
@@ -32,10 +34,14 @@ export async function GET(request: Request) {
       // all HOD/Principal/etc. roles above may view any section within their own college.
       assignmentQuery = assignmentQuery.where("sectionId", "==", sectionId);
     } else if (deptView && session.role === "HOD") {
-      // Resolve HOD's department from their user profile
-      const hodSnap = await collegeRef.collection("users").doc(session.uid).get();
-      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-      if (hodDept) assignmentQuery = assignmentQuery.where("department", "==", hodDept);
+      // Resolve HOD's department scope, including any sub-departments — a
+      // parent HOD gets automatic view-only access to child assignments.
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (scope.departmentName) assignmentQuery = assignmentQuery.where("department", "==", scope.departmentName);
+      if (scope.childDepartmentNames.length > 0) {
+        secondaryAssignmentQuery = collegeRef.collection("teachingAssignments")
+          .where("department", "in", scope.childDepartmentNames);
+      }
     } else {
       // Viewing a specific faculty member's assignments — HOD/Principal/SuperAdmin may look up anyone;
       // everyone else (including a faculty viewing their own "Teaching Load") is restricted to themselves.
@@ -51,21 +57,29 @@ export async function GET(request: Request) {
       timetableSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }));
     }
 
-    const assignmentsSnap = await assignmentQuery.get();
+    const [assignmentsSnap, secondaryAssignmentsSnap] = await Promise.all([
+      assignmentQuery.get(),
+      secondaryAssignmentQuery ? secondaryAssignmentQuery.get() : Promise.resolve(null),
+    ]);
 
-    const assignments: (TeachingAssignment & { id: string })[] = assignmentsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as TeachingAssignment & { id: string }))
-      .sort((a, b) => {
-        const ta =
-          a.createdAt && typeof (a.createdAt as { toMillis?: () => number }).toMillis === "function"
-            ? (a.createdAt as { toMillis: () => number }).toMillis()
-            : new Date(a.createdAt as unknown as string).getTime();
-        const tb =
-          b.createdAt && typeof (b.createdAt as { toMillis?: () => number }).toMillis === "function"
-            ? (b.createdAt as { toMillis: () => number }).toMillis()
-            : new Date(b.createdAt as unknown as string).getTime();
-        return tb - ta; // descending
-      });
+    const assignments: (TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" })[] = assignmentsSnap.docs
+      .map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" }));
+    if (secondaryAssignmentsSnap) {
+      for (const d of secondaryAssignmentsSnap.docs) {
+        assignments.push({ id: d.id, ...d.data(), accessLevel: "secondary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" });
+      }
+    }
+    assignments.sort((a, b) => {
+      const ta =
+        a.createdAt && typeof (a.createdAt as { toMillis?: () => number }).toMillis === "function"
+          ? (a.createdAt as { toMillis: () => number }).toMillis()
+          : new Date(a.createdAt as unknown as string).getTime();
+      const tb =
+        b.createdAt && typeof (b.createdAt as { toMillis?: () => number }).toMillis === "function"
+          ? (b.createdAt as { toMillis: () => number }).toMillis()
+          : new Date(b.createdAt as unknown as string).getTime();
+      return tb - ta; // descending
+    });
 
     return NextResponse.json({ assignments, timetableSlots });
   } catch (err) {
@@ -99,6 +113,11 @@ export async function POST(request: Request) {
       hoursPerWeek?: number;
       totalHoursAllotted?: number;
       slots?: { day: string; periodNumber: number; classroom?: string }[];
+      isPast?: boolean;
+      assignmentAcademicYear?: string;
+      assignmentSemester?: string;
+      passPercentage?: number;
+      studentFeedback?: number;
     };
 
     const { facultyId, facultyName, courseId, sectionId, subjectId } = body;
@@ -123,15 +142,41 @@ export async function POST(request: Request) {
       const section = sectionSnap.data() as { name: string; year: number; department: string };
       const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
 
+      // A parent department's HOD only has view-only access to a sub-department's
+      // sections — assigning faculty is an edit action, restricted to the section's
+      // own (primary) HOD. The faculty being assigned may come from the HOD's own
+      // department OR one of their sub-departments (e.g. a shared Basic Science
+      // section staffed with a BS-Physics specialist for the Physics subject) —
+      // but nowhere else.
+      if (session.role === "HOD") {
+        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+        if (!scope.departmentName || scope.departmentName !== section.department) {
+          return NextResponse.json({ error: "Section is not in your department" }, { status: 403 });
+        }
+
+        const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
+        if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+        const facultyDept = (facultySnap.data() as { department?: string }).department ?? "";
+        if (facultyDept !== scope.departmentName && !scope.childDepartmentNames.includes(facultyDept)) {
+          return NextResponse.json({ error: "Faculty must be in your department or one of your sub-departments" }, { status: 403 });
+        }
+      }
+
       // Conflict check: this faculty already teaching this exact section+subject?
-      const existing = await collegeRef.collection("teachingAssignments")
-        .where("facultyId", "==", facultyId)
-        .where("sectionId", "==", sectionId)
-        .where("subjectId", "==", subjectId)
-        .limit(1)
-        .get();
-      if (!existing.empty) {
-        return NextResponse.json({ error: "This faculty is already assigned to this subject for this section" }, { status: 409 });
+      // Only applies to current assignments — past ones are historical records and
+      // may legitimately repeat the same section+subject across different years.
+      if (!body.isPast) {
+        // Firestore's "!=" excludes docs missing the field entirely, which every
+        // pre-existing current assignment does — so the isPast!==true filter has
+        // to happen in application code, not the query, to still catch them.
+        const existing = await collegeRef.collection("teachingAssignments")
+          .where("facultyId", "==", facultyId)
+          .where("sectionId", "==", sectionId)
+          .where("subjectId", "==", subjectId)
+          .get();
+        if (existing.docs.some((d) => !(d.data() as { isPast?: boolean }).isPast)) {
+          return NextResponse.json({ error: "This faculty is already assigned to this subject for this section" }, { status: 409 });
+        }
       }
 
       const now = new Date();
@@ -156,11 +201,19 @@ export async function POST(request: Request) {
         assignedByName: session.role,
         createdAt: now,
         updatedAt: now,
+        assignmentAcademicYear: body.assignmentAcademicYear ?? "",
+        assignmentSemester: body.assignmentSemester ?? "",
+        ...(body.isPast ? {
+          isPast: true,
+          ...(body.passPercentage != null ? { passPercentage: Number(body.passPercentage) } : {}),
+          ...(body.studentFeedback != null ? { studentFeedback: Number(body.studentFeedback) } : {}),
+        } : {}),
       });
 
-      // Create any staged timetable slots (day + period) for this assignment
+      // Create any staged timetable slots (day + period) for this assignment —
+      // past rows never have any (no live schedule to book).
       const createdSlots: string[] = [];
-      if (body.slots?.length) {
+      if (!body.isPast && body.slots?.length) {
         for (const slot of body.slots) {
           const conflict = await collegeRef.collection("timetableSlots")
             .where("sectionId", "==", sectionId)
@@ -229,11 +282,14 @@ export async function POST(request: Request) {
       const faculty = facultySnap.data() as { name?: string; department?: string };
       const subject = subjectSnap.data() as { name?: string; code?: string; department?: string; hoursPerWeek?: number };
 
-      // HOD may only assign within their own department; Principal/Super Admin can cross departments.
+      // HOD may only assign within their own department (subject must be theirs)
+      // and their own department or sub-departments (faculty); Principal/Super
+      // Admin can cross departments freely.
       if (session.role === "HOD") {
-        const hodSnap = await collegeRef.collection("users").doc(session.uid).get();
-        const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-        if (!hodDept || faculty.department !== hodDept || subject.department !== hodDept) {
+        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+        const facultyDept = faculty.department ?? "";
+        const facultyAllowed = facultyDept === scope.departmentName || scope.childDepartmentNames.includes(facultyDept);
+        if (!scope.departmentName || !facultyAllowed || subject.department !== scope.departmentName) {
           return NextResponse.json({ error: "Faculty/subject must be in your department" }, { status: 403 });
         }
       }
@@ -265,16 +321,14 @@ export async function POST(request: Request) {
       let ratioWarning: string | undefined;
       const dept = subject.department ?? faculty.department ?? "";
       if (dept) {
-        const [sectionsSnap, assignmentsSnap] = await Promise.all([
-          collegeRef.collection("sections").where("department", "==", dept).get(),
+        const [studentsSnap, assignmentsSnap] = await Promise.all([
+          collegeRef.collection("students").where("department", "==", dept).get(),
           collegeRef.collection("teachingAssignments")
             .where("department", "==", dept)
             .where("academicYear", "==", body.academicYear)
             .get(),
         ]);
-        const totalStudents = sectionsSnap.docs.reduce(
-          (sum, d) => sum + ((d.data() as { studentCount?: number }).studentCount ?? 0), 0
-        );
+        const totalStudents = studentsSnap.size;
         const required = requiredFacultyCount(totalStudents);
         const distinctFaculty = new Set(
           assignmentsSnap.docs.map((d) => (d.data() as { facultyId?: string }).facultyId).filter(Boolean)
@@ -312,6 +366,16 @@ export async function DELETE(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const ref = collegeRef.collection("teachingAssignments").doc(assignmentId);
+
+    if (session.role === "HOD") {
+      const assignmentSnap = await ref.get();
+      if (!assignmentSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      const assignmentDept = (assignmentSnap.data() as { department?: string }).department ?? "";
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!scope.departmentName || scope.departmentName !== assignmentDept) {
+        return NextResponse.json({ error: "You can only remove assignments in your own department" }, { status: 403 });
+      }
+    }
 
     const slotsSnap = await collegeRef.collection("timetableSlots").where("assignmentId", "==", assignmentId).get();
     const batch = db.batch();

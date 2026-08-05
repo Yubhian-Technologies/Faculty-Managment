@@ -1,5 +1,6 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS } from "@/types";
+import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
@@ -8,6 +9,7 @@ interface DegreeDetail {
   universityOrInstitute?: string;
   percentageOrDivision?: string;
   yearOfCompletion?: number;
+  certificateUrl?: string;
 }
 
 interface CourseAssignment {
@@ -27,25 +29,13 @@ interface PreviousInstitution {
   yearsWorked?: number;
 }
 
-interface TenurePastRecord {
-  academicYear?: string;
-  semester?: string;
-  subject?: string;
-  studentPassPercentage?: number;
-}
-
-interface TenurePresentRecord {
-  academicYear?: string;
-  semester?: string;
-  subject?: string;
-}
-
 interface Publication {
   title?: string;
   coAuthors?: string;
   journalOrConference?: string;
   publicationYear?: number;
   indexing?: string;
+  driveLink?: string;
 }
 
 interface FundedProject {
@@ -135,9 +125,6 @@ interface FacultyProfileFieldsLike {
   fundingConsultancyRevenue?: number;
 
   otherInformation?: string;
-
-  tenurePastRecords?: TenurePastRecord[];
-  tenurePresentRecords?: TenurePresentRecord[];
 }
 
 export interface ResumeData {
@@ -151,6 +138,9 @@ export interface ResumeData {
   phone?: string;
   profilePhotoUrl?: string;
   collegeName?: string;
+  /** Uploaded Resume/CV file (Faculty edit page Documents section) — distinct
+   *  from this generated document, surfaced as a link when present. */
+  resumeUrl?: string;
 
   joiningDate?: TimestampLike;
   employmentType?: string;
@@ -202,6 +192,11 @@ export interface ResumeData {
     subjectName?: string;
     subjectCode?: string;
     hoursPerWeek?: number;
+    assignmentAcademicYear?: string;
+    assignmentSemester?: string;
+    isPast?: boolean;
+    passPercentage?: number;
+    studentFeedback?: number;
   }[];
 }
 
@@ -254,6 +249,34 @@ function detailTable(rows: string): string {
   return `<div class="fgrid">${rows}</div>`;
 }
 
+/** Renders one Teaching Load table — Academic Year / Year-Branch-Semester-Section /
+ *  Subject / Hr-Week (+ Pass % + Student Feedback % for past) — leaving cells
+ *  blank where a given row's source doesn't carry that field. */
+function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boolean): string {
+  if (!rows.length) return "";
+  const body = rows
+    .map(
+      (r) =>
+        `<tr><td>${esc(r.academicYear)}</td><td>${esc(formatClassColumn(r))}</td><td>${esc(r.subject)}</td><td>${esc(r.hoursPerWeek)}</td>${showPastColumns ? `<td>${r.passPercentage != null ? `${esc(r.passPercentage)}%` : ""}</td><td>${r.studentFeedback != null ? `${esc(r.studentFeedback)}%` : ""}</td>` : ""}</tr>`
+    )
+    .join("");
+  const pastHeaders = showPastColumns ? "<th>Pass %</th><th>Student Feedback %</th>" : "";
+  return `<table class="data-table"><tr><th>Academic Year</th><th>Year / Branch / Semester / Section</th><th>Subject</th><th>Hr/Week</th>${pastHeaders}</tr>${body}</table>`;
+}
+
+/** Renders the Current / Past Teaching Assignments tables under their own
+ *  labeled subheadings, kept visually separate rather than intermixed —
+ *  Pass % only ever applies to (and is only shown on) the Past table. */
+function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }): string {
+  const currentBlock = groups.current.length
+    ? `<div class="subheading">Current Teaching Assignments</div>${renderTeachingLoadTable(groups.current, false)}`
+    : "";
+  const pastBlock = groups.past.length
+    ? `<div class="subheading">Past Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Pass % + Feedback %
+    : "";
+  return currentBlock + pastBlock;
+}
+
 /** Renders a section's heading + body together, or nothing at all when the
  *  body is empty — a person's record with no data for a module simply
  *  doesn't get a module in their resume, rather than a placeholder. */
@@ -263,11 +286,16 @@ function renderSection(title: string, body: string): string {
 
 function degreeEntry(label: string, d?: DegreeDetail): string {
   if (!d || (!d.degreeAndBranch && !d.universityOrInstitute)) return "";
-  return entry(
-    d.universityOrInstitute || label,
-    d.yearOfCompletion ? String(d.yearOfCompletion) : "",
-    `${label}${d.degreeAndBranch ? ` — ${d.degreeAndBranch}` : ""}`,
-    d.percentageOrDivision || ""
+  const certLink = d.certificateUrl
+    ? `<div class="doc-link"><a href="${esc(d.certificateUrl)}" target="_blank">View Certificate ↗</a></div>`
+    : "";
+  return (
+    entry(
+      d.universityOrInstitute || label,
+      d.yearOfCompletion ? String(d.yearOfCompletion) : "",
+      `${label}${d.degreeAndBranch ? ` — ${d.degreeAndBranch}` : ""}`,
+      d.percentageOrDivision || ""
+    ) + certLink
   );
 }
 
@@ -307,6 +335,7 @@ export function getResumeHTML(data: ResumeData): string {
     data.collegeName ? `College: ${esc(data.collegeName)}` : "",
     data.phone ? `Mobile: ${esc(data.phone)}` : "",
     data.employeeId ? `Employee ID: ${esc(data.employeeId)}` : "",
+    data.resumeUrl ? `<a href="${esc(data.resumeUrl)}" target="_blank" style="color:#1d4ed8;text-decoration:none;">View Uploaded Resume ↗</a>` : "",
   ].filter(Boolean);
 
   // ── Education ────────────────────────────────────────────────────────────
@@ -352,20 +381,19 @@ export function getResumeHTML(data: ResumeData): string {
   const experienceBody = experienceEntry + experienceBullets + previousInstitutionEntries;
 
   // ── Teaching load ────────────────────────────────────────────────────────
+  // Current and past assignments, kept as two separate tables — current
+  // course/section assignments + the Module 2 course summary vs. structured
+  // past assignments (past rows carry a pass %, current ones never do).
   const teachingLoadBullets = bullets([
     ap?.teachingAssignment?.primaryTeachingRole && `Primary Teaching Role: ${esc(ap.teachingAssignment.primaryTeachingRole)}`,
   ]);
-  const teachingCourses = ap?.teachingAssignment?.courses?.length
-    ? `<table class="data-table"><tr><th>Code</th><th>Course</th><th>Weekly Credit Hours</th></tr>${ap.teachingAssignment.courses
-        .map((c) => `<tr><td>${esc(c.code)}</td><td>${esc(c.name)}</td><td>${esc(c.weeklyCreditHours)}</td></tr>`)
-        .join("")}</table>`
-    : "";
-  const currentTeachingAssignmentsTable = data.teachingAssignments?.length
-    ? `<table class="data-table"><tr><th>Course</th><th>Year</th><th>Section</th><th>Subject</th><th>Hours/Week</th></tr>${data.teachingAssignments
-        .map((t) => `<tr><td>${esc(t.courseName)}</td><td>${esc(t.year)}</td><td>${esc(t.sectionName)}</td><td>${esc(t.subjectName)}${t.subjectCode ? ` (${esc(t.subjectCode)})` : ""}</td><td>${esc(t.hoursPerWeek)}</td></tr>`)
-        .join("")}</table>`
-    : "";
-  const teachingLoadBody = teachingLoadBullets + teachingCourses + currentTeachingAssignmentsTable;
+  const teachingLoadGroups = buildTeachingLoadRows({
+    currentAssignments: data.teachingAssignments,
+    staticCourses: ap?.teachingAssignment?.courses,
+    department: data.department,
+  });
+  const teachingLoadTables = renderTeachingLoadGroups(teachingLoadGroups);
+  const teachingLoadBody = teachingLoadBullets + teachingLoadTables;
 
   // ── Research publications ───────────────────────────────────────────────
   const publicationStatsBullets = bullets([
@@ -379,10 +407,25 @@ export function getResumeHTML(data: ResumeData): string {
     (ap?.totalCitations || ap?.hIndex || ap?.i10Index) &&
       `Citations: ${ap?.totalCitations ?? 0} · h-Index: ${ap?.hIndex ?? 0} · i10-Index: ${ap?.i10Index ?? 0}`,
   ]);
+  const publicationEntries = ap?.publications?.length
+    ? ap.publications
+        .filter((p) => p.title)
+        .map((p, i) => {
+          const meta = [p.coAuthors, p.journalOrConference].filter(Boolean).join(" · ");
+          const indexingAndYear = [p.indexing, p.publicationYear ? String(p.publicationYear) : ""].filter(Boolean).join(" · ");
+          const link = p.driveLink
+            ? `<div class="doc-link"><a href="${esc(p.driveLink)}" target="_blank">View Publication ↗</a></div>`
+            : "";
+          return (
+            entry(`${i + 1}. ${p.title}`, indexingAndYear, meta) + link
+          );
+        })
+        .join("")
+    : "";
   const booksEntries = ap?.authoredBooks?.length
     ? ap.authoredBooks.map((b) => entry(b.title || "Authored Book", b.year ? String(b.year) : "", b.publisher || "")).join("")
     : "";
-  const publicationsBody = publicationStatsBullets + booksEntries;
+  const publicationsBody = publicationEntries + publicationStatsBullets + booksEntries;
 
   // ── Projects, grants & consultancy ──────────────────────────────────────
   const fundedProjectEntries = ap?.fundedProjects?.length
@@ -435,7 +478,10 @@ export function getResumeHTML(data: ResumeData): string {
   const personalBody = detailTable(
     detail("Status", statusLabel) +
     detail("Employment Type", employmentTypeLabel) +
-    detail("Date of Joining", data.joiningDate ? formatDate(data.joiningDate as Parameters<typeof formatDate>[0]) : "") +
+    detail(
+      data.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining",
+      data.joiningDate ? formatDate(data.joiningDate as Parameters<typeof formatDate>[0]) : ""
+    ) +
     detail("Date of Birth", data.dateOfBirth ? formatDate(data.dateOfBirth as Parameters<typeof formatDate>[0]) : "") +
     detail("Gender", data.gender) +
     detail("Blood Group", data.bloodGroup) +
@@ -468,34 +514,6 @@ export function getResumeHTML(data: ResumeData): string {
   // ── Other information ────────────────────────────────────────────────────
   const otherInfoBody = ap?.otherInformation ? `<p class="summary-text">${esc(ap.otherInformation)}</p>` : "";
 
-  // ── Tenure & Load (Past / Present) ──────────────────────────────────────
-  const tenurePastEntries = ap?.tenurePastRecords?.length
-    ? `<div class="subheading">Past</div>` +
-      ap.tenurePastRecords
-        .map((r) =>
-          detailTable(
-            detail("Academic Year", r.academicYear) +
-            detail("Semester", r.semester) +
-            detail("Subject", r.subject) +
-            detail("Student Pass %", r.studentPassPercentage)
-          )
-        )
-        .join("")
-    : "";
-  const tenurePresentEntries = ap?.tenurePresentRecords?.length
-    ? `<div class="subheading">Present</div>` +
-      ap.tenurePresentRecords
-        .map((r) =>
-          detailTable(
-            detail("Academic Year", r.academicYear) +
-            detail("Semester", r.semester) +
-            detail("Subject", r.subject)
-          )
-        )
-        .join("")
-    : "";
-  const tenureLoadBody = tenurePastEntries + tenurePresentEntries;
-
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -510,7 +528,7 @@ export function getResumeHTML(data: ResumeData): string {
      the top/bottom breathing room supplied per-page via page.pdf()'s margin. */
   .page { width: 210mm; background: #ffffff; padding: 0 15mm; }
 
-  .resume-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
+  .resume-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
   .header-left { display: flex; align-items: center; gap: 14px; }
   .avatar { width: 66px; height: 66px; border-radius: 50%; object-fit: cover; border: 1.5px solid #111827; flex-shrink: 0; }
   .avatar-fallback { width: 66px; height: 66px; border-radius: 50%; background: #111827; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; flex-shrink: 0; }
@@ -519,7 +537,11 @@ export function getResumeHTML(data: ResumeData): string {
   .college { font-size: 12px; color: #4b5563; margin-top: 2px; }
   .contact-block { text-align: right; font-size: 11.5px; line-height: 1.6; white-space: nowrap; }
 
-  .section-title { text-align: center; font-weight: bold; font-size: 13px; letter-spacing: 0.6px; text-transform: uppercase; border-top: 1px solid #111827; border-bottom: 1px solid #111827; padding: 3px 0; margin: 14px 0 8px; break-after: avoid-page; }
+  /* Centered with flexbox (not padding + line-height) — html2canvas approximates
+     font baseline position with a measurement heuristic that isn't always exact,
+     so text drifts within symmetric padding instead of sitting truly centered.
+     Flex centering is geometric, not font-metric-based, so it renders correctly. */
+  .section-title { display: flex; align-items: center; justify-content: center; padding: 12px 0; line-height: 1; font-weight: bold; font-size: 13px; letter-spacing: 0.6px; text-transform: uppercase; border-top: 1px solid #111827; border-bottom: 1px solid #111827; margin: 14px 0 8px; break-after: avoid-page; }
 
   .entry { margin-bottom: 6px; break-inside: avoid-page; }
   .entry-row { display: flex; justify-content: space-between; gap: 10px; font-weight: bold; font-size: 12.5px; color: #000000; }
@@ -537,10 +559,15 @@ export function getResumeHTML(data: ResumeData): string {
   .empty-note { font-size: 12px; color: #6b7280; font-style: italic; margin: 3px 0 8px; }
 
   /* Compact 2-up key/value grid — used for personal/financial facts, which are
-     simple label:value pairs rather than narrative achievements. */
-  .fgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 3px; margin: 3px 0 10px; }
-  .fitem { font-size: 12px; padding: 2.5px 0; border-bottom: 1px dotted #d1d5db; break-inside: avoid-page; }
-  .fitem-wide { grid-column: 1 / -1; }
+     simple label:value pairs rather than narrative achievements. Built with
+     flexbox + explicit width/margin (not CSS Grid) — html2canvas 1.x only
+     recognizes display:grid as a display-type flag and never actually lays
+     out grid tracks, so a real grid here would collapse to a single column
+     (misaligned) in the generated PDF even though it looks fine in a browser. */
+  .fgrid { display: flex; flex-wrap: wrap; margin: 3px 0 10px; }
+  .fitem { width: 48%; margin: 0 4% 6px 0; font-size: 12px; padding: 2.5px 0; break-inside: avoid-page; }
+  .fitem:nth-child(2n) { margin-right: 0; }
+  .fitem-wide { width: 100%; margin-right: 0; }
   .fitem .fk { color: #4b5563; font-weight: 600; }
   .fitem .fk::after { content: ": "; }
   .fitem .fv { color: #111827; }
@@ -549,6 +576,10 @@ export function getResumeHTML(data: ResumeData): string {
   table.data-table tr { break-inside: avoid-page; }
   table.data-table th { background: #e5e7eb; color: #111827; padding: 4px 8px; font-size: 11.5px; text-align: left; border: 1px solid #9ca3af; }
   table.data-table td { padding: 4px 8px; font-size: 11.5px; border: 1px solid #d1d5db; }
+
+  .doc-link { margin: 2px 0 6px; font-size: 11px; }
+  .doc-link a { color: #1d4ed8; text-decoration: none; }
+  .doc-link a:hover { text-decoration: underline; }
 
   .footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #d1d5db; font-size: 10px; color: #6b7280; text-align: center; }
 </style>
@@ -573,15 +604,14 @@ export function getResumeHTML(data: ResumeData): string {
 
   ${renderSection("Personal & Contact Details", personalBody)}
   ${renderSection("Education", educationBody)}
+  ${renderSection("Previous Experience", experienceBody)}
   ${renderSection("Teaching Load", teachingLoadBody)}
-  ${renderSection("Professional Experience", experienceBody)}
   ${renderSection("Research Publications", publicationsBody)}
   ${renderSection("Projects, Grants & Consultancy", grantsBody)}
   ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
   ${renderSection("Certifications & Professional Memberships", certificationsBody)}
   ${renderSection("Other Information", otherInfoBody)}
   ${renderSection("Financial Standing", financialBody)}
-  ${renderSection("Tenure & Load", tenureLoadBody)}
 
   <div class="footer">Generated on ${esc(formatDate(new Date()))} — Confidential, for internal institutional use only.</div>
 </div>

@@ -7,8 +7,16 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
 
-const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF"];
-const HOD_ROLES: UserRole[] = ["PANEL_MEMBER"];
+const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+// HOD is included so a main HOD can create a Sub-HOD login (see
+// hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
+// posts role: "HOD" with the not-yet-created sub-department's name as
+// `department` — the sub-department itself, and this account's actual scope,
+// only becomes real once POST /api/college/departments links them via
+// hodUid, which is where the "only within your own department" check lives).
+const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD"];
+// One holder per role per college — same rule as administration/college-staff route.
+const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
 
 export async function GET(request: Request) {
   try {
@@ -120,6 +128,20 @@ export async function POST(request: Request) {
 
     const collegeId = session.collegeId;
     const db = getAdminDb();
+
+    // Enforce one holder per role per college for Office/Placement Dept/Library/Exam Cell
+    if (COLLEGE_SINGLETON_ROLES.includes(role)) {
+      const existingSnap = await db
+        .collection("colleges").doc(collegeId).collection("users")
+        .where("role", "==", role).limit(1).get();
+      if (!existingSnap.empty) {
+        const holder = existingSnap.docs[0].data() as { name?: string };
+        return NextResponse.json(
+          { error: `${role} is already assigned to ${holder.name ?? "another user"} for this college. Only one person can hold this role.` },
+          { status: 409 }
+        );
+      }
+    }
 
     // For HOD: auto-assign their department if not provided
     let resolvedDepartment = department ?? "";

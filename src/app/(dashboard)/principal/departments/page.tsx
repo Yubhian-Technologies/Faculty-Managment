@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle2, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,10 +56,16 @@ export default function DepartmentsPage() {
         title="Departments"
         description="Manage college departments and assign Heads of Department"
         actions={
-          <Button onClick={() => router.push("/principal/departments/new")}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Department
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => router.push("/principal/departments/import")}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+            <Button onClick={() => router.push("/principal/departments/new")}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Department
+            </Button>
+          </>
         }
       />
 
@@ -113,6 +119,11 @@ export default function DepartmentsPage() {
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground mt-1.5">No years assigned yet</p>
+                    )}
+                    {dept.secondaryDepartments && dept.secondaryDepartments.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Cross-listed with <span className="text-foreground">{dept.secondaryDepartments.join(", ")}</span>
+                      </p>
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">

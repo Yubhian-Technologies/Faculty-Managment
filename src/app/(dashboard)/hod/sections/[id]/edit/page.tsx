@@ -12,10 +12,8 @@ import { toast } from "@/hooks/useToast";
 import type { Course, Section, Subject, TeachingAssignment } from "@/types";
 
 type SectionRow = Section & { id: string };
-type FacultyOption = { id: string; name: string; designation: string };
+type FacultyOption = { id: string; name: string; designation: string; department?: string; accessLevel?: "primary" | "secondary" };
 type SubjectRow = Subject & { id: string };
-
-const STUDENT_FACULTY_RATIO = 15;
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -27,13 +25,12 @@ type SectionForm = {
   name: string;
   year: string;
   batch: string;
-  studentCount: number | "";
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
 
 const EMPTY_FORM: SectionForm = {
-  courseId: "", name: "", year: "", batch: "", studentCount: "", facultyInchargeUid: "", facultyInchargeName: "",
+  courseId: "", name: "", year: "", batch: "", facultyInchargeUid: "", facultyInchargeName: "",
 };
 
 export default function EditSectionPage() {
@@ -47,6 +44,7 @@ export default function EditSectionPage() {
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
   const [sectionName, setSectionName] = useState("");
+  const [enrolledCount, setEnrolledCount] = useState(0);
 
   // Subjects & faculty (per-subject teaching assignments for this section)
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
@@ -73,8 +71,10 @@ export default function EditSectionPage() {
 
     fetch("/api/college/faculty?status=ACTIVE")
       .then((r) => r.json())
-      .then((d: { faculty?: { id: string; name: string; designation: string }[] }) => {
-        setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: f.name, designation: f.designation })));
+      .then((d: { faculty?: FacultyOption[] }) => {
+        setFacultyList((d.faculty ?? []).map((f) => ({
+          id: f.id, name: f.name, designation: f.designation, department: f.department, accessLevel: f.accessLevel,
+        })));
       })
       .catch(() => { /* non-critical */ });
 
@@ -88,12 +88,12 @@ export default function EditSectionPage() {
           return;
         }
         setSectionName(s.name);
+        setEnrolledCount(s.studentCount ?? 0);
         setForm({
           courseId: s.courseId ?? "",
           name: s.name,
           year: String(s.year),
           batch: s.batch,
-          studentCount: s.studentCount ?? "",
           facultyInchargeUid: s.facultyInchargeUid ?? "",
           facultyInchargeName: s.facultyInchargeName ?? "",
         });
@@ -200,7 +200,6 @@ export default function EditSectionPage() {
           name: form.name,
           year: Number(form.year),
           batch: form.batch,
-          studentCount: form.studentCount === "" ? 0 : Number(form.studentCount),
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
         }),
@@ -303,19 +302,10 @@ export default function EditSectionPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Student Intake</Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.studentCount}
-                onChange={(e) => setF({ studentCount: e.target.value === "" ? "" : Number(e.target.value) })}
-                placeholder="e.g. 60"
-              />
-              {form.studentCount !== "" && Number(form.studentCount) > 0 && (
-                <p className="text-xs text-blue-600 font-medium">
-                  Faculty required (1:{STUDENT_FACULTY_RATIO} ratio): {Math.ceil(Number(form.studentCount) / STUDENT_FACULTY_RATIO)}
-                </p>
-              )}
+              <Label>Enrolled Students</Label>
+              <p className="text-sm rounded-md border px-3 py-2 text-muted-foreground">
+                <strong className="text-foreground">{enrolledCount}</strong> student{enrolledCount !== 1 ? "s" : ""} currently enrolled
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -330,7 +320,9 @@ export default function EditSectionPage() {
                 <SelectContent>
                   <SelectItem value="none">— Not assigned —</SelectItem>
                   {facultyList.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -367,7 +359,9 @@ export default function EditSectionPage() {
                         <SelectContent>
                           <SelectItem value="none">— Unassigned —</SelectItem>
                           {facultyList.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

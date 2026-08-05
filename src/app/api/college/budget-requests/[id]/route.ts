@@ -8,6 +8,7 @@ import { budgetRequestTotal, normalizeBudgetRequest } from "@/types";
 import { resolveUserName } from "@/lib/budget/departmentScope";
 import { applySalaryStructurePricing } from "@/lib/budget/applySalaryStructurePricing";
 import { notify, notifyRole } from "@/lib/notify";
+import { emitWorkflowNotification, resolveWorkflowNotifications } from "@/lib/notifications/workflowNotifications";
 
 export async function GET(
   request: Request,
@@ -87,7 +88,7 @@ export async function PATCH(
       if (req.hodUid !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (req.status !== "RETURNED_TO_HOD") {
+      if (req.status !== "RETURNED_TO_HOD" && req.status !== "PENDING_SUBMISSION") {
         return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
       }
       const submittedNonRecurring = Array.isArray(body.nonRecurring) ? body.nonRecurring : [];
@@ -103,6 +104,8 @@ export async function PATCH(
       const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring, req.department);
 
       const hodName = await resolveUserName(db, session.collegeId, session.uid);
+      const isFirstSubmission = req.status === "PENDING_SUBMISSION";
+      const round = (req.history ?? []).length;
       const historyEntry = {
         action: "PENDING_PRINCIPAL_VERIFICATION" as const,
         byRole: "HOD" as const,
@@ -118,20 +121,30 @@ export async function PATCH(
         nonRecurring,
         recurring,
         status: "PENDING_PRINCIPAL_VERIFICATION",
+        submittedAt: now,
         history: [...(req.history ?? []), historyEntry],
         updatedAt: now,
       });
 
+      // Clears whichever actionable "your turn" popup the HOD had pending —
+      // either "department budget due" (from Budget Cycle approval) or
+      // "returned to you, please fix" (from a Principal/Finance return).
+      await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
+
       const principalsSnap = await db
         .collection("colleges").doc(session.collegeId)
-        .collection("users").where("role", "==", "PRINCIPAL").get();
+        .collection("users").where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"]).get();
       for (const p of principalsSnap.docs) {
-        await notify(
-          db, session.collegeId, p.id,
-          "BUDGET_REQUEST_SUBMITTED", "Budget Request Resubmitted",
-          `${hodName} resubmitted the budget request "${req.title}" for ${req.department}.`,
-          "/principal/budget"
-        );
+        await emitWorkflowNotification({
+          db, collegeId: session.collegeId, toUid: p.id,
+          type: "BUDGET_REQUEST_SUBMITTED",
+          title: isFirstSubmission ? "Department Budget Submitted" : "Budget Request Resubmitted",
+          message: `${hodName} ${isFirstSubmission ? "submitted" : "resubmitted"} the budget request "${req.title}" for ${req.department}.`,
+          link: "/principal/budget",
+          entityType: "budgetRequest",
+          entityId: id,
+          dedupeKey: `budget-request-review:${id}:${p.id}:${round}`,
+        });
       }
 
       return NextResponse.json({ ok: true });
@@ -200,6 +213,11 @@ export async function PATCH(
         updatedAt: now,
       });
 
+      // Clears the "returned to you, please fix" popup this Principal/VP had
+      // pending. Management itself works pull-style (see comment in the POST
+      // handler) so there's no next actionable notification to emit here.
+      await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
+
       return NextResponse.json({ ok: true });
     }
 
@@ -224,6 +242,7 @@ export async function PATCH(
         return NextResponse.json({ error: "action must be VERIFY, REJECT, or RETURN" }, { status: 400 });
       }
 
+      const round = (req.history ?? []).length;
       const historyEntry = {
         action: nextStatus,
         byRole: session.role as "PRINCIPAL" | "VICE_PRINCIPAL",
@@ -251,24 +270,45 @@ export async function PATCH(
         timestamp: now,
       });
 
+      // The Principal/VP has now acted — clears their own "awaiting your
+      // review" popup regardless of which of the three outcomes this was.
+      await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
+
       if (nextStatus === "L1_FROZEN") {
         // FINANCE is a GLOBAL role (systemUsers), not in the college users subcollection.
         const financeSnap = await db
           .collection("systemUsers").where("role", "==", "FINANCE").get();
         for (const f of financeSnap.docs) {
-          await notify(
-            db, session.collegeId, f.id,
-            "BUDGET_REQUEST_VERIFIED", "Budget Request Ready for Review",
-            `${req.title} (${req.department}) was verified by ${principalName} and is ready for Finance review.`,
-            "/finance/budget-approvals"
-          );
+          await emitWorkflowNotification({
+            db, collegeId: session.collegeId, toUid: f.id,
+            type: "BUDGET_REQUEST_VERIFIED",
+            title: "Budget Request Ready for Review",
+            message: `${req.title} (${req.department}) was verified by ${principalName} and is ready for Finance review.`,
+            link: "/finance/budget-approvals",
+            entityType: "budgetRequest",
+            entityId: id,
+            dedupeKey: `budget-request-finance-review:${id}:${f.id}:${round}`,
+          });
         }
+      } else if (nextStatus === "RETURNED_TO_HOD") {
+        // Actionable — the HOD needs to fix and resubmit (resolved above,
+        // in the HOD-resubmit branch, when that happens).
+        await emitWorkflowNotification({
+          db, collegeId: session.collegeId, toUid: req.hodUid,
+          type: "BUDGET_REQUEST_RETURNED",
+          title: "Budget Request Returned",
+          message: `${principalName} returned your budget request "${req.title}".${body.remarks ? " Remarks: " + body.remarks : ""}`,
+          link: "/hod/budget",
+          entityType: "budgetRequest",
+          entityId: id,
+          dedupeKey: `budget-request-fix:${id}:${req.hodUid}:${round}`,
+        });
       } else {
+        // PRINCIPAL_REJECTED — terminal, nothing further for the HOD to do.
         await notify(
           db, session.collegeId, req.hodUid,
-          nextStatus === "PRINCIPAL_REJECTED" ? "BUDGET_REQUEST_REJECTED" : "BUDGET_REQUEST_RETURNED",
-          nextStatus === "PRINCIPAL_REJECTED" ? "Budget Request Rejected" : "Budget Request Returned",
-          `${principalName} ${nextStatus === "PRINCIPAL_REJECTED" ? "rejected" : "returned"} your budget request "${req.title}".${body.remarks ? " Remarks: " + body.remarks : ""}`,
+          "BUDGET_REQUEST_REJECTED", "Budget Request Rejected",
+          `${principalName} rejected your budget request "${req.title}".${body.remarks ? " Remarks: " + body.remarks : ""}`,
           "/hod/budget"
         );
       }
@@ -468,13 +508,34 @@ export async function PATCH(
         });
       });
 
-      await notify(
-        db, session.collegeId, req.hodUid,
-        nextStatus === "FINANCE_APPROVED" ? "BUDGET_REQUEST_APPROVED" : nextStatus === "FINANCE_REJECTED" ? "BUDGET_REQUEST_REJECTED" : "BUDGET_REQUEST_RETURNED",
-        nextStatus === "FINANCE_APPROVED" ? "Budget Request Approved" : nextStatus === "FINANCE_REJECTED" ? "Budget Request Rejected" : "Budget Request Returned",
-        `Finance ${nextStatus === "FINANCE_APPROVED" ? "approved" : nextStatus === "FINANCE_REJECTED" ? "rejected" : "returned"} your budget request "${req.title}".${body.remarks ? " Remarks: " + body.remarks : ""}`,
-        req.isEmergency ? "/principal/budget" : "/hod/budget"
-      );
+      // Finance has now acted — clears their own "ready for review" popup
+      // regardless of which of the three outcomes this was.
+      await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "budgetRequest", entityId: id });
+
+      const recipientLink = req.isEmergency ? "/principal/budget" : "/hod/budget";
+      if (nextStatus === "RETURNED_TO_HOD" || nextStatus === "RETURNED_TO_PRINCIPAL") {
+        // Actionable — the owner needs to fix and resubmit (resolved in the
+        // HOD/emergency-owner resubmit branches above, when that happens).
+        await emitWorkflowNotification({
+          db, collegeId: session.collegeId, toUid: req.hodUid,
+          type: "BUDGET_REQUEST_RETURNED",
+          title: "Budget Request Returned",
+          message: `Finance returned your budget request "${req.title}".${body.remarks ? " Remarks: " + body.remarks : ""}`,
+          link: recipientLink,
+          entityType: "budgetRequest",
+          entityId: id,
+          dedupeKey: `budget-request-fix:${id}:${req.hodUid}:${(req.history ?? []).length}`,
+        });
+      } else {
+        // FINANCE_APPROVED / FINANCE_REJECTED — terminal, nothing further to do.
+        await notify(
+          db, session.collegeId, req.hodUid,
+          nextStatus === "FINANCE_APPROVED" ? "BUDGET_REQUEST_APPROVED" : "BUDGET_REQUEST_REJECTED",
+          nextStatus === "FINANCE_APPROVED" ? "Budget Request Approved" : "Budget Request Rejected",
+          `Finance ${nextStatus === "FINANCE_APPROVED" ? "approved" : "rejected"} your budget request "${req.title}".${body.remarks ? " Remarks: " + body.remarks : ""}`,
+          recipientLink
+        );
+      }
 
       if (purchaseClearanceId) {
         await notifyRole(

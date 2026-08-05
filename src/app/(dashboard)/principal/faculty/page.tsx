@@ -63,6 +63,9 @@ export default function PrincipalFacultyDepartmentsPage() {
                   <div>
                     <p className="font-medium">{d.name}</p>
                     <p className="text-xs text-muted-foreground">{d.code}</p>
+                    <p className={`text-xs mt-0.5 ${d.hodName ? "text-muted-foreground" : "text-orange-500"}`}>
+                      {d.hodName ? `HOD: ${d.hodName}` : "No HOD assigned"}
+                    </p>
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />

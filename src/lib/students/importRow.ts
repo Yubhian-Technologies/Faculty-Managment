@@ -13,6 +13,11 @@ export interface StudentImportRow {
   dateOfBirth?: string;
   guardianContact?: string;
   email?: string;
+  // View-only department (e.g. a 1st-year's registered core branch while
+  // primarily enrolled under Basic Science) — only meaningfully populated by
+  // the multi-department bulk import (students/import-excel); validated
+  // there against real department names before reaching this helper.
+  secondaryDepartment?: string;
 }
 
 export function parseStudentStatus(v: string | undefined): StudentStatus {
@@ -36,6 +41,7 @@ export function buildStudentDoc(
     ...(row.dateOfBirth?.trim() ? { dateOfBirth: row.dateOfBirth.trim() } : {}),
     ...(row.guardianContact?.trim() ? { guardianContact: row.guardianContact.trim() } : {}),
     ...(row.email?.trim() ? { email: row.email.trim().toLowerCase() } : {}),
+    ...(row.secondaryDepartment?.trim() ? { secondaryDepartment: row.secondaryDepartment.trim() } : {}),
     createdAt: now,
     updatedAt: now,
   };

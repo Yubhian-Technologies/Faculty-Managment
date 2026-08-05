@@ -1,17 +1,21 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, notFound } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { TopBar } from "@/components/layout/TopBar";
+import { isPathHidden } from "@/components/layout/navConfig";
 import { useAuthStore } from "@/store/authStore";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
+  const { hiddenModules, hiddenItems, loading: navLoading } = useNavVisibility();
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -19,7 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user, isLoading, router]);
 
-  if (isLoading) {
+  if (isLoading || navLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-full max-w-4xl px-4">
@@ -31,10 +35,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
+  if (isPathHidden(pathname, user.role, hiddenModules, hiddenItems)) {
+    notFound();
+  }
+
   return (
     <div className="min-h-screen bg-muted/30">
-      <Sidebar />
-      <MobileDrawer />
+      <Sidebar hiddenModules={hiddenModules} hiddenItems={hiddenItems} />
+      <MobileDrawer hiddenModules={hiddenModules} hiddenItems={hiddenItems} />
       <div className="md:ml-64 flex flex-col min-h-screen">
         <TopBar />
         <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 max-w-7xl mx-auto w-full">
@@ -45,7 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span>Developed by Yubhian Technologies LLP</span>
         </footer>
       </div>
-      <BottomNav />
+      <BottomNav hiddenModules={hiddenModules} hiddenItems={hiddenItems} />
     </div>
   );
 }

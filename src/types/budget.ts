@@ -4,6 +4,7 @@ import type { Timestamp } from "firebase/firestore";
 // Cross-role type: lives outside finance.ts (which stays Finance-internal only).
 
 export type BudgetRequestStatus =
+  | "PENDING_SUBMISSION"             // Auto-created by a Budget Cycle approval; HOD hasn't filled it in yet
   | "PENDING_PRINCIPAL_VERIFICATION" // HOD submitted, awaiting Principal
   | "RETURNED_TO_HOD"                // Principal or Finance sent it back; HOD can edit + resubmit
   | "L1_FROZEN"                      // Principal verified & locked; queued for Finance
@@ -16,6 +17,7 @@ export type BudgetRequestStatus =
   | "MANAGEMENT_REJECTED";           // terminal
 
 export const BUDGET_REQUEST_STATUS_LABELS: Record<BudgetRequestStatus, string> = {
+  PENDING_SUBMISSION: "Pending Submission",
   PENDING_PRINCIPAL_VERIFICATION: "Pending Principal Verification",
   RETURNED_TO_HOD: "Returned to HOD",
   L1_FROZEN: "Level 1 Freeze",
@@ -55,10 +57,23 @@ export interface BudgetRequestItem {
   customFields?: BudgetExtraFieldDef[]; // ad-hoc fields the HOD added for this item only, via "+ Add Field"
 }
 
+// HOD-set priority per category group — HOD dashboard only (see
+// BudgetCategorySection's showPriority prop). Optional so existing stored
+// groups without it still normalize/render fine everywhere else.
+export type BudgetPriority = "NORMAL" | "PRIORITY_1" | "PRIORITY_2" | "PRIORITY_3";
+
+export const BUDGET_PRIORITY_LABELS: Record<BudgetPriority, string> = {
+  NORMAL: "Normal Priority",
+  PRIORITY_1: "Priority 1",
+  PRIORITY_2: "Priority 2",
+  PRIORITY_3: "Priority 3",
+};
+
 export interface BudgetCategoryGroup {
   id: string;
   category: string;
   items: BudgetRequestItem[];
+  priority?: BudgetPriority;
 }
 
 export interface BudgetApprovalAction {
@@ -88,6 +103,10 @@ export interface BudgetRequest {
   status: BudgetRequestStatus;
   history: BudgetApprovalAction[];
   financeBudgetId?: string;
+  // Set when this request was auto-created by a Budget Cycle approval
+  // (see BudgetCycle below) rather than started ad hoc by the HOD.
+  budgetCycleId?: string;
+  submittedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   // ─── Emergency request (Principal/VP → Management → Finance) ─────────────
@@ -101,6 +120,59 @@ export interface BudgetRequest {
   reportUploadedBy?: string;
   reportUploadedByName?: string;
   reportUploadedAt?: Timestamp;
+}
+
+// ─── Budget Cycle (Finance → Principal → auto-seeded department budgets) ──────
+// Finance releases an institution-wide budget cycle instead of creating a
+// single department's budget directly. Once the Principal approves it, one
+// BudgetRequest per active department is auto-created with status
+// PENDING_SUBMISSION (see src/app/api/college/budget-cycles/[id]/route.ts) —
+// there is no separate "DepartmentBudget" table; BudgetRequest already is one.
+
+export type BudgetCycleStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "RETURNED";
+
+export const BUDGET_CYCLE_STATUS_LABELS: Record<BudgetCycleStatus, string> = {
+  PENDING_APPROVAL: "Pending Principal Approval",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  RETURNED: "Returned for Correction",
+};
+
+export type BudgetType = "ANNUAL" | "REVISED" | "EMERGENCY";
+
+export const BUDGET_TYPE_LABELS: Record<BudgetType, string> = {
+  ANNUAL: "Annual",
+  REVISED: "Revised",
+  EMERGENCY: "Emergency",
+};
+
+export interface BudgetCycle {
+  id: string;
+  collegeId: string;
+  title: string;
+  financialYear: string;
+  budgetType: BudgetType;
+  releaseDate: Timestamp;
+  submissionStartDate: string; // ISO date
+  submissionDeadline: string; // ISO date
+  description?: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  allowLateSubmission: boolean;
+  status: BudgetCycleStatus;
+  createdBy: string;
+  createdByName: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: Timestamp;
+  remarks?: string; // set on REJECT/RETURN
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export function daysRemaining(deadline: string): number {
+  const ms = new Date(deadline).setHours(23, 59, 59, 999) - Date.now();
+  return Math.ceil(ms / (24 * 60 * 60 * 1000));
 }
 
 export function categoryGroupTotal(group: BudgetCategoryGroup): number {
@@ -158,7 +230,7 @@ export const CATEGORY_FIELD_CONFIG: Record<string, BudgetCategoryFieldConfig> = 
   "Furniture": { extraFields: [QUANTITY_FIELD, { key: "justification", label: "Justification", type: "TEXT" }] },
   "Printing & Stationery": { extraFields: [QUANTITY_FIELD] },
   "Guest Faculty/Guest Lectures": { extraFields: [{ ...QUANTITY_FIELD, label: "Number of Lectures" }] },
-  "Inhouse R&D Activities": { extraFields: [QUANTITY_FIELD] },
+  "Inhouse R&D Activities": { extraFields: [] },
   "Workshops/Seminars/Paper Presentations": { extraFields: [] },
   "Department Forum's Activities": { extraFields: [] },
   "Equipment Maintenance & Consumables": { extraFields: [] },

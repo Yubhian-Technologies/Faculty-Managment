@@ -46,6 +46,7 @@ export async function PATCH(
     const body = (await request.json()) as Partial<{
       name: string;
       employeeId: string;
+      apaarFacultyId: string;
       email: string;
       phone: string;
       collegeEmail: string;
@@ -59,8 +60,10 @@ export async function PATCH(
       industryExperience: number;
       researchExperience: number;
       joiningDate: string;
+      dateOfJoiningDepartment: string;
       dateOfBirth: string;
       employmentType: EmploymentType;
+      aicteEligible: boolean;
       status: FacultyStatus;
       gender: string;
       legalName: string;
@@ -88,6 +91,9 @@ export async function PATCH(
       userUid: string;
       academicProfile: Record<string, unknown>;
       profilePhotoUrl: string;
+      joiningLetterUrl: string;
+      appointmentLetterUrl: string;
+      resumeUrl: string;
     }>;
 
     const db = getAdminDb();
@@ -136,7 +142,7 @@ export async function PATCH(
     }
 
     const stringFields = [
-      "name", "email", "phone", "collegeEmail", "designation", "qualification",
+      "name", "email", "phone", "collegeEmail", "apaarFacultyId", "designation", "qualification",
       "specialization", "employmentType", "status", "gender", "legalName",
       "fatherName", "motherName", "religion", "caste", "aadharNo", "passportNumber",
       "emergencyContactName", "emergencyContactPhone", "ratificationStatus", "userUid",
@@ -161,6 +167,7 @@ export async function PATCH(
 
     // Boolean
     if (body.hasPHD !== undefined) updates.hasPHD = body.hasPHD;
+    if (body.aicteEligible !== undefined) updates.aicteEligible = body.aicteEligible;
     if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
 
     // Academic profile (Modules 1-5)
@@ -168,10 +175,21 @@ export async function PATCH(
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
+    if (body.dateOfJoiningDepartment) updates.dateOfJoiningDepartment = new Date(body.dateOfJoiningDepartment);
     if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
     if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
+
+    // Letter/resume URL fields — validate they are Firebase Storage URLs or empty (clear)
+    for (const field of ["joiningLetterUrl", "appointmentLetterUrl", "resumeUrl"] as const) {
+      if (body[field] !== undefined) {
+        if (body[field] !== "" && !body[field].startsWith("https://firebasestorage.googleapis.com/")) {
+          return NextResponse.json({ error: `Invalid ${field}` }, { status: 400 });
+        }
+        updates[field] = body[field];
+      }
+    }
 
     await ref.update(updates);
 

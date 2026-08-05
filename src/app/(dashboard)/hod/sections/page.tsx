@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Upload } from "lucide-react";
+import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Upload, Eye, Network } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import type { Section, Course } from "@/types";
+import { useAuthStore } from "@/store/authStore";
+import type { SectionListItem, Course, Department } from "@/types";
 
-type SectionRow = Section & { id: string };
+type SectionRow = SectionListItem;
 
 const YEAR_PALETTE = [
   "bg-purple-50 border-purple-200 text-purple-800",
@@ -39,11 +42,14 @@ const STUDENT_FACULTY_RATIO = 15;
 
 export default function HODSectionsPage() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeCourseId, setActiveCourseId] = useState<string>("all");
   const [activeYear, setActiveYear] = useState<number | "all">("all");
+  const [reassigningId, setReassigningId] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<SectionRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -51,12 +57,14 @@ export default function HODSectionsPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [sectionsRes, coursesRes] = await Promise.all([
+      const [sectionsRes, coursesRes, deptsRes] = await Promise.all([
         fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: SectionRow[] }>),
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
+        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
       ]);
       setSections(sectionsRes.sections ?? []);
       setCourses((coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+      setDepartments(deptsRes.departments ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load sections" });
     } finally {
@@ -65,6 +73,40 @@ export default function HODSectionsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Own department + its sub-departments — the set a main HOD can reassign an
+  // existing section between (handing it to a Sub-HOD to run, or pulling it
+  // back). Empty for a Sub-HOD (their department has no children of its own),
+  // so the picker below simply doesn't render for them.
+  const ownDept = useMemo(() => departments.find((d) => d.name === user?.department) ?? null, [departments, user]);
+  const deptOptions = useMemo(
+    () => (ownDept ? [ownDept, ...departments.filter((d) => d.parentDepartmentId === ownDept.id)] : []),
+    [departments, ownDept]
+  );
+
+  async function handleReassign(section: SectionRow, departmentId: string) {
+    if (departmentId === deptOptions.find((d) => d.name === section.department)?.id) return;
+    setReassigningId(section.id);
+    try {
+      const res = await fetch(`/api/college/sections/${section.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departmentId }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to reassign section" });
+        return;
+      }
+      const newDeptName = deptOptions.find((d) => d.id === departmentId)?.name ?? "";
+      toast({ variant: "success", title: `Section ${section.name} moved to ${newDeptName}` });
+      void load();
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setReassigningId(null);
+    }
+  }
 
   function openCreate() {
     router.push(activeCourseId !== "all" ? `/hod/sections/new?courseId=${activeCourseId}` : "/hod/sections/new");
@@ -250,27 +292,71 @@ export default function HODSectionsPage() {
                     >
                       {/* Header row */}
                       <div className="flex items-start justify-between">
-                        <div>
-                          <p className="text-2xl font-bold tracking-tight">Section {sec.name}</p>
+                        <Link href={`/hod/sections/${sec.id}`} className="hover:underline">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-2xl font-bold tracking-tight">Section {sec.name}</p>
+                            {sec.secondaryDepartments && sec.secondaryDepartments.length > 0 && (
+                              <Badge variant="outline" className="text-xs">{sec.secondaryDepartments.join(", ")}</Badge>
+                            )}
+                            {sec.accessLevel === "secondary" && (
+                              <Badge variant="secondary" className="text-xs">View only</Badge>
+                            )}
+                          </div>
                           <p className="text-sm opacity-70 mt-0.5">{sec.batch}</p>
-                        </div>
+                        </Link>
                         <div className="flex gap-1">
                           <button
-                            onClick={() => router.push(`/hod/sections/${sec.id}/edit`)}
+                            onClick={() => router.push(`/hod/sections/${sec.id}`)}
                             className="p-1.5 rounded-md hover:bg-black/10 transition-colors"
-                            title="Edit section"
+                            title="View students"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <Eye className="h-3.5 w-3.5" />
                           </button>
-                          <button
-                            onClick={() => setDeleteTarget(sec)}
-                            className="p-1.5 rounded-md hover:bg-red-200/60 transition-colors text-red-700"
-                            title="Delete section"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {sec.accessLevel !== "secondary" && (
+                            <>
+                              <button
+                                onClick={() => router.push(`/hod/sections/${sec.id}/edit`)}
+                                className="p-1.5 rounded-md hover:bg-black/10 transition-colors"
+                                title="Edit section"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setDeleteTarget(sec)}
+                                className="p-1.5 rounded-md hover:bg-red-200/60 transition-colors text-red-700"
+                                title="Delete section"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
+
+                      {/* Department assignment — only rendered for a main HOD whose
+                          department has sub-departments; lets them hand this section
+                          to a Sub-HOD (or pull it back) without recreating it. */}
+                      {deptOptions.length > 1 && sec.accessLevel !== "secondary" && (
+                        <div className="flex items-center gap-2">
+                          <Network className="h-4 w-4 opacity-50 shrink-0" />
+                          <Select
+                            value={deptOptions.find((d) => d.name === sec.department)?.id ?? ""}
+                            onValueChange={(v) => void handleReassign(sec, v)}
+                            disabled={reassigningId === sec.id}
+                          >
+                            <SelectTrigger className="h-8 text-sm bg-background/60">
+                              <SelectValue placeholder="Department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {deptOptions.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  {d.id === ownDept?.id ? `${d.name} (yours)` : d.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
 
                       {/* Faculty incharge */}
                       <div className="flex items-center gap-2">
