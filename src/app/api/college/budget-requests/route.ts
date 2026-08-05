@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { normalizeBudgetRequest, type BudgetCategoryGroup, type BudgetRequest } from "@/types";
 import { resolveUserProfile, scopeBudgetQueryByDepartment } from "@/lib/budget/departmentScope";
 import { applySalaryStructurePricing } from "@/lib/budget/applySalaryStructurePricing";
+import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 
 function toMillis(value: unknown): number {
   if (value && typeof (value as { toMillis?: () => number }).toMillis === "function") {
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
     const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "FINANCE", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
+    const budgetCycleId = searchParams.get("budgetCycleId");
 
     const db = getAdminDb();
     const baseQuery = db.collection("colleges").doc(session.collegeId).collection("budgetRequests");
@@ -29,6 +31,9 @@ export async function GET(request: Request) {
 
     if (status) {
       requests = requests.filter((r) => (r as { status?: string }).status === status);
+    }
+    if (budgetCycleId) {
+      requests = requests.filter((r) => r.budgetCycleId === budgetCycleId);
     }
 
     // In-memory sort (avoids a composite index for where(department) + orderBy(createdAt))
@@ -205,24 +210,27 @@ export async function POST(request: Request) {
       .collection("colleges")
       .doc(session.collegeId)
       .collection("users")
-      .where("role", "==", "PRINCIPAL")
+      .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
       .get();
 
-    const batch = db.batch();
+    // Actionable — the Principal/VP is the next responsible party until they
+    // verify/reject/return it (resolved in budget-requests/[id]/route.ts on
+    // that action). dedupeKey includes the history length as a "round"
+    // counter: 0 at first submission, so a later resubmit (history grows)
+    // gets a fresh key and pops up again instead of being silently
+    // deduped against the already-resolved first-round notification.
     for (const p of principalsSnap.docs) {
-      const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-      batch.set(notifRef, {
-        collegeId: session.collegeId,
-        toUid: p.id,
+      await emitWorkflowNotification({
+        db, collegeId: session.collegeId, toUid: p.id,
         type: "BUDGET_REQUEST_SUBMITTED",
         title: "New Budget Request",
         message: `${hodName} submitted a budget request "${title}" for ${department}.`,
         link: "/principal/budget",
-        read: false,
-        createdAt: now,
+        entityType: "budgetRequest",
+        entityId: ref.id,
+        dedupeKey: `budget-request-review:${ref.id}:${p.id}:0`,
       });
     }
-    await batch.commit();
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

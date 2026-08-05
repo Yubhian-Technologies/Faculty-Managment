@@ -2,20 +2,24 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { collegeFetch } from "@/lib/api/collegeFetch";
 import type { AppNotification } from "@/types";
 
 const POLL_INTERVAL = 30_000; // 30 seconds
 
 export function useNotifications() {
   const user = useAuthStore((s) => s.user);
+  const selectedCollegeId = useAuthStore((s) => s.selectedCollegeId);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!user?.uid || !user?.collegeId) { setLoading(false); return; }
+    // College-scoped roles carry session.collegeId; GLOBAL roles (FINANCE,
+    // PURCHASE_DEPT, MANAGEMENT) need a college picked via CollegeSwitcher.
+    if (!user?.uid || (!user?.collegeId && !selectedCollegeId)) { setLoading(false); return; }
     try {
-      const res = await fetch("/api/college/notifications");
+      const res = await collegeFetch("/api/college/notifications");
       if (!res.ok) return;
       const data = await res.json() as { notifications: AppNotification[] };
       const notifs = data.notifications ?? [];
@@ -26,7 +30,7 @@ export function useNotifications() {
     } finally {
       setLoading(false);
     }
-  }, [user?.uid, user?.collegeId]);
+  }, [user?.uid, user?.collegeId, selectedCollegeId]);
 
   useEffect(() => {
     void load();
@@ -39,7 +43,7 @@ export function useNotifications() {
       prev.map((n) => n.id === notificationId ? { ...n, read: true } : n)
     );
     setUnreadCount((c) => Math.max(0, c - 1));
-    await fetch("/api/college/notifications", {
+    await collegeFetch("/api/college/notifications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: notificationId }),
@@ -49,7 +53,7 @@ export function useNotifications() {
   const markAllRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setUnreadCount(0);
-    await fetch("/api/college/notifications", {
+    await collegeFetch("/api/college/notifications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ markAll: true }),

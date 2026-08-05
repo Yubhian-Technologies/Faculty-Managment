@@ -63,6 +63,19 @@ export interface TeachingAssignment {
   assignedByName: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // Course/section-scoped rows only — every such row (current or past) carries
+  // which academic year/semester it belongs to, for the resume/Teaching Load
+  // table. Named distinctly from `academicYear`/`semester` above (which belong to
+  // the independent semester-scoped shape this collection also stores, and are
+  // typed differently — semester there is a number) to keep the two shapes
+  // unambiguous. `isPast` additionally marks a historical assignment (no weekly
+  // schedule/timetable slots), which is the only thing that unlocks `passPercentage`.
+  isPast?: boolean;
+  assignmentAcademicYear?: string;
+  assignmentSemester?: string;
+  passPercentage?: number;
+  studentFeedback?: number;   // average student feedback rating for this teaching period, as a %
 }
 
 // ─── Timetable Slot ───────────────────────────────────────────────────────────

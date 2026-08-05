@@ -4,11 +4,13 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildStudentDoc, type StudentImportRow } from "@/lib/students/importRow";
+import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
+import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Section } from "@/types";
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const body = (await request.json()) as { sectionId: string; records: StudentImportRow[] };
 
     if (!body.sectionId) {
@@ -57,8 +59,15 @@ export async function POST(request: Request) {
     const created: string[] = [];
     const failed: { row: number; rollNumber: string; error: string }[] = [];
 
-    const batch = db.batch();
-    let batchCount = 0;
+    const batch = new ChunkedBatch(db);
+
+    // This route's upload template has no per-row secondary-department column
+    // (unlike students/import-excel) — the section itself is the only source.
+    // Only auto-fill when the section cross-lists to exactly one department;
+    // when it splits across several (e.g. a shared first-year section feeding
+    // both CSE and ECE), there's no single default to apply, so leave it
+    // unset — use students/import-excel to set it per row instead.
+    const secondaryDepartment = section.secondaryDepartments?.length === 1 ? section.secondaryDepartments[0] : "";
 
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
@@ -74,12 +83,11 @@ export async function POST(request: Request) {
       }
 
       const docRef = studentsColl.doc();
-      batch.set(docRef, buildStudentDoc(section, row, now));
+      batch.set(docRef, buildStudentDoc(section, { ...row, secondaryDepartment: row.secondaryDepartment?.trim() || secondaryDepartment || undefined }, now));
+      const history = departmentHistoryEntry(db, session.collegeId, docRef.id, section.department, section.name, section.year, now);
+      batch.set(history.ref, history.data);
       existingRolls.add(roll);
       created.push(roll);
-      batchCount++;
-
-      if (batchCount === 499) break;
     }
 
     await batch.commit();

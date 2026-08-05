@@ -10,9 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
+import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
+import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import {
@@ -34,6 +37,7 @@ interface EmploymentForm {
   name: string;
   phone: string;
   collegeEmail: string;
+  apaarFacultyId: string;
   designation: Designation;
   qualification: string;
   specialization: string;
@@ -45,15 +49,17 @@ interface EmploymentForm {
   researchExperience: number;
   hasPHD: boolean;
   employmentType: EmploymentType;
+  aicteEligible: boolean;
   status: FacultyStatus;
   joiningDate: string;
+  dateOfJoiningDepartment: string;
 }
 
 const EMPTY_FORM: EmploymentForm = {
-  name: "", phone: "", collegeEmail: "", designation: "ASSISTANT_PROFESSOR", qualification: "",
+  name: "", phone: "", collegeEmail: "", apaarFacultyId: "", designation: "ASSISTANT_PROFESSOR", qualification: "",
   specialization: "", experienceYears: 0, internalExperience: 0, externalExperience: 0,
   inCampusExperience: 0, industryExperience: 0, researchExperience: 0, hasPHD: false,
-  employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
+  employmentType: "PERMANENT", aicteEligible: false, status: "ACTIVE", joiningDate: "", dateOfJoiningDepartment: "",
 };
 
 const EXPERIENCE_FIELDS: [keyof EmploymentForm, string][] = [
@@ -74,10 +80,14 @@ export default function EditFacultyPage() {
   const [saving, setSaving] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
+  const [department, setDepartment] = useState("");
   const [form, setForm] = useState<EmploymentForm>(EMPTY_FORM);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
+  const [joiningLetterUrl, setJoiningLetterUrl] = useState<string>("");
+  const [appointmentLetterUrl, setAppointmentLetterUrl] = useState<string>("");
+  const [resumeUrl, setResumeUrl] = useState<string>("");
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [teachingLoaded, setTeachingLoaded] = useState(false);
@@ -95,10 +105,12 @@ export default function EditFacultyPage() {
         const m = data.faculty;
         setEmployeeId((m.employeeId as string) ?? "");
         setEmail((m.email as string) ?? "");
+        setDepartment((m.department as string) ?? "");
         setForm({
           name: (m.name as string) ?? "",
           phone: (m.phone as string) ?? "",
           collegeEmail: (m.collegeEmail as string) ?? "",
+          apaarFacultyId: (m.apaarFacultyId as string) ?? "",
           designation: (m.designation as Designation) ?? "ASSISTANT_PROFESSOR",
           qualification: (m.qualification as string) ?? "",
           specialization: (m.specialization as string) ?? "",
@@ -110,8 +122,10 @@ export default function EditFacultyPage() {
           researchExperience: (m.researchExperience as number) ?? 0,
           hasPHD: (m.hasPHD as boolean) ?? false,
           employmentType: (m.employmentType as EmploymentType) ?? "PERMANENT",
+          aicteEligible: (m.aicteEligible as boolean) ?? false,
           status: (m.status as FacultyStatus) ?? "ACTIVE",
           joiningDate: toDateInputValue(m.joiningDate as never),
+          dateOfJoiningDepartment: toDateInputValue(m.dateOfJoiningDepartment as never),
         });
         setPersonalDetails({
           gender: (m.gender as string) ?? "",
@@ -141,6 +155,9 @@ export default function EditFacultyPage() {
         setAcademicProfile((m.academicProfile as Partial<FacultyProfileFields>) ?? {});
         setPendingPreference((m.pendingTeachingPreference as PendingTeachingPreference | undefined) ?? null);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
+        setJoiningLetterUrl((m.joiningLetterUrl as string) ?? "");
+        setAppointmentLetterUrl((m.appointmentLetterUrl as string) ?? "");
+        setResumeUrl((m.resumeUrl as string) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));
@@ -149,7 +166,7 @@ export default function EditFacultyPage() {
   useEffect(() => {
     fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(facultyId)}`)
       .then((r) => r.json() as Promise<{
-        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number }>;
+        assignments: Array<{ id: string; courseId: string; courseName: string; year: number; sectionId: string; sectionName: string; subjectId: string; subjectName: string; subjectCode: string; hoursPerWeek: number; isPast?: boolean; assignmentAcademicYear?: string; assignmentSemester?: string; passPercentage?: number; studentFeedback?: number }>;
         timetableSlots: Array<{ id: string; assignmentId: string; day: StagedTeachingRow["slots"][number]["day"]; periodNumber: number }>;
       }>)
       .then((d) => {
@@ -166,6 +183,11 @@ export default function EditFacultyPage() {
           subjectCode: a.subjectCode,
           hoursPerWeek: a.hoursPerWeek,
           subjectHoursPerWeek: a.hoursPerWeek,
+          isPast: a.isPast,
+          assignmentAcademicYear: a.assignmentAcademicYear,
+          assignmentSemester: a.assignmentSemester,
+          passPercentage: a.passPercentage,
+          studentFeedback: a.studentFeedback,
           slots: (d.timetableSlots ?? [])
             .filter((s) => s.assignmentId === a.id)
             .map((s) => ({ localId: s.id, id: s.id, day: s.day, periodNumber: s.periodNumber })),
@@ -234,6 +256,9 @@ export default function EditFacultyPage() {
           ...personalDetails,
           academicProfile,
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
+          joiningLetterUrl,
+          appointmentLetterUrl,
+          resumeUrl,
         }),
       });
       if (res.status === 409) {
@@ -260,161 +285,236 @@ export default function EditFacultyPage() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl">
+      <div>
         <PageHeader title="Edit Faculty Member" description="Loading…" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <PageHeader title="Edit Faculty Member" description={`Employee ID: ${employeeId} · ${email}`} />
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Faculty Details</CardTitle></CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
-              <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
-                <Label>Profile Photo</Label>
-                <AvatarUploadField name={form.name || "?"} photoUrl={photoUrl} targetId={facultyId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
-              </div>
-              <div className="grid flex-1 grid-cols-1 gap-4">
-                <div className="space-y-2">
-                  <Label>Employee ID *</Label>
-                  <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          {/* Left column */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Faculty Details</CardTitle></CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
+                  <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
+                    <Label>Profile Photo</Label>
+                    <AvatarUploadField name={form.name || "?"} photoUrl={photoUrl} targetId={facultyId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
+                  </div>
+                  <div className="grid flex-1 grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <Label>Employee ID *</Label>
+                      <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Full Name *</Label>
+                      <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone</Label>
+                      <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>APAAR Faculty ID</Label>
+                      <Input value={form.apaarFacultyId} onChange={(e) => set({ apaarFacultyId: e.target.value })} placeholder="NBA/AICTE APAAR ID" />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Full Name *</Label>
-                  <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>College Email *</Label>
+                    <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@vishnu.edu.in" />
+                    <p className="text-xs text-muted-foreground">This is their login username.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Personal Email</Label>
+                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="faculty@example.com" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
+
+                <div className="pt-2 pb-1 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Academic Profile</p>
                 </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>College Email *</Label>
-                <Input type="email" value={form.collegeEmail} onChange={(e) => set({ collegeEmail: e.target.value })} placeholder="name@vishnu.edu.in" />
-                <p className="text-xs text-muted-foreground">This is their login username.</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Personal Email</Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="faculty@example.com" />
-              </div>
-            </div>
-
-            <div className="pt-2 pb-1 border-t">
-              <p className="text-sm font-medium text-muted-foreground">Academic Profile</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Designation *</Label>
-                <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(DESIGNATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Highest Qualification *</Label>
-                <Input value={form.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. Ph.D, M.Tech, M.Sc" />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Specialization</Label>
-                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="e.g. Machine Learning, VLSI" />
-              </div>
-              <div className="space-y-2">
-                <Label>Status *</Label>
-                <Select value={form.status} onValueChange={(v) => set({ status: v as FacultyStatus })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(FACULTY_STATUS_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="pt-2 pb-1 border-t">
-              <p className="text-sm font-medium text-muted-foreground">Experience (Years)</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              {EXPERIENCE_FIELDS.map(([key, label]) => (
-                <div key={key} className="space-y-2">
-                  <Label>{label}</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={form[key] as number}
-                    onChange={(e) => set({ [key]: e.target.value === "" ? 0 : parseFloat(e.target.value) } as Partial<EmploymentForm>)}
-                  />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Designation *</Label>
+                    <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(DESIGNATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Highest Qualification *</Label>
+                    <Input value={form.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. Ph.D, M.Tech, M.Sc" />
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="hasPHD" checked={form.hasPHD} onChange={(e) => set({ hasPHD: e.target.checked })} className="h-4 w-4 rounded border-gray-300" />
-              <Label htmlFor="hasPHD" className="cursor-pointer">Has Ph.D</Label>
-            </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Specialization</Label>
+                    <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="e.g. Machine Learning, VLSI" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status *</Label>
+                    <Select value={form.status} onValueChange={(v) => set({ status: v as FacultyStatus })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(FACULTY_STATUS_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-            <div className="pt-2 pb-1 border-t">
-              <p className="text-sm font-medium text-muted-foreground">Employment Details</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Employment Type *</Label>
-                <Select value={form.employmentType} onValueChange={(v) => set({ employmentType: v as EmploymentType })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Joining Date *</Label>
-                <Input type="date" value={form.joiningDate} onChange={(e) => set({ joiningDate: e.target.value })} />
-              </div>
-            </div>
+                <div className="pt-2 pb-1 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Experience (Years)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {EXPERIENCE_FIELDS.map(([key, label]) => (
+                    <div key={key} className="space-y-2">
+                      <Label>{label}</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={form[key] as number}
+                        onChange={(e) => set({ [key]: e.target.value === "" ? 0 : parseFloat(e.target.value) } as Partial<EmploymentForm>)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="hasPHD" checked={form.hasPHD} onChange={(e) => set({ hasPHD: e.target.checked })} className="h-4 w-4 rounded border-gray-300" />
+                  <Label htmlFor="hasPHD" className="cursor-pointer">Has Ph.D</Label>
+                </div>
 
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={saving}>Save Changes</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+                <div className="pt-2 pb-1 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Employment Details</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Employment Type *</Label>
+                    <Select value={form.employmentType} onValueChange={(v) => set({ employmentType: v as EmploymentType })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date of Joining Institution *</Label>
+                    <Input type="date" value={form.joiningDate} onChange={(e) => set({ joiningDate: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date of Joining Department</Label>
+                    <Input type="date" value={form.dateOfJoiningDepartment} onChange={(e) => set({ dateOfJoiningDepartment: e.target.value })} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="aicteEligible" checked={form.aicteEligible} onChange={(e) => set({ aicteEligible: e.target.checked })} className="h-4 w-4 rounded border-gray-300" />
+                  <Label htmlFor="aicteEligible" className="cursor-pointer">AICTE Eligible</Label>
+                </div>
+              </CardContent>
+            </Card>
 
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
-        <CardContent>
-          <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-        </CardContent>
-      </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
+              <CardContent>
+                <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
+              </CardContent>
+            </Card>
 
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-        <CardContent>
-          <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment />
-        </CardContent>
-      </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Documents</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-xs text-muted-foreground">Upload signed copies of the joining letter and appointment order for this faculty member.</p>
+                <DocumentUploadField
+                  label="Joining Letter"
+                  value={joiningLetterUrl || undefined}
+                  uploadEndpoint="/api/upload/faculty-document"
+                  extraFields={{ facultyId, docType: "joining-letter" }}
+                  onUploaded={(url) => setJoiningLetterUrl(url)}
+                  onRemoved={() => setJoiningLetterUrl("")}
+                />
+                <DocumentUploadField
+                  label="Appointment Letter"
+                  value={appointmentLetterUrl || undefined}
+                  uploadEndpoint="/api/upload/faculty-document"
+                  extraFields={{ facultyId, docType: "appointment-letter" }}
+                  onUploaded={(url) => setAppointmentLetterUrl(url)}
+                  onRemoved={() => setAppointmentLetterUrl("")}
+                />
+                <DocumentUploadField
+                  label="Resume / CV"
+                  value={resumeUrl || undefined}
+                  uploadEndpoint="/api/upload/faculty-document"
+                  extraFields={{ facultyId, docType: "resume" }}
+                  onUploaded={(url) => setResumeUrl(url)}
+                  onRemoved={() => setResumeUrl("")}
+                />
+              </CardContent>
+            </Card>
+          </div>
 
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Current Teaching Assignments</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {pendingPreference && originalTeachingRows.length === 0 && teachingRows.length > 0 && (
-            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
-              Pre-filled from the course/subjects set during hiring — pick a section for each row below to activate it.
-            </p>
-          )}
-          <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />
-        </CardContent>
-      </Card>
+          {/* Right column */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
+              <CardContent>
+                <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-base">Current Teaching Assignments</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {pendingPreference && originalTeachingRows.length === 0 && teachingRows.length > 0 && (
+                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
+                    Pre-filled from the course/subjects set during hiring — pick a section for each row below to activate it.
+                  </p>
+                )}
+                <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-base">Teaching Load Summary</CardTitle></CardHeader>
+              <CardContent>
+                <TeachingLoadTable
+                  groups={buildTeachingLoadRows({
+                    currentAssignments: teachingRows.map((r) => ({
+                      courseName: r.courseName,
+                      year: r.year,
+                      sectionName: r.sectionName,
+                      subjectName: r.subjectName,
+                      subjectCode: r.subjectCode,
+                      hoursPerWeek: r.hoursPerWeek,
+                      isPast: r.isPast,
+                      assignmentAcademicYear: r.assignmentAcademicYear,
+                      assignmentSemester: r.assignmentSemester,
+                      passPercentage: r.passPercentage,
+                    })),
+                    staticCourses: academicProfile.teachingAssignment?.courses,
+                    department,
+                  })}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end mt-6 pt-4 border-t">
+          <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+          <Button type="submit" loading={saving}>Save Changes</Button>
+        </div>
+      </form>
     </div>
   );
 }

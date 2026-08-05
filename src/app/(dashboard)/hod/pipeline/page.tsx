@@ -11,7 +11,7 @@ export default function HiringPipelinePage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Pipeline"
-        description="Active positions — from request to hiring decision in one view"
+        description="Active positions — from request to hiring results in one view"
         actions={
           <Button asChild>
             <Link href="/hod/vacancy/new">

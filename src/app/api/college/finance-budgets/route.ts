@@ -3,17 +3,13 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Firestore } from "firebase-admin/firestore";
 
-async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
-  if (!collegeId || !uid) return "Unknown";
-  try {
-    const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-    return (snap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-  } catch {
-    return "Unknown";
-  }
-}
+// Finance no longer creates department budgets directly (department, purpose,
+// allocatedAmount) — that bypassed the department entirely. Every doc in this
+// collection is now auto-created when a budget-requests doc is FINANCE_APPROVED
+// (src/app/api/college/budget-requests/[id]/route.ts), which itself is only
+// reachable via a Budget Cycle (src/app/api/college/budget-cycles). This route
+// is read-only.
 
 export async function GET(request: Request) {
   try {
@@ -40,67 +36,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[college/finance-budgets GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const session = await requireCollegeContext(request, "FINANCE", "SUPER_ADMIN");
-    const body = (await request.json()) as {
-      department: string;
-      purpose: string;
-      fiscalYear: string;
-      allocatedAmount: number;
-    };
-
-    const { department, purpose, fiscalYear, allocatedAmount } = body;
-    if (!department || !purpose || !fiscalYear || !allocatedAmount) {
-      return NextResponse.json(
-        { error: "department, purpose, fiscalYear, allocatedAmount required" },
-        { status: 400 }
-      );
-    }
-
-    const db = getAdminDb();
-    const byName = await getUserName(db, session.collegeId, session.uid);
-    const now = new Date();
-
-    const ref = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("financeBudgets")
-      .add({
-        collegeId: session.collegeId,
-        department,
-        purpose,
-        fiscalYear,
-        allocatedAmount: Number(allocatedAmount),
-        utilizedAmount: 0,
-        status: "ACTIVE",
-        revisions: [],
-        createdBy: session.uid,
-        createdByName: byName,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-    await db.collection("colleges").doc(session.collegeId).collection("financeAuditLogs").add({
-      collegeId: session.collegeId,
-      action: "BUDGET_CREATED",
-      performedBy: session.uid,
-      performedByName: byName,
-      targetId: ref.id,
-      details: { department, fiscalYear, allocatedAmount },
-      timestamp: now,
-    });
-
-    return NextResponse.json({ id: ref.id }, { status: 201 });
-  } catch (err) {
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    console.error("[college/finance-budgets POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

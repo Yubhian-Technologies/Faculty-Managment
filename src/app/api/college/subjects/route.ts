@@ -90,10 +90,16 @@ export async function POST(request: Request) {
         ? await getHodDept(db, session.collegeId, session.uid)
         : "";
       if (session.role === "HOD" && dept) {
+        // A sub-department borrows its parent's courses (it never has its own),
+        // so a sub-HOD adding subjects for their own sections must be allowed
+        // against the parent's course, not just an exact department match.
         const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
           .where("name", "==", dept).limit(1).get();
+        const deptDoc = deptSnap.empty ? null : (deptSnap.docs[0].data() as { parentDepartmentId?: string });
         const deptId = deptSnap.empty ? null : deptSnap.docs[0].id;
-        if (deptId !== course.departmentId) {
+        const ownsDirectly = deptId === course.departmentId;
+        const ownsViaParent = !!deptDoc?.parentDepartmentId && deptDoc.parentDepartmentId === course.departmentId;
+        if (!ownsDirectly && !ownsViaParent) {
           return NextResponse.json({ error: "Course does not belong to your department" }, { status: 403 });
         }
       }

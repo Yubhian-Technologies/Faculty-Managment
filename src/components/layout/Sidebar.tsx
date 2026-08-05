@@ -10,7 +10,9 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
-import { getNavItemsForRole, isNavItemActive, type NavItem } from "./navConfig";
+import { useIncomingStudents } from "@/hooks/useIncomingStudents";
+import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
+import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { OrgScopeTree } from "./OrgScopeTree";
 import { ROLE_LABELS } from "@/types";
@@ -24,7 +26,12 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
-export function Sidebar() {
+interface SidebarProps {
+  hiddenModules: string[];
+  hiddenItems: string[];
+}
+
+export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const { logout } = useAuth();
   const { unreadCount } = useNotifications();
@@ -32,26 +39,40 @@ export function Sidebar() {
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
+  const { hasIncomingStudents } = useIncomingStudents();
+  const { isSubDepartment } = useIsSubDepartmentHod();
 
   if (!user) return null;
 
-  const baseNavItems = getNavItemsForRole(user.role);
+  // "Incoming Students" is only ever relevant once the office has actually
+  // pre-registered a student to this department while enrolling them
+  // elsewhere — hide the link entirely until there's at least one, instead
+  // of leaving a permanently-empty page in every HOD's sidebar.
+  // "Sub-Departments" is hidden for an HOD whose own department already is a
+  // sub-department — sub-departments are one level deep only, so that page
+  // can never do anything for them.
+  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
+    .filter((item) => hasIncomingStudents || item.href !== "/hod/students/incoming")
+    .filter((item) => !isSubDepartment || item.href !== "/hod/settings/sub-departments");
 
   // Inject dynamic nav items based on panel assignments (any role can be a panel member)
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];
-    // Skip roles that already have a static "Panel Scoring" tab in navConfig
-    if (hasInterviews && !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)) {
-      injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
-    }
-    if (coordinatorBatchId) {
-      injected.push({
-        label: "Demo Session",
-        href: `/coordinator/${coordinatorBatchId}`,
-        iconName: "QrCode",
-        roles: [user.role],
-      });
+    // Skip roles that already have a static "Panel Scoring" tab in navConfig.
+    // Also skip for PANEL_MEMBER — their nav is kept minimal (My Work + My Profile only).
+    if (user.role !== "PANEL_MEMBER") {
+      if (hasInterviews && !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)) {
+        injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
+      }
+      if (coordinatorBatchId) {
+        injected.push({
+          label: "Demo Session",
+          href: `/coordinator/${coordinatorBatchId}`,
+          iconName: "QrCode",
+          roles: [user.role],
+        });
+      }
     }
     if (injected.length > 0) {
       navItems = [baseNavItems[0], ...injected, ...baseNavItems.slice(1)];

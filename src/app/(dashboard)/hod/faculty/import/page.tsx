@@ -12,7 +12,11 @@ import { COLUMNS, HINTS } from "@/lib/faculty/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
-type ImportResult = { created: number; failed: { row: number; employeeId: string; error: string }[] };
+type ImportResult = {
+  created: number;
+  failed: { row: number; employeeId: string; error: string }[];
+  warnings: { row: number; employeeId: string; warning: string }[];
+};
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -264,6 +268,9 @@ export default function FacultyImportPage() {
                 {result.failed.length > 0 && (
                   <p className="text-sm text-muted-foreground">{result.failed.length} row{result.failed.length !== 1 ? "s" : ""} skipped</p>
                 )}
+                {result.warnings.length > 0 && (
+                  <p className="text-sm text-amber-700">{result.warnings.length} field{result.warnings.length !== 1 ? "s" : ""} ignored due to invalid values</p>
+                )}
               </div>
             </div>
             {result.failed.length > 0 && (
@@ -274,6 +281,19 @@ export default function FacultyImportPage() {
                     <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
                       <span className="text-muted-foreground">Row {f.row} · {f.employeeId}</span>
                       <span className="text-red-600 text-xs">{f.error}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {result.warnings.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
+                <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
+                  {result.warnings.map((w, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
+                      <span className="text-muted-foreground">Row {w.row} · {w.employeeId}</span>
+                      <span className="text-amber-700 text-xs">{w.warning}</span>
                     </div>
                   ))}
                 </div>

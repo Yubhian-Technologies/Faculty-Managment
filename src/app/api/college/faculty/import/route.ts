@@ -3,7 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import type {
+  Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution,
+  FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, PromotionRecord, AdminResponsibilityEntry,
+  AdminResponsibilityCategory, TrainingEntry, TrainingEntryType, ProfessionalMembership, ProfessionalBody,
+  AwardEntry, AwardCategory, CourseFileEntry,
+} from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -41,6 +46,61 @@ const STATUS_MAP: Record<string, FacultyStatus> = {
   "on leave": "ON_LEAVE",
   "resigned": "RESIGNED",
   "retired": "RETIRED",
+};
+
+const PI_CO_PI_MAP: Record<string, "PI" | "CO_PI"> = {
+  "pi": "PI",
+  "co-pi": "CO_PI",
+  "co pi": "CO_PI",
+  "copi": "CO_PI",
+};
+
+const ADMIN_RESPONSIBILITY_CATEGORY_MAP: Record<string, AdminResponsibilityCategory> = {
+  "coordinator role": "COORDINATOR",
+  "coordinator": "COORDINATOR",
+  "committee membership": "COMMITTEE_MEMBER",
+  "committee member": "COMMITTEE_MEMBER",
+  "nba / naac work": "NBA_NAAC",
+  "nba/naac work": "NBA_NAAC",
+  "nba naac": "NBA_NAAC",
+  "nba": "NBA_NAAC",
+  "naac": "NBA_NAAC",
+  "iqac": "IQAC",
+  "examination duty": "EXAMINATION_DUTY",
+  "other": "OTHER",
+};
+
+const TRAINING_TYPE_MAP: Record<string, TrainingEntryType> = {
+  "fdp": "FDP",
+  "workshop": "WORKSHOP",
+  "mooc": "MOOC",
+  "certification": "CERTIFICATION",
+  "skill development": "SKILL_DEVELOPMENT",
+  "administrative": "ADMINISTRATIVE",
+  "administrative training": "ADMINISTRATIVE",
+  "erp": "ERP",
+  "erp training": "ERP",
+  "office automation": "OFFICE_AUTOMATION",
+  "office automation training": "OFFICE_AUTOMATION",
+  "other": "OTHER",
+};
+
+const PROFESSIONAL_BODY_MAP: Record<string, ProfessionalBody> = {
+  "ieee": "IEEE",
+  "iste": "ISTE",
+  "csi": "CSI",
+  "acm": "ACM",
+  "iei": "IEI",
+  "other": "OTHER",
+};
+
+const AWARD_CATEGORY_MAP: Record<string, AwardCategory> = {
+  "best teacher award": "BEST_TEACHER",
+  "best teacher": "BEST_TEACHER",
+  "research award": "RESEARCH_AWARD",
+  "appreciation certificate": "APPRECIATION_CERTIFICATE",
+  "appreciation": "APPRECIATION_CERTIFICATE",
+  "other": "OTHER",
 };
 
 type ImportRow = {
@@ -95,6 +155,40 @@ function num(v: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+// Accepts the template's YYYY-MM-DD format, and falls back to DD-MM-YYYY /
+// DD/MM/YYYY (what Excel re-saves a date cell as under an Indian locale, even
+// when the column was originally filled in as YYYY-MM-DD) — otherwise a
+// malformed string silently becomes a JS "Invalid Date" object that isn't
+// caught by any `undefined` check and throws when Firestore serializes it,
+// failing the entire batch instead of just this row.
+//
+// The final generic-parse fallback is dangerously lenient: V8 happily accepts
+// e.g. a typo'd 5-digit-year "20110-04-15" as a *valid* Date (year 20110)
+// rather than rejecting it, since it's not NaN — but that's far outside
+// Firestore Timestamp's max (year 9999), and blows up batch.commit() for the
+// whole import. sane() rejects anything outside a plausible human-date range.
+function sane(d: Date): Date | undefined {
+  const year = d.getFullYear();
+  return Number.isFinite(d.getTime()) && year >= 1900 && year <= 2100 ? d : undefined;
+}
+
+function parseDate(v: string | undefined): Date | undefined {
+  const trimmed = v?.trim();
+  if (!trimmed) return undefined;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (iso) {
+    return sane(new Date(`${trimmed}T00:00:00`));
+  }
+  const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+  if (dmy) {
+    const [, dd, mm, yyyy] = dmy;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    // Guard against JS's silent day/month rollover (e.g. Feb 30 -> Mar 2).
+    return d.getMonth() === Number(mm) - 1 && d.getDate() === Number(dd) ? sane(d) : undefined;
+  }
+  return sane(new Date(trimmed));
+}
+
 function degree(row: ImportRow, prefix: string): DegreeDetail | undefined {
   const degreeAndBranch = row[`${prefix}_degreeAndBranch`]?.trim();
   const universityOrInstitute = row[`${prefix}_university`]?.trim();
@@ -124,8 +218,77 @@ function publications(row: ImportRow): Publication[] {
 
 function fundedProjects(row: ImportRow): FundedProject[] {
   return [1, 2, 3]
-    .map((i) => ({ title: row[`project${i}_title`]?.trim() ?? "", fundingAgency: row[`project${i}_agency`]?.trim() ?? "", grantAmountLakhs: num(row[`project${i}_amount`]) ?? 0, year: num(row[`project${i}_year`]) ?? 0, status: row[`project${i}_status`]?.trim() ?? "" }))
+    .map((i) => {
+      const roleKey = (row[`project${i}_role`] ?? "").trim().toLowerCase();
+      const piOrCoPi = PI_CO_PI_MAP[roleKey];
+      return {
+        title: row[`project${i}_title`]?.trim() ?? "", fundingAgency: row[`project${i}_agency`]?.trim() ?? "",
+        grantAmountLakhs: num(row[`project${i}_amount`]) ?? 0, year: num(row[`project${i}_year`]) ?? 0,
+        status: row[`project${i}_status`]?.trim() ?? "", ...(piOrCoPi ? { piOrCoPi } : {}),
+      };
+    })
     .filter((p) => p.title || p.fundingAgency);
+}
+
+function promotions(row: ImportRow): PromotionRecord[] {
+  return [1, 2, 3]
+    .map((i) => ({ fromDesignation: row[`promotion${i}_fromDesignation`]?.trim() ?? "", toDesignation: row[`promotion${i}_toDesignation`]?.trim() ?? "", effectiveYear: num(row[`promotion${i}_effectiveYear`]) ?? 0 }))
+    .filter((p) => p.fromDesignation || p.toDesignation);
+}
+
+function adminResponsibilities(row: ImportRow): AdminResponsibilityEntry[] {
+  return [1, 2, 3]
+    .map((i) => ({
+      category: ADMIN_RESPONSIBILITY_CATEGORY_MAP[(row[`adminResp${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
+      description: row[`adminResp${i}_description`]?.trim() ?? "",
+      fromYear: num(row[`adminResp${i}_fromYear`]),
+      toYear: num(row[`adminResp${i}_toYear`]),
+    }))
+    .filter((a) => a.description);
+}
+
+function trainingEntries(row: ImportRow): TrainingEntry[] {
+  return [1, 2, 3]
+    .map((i) => ({
+      type: TRAINING_TYPE_MAP[(row[`training${i}_type`] ?? "").trim().toLowerCase()] ?? "OTHER",
+      title: row[`training${i}_title`]?.trim() ?? "",
+      organizer: row[`training${i}_organizer`]?.trim() ?? "",
+      year: num(row[`training${i}_year`]) ?? 0,
+      durationDays: num(row[`training${i}_durationDays`]),
+    }))
+    .filter((t) => t.title || t.organizer);
+}
+
+function professionalMemberships(row: ImportRow): ProfessionalMembership[] {
+  return [1, 2, 3]
+    .map((i) => {
+      const bodyRaw = row[`membership${i}_body`]?.trim();
+      const body = PROFESSIONAL_BODY_MAP[(bodyRaw ?? "").toLowerCase()];
+      return {
+        body: body ?? "OTHER",
+        ...(!body && bodyRaw ? { otherName: bodyRaw } : row[`membership${i}_otherName`]?.trim() ? { otherName: row[`membership${i}_otherName`]!.trim() } : {}),
+        membershipId: row[`membership${i}_membershipId`]?.trim() || undefined,
+        sinceYear: num(row[`membership${i}_sinceYear`]),
+      };
+    })
+    .filter((m) => m.membershipId || m.sinceYear !== undefined || m.otherName);
+}
+
+function awards(row: ImportRow): AwardEntry[] {
+  return [1, 2, 3]
+    .map((i) => ({
+      category: AWARD_CATEGORY_MAP[(row[`award${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
+      title: row[`award${i}_title`]?.trim() ?? "",
+      awardingBody: row[`award${i}_awardingBody`]?.trim() ?? "",
+      year: num(row[`award${i}_year`]) ?? 0,
+    }))
+    .filter((a) => a.title || a.awardingBody);
+}
+
+function courseFiles(row: ImportRow): CourseFileEntry[] {
+  return [1, 2, 3]
+    .map((i) => ({ courseCode: row[`courseFile${i}_courseCode`]?.trim() ?? "", courseName: row[`courseFile${i}_courseName`]?.trim() ?? "", academicYear: row[`courseFile${i}_academicYear`]?.trim() ?? "" }))
+    .filter((c) => c.courseCode || c.courseName);
 }
 
 function consultancyProjects(row: ImportRow): ConsultancyProject[] {
@@ -152,6 +315,7 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     ugDetails: degree(row, "ug"),
     pgDetails: degree(row, "pg"),
     phdDetails: degree(row, "phd"),
+    postDoctoralDetails: degree(row, "postdoc"),
     phdStatus: row.phdStatus?.trim().toUpperCase().includes("PURSU") ? "PURSUING" : row.phdStatus?.trim() ? "AWARDED" : undefined,
     phdMode: row.phdMode?.trim().toUpperCase().includes("PART") ? "PART_TIME" : row.phdMode?.trim() ? "FULL_TIME" : undefined,
     phdSupervisorName: row.phdSupervisorName?.trim() || undefined,
@@ -163,6 +327,7 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
       ? { primaryTeachingRole: row.primaryTeachingRole?.trim() ?? "", courses: courses(row) }
       : undefined,
     previousInstitutions: previousInstitutions(row),
+    promotionHistory: promotions(row),
     publications: publications(row),
     publicationsFirstOrCorrespondingAuthor: num(row.publicationsFirstOrCorrespondingAuthor) ?? 0,
     publicationsQ1OrHighImpact: num(row.publicationsQ1OrHighImpact) ?? 0,
@@ -175,6 +340,9 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     totalCitations: num(row.totalCitations) ?? 0,
     hIndex: num(row.hIndex) ?? 0,
     i10Index: num(row.i10Index) ?? 0,
+    googleScholarId: row.googleScholarId?.trim() || undefined,
+    scopusAuthorId: row.scopusAuthorId?.trim() || undefined,
+    orcidId: row.orcidId?.trim() || undefined,
     fundedProjects: fundedProjects(row),
     consultancyProjects: consultancyProjects(row),
     patents: {
@@ -195,11 +363,21 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     nationalExposure: row.nationalExposure?.trim() || undefined,
     internationalExposure: row.internationalExposure?.trim() || undefined,
     labsEstablished: labsEstablished(row),
+    adminResponsibilityEntries: adminResponsibilities(row),
     administrativeResponsibilities: row.administrativeResponsibilities?.trim() || undefined,
+    trainingEntries: trainingEntries(row),
     certificationsAndFdps: row.certificationsAndFdps?.trim() || undefined,
+    professionalMemberships: professionalMemberships(row),
     professionalBodyMemberships: row.professionalBodyMemberships?.trim() || undefined,
     authoredBooks: authoredBooks(row),
+    awardEntries: awards(row),
     notableAwards: row.notableAwards?.trim() || undefined,
+    courseFilesAndCoPoMapping: courseFiles(row),
+    presentSalary: num(row.presentSalary),
+    grossAnnualCTC: num(row.grossAnnualCTC),
+    incrementsAwarded: num(row.incrementsAwarded),
+    fundingConsultancyRevenue: num(row.fundingConsultancyRevenue),
+    otherInformation: row.otherInformation?.trim() || undefined,
   };
   for (const key of Object.keys(profile)) {
     if (profile[key] === undefined) delete profile[key];
@@ -223,11 +401,22 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    // Resolve HOD's department
-    let hodDept = "";
-    if (session.role === "HOD") {
-      const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();
-      hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+    // Resolve HOD's department. This template has no Department column at
+    // all (see HINTS: "Department is auto-assigned from your HOD profile") —
+    // there's no per-row value to fall back on, so a caller this can't be
+    // resolved for (a non-HOD role reaching this route via the L0-L6 role
+    // inheritance that lets Principal/VP browse HOD pages, or an HOD whose
+    // own profile has no department set) must be rejected up front. Silently
+    // falling back to "" previously created faculty with no department at
+    // all — invisible on every department's Faculty list (including their
+    // own), since every list there is scoped by an exact department match.
+    if (session.role !== "HOD") {
+      return NextResponse.json({ error: "Only an HOD can bulk-import faculty — sign in as the HOD of the target department" }, { status: 403 });
+    }
+    const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();
+    const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+    if (!hodDept) {
+      return NextResponse.json({ error: "Your account has no department set — ask your Principal to assign one before importing faculty" }, { status: 400 });
     }
 
     // Load existing employeeIds to detect duplicates
@@ -238,6 +427,7 @@ export async function POST(request: Request) {
     const now = new Date();
     const created: string[] = [];
     const failed: { row: number; employeeId: string; error: string }[] = [];
+    const warnings: { row: number; employeeId: string; warning: string }[] = [];
 
     const batch = db.batch();
     let batchCount = 0;
@@ -245,6 +435,13 @@ export async function POST(request: Request) {
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
       const rowNum = i + 2; // 1-indexed + header row
+
+      // A value was provided but couldn't be parsed — record it was silently
+      // dropped instead of just proceeding, so a typo (e.g. a mistyped year)
+      // doesn't disappear without a trace the way it used to.
+      const dropped = (empId: string, label: string, raw: string | undefined) => {
+        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored — invalid value ("${raw?.trim()}")` });
+      };
 
       // Required field validation
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "—", error: "Employee ID is required" }); continue; }
@@ -271,28 +468,42 @@ export async function POST(request: Request) {
       const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
 
       // Parse dates
-      const joiningDate = row.joiningDate ? new Date(row.joiningDate) : now;
-      const dateOfBirth = row.dateOfBirth ? new Date(row.dateOfBirth) : undefined;
-      const ratificationDate = row.ratificationDate ? new Date(row.ratificationDate) : undefined;
+      const joiningDate = parseDate(row.joiningDate);
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date — use YYYY-MM-DD" }); continue; }
+      const dateOfBirth = parseDate(row.dateOfBirth);
+      if (row.dateOfBirth?.trim() && !dateOfBirth) dropped(empId, "Date of birth", row.dateOfBirth);
+      const ratificationDate = parseDate(row.ratificationDate);
+      if (row.ratificationDate?.trim() && !ratificationDate) dropped(empId, "Ratification date", row.ratificationDate);
+      const dateOfJoiningDepartment = parseDate(row.dateOfJoiningDepartment);
+      if (row.dateOfJoiningDepartment?.trim() && !dateOfJoiningDepartment) dropped(empId, "Date of joining department", row.dateOfJoiningDepartment);
 
-      // Determine department
-      const department = hodDept || "";
+      // Parses a numeric field, warning (rather than silently zeroing/dropping
+      // it) when a non-empty value fails to parse.
+      const checkNum = (raw: string | undefined, label: string): number | undefined => {
+        if (!raw?.trim()) return undefined;
+        const n = parseFloat(raw);
+        if (!Number.isFinite(n)) { dropped(empId, label, raw); return undefined; }
+        return n;
+      };
 
       const docRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
 
       const payload: Record<string, unknown> = {
         collegeId,
-        department,
+        department: hodDept,
         employeeId: empId,
         name: row.name.trim(),
+        apaarFacultyId: row.apaarFacultyId?.trim() || undefined,
         email: row.email.trim().toLowerCase(),
         phone: row.phone?.trim() ?? "",
         designation,
         qualification: row.qualification?.trim() ?? "",
         specialization: row.specialization?.trim() ?? "",
         employmentType,
-        experienceYears: parseFloat(row.experienceYears ?? "0") || 0,
+        experienceYears: checkNum(row.experienceYears, "Total Experience") ?? 0,
         joiningDate,
+        dateOfJoiningDepartment: dateOfJoiningDepartment || undefined,
+        aicteEligible: row.aicteEligible ? row.aicteEligible.trim().toLowerCase() === "yes" : undefined,
         status,
         gender: row.gender?.trim() || undefined,
         dateOfBirth: dateOfBirth || undefined,
@@ -312,18 +523,19 @@ export async function POST(request: Request) {
         hasPHD: row.hasPHD ? row.hasPHD.trim().toLowerCase() === "yes" : undefined,
         maritalStatus: row.maritalStatus?.trim().toLowerCase().startsWith("married") ? "Married" : row.maritalStatus?.trim() ? "Single" : undefined,
         spouseName: row.spouseName?.trim() || undefined,
-        numberOfChildren: row.numberOfChildren ? parseFloat(row.numberOfChildren) || undefined : undefined,
+        numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
         referral: row.referral?.trim() || undefined,
         nativePlace: row.nativePlace?.trim() || undefined,
         bloodGroup: row.bloodGroup?.trim() || undefined,
         temporaryAddress: row.temporaryAddress?.trim() || undefined,
         permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
         permanentAddress: row.permanentAddress?.trim() || undefined,
-        internalExperience: row.internalExperience ? parseFloat(row.internalExperience) || undefined : undefined,
-        externalExperience: row.externalExperience ? parseFloat(row.externalExperience) || undefined : undefined,
-        inCampusExperience: row.inCampusExperience ? parseFloat(row.inCampusExperience) || undefined : undefined,
-        industryExperience: row.industryExperience ? parseFloat(row.industryExperience) || undefined : undefined,
-        researchExperience: row.researchExperience ? parseFloat(row.researchExperience) || undefined : undefined,
+        resumeUrl: row.resumeUrl?.trim() || undefined,
+        internalExperience: checkNum(row.internalExperience, "Internal Exp"),
+        externalExperience: checkNum(row.externalExperience, "External Exp"),
+        inCampusExperience: checkNum(row.inCampusExperience, "In Campus Exp"),
+        industryExperience: checkNum(row.industryExperience, "Industry Exp"),
+        researchExperience: checkNum(row.researchExperience, "Research Exp"),
         academicProfile: buildAcademicProfile(row),
         createdAt: now,
         updatedAt: now,
@@ -345,12 +557,13 @@ export async function POST(request: Request) {
 
     await batch.commit();
 
-    return NextResponse.json({ created: created.length, failed }, { status: 201 });
+    return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[faculty/import POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const detail = process.env.NODE_ENV !== "production" ? `: ${err instanceof Error ? err.message : String(err)}` : "";
+    return NextResponse.json({ error: `Internal error${detail}` }, { status: 500 });
   }
 }

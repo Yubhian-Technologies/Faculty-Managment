@@ -17,10 +17,14 @@ async function verifyToken(request: Request): Promise<string | null> {
   }
 }
 
-// Serves the letter/report/resume as a downloadable HTML document — the browser can
-// print it to a real PDF (Ctrl/Cmd+P → Save as PDF) with the exact same layout. No
-// headless-browser dependency (Puppeteer et al.), so this works identically on any
+// Serves the letter/report/resume as an HTML document — no headless-browser
+// dependency (Puppeteer et al.) server-side, so this works identically on any
 // serverless host with zero native binaries, cold-start cost, or version pinning.
+// Offer/appointment letters and finance reports are downloaded as this HTML directly
+// (the browser can print it to a real PDF — Ctrl/Cmd+P → Save as PDF — with the exact
+// same layout). The resume is the one exception: its client (downloadResumePdf /
+// src/lib/pdf/htmlToPdf.ts) converts this same HTML into a real .pdf file in the
+// browser via html2canvas + jsPDF before downloading it.
 export async function POST(request: Request) {
   const uid = await verifyToken(request);
   if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

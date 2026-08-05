@@ -49,6 +49,13 @@ export async function syncTeachingAssignments(
           subjectId: row.subjectId,
           hoursPerWeek: row.hoursPerWeek,
           slots: row.slots.map((s) => ({ day: s.day, periodNumber: s.periodNumber })),
+          assignmentAcademicYear: row.assignmentAcademicYear ?? "",
+          assignmentSemester: row.assignmentSemester ?? "",
+          ...(row.isPast ? {
+            isPast: true,
+            ...(row.passPercentage != null ? { passPercentage: row.passPercentage } : {}),
+            ...(row.studentFeedback != null ? { studentFeedback: row.studentFeedback } : {}),
+          } : {}),
         }),
       });
       if (!res.ok) errors.push(`Adding ${row.subjectName}: ${await parseError(res)}`);
@@ -56,6 +63,47 @@ export async function syncTeachingAssignments(
     }
 
     const original = originalRows.find((o) => o.id === row.id);
+
+    if (row.isPast) {
+      // Past rows have no weekly schedule to diff — just persist the record's
+      // fields (academic year/semester/hours/pass %) if they've changed.
+      if (
+        original?.assignmentAcademicYear !== row.assignmentAcademicYear ||
+        original?.assignmentSemester !== row.assignmentSemester ||
+        original?.passPercentage !== row.passPercentage ||
+        original?.studentFeedback !== row.studentFeedback ||
+        original?.hoursPerWeek !== row.hoursPerWeek
+      ) {
+        const res = await fetch(`/api/college/teaching-assignments/${row.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hoursPerWeek: row.hoursPerWeek,
+            assignmentAcademicYear: row.assignmentAcademicYear ?? "",
+            assignmentSemester: row.assignmentSemester ?? "",
+            passPercentage: row.passPercentage ?? null,
+            studentFeedback: row.studentFeedback ?? null,
+          }),
+        });
+        if (!res.ok) errors.push(`Updating past record for ${row.subjectName}: ${await parseError(res)}`);
+      }
+      continue;
+    }
+
+    // Current (non-past) rows: academic year/semester can still change even
+    // though there's no pass % — persist those independently of the slot diffing below.
+    if (original?.assignmentAcademicYear !== row.assignmentAcademicYear || original?.assignmentSemester !== row.assignmentSemester) {
+      const res = await fetch(`/api/college/teaching-assignments/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assignmentAcademicYear: row.assignmentAcademicYear ?? "",
+          assignmentSemester: row.assignmentSemester ?? "",
+        }),
+      });
+      if (!res.ok) errors.push(`Updating academic year/semester for ${row.subjectName}: ${await parseError(res)}`);
+    }
+
     const originalSlots = original?.slots ?? [];
     const removedSlots = originalSlots.filter((o) => o.id && !row.slots.some((s) => s.id === o.id));
     for (const slot of removedSlots) {

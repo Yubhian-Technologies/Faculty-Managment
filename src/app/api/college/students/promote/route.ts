@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
+import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Firestore } from "firebase-admin/firestore";
 import type { Section, StudentRecord } from "@/types";
 
@@ -65,7 +67,7 @@ export async function POST(request: Request) {
     );
 
     const now = new Date();
-    const batch = db.batch();
+    const batch = new ChunkedBatch(db);
     let updatedCount = 0;
     const skipped: string[] = [];
 
@@ -87,8 +89,17 @@ export async function POST(request: Request) {
           department: targetSection!.department,
           year: targetSection!.year,
           section: targetSection!.name,
+          // Clear it: if this promotion is exactly a student's pre-registered
+          // secondary department becoming their new primary one, a leftover
+          // secondaryDepartment would be redundant (and stale/misleading if
+          // it was ever anything else, e.g. corrected mid-way).
+          secondaryDepartment: null,
           updatedAt: now,
         });
+        const history = departmentHistoryEntry(
+          db, session.collegeId, snap.id, targetSection!.department, targetSection!.name, targetSection!.year, now
+        );
+        batch.set(history.ref, history.data);
       }
       updatedCount++;
     }

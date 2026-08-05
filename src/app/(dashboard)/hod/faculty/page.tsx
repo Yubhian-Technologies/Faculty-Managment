@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
+import { FacultyModuleTabs } from "@/components/faculty/FacultyModuleTabs";
 import { toast } from "@/hooks/useToast";
 import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
@@ -36,9 +37,16 @@ function fmtExp(val: unknown): string {
   return String(+(Number(val).toFixed(1)));
 }
 
+// INTERVIEW_DONE faculty haven't actually joined yet — their joiningDate is the
+// proposed date from the offer letter, so it reads as an expectation, not a fact.
+function joiningLabel(status: unknown): string {
+  return status === "INTERVIEW_DONE" ? "Expected to join" : "Joined";
+}
+
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  INTERVIEW_DONE: "outline",
   ACTIVE: "default",
   ON_LEAVE: "outline",
   RESIGNED: "secondary",
@@ -133,6 +141,7 @@ export default function HODFacultyPage() {
 
   const STATUS_TABS = [
     { key: "", label: "All" },
+    { key: "INTERVIEW_DONE", label: "Interview Done" },
     { key: "ACTIVE", label: "Active" },
     { key: "ON_LEAVE", label: "On Leave" },
     { key: "RESIGNED", label: "Resigned" },
@@ -147,13 +156,21 @@ export default function HODFacultyPage() {
         <div className="flex items-start gap-3 min-w-0">
           <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <p className="font-medium leading-tight">{row.name as string}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="font-medium leading-tight">{row.name as string}</p>
+              {row.accessLevel === "secondary" && (
+                <>
+                  <Badge variant="secondary" className="text-xs">{row.department as string}</Badge>
+                  <Badge variant="secondary" className="text-xs">View only</Badge>
+                </>
+              )}
+            </div>
             {(row.collegeEmail as string) && (
               <p className="text-xs text-muted-foreground">{row.collegeEmail as string}</p>
             )}
             <p className="text-xs text-muted-foreground">{row.email as string}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
-            <p className="text-xs text-muted-foreground">Joined: {fmtDate(row.joiningDate)}</p>
+            <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
           </div>
         </div>
       ),
@@ -181,7 +198,7 @@ export default function HODFacultyPage() {
       render: (row) => (
         <div className="space-y-1">
           <Badge variant="outline">{EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? (row.employmentType as string)}</Badge>
-          <p className="text-xs text-muted-foreground">{fmtDate(row.joiningDate)}</p>
+          <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
         </div>
       ),
     },
@@ -222,7 +239,7 @@ export default function HODFacultyPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
-          {!(row.userUid as string) && (
+          {row.accessLevel !== "secondary" && !(row.userUid as string) && (
             <Button
               variant="ghost"
               size="sm"
@@ -233,9 +250,11 @@ export default function HODFacultyPage() {
               <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}/edit`); }}>
-            <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
-          </Button>
+          {row.accessLevel !== "secondary" && (
+            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}/edit`); }}>
+              <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -245,10 +264,12 @@ export default function HODFacultyPage() {
           >
             <FileDown className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Download</span>
           </Button>
-          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {row.accessLevel !== "secondary" && (
+            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -273,6 +294,8 @@ export default function HODFacultyPage() {
           </div>
         }
       />
+
+      <FacultyModuleTabs facultyHref="/hod/faculty" supportingStaffHref="/hod/supporting-staff" />
 
       <div className="flex gap-2 flex-wrap">
         {STATUS_TABS.map((tab) => (

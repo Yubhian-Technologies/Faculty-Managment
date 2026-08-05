@@ -55,15 +55,40 @@ export async function PATCH(
       employeeId?: string;
       phone?: string;
       academicProfile?: Record<string, unknown>;
+      newPassword?: string;
     } & PersonalDetailsInput;
 
-    const { collegeId, role, isActive, department, name, email, collegeEmail, employeeId, phone, academicProfile } = body;
+    const { collegeId, role, isActive, department, name, email, collegeEmail, employeeId, phone, academicProfile, newPassword } = body;
 
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
     }
+    if (newPassword !== undefined && newPassword.length < 6) {
+      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+    }
 
     const db = getAdminDb();
+
+    // Reset Password only ever sends { collegeId, newPassword } — this was
+    // previously silently dropped (not in this destructure at all), so the
+    // dialog showed "Password reset successfully" while the Auth password
+    // never actually changed. Firebase Auth is the actual credential store;
+    // nothing in `colleges/{id}/users` needs updating for a password change.
+    if (newPassword !== undefined) {
+      const { getAdminAuth } = await import("@/lib/firebase/admin");
+      const auth = await getAdminAuth();
+      await auth.updateUser(uid, { password: newPassword });
+
+      await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
+        collegeId,
+        action: "USER_PASSWORD_RESET",
+        performedBy: "SUPER_ADMIN",
+        performedByName: "Super Admin",
+        targetId: uid,
+        details: {},
+        timestamp: new Date(),
+      });
+    }
     const updates: Record<string, unknown> = { updatedAt: new Date(), ...buildPersonalDetailsUpdate(body) };
 
     if (role !== undefined) updates.role = role;

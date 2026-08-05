@@ -79,11 +79,15 @@ export async function POST(request: Request) {
       referralName?: string;
       referralPhone?: string;
       referralDescription?: string;
+      referralCollege?: string;
+      referralDesignation?: string;
+      referralInfluenceType?: string;
+      referralInfluenceOther?: string;
       residenceAddress?: string;
       permanentAddress?: string;
     };
 
-    const { name, email, phone, department, position, courseId, courseName, year, preferredSubjectIds, preferredSubjectNames, resumeUrl, source, interviewMode, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription, residenceAddress, permanentAddress } = body;
+    const { name, email, phone, department, position, courseId, courseName, year, preferredSubjectIds, preferredSubjectNames, resumeUrl, source, interviewMode, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription, referralCollege, referralDesignation, referralInfluenceType, referralInfluenceOther, residenceAddress, permanentAddress } = body;
     if (!name || !email || !phone || !department || !position) {
       return NextResponse.json({ error: "name, email, phone, department, position required" }, { status: 400 });
     }
@@ -118,6 +122,16 @@ export async function POST(request: Request) {
           ...(referralName ? { referralName: referralName.trim() } : {}),
           ...(referralPhone ? { referralPhone: referralPhone.trim() } : {}),
           ...(referralDescription ? { referralDescription: referralDescription.trim() } : {}),
+          ...(referralType === "INTERNAL" ? {
+            ...(referralCollege ? { referralCollege: referralCollege.trim() } : {}),
+            ...(referralDesignation ? { referralDesignation: referralDesignation.trim() } : {}),
+          } : {}),
+          ...(referralType === "EXTERNAL" ? {
+            referralInfluenceType: referralInfluenceType ?? "NONE",
+            ...(referralInfluenceType === "OTHER" && referralInfluenceOther
+              ? { referralInfluenceOther: referralInfluenceOther.trim() }
+              : {}),
+          } : {}),
         } : {}),
         currentStage: "DEMO",
         status: "PENDING",

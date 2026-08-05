@@ -2,237 +2,167 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
-import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
-import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
-import { createUserSchema } from "@/lib/validations";
-import type { z } from "zod";
-
-type StaffFormData = z.infer<ReturnType<typeof createUserSchema.omit<{ collegeId: true }>>>;
-import { ROLE_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
-import type { Department, FacultyProfileFields } from "@/types";
+import { ROLE_LABELS } from "@/types";
+import type { Department, UserRole } from "@/types";
 
-const PRINCIPAL_ASSIGNABLE_ROLES = [
-  { value: "VICE_PRINCIPAL", label: ROLE_LABELS.VICE_PRINCIPAL },
-  { value: "HOD", label: ROLE_LABELS.HOD },
-  { value: "COLLEGE_OFFICE", label: ROLE_LABELS.COLLEGE_OFFICE },
-  { value: "COLLEGE_STAFF", label: ROLE_LABELS.COLLEGE_STAFF },
-] as const;
+// Roles a Principal/VP can create here — must match PRINCIPAL_ROLES in
+// src/app/api/college/users/route.ts.
+const CREATABLE_ROLES: UserRole[] = [
+  "HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF",
+  "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
+];
+
+// One holder per college — matches COLLEGE_SINGLETON_ROLES on the API route.
+const SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
 
 export default function NewStaffPage() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
-  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
-  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
-  const [tempPhotoId] = useState(() => crypto.randomUUID());
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [collegeEmail, setCollegeEmail] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("12345678");
+  const [role, setRole] = useState<UserRole>("COLLEGE_OFFICE");
+  const [department, setDepartment] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((data) => setDepartments(data.departments ?? []))
-      .catch(() => {});
+      .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
+      .catch(() => { /* only needed for the HOD department picker */ });
   }, []);
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<StaffFormData>({
-    resolver: zodResolver(createUserSchema.omit({ collegeId: true })),
-    defaultValues: { role: "HOD" },
-  });
+  const isValid = !!name.trim() && !!email.trim() && !!password.trim() && !!role &&
+    (role !== "HOD" || !!department);
 
-  const role = watch("role");
-  const name = watch("name");
-
-  const onSubmit = async (data: StaffFormData) => {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isValid) return;
+    setSaving(true);
     try {
       const res = await fetch("/api/college/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
-          ...personalDetails,
-          ...(data.role === "VICE_PRINCIPAL" || data.role === "HOD" ? { academicProfile } : {}),
-          ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          role,
+          ...(collegeEmail.trim() ? { collegeEmail: collegeEmail.trim() } : {}),
+          ...(employeeId.trim() ? { employeeId: employeeId.trim() } : {}),
+          ...(phone.trim() ? { phone: phone.trim() } : {}),
+          ...(role === "HOD" ? { department } : {}),
+          ...(role === "COLLEGE_STAFF" && designation.trim() ? { designation: designation.trim() } : {}),
         }),
       });
       const json = await res.json() as { uid?: string; error?: string };
-
       if (res.status === 409) {
-        toast({ variant: "destructive", title: "Email already in use", description: json.error });
+        toast({ variant: "destructive", title: json.error ?? "Already exists" });
         return;
       }
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create account", description: json.error });
+        toast({ variant: "destructive", title: "Failed to create", description: json.error });
         return;
       }
-
-      toast({ variant: "success", title: "Account created", description: `${data.name} can now log in.` });
+      toast({ variant: "success", title: `${ROLE_LABELS[role]} account created` });
       router.push("/principal/staff");
     } catch {
-      toast({ variant: "destructive", title: "Network error", description: "Please try again." });
+      toast({ variant: "destructive", title: "Network error, please try again" });
+    } finally {
+      setSaving(false);
     }
-  };
+  }
 
   return (
     <div className="max-w-xl">
-      <PageHeader
-        title="Add Staff Member"
-        description="Create login access for HOD or College Office staff"
-      />
-
+      <PageHeader title="Add Staff" description="Create a staff login for your college" />
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Account Details</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base">Staff Details</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
-              <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
-                <Label>Profile Photo</Label>
-                <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={tempPhotoId} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl(undefined)} />
-              </div>
-              <div className="grid flex-1 grid-cols-1 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name *</Label>
-                  <Input id="name" {...register("name")} placeholder="Dr. Ramesh Kumar" />
-                  {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
-                  <Input id="email" type="email" {...register("email")} placeholder="staff@college.edu" />
-                  {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="collegeEmail">College Email</Label>
-                  <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@vishnu.edu.in" />
-                  {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="employeeId">Employee ID</Label>
-                  <Input id="employeeId" {...register("employeeId")} placeholder="EMP-001" />
-                  {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="password">Temporary Password *</Label>
-                <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
-                {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-                <p className="text-xs text-muted-foreground">Share this with the staff member to log in for the first time.</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Role *</Label>
-                <Select
-                  value={role}
-                  onValueChange={(v) => setValue("role", v as StaffFormData["role"])}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRINCIPAL_ASSIGNABLE_ROLES.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
-                        {r.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
-              </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label>Role <span className="text-destructive">*</span></Label>
+              <Select value={role} onValueChange={(v) => { setRole(v as UserRole); setDepartment(""); setDesignation(""); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CREATABLE_ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROLE_LABELS[r]}{SINGLETON_ROLES.includes(r) ? " (one per college)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {role === "HOD" && (
               <div className="space-y-2">
-                <Label>Department *</Label>
-                {departments.length > 0 ? (
-                  <Select onValueChange={(v) => setValue("department", v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map((d) => (
-                        <SelectItem key={d.id} value={d.name}>
-                          {d.name} ({d.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                    No departments yet.{" "}
-                    <button
-                      type="button"
-                      className="text-primary underline"
-                      onClick={() => router.push("/principal/departments")}
-                    >
-                      Add departments first
-                    </button>
-                  </div>
-                )}
-                {errors.department && <p className="text-sm text-destructive">{errors.department.message}</p>}
+                <Label>Department <span className="text-destructive">*</span></Label>
+                <Select value={department} onValueChange={setDepartment}>
+                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectContent>
+                    {departments.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No departments found — ask Principal to add one under Departments</div>
+                    ) : (
+                      departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
             {role === "COLLEGE_STAFF" && (
               <div className="space-y-2">
-                <Label htmlFor="designation">Title *</Label>
-                <Input id="designation" {...register("designation")} placeholder="e.g. Dean - R&D, IQAC Coordinator" />
-                <p className="text-xs text-muted-foreground">
-                  A free-text title for this staff member — not a fixed system role.
-                </p>
-                {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
+                <Label>Designation</Label>
+                <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Dean - R&D, IQAC Coordinator" />
               </div>
             )}
 
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Full Name <span className="text-destructive">*</span></Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+              </div>
+              <div className="space-y-2">
+                <Label>Email <span className="text-destructive">*</span></Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
+              </div>
+              <div className="space-y-2">
+                <Label>College Email</Label>
+                <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="Optional" />
+              </div>
+              <div className="space-y-2">
+                <Label>Employee ID</Label>
+                <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="Optional" />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+              </div>
+              <div className="space-y-2">
+                <Label>Temporary Password <span className="text-destructive">*</span></Label>
+                <Input value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
+            </div>
+
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>
-                Cancel
-              </Button>
-              <Button type="submit" loading={isSubmitting}>
-                Create Account
-              </Button>
+              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+              <Button type="submit" loading={saving} disabled={!isValid}>Create Account</Button>
             </div>
           </form>
         </CardContent>
       </Card>
-
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
-        <CardContent>
-          <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-        </CardContent>
-      </Card>
-
-      {(role === "VICE_PRINCIPAL" || role === "HOD") && (
-        <Card className="mt-6">
-          <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-          <CardContent>
-            <AcademicProfileFields
-              value={academicProfile}
-              onChange={setAcademicProfile}
-              includeTeachingAssignment={role === "HOD"}
-            />
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
