@@ -5,11 +5,11 @@ import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 
-// Office / Placement Department / Library / Exam Cell — college-scoped, one
-// holder per role per college (see ROLE_SCOPE in src/types/core.ts). Mirrors
+// Placement Department / Library / Exam Cell — college-scoped, one holder
+// per role per college (see ROLE_SCOPE in src/types/core.ts). Mirrors
 // administration/principals/route.ts, kept as its own route so the working
 // Principal/Vice Principal flow is untouched.
-const COLLEGE_STAFF_ROLES = ["OFFICE", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const COLLEGE_STAFF_ROLES = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
 
 export async function GET(request: Request) {
   try {

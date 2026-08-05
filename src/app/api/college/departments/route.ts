@@ -173,6 +173,25 @@ export async function DELETE(request: Request) {
       }
     }
 
+    // Refuse to delete a department that still has sub-departments — otherwise
+    // a main department can be removed while its sub-department (and that
+    // sub-department's own students/sections) are still intact, orphaning the
+    // sub-department's `parentDepartmentId` pointer. Cleanup must go
+    // bottom-up: delete the sub-departments first.
+    const childDeptsSnap = await db
+      .collection("colleges")
+      .doc(collegeId)
+      .collection("departments")
+      .where("parentDepartmentId", "==", deptId)
+      .limit(1)
+      .get();
+    if (!childDeptsSnap.empty) {
+      return NextResponse.json(
+        { error: "Cannot delete a department that still has sub-departments. Remove them first." },
+        { status: 409 }
+      );
+    }
+
     // Refuse to delete a department that still has students or sections —
     // deleting it would silently orphan their `department` string references.
     const [studentsSnap, sectionsSnap] = await Promise.all([

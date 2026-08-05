@@ -12,7 +12,6 @@ import { toast } from "@/hooks/useToast";
 import type { College } from "@/types";
 
 const ROLE_OPTIONS = [
-  { value: "OFFICE", label: "Office" },
   { value: "PLACEMENT_DEPT", label: "Placement Department" },
   { value: "LIBRARY", label: "Library" },
   { value: "EXAM_CELL", label: "Exam Cell" },
@@ -30,7 +29,7 @@ export default function NewCollegeStaffPage() {
   const searchParams = useSearchParams();
   const collegeId = params.id;
   const roleParam = searchParams.get("role");
-  const defaultRole: StaffRole = isStaffRole(roleParam) ? roleParam : "OFFICE";
+  const defaultRole: StaffRole = isStaffRole(roleParam) ? roleParam : "PLACEMENT_DEPT";
 
   const [college, setCollege] = useState<College | null>(null);
   const [loading, setLoading] = useState(true);

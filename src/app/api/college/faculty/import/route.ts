@@ -3,7 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import type {
+  Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution,
+  FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, PromotionRecord, AdminResponsibilityEntry,
+  AdminResponsibilityCategory, TrainingEntry, TrainingEntryType, ProfessionalMembership, ProfessionalBody,
+  AwardEntry, AwardCategory, CourseFileEntry,
+} from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -41,6 +46,61 @@ const STATUS_MAP: Record<string, FacultyStatus> = {
   "on leave": "ON_LEAVE",
   "resigned": "RESIGNED",
   "retired": "RETIRED",
+};
+
+const PI_CO_PI_MAP: Record<string, "PI" | "CO_PI"> = {
+  "pi": "PI",
+  "co-pi": "CO_PI",
+  "co pi": "CO_PI",
+  "copi": "CO_PI",
+};
+
+const ADMIN_RESPONSIBILITY_CATEGORY_MAP: Record<string, AdminResponsibilityCategory> = {
+  "coordinator role": "COORDINATOR",
+  "coordinator": "COORDINATOR",
+  "committee membership": "COMMITTEE_MEMBER",
+  "committee member": "COMMITTEE_MEMBER",
+  "nba / naac work": "NBA_NAAC",
+  "nba/naac work": "NBA_NAAC",
+  "nba naac": "NBA_NAAC",
+  "nba": "NBA_NAAC",
+  "naac": "NBA_NAAC",
+  "iqac": "IQAC",
+  "examination duty": "EXAMINATION_DUTY",
+  "other": "OTHER",
+};
+
+const TRAINING_TYPE_MAP: Record<string, TrainingEntryType> = {
+  "fdp": "FDP",
+  "workshop": "WORKSHOP",
+  "mooc": "MOOC",
+  "certification": "CERTIFICATION",
+  "skill development": "SKILL_DEVELOPMENT",
+  "administrative": "ADMINISTRATIVE",
+  "administrative training": "ADMINISTRATIVE",
+  "erp": "ERP",
+  "erp training": "ERP",
+  "office automation": "OFFICE_AUTOMATION",
+  "office automation training": "OFFICE_AUTOMATION",
+  "other": "OTHER",
+};
+
+const PROFESSIONAL_BODY_MAP: Record<string, ProfessionalBody> = {
+  "ieee": "IEEE",
+  "iste": "ISTE",
+  "csi": "CSI",
+  "acm": "ACM",
+  "iei": "IEI",
+  "other": "OTHER",
+};
+
+const AWARD_CATEGORY_MAP: Record<string, AwardCategory> = {
+  "best teacher award": "BEST_TEACHER",
+  "best teacher": "BEST_TEACHER",
+  "research award": "RESEARCH_AWARD",
+  "appreciation certificate": "APPRECIATION_CERTIFICATE",
+  "appreciation": "APPRECIATION_CERTIFICATE",
+  "other": "OTHER",
 };
 
 type ImportRow = {
@@ -158,8 +218,77 @@ function publications(row: ImportRow): Publication[] {
 
 function fundedProjects(row: ImportRow): FundedProject[] {
   return [1, 2, 3]
-    .map((i) => ({ title: row[`project${i}_title`]?.trim() ?? "", fundingAgency: row[`project${i}_agency`]?.trim() ?? "", grantAmountLakhs: num(row[`project${i}_amount`]) ?? 0, year: num(row[`project${i}_year`]) ?? 0, status: row[`project${i}_status`]?.trim() ?? "" }))
+    .map((i) => {
+      const roleKey = (row[`project${i}_role`] ?? "").trim().toLowerCase();
+      const piOrCoPi = PI_CO_PI_MAP[roleKey];
+      return {
+        title: row[`project${i}_title`]?.trim() ?? "", fundingAgency: row[`project${i}_agency`]?.trim() ?? "",
+        grantAmountLakhs: num(row[`project${i}_amount`]) ?? 0, year: num(row[`project${i}_year`]) ?? 0,
+        status: row[`project${i}_status`]?.trim() ?? "", ...(piOrCoPi ? { piOrCoPi } : {}),
+      };
+    })
     .filter((p) => p.title || p.fundingAgency);
+}
+
+function promotions(row: ImportRow): PromotionRecord[] {
+  return [1, 2, 3]
+    .map((i) => ({ fromDesignation: row[`promotion${i}_fromDesignation`]?.trim() ?? "", toDesignation: row[`promotion${i}_toDesignation`]?.trim() ?? "", effectiveYear: num(row[`promotion${i}_effectiveYear`]) ?? 0 }))
+    .filter((p) => p.fromDesignation || p.toDesignation);
+}
+
+function adminResponsibilities(row: ImportRow): AdminResponsibilityEntry[] {
+  return [1, 2, 3]
+    .map((i) => ({
+      category: ADMIN_RESPONSIBILITY_CATEGORY_MAP[(row[`adminResp${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
+      description: row[`adminResp${i}_description`]?.trim() ?? "",
+      fromYear: num(row[`adminResp${i}_fromYear`]),
+      toYear: num(row[`adminResp${i}_toYear`]),
+    }))
+    .filter((a) => a.description);
+}
+
+function trainingEntries(row: ImportRow): TrainingEntry[] {
+  return [1, 2, 3]
+    .map((i) => ({
+      type: TRAINING_TYPE_MAP[(row[`training${i}_type`] ?? "").trim().toLowerCase()] ?? "OTHER",
+      title: row[`training${i}_title`]?.trim() ?? "",
+      organizer: row[`training${i}_organizer`]?.trim() ?? "",
+      year: num(row[`training${i}_year`]) ?? 0,
+      durationDays: num(row[`training${i}_durationDays`]),
+    }))
+    .filter((t) => t.title || t.organizer);
+}
+
+function professionalMemberships(row: ImportRow): ProfessionalMembership[] {
+  return [1, 2, 3]
+    .map((i) => {
+      const bodyRaw = row[`membership${i}_body`]?.trim();
+      const body = PROFESSIONAL_BODY_MAP[(bodyRaw ?? "").toLowerCase()];
+      return {
+        body: body ?? "OTHER",
+        ...(!body && bodyRaw ? { otherName: bodyRaw } : row[`membership${i}_otherName`]?.trim() ? { otherName: row[`membership${i}_otherName`]!.trim() } : {}),
+        membershipId: row[`membership${i}_membershipId`]?.trim() || undefined,
+        sinceYear: num(row[`membership${i}_sinceYear`]),
+      };
+    })
+    .filter((m) => m.membershipId || m.sinceYear !== undefined || m.otherName);
+}
+
+function awards(row: ImportRow): AwardEntry[] {
+  return [1, 2, 3]
+    .map((i) => ({
+      category: AWARD_CATEGORY_MAP[(row[`award${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
+      title: row[`award${i}_title`]?.trim() ?? "",
+      awardingBody: row[`award${i}_awardingBody`]?.trim() ?? "",
+      year: num(row[`award${i}_year`]) ?? 0,
+    }))
+    .filter((a) => a.title || a.awardingBody);
+}
+
+function courseFiles(row: ImportRow): CourseFileEntry[] {
+  return [1, 2, 3]
+    .map((i) => ({ courseCode: row[`courseFile${i}_courseCode`]?.trim() ?? "", courseName: row[`courseFile${i}_courseName`]?.trim() ?? "", academicYear: row[`courseFile${i}_academicYear`]?.trim() ?? "" }))
+    .filter((c) => c.courseCode || c.courseName);
 }
 
 function consultancyProjects(row: ImportRow): ConsultancyProject[] {
@@ -186,6 +315,7 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     ugDetails: degree(row, "ug"),
     pgDetails: degree(row, "pg"),
     phdDetails: degree(row, "phd"),
+    postDoctoralDetails: degree(row, "postdoc"),
     phdStatus: row.phdStatus?.trim().toUpperCase().includes("PURSU") ? "PURSUING" : row.phdStatus?.trim() ? "AWARDED" : undefined,
     phdMode: row.phdMode?.trim().toUpperCase().includes("PART") ? "PART_TIME" : row.phdMode?.trim() ? "FULL_TIME" : undefined,
     phdSupervisorName: row.phdSupervisorName?.trim() || undefined,
@@ -197,6 +327,7 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
       ? { primaryTeachingRole: row.primaryTeachingRole?.trim() ?? "", courses: courses(row) }
       : undefined,
     previousInstitutions: previousInstitutions(row),
+    promotionHistory: promotions(row),
     publications: publications(row),
     publicationsFirstOrCorrespondingAuthor: num(row.publicationsFirstOrCorrespondingAuthor) ?? 0,
     publicationsQ1OrHighImpact: num(row.publicationsQ1OrHighImpact) ?? 0,
@@ -209,6 +340,9 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     totalCitations: num(row.totalCitations) ?? 0,
     hIndex: num(row.hIndex) ?? 0,
     i10Index: num(row.i10Index) ?? 0,
+    googleScholarId: row.googleScholarId?.trim() || undefined,
+    scopusAuthorId: row.scopusAuthorId?.trim() || undefined,
+    orcidId: row.orcidId?.trim() || undefined,
     fundedProjects: fundedProjects(row),
     consultancyProjects: consultancyProjects(row),
     patents: {
@@ -229,11 +363,21 @@ function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefin
     nationalExposure: row.nationalExposure?.trim() || undefined,
     internationalExposure: row.internationalExposure?.trim() || undefined,
     labsEstablished: labsEstablished(row),
+    adminResponsibilityEntries: adminResponsibilities(row),
     administrativeResponsibilities: row.administrativeResponsibilities?.trim() || undefined,
+    trainingEntries: trainingEntries(row),
     certificationsAndFdps: row.certificationsAndFdps?.trim() || undefined,
+    professionalMemberships: professionalMemberships(row),
     professionalBodyMemberships: row.professionalBodyMemberships?.trim() || undefined,
     authoredBooks: authoredBooks(row),
+    awardEntries: awards(row),
     notableAwards: row.notableAwards?.trim() || undefined,
+    courseFilesAndCoPoMapping: courseFiles(row),
+    presentSalary: num(row.presentSalary),
+    grossAnnualCTC: num(row.grossAnnualCTC),
+    incrementsAwarded: num(row.incrementsAwarded),
+    fundingConsultancyRevenue: num(row.fundingConsultancyRevenue),
+    otherInformation: row.otherInformation?.trim() || undefined,
   };
   for (const key of Object.keys(profile)) {
     if (profile[key] === undefined) delete profile[key];
@@ -330,6 +474,8 @@ export async function POST(request: Request) {
       if (row.dateOfBirth?.trim() && !dateOfBirth) dropped(empId, "Date of birth", row.dateOfBirth);
       const ratificationDate = parseDate(row.ratificationDate);
       if (row.ratificationDate?.trim() && !ratificationDate) dropped(empId, "Ratification date", row.ratificationDate);
+      const dateOfJoiningDepartment = parseDate(row.dateOfJoiningDepartment);
+      if (row.dateOfJoiningDepartment?.trim() && !dateOfJoiningDepartment) dropped(empId, "Date of joining department", row.dateOfJoiningDepartment);
 
       // Parses a numeric field, warning (rather than silently zeroing/dropping
       // it) when a non-empty value fails to parse.
@@ -347,6 +493,7 @@ export async function POST(request: Request) {
         department: hodDept,
         employeeId: empId,
         name: row.name.trim(),
+        apaarFacultyId: row.apaarFacultyId?.trim() || undefined,
         email: row.email.trim().toLowerCase(),
         phone: row.phone?.trim() ?? "",
         designation,
@@ -355,6 +502,8 @@ export async function POST(request: Request) {
         employmentType,
         experienceYears: checkNum(row.experienceYears, "Total Experience") ?? 0,
         joiningDate,
+        dateOfJoiningDepartment: dateOfJoiningDepartment || undefined,
+        aicteEligible: row.aicteEligible ? row.aicteEligible.trim().toLowerCase() === "yes" : undefined,
         status,
         gender: row.gender?.trim() || undefined,
         dateOfBirth: dateOfBirth || undefined,
@@ -381,6 +530,7 @@ export async function POST(request: Request) {
         temporaryAddress: row.temporaryAddress?.trim() || undefined,
         permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
         permanentAddress: row.permanentAddress?.trim() || undefined,
+        resumeUrl: row.resumeUrl?.trim() || undefined,
         internalExperience: checkNum(row.internalExperience, "Internal Exp"),
         externalExperience: checkNum(row.externalExperience, "External Exp"),
         inCampusExperience: checkNum(row.inCampusExperience, "In Campus Exp"),

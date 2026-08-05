@@ -16,7 +16,6 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   ADMINISTRATION: ["/administration"],
   HR_ADMIN: ["/hr-admin"],
   ADMIN_OFFICE: ["/admin-office"],
-  OFFICE: ["/office"],
   PLACEMENT_DEPT: ["/placement-dept"],
   LIBRARY: ["/library"],
   EXAM_CELL: ["/exam-cell"],

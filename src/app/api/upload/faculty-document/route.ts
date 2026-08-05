@@ -6,7 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminStorage } from "@/lib/firebase/admin";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_DOC_TYPES = ["joining-letter", "appointment-letter"] as const;
+const ALLOWED_DOC_TYPES = ["joining-letter", "appointment-letter", "resume"] as const;
 type DocType = (typeof ALLOWED_DOC_TYPES)[number];
 
 const MIME_TO_EXT: Record<string, string> = {
