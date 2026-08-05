@@ -72,6 +72,9 @@ export const NAV_ITEMS: NavItem[] = [
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
 
+  // Annexure
+  { label: "Dashboard", href: "/annexure", iconName: "LayoutDashboard", roles: ["ANNEXURE"] },
+
   // Location Dept Head
   { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
   { label: "Hiring Requests", href: "/location-dept-head/vacancies", iconName: "ClipboardPlus", roles: ["LOCATION_DEPT_HEAD"], section: "Hiring" },
@@ -118,6 +121,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
   { label: "Supporting Staff", href: "/hod/supporting-staff", iconName: "UserCog", roles: ["HOD"] },
+  { label: "Annexure", href: "/hod/annexure", iconName: "UsersRound", roles: ["HOD"] },
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
   { label: "Incoming Students", href: "/hod/students/incoming", iconName: "UserPlus", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
@@ -345,6 +349,9 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   EXAM_CELL: [
     { label: "Home", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
+  ],
+  ANNEXURE: [
+    { label: "Home", href: "/annexure", iconName: "LayoutDashboard", roles: ["ANNEXURE"] },
   ],
   LOCATION_DEPT_HEAD: [
     { label: "Home", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },

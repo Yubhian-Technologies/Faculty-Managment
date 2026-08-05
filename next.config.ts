@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Pin the workspace root to this project. Without this, Turbopack walks up
+  // looking for a lockfile and finds a stray one in the parent folder (which
+  // also contains unrelated sibling projects), making it treat that parent
+  // directory as the root — watching/resolving far more than needed and
+  // slowing down dev. See node_modules/next/dist/docs/.../turbopack.md.
+  turbopack: {
+    root: __dirname,
+  },
   images: {
     remotePatterns: [
       {
