@@ -95,7 +95,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Hiring Decisions", href: "/principal/decisions", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Supporting Staff", href: "/principal/supporting-staff", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   { label: "College Members", href: "/principal/college-members", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -117,7 +116,6 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
-  { label: "Supporting Staff", href: "/hod/supporting-staff", iconName: "UserCog", roles: ["HOD"] },
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
   { label: "Incoming Students", href: "/hod/students/incoming", iconName: "UserPlus", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
