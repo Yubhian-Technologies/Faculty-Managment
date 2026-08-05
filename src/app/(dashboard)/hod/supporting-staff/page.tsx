@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
+import { FacultyModuleTabs } from "@/components/faculty/FacultyModuleTabs";
 import { toast } from "@/hooks/useToast";
 import {
   STAFF_CATEGORY_LABELS, TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
@@ -155,6 +156,8 @@ export default function HODSupportingStaffPage() {
           </div>
         }
       />
+
+      <FacultyModuleTabs facultyHref="/hod/faculty" supportingStaffHref="/hod/supporting-staff" />
 
       <div className="flex gap-2 flex-wrap">
         {CATEGORY_TABS.map((tab) => (
