@@ -47,8 +47,8 @@ export async function GET(request: Request) {
 }
 
 // Two independent creation shapes share this collection: course/year-scoped subjects
-// (HOD Subjects page — courseId + year, validated against the course) and
-// semester-scoped subjects (HOD Teaching Assignments page — semester + department,
+// (HOD Subjects page - courseId + year, validated against the course) and
+// semester-scoped subjects (HOD Teaching Assignments page - semester + department,
 // no course link). Branch on which fields the caller sent.
 export async function POST(request: Request) {
   try {

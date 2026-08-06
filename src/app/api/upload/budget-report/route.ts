@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminStorage } from "@/lib/firebase/admin";
 
-const MAX_SIZE = 10 * 1024 * 1024; // 10 MB — "any form" report, larger than a single receipt image
+const MAX_SIZE = 10 * 1024 * 1024; // 10 MB - "any form" report, larger than a single receipt image
 const ALLOWED_TYPES = [
   "application/pdf",
   "image/jpeg",

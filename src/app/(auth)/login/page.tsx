@@ -53,7 +53,7 @@ function LoginForm() {
       const token = await credential.user.getIdToken();
       setFirebaseToken(token);
 
-      // Set session cookie — the server resolves role/collegeId from JWT claims
+      // Set session cookie - the server resolves role/collegeId from JWT claims
       // or from the Firestore systemUsers collection (for users created without claims)
       const sessionRes = await fetch("/api/auth/session", {
         method: "POST",
@@ -76,7 +76,7 @@ function LoginForm() {
         refreshToken?: boolean;
       };
 
-      // Server just backfilled custom claims — force a token refresh so the new
+      // Server just backfilled custom claims - force a token refresh so the new
       // claims are included in the client's Firebase Auth token. This makes
       // client-side Firestore security rules work on first login.
       if (sessionData.refreshToken) {
@@ -104,7 +104,7 @@ function LoginForm() {
         });
         router.push(redirect ?? "/super-admin");
       } else if (ROLE_SCOPE[role as UserRole] === "GLOBAL") {
-        // MANAGEMENT, FINANCE, PURCHASE_DEPT — global roles with no college/location
+        // MANAGEMENT, FINANCE, PURCHASE_DEPT - global roles with no college/location
         // scope. Their profile lives only in systemUsers; act on colleges via an
         // explicit college context chosen inside the dashboard.
         setUser({
@@ -118,7 +118,7 @@ function LoginForm() {
         });
         router.push(redirect ?? ROLE_DASHBOARD_PATHS[role as UserRole] ?? "/login");
       } else if (LOCATION_ROLES.includes(role) && locationId) {
-        // Location-scoped role — profile comes from locations/{id}/locationUsers/{uid}
+        // Location-scoped role - profile comes from locations/{id}/locationUsers/{uid}
         const profile: FMSUser = sessionData.profile ?? {
           uid: credential.user.uid,
           collegeId: "",
@@ -139,7 +139,7 @@ function LoginForm() {
         if (!profile) {
           try {
             profile = await getUserById(collegeId, credential.user.uid);
-          } catch { /* blocked by Firestore rules — use session data fallback */ }
+          } catch { /* blocked by Firestore rules - use session data fallback */ }
         }
         if (!profile) {
           profile = {

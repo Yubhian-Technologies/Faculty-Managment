@@ -19,7 +19,7 @@ const PUBLIC_PATHS = [
   "/about-team-illustration.png",
 ];
 
-// /panel/interviews is shared — any staff role can be added as a panel member
+// /panel/interviews is shared - any staff role can be added as a panel member
 const PANEL_INTERVIEWS_PATH = "/panel/interviews";
 
 // Per-role *own* (and explicitly-shared) path prefixes. Inherited lower-level
@@ -35,13 +35,14 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   EXAM_CELL: ["/exam-cell"],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
   PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH],
-  // Vice Principal mirrors Principal's authority (see AGENTS.md) — full access
+  // Vice Principal mirrors Principal's authority (see AGENTS.md) - full access
   // to /principal/* alongside its own /vice-principal home.
   VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH],
   HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH],
   COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH],
   COLLEGE_STAFF: ["/college-staff"],
   PANEL_MEMBER: ["/panel", "/coordinator"],
+  ANNEXURE: ["/annexure"],
   ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH],
   FINANCE: ["/finance"],
   PURCHASE_DEPT: ["/purchase"],
@@ -54,7 +55,7 @@ function isPublicPath(pathname: string): boolean {
 }
 
 // A role may reach its own paths plus the dashboards of every lower-level role it
-// inherits within scope (L0–L6 hierarchy). This is coarse path gating only —
+// inherits within scope (L0–L6 hierarchy). This is coarse path gating only -
 // real tenant/data isolation is still enforced by the per-route API guards.
 function allowedPathsForRole(role: string): string[] {
   const own = ROLE_PATH_MAP[role] ?? [];

@@ -48,7 +48,7 @@ export default function HODLeaveApprovalsPage() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectState, setRejectState] = useState<RejectState | null>(null);
 
-  // "Others" resolution — the HOD picks the actual leave type to sanction,
+  // "Others" resolution - the HOD picks the actual leave type to sanction,
   // informed by the applicant's own remaining balance for each type.
   const [leaveTypeOptions, setLeaveTypeOptions] = useState<LeaveTypeFull[]>([]);
   const [applicantBalances, setApplicantBalances] = useState<Record<string, LeaveBalanceV2[]>>({});
@@ -59,7 +59,7 @@ export default function HODLeaveApprovalsPage() {
     fetch("/api/leave/types")
       .then((r) => r.json() as Promise<{ leaveTypes: LeaveTypeFull[] }>)
       .then((d) => setLeaveTypeOptions((d.leaveTypes ?? []).filter((lt) => !lt.rules.isVacationEntitlement)))
-      .catch(() => { /* non-fatal — dropdown just shows codes without balances */ });
+      .catch(() => { /* non-fatal - dropdown just shows codes without balances */ });
   }, []);
 
   const loadApplicantBalances = useCallback((employeeId: string) => {
@@ -180,7 +180,7 @@ export default function HODLeaveApprovalsPage() {
                     key={req.id}
                     className="rounded-lg border bg-card"
                   >
-                    {/* Summary row — always visible */}
+                    {/* Summary row - always visible */}
                     <button
                       type="button"
                       className="w-full text-left p-4 space-y-2"
@@ -211,8 +211,8 @@ export default function HODLeaveApprovalsPage() {
                         <BookOpen className="h-4 w-4 shrink-0" />
                         <span className="font-medium text-foreground">
                           {req.isOtherRequest
-                            ? "Others — needs type selection"
-                            : (req.leaveTypeCode ? LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode : "—")}
+                            ? "Others - needs type selection"
+                            : (req.leaveTypeCode ? LT_LABELS[req.leaveTypeCode] ?? req.leaveTypeCode : "-")}
                         </span>
                         <span>·</span>
                         <CalendarDays className="h-4 w-4 shrink-0" />
@@ -256,7 +256,7 @@ export default function HODLeaveApprovalsPage() {
                           </div>
                         </div>
 
-                        {/* "Others" — HOD picks the actual leave type to sanction */}
+                        {/* "Others" - HOD picks the actual leave type to sanction */}
                         {req.isOtherRequest && !req.leaveTypeCode && !isRejectingThis && (
                           <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50 p-3">
                             <Label className="text-sm font-medium text-blue-900">
@@ -265,7 +265,7 @@ export default function HODLeaveApprovalsPage() {
                             <p className="text-xs text-blue-800/80">
                               Faculty applied under &quot;Others&quot; and the Principal has already approved
                               the general request. Review the reason above and pick whichever leave type
-                              best fits, based on their remaining balance — this finalizes the approval.
+                              best fits, based on their remaining balance - this finalizes the approval.
                             </p>
                             <Select
                               value={otherTypeChoice[req.id] ?? ""}
@@ -288,7 +288,7 @@ export default function HODLeaveApprovalsPage() {
                                     : null;
                                   return (
                                     <SelectItem key={lt.code} value={lt.code}>
-                                      {lt.label} {available !== null ? `— ${available} day(s) available` : ""}
+                                      {lt.label} {available !== null ? `- ${available} day(s) available` : ""}
                                     </SelectItem>
                                   );
                                 })}

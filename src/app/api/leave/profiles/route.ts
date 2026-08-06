@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import type { EmployeeLeaveProfile } from "@/types/leave";
 import { PROFILES_COL } from "@/lib/leave/balanceEngine";
 
-// GET /api/leave/profiles — returns all profiles for HOD's dept (or all for Principal)
+// GET /api/leave/profiles - returns all profiles for HOD's dept (or all for Principal)
 // Also returns the uid list of faculty without profiles so HOD can identify who needs setup.
 
 export async function GET(request: Request) {

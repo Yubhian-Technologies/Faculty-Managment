@@ -34,26 +34,26 @@ export default function SuperAdminDashboard() {
   const statCards = [
     {
       label: "Total Colleges",
-      value: stats ? String(stats.colleges) : "—",
+      value: stats ? String(stats.colleges) : "-",
       sub: stats ? `${stats.activeColleges} active` : undefined,
       icon: Building2,
       color: "text-blue-600 bg-blue-50",
     },
     {
       label: "Active Users",
-      value: "—",
+      value: "-",
       icon: Users,
       color: "text-green-600 bg-green-50",
     },
     {
       label: "Ongoing Hirings",
-      value: "—",
+      value: "-",
       icon: TrendingUp,
       color: "text-orange-600 bg-orange-50",
     },
     {
       label: "Audit Events",
-      value: "—",
+      value: "-",
       icon: ScrollText,
       color: "text-purple-600 bg-purple-50",
     },

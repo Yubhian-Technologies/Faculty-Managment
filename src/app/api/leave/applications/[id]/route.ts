@@ -24,7 +24,7 @@ function labelFor(code?: LeaveTypeCodeV2) {
   return LT_SHORT[code] ?? code;
 }
 
-// Looks up the leave type's approval chain — "standard" types are fully
+// Looks up the leave type's approval chain - "standard" types are fully
 // decided by the HOD; "management"/"medical_officer" types still require
 // Principal/VP ratification after HOD sign-off.
 async function resolveApprovalChain(
@@ -55,7 +55,7 @@ async function notify(
   } catch { /* non-fatal */ }
 }
 
-// ─── GET — fetch a single leave request ──────────────────────────────────────
+// ─── GET - fetch a single leave request ──────────────────────────────────────
 
 export async function GET(
   _request: Request,
@@ -101,7 +101,7 @@ export async function GET(
   }
 }
 
-// ─── PATCH — cancel / HOD approve-reject / Principal approve-reject ───────────
+// ─── PATCH - cancel / HOD approve-reject / Principal approve-reject ───────────
 
 export async function PATCH(
   request: Request,
@@ -116,7 +116,7 @@ export async function PATCH(
     const body = (await request.json()) as {
       action: "CANCEL" | "APPROVE" | "REJECT" | "RECALL";
       comments?: string;
-      // Required when the HOD is approving an "Others" request — the type they
+      // Required when the HOD is approving an "Others" request - the type they
       // decide is the most suitable to sanction the leave against.
       leaveTypeCode?: LeaveTypeCodeV2;
     };
@@ -139,7 +139,7 @@ export async function PATCH(
       if (req.employeeId !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      // Cancellable while awaiting the first reviewer's decision — the HOD for
+      // Cancellable while awaiting the first reviewer's decision - the HOD for
       // normal requests, or the Principal for "Others" requests (which are
       // reviewed by the Principal before the HOD).
       const awaitingFirstReview =
@@ -178,7 +178,7 @@ export async function PATCH(
 
         // "Others" requests reach the HOD only after the Principal has already
         // given a general go-ahead; the HOD's job here is just to pick the
-        // concrete leave type and finalize — no further ratification needed.
+        // concrete leave type and finalize - no further ratification needed.
         const isOtherFinalStage = !!req.isOtherRequest && !req.leaveTypeCode;
 
         let effectiveCode = req.leaveTypeCode;
@@ -228,7 +228,7 @@ export async function PATCH(
         const year = resolveYear(req.fromDate);
 
         if (isOtherFinalStage) {
-          // Principal already approved the general request — HOD's type pick is final.
+          // Principal already approved the general request - HOD's type pick is final.
           await reqRef.update({
             status: "APPROVED",
             currentApproverRole: FieldValue.delete(),
@@ -269,7 +269,7 @@ export async function PATCH(
           return NextResponse.json({ ok: true });
         }
 
-        // Normal (non-Other) request — decide whether this type still needs
+        // Normal (non-Other) request - decide whether this type still needs
         // Principal/Management ratification, or whether HOD approval is final.
         const approvalChain = await resolveApprovalChain(db, effectiveCode as LeaveTypeCodeV2);
         const needsRatification = approvalChain === "management" || approvalChain === "medical_officer";
@@ -316,7 +316,7 @@ export async function PATCH(
           await notify(
             db, session.collegeId, req.employeeId,
             "GENERAL",
-            `${ltLabel} Leave — Pending Principal Approval`,
+            `${ltLabel} Leave - Pending Principal Approval`,
             `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was approved by ${hodName} and is now awaiting Principal's approval.`,
             `${leaveBase}/${id}`
           );
@@ -345,7 +345,7 @@ export async function PATCH(
         const principalName = (principalSnap.data() as { name?: string })?.name
           ?? (session.role === "VICE_PRINCIPAL" ? "Vice Principal" : "Principal");
 
-        // "Others" requests land here first, before the HOD has picked a type —
+        // "Others" requests land here first, before the HOD has picked a type -
         // the Principal is only giving a general go-ahead; the HOD finalizes
         // (and picks the actual leave type) afterwards.
         const isOtherFirstStage = !!req.isOtherRequest && !req.leaveTypeCode;
@@ -378,7 +378,7 @@ export async function PATCH(
             return NextResponse.json({ ok: true });
           }
 
-          // APPROVE — forward to the HOD to pick the actual leave type.
+          // APPROVE - forward to the HOD to pick the actual leave type.
           await reqRef.update({ status: "PENDING_HOD", currentApproverRole: "HOD", updatedAt: now });
           await db.collection("colleges").doc(session.collegeId)
             .collection("leaveApprovalSteps").add({
@@ -396,7 +396,7 @@ export async function PATCH(
           await notify(
             db, session.collegeId, req.employeeId,
             "GENERAL",
-            "Leave — Pending HOD Review",
+            "Leave - Pending HOD Review",
             `Your leave request (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was approved by ${principalName} and is now with your HOD to finalize the leave type.`,
             `${leaveBase}/${id}`
           );

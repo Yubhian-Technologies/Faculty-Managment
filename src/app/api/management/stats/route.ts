@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// MANAGEMENT is read-only — this route only implements GET.
+// MANAGEMENT is read-only - this route only implements GET.
 // Uses Firestore count() aggregation queries so this stays cheap as data grows
-// (no document reads — the whole point is avoiding the full-collection-fetch
+// (no document reads - the whole point is avoiding the full-collection-fetch
 // pattern the rest of the management pages used to rely on).
 export async function GET() {
   try {

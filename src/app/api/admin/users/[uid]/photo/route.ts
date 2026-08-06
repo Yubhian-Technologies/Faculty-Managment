@@ -8,11 +8,11 @@ import type { UserRole } from "@/types";
 
 // Super Admin may only set the photo / "Others" note for the roles it directly
 // administers. Everyone else's photo is edited from their own manager's
-// dashboard (Principal for HOD/Vice Principal, HOD for faculty) — Super Admin
+// dashboard (Principal for HOD/Vice Principal, HOD for faculty) - Super Admin
 // can still see those elsewhere, just not edit them from here.
 //
 // Where the write lands is driven by ROLE_SCOPE (colleges/users, locations/
-// locationUsers, or systemUsers-only) rather than a hardcoded per-role bucket —
+// locationUsers, or systemUsers-only) rather than a hardcoded per-role bucket -
 // scope is a tenancy property of the role (see core.ts), not something tied to
 // which roles happen to be Super-Admin-editable here.
 const SUPER_ADMIN_EDITABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "ADMINISTRATION", "MANAGEMENT"];
@@ -40,7 +40,7 @@ export async function PATCH(
     if (!SUPER_ADMIN_EDITABLE_ROLES.includes(role)) {
       return NextResponse.json({ error: "Super Admin cannot edit this role" }, { status: 403 });
     }
-    // Empty string clears the photo — everything else must be a real upload of ours.
+    // Empty string clears the photo - everything else must be a real upload of ours.
     if (
       photoUrl !== undefined &&
       photoUrl !== "" &&
@@ -79,7 +79,7 @@ export async function PATCH(
       await db.collection("locations").doc(locationId).collection("locationUsers").doc(uid)
         .set(tenantUpdate, { merge: true });
     }
-    // scope === "GLOBAL" (MANAGEMENT/FINANCE/PURCHASE_DEPT): systemUsers is the only record — handled below.
+    // scope === "GLOBAL" (MANAGEMENT/FINANCE/PURCHASE_DEPT): systemUsers is the only record - handled below.
 
     // systemUsers is the mirror every dashboard's nav/avatar reads from, regardless of scope.
     const systemUpdate: Record<string, unknown> = {};

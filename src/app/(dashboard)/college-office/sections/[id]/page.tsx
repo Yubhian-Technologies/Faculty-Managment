@@ -59,9 +59,9 @@ export default function OfficeSectionRosterPage() {
           toast({ variant: "destructive", title: "Section not found" });
           return null;
         }
-        // Students API scopes by section NAME + year, not id — section names
+        // Students API scopes by section NAME + year, not id - section names
         // aren't unique across departments (or even within one, when two
-        // sections are cross-listed to different branches — e.g. two "A"s
+        // sections are cross-listed to different branches - e.g. two "A"s
         // under Basic Science, one feeding CSE and one ECE), so narrow
         // client-side by department and, when this section is cross-listed,
         // by that cross-listing too.
@@ -205,11 +205,11 @@ export default function OfficeSectionRosterPage() {
                       <td className="px-4 py-2.5">
                         {s.secondaryDepartment
                           ? <Badge variant="outline" className="text-xs">{s.secondaryDepartment}</Badge>
-                          : <span className="text-muted-foreground">—</span>}
+                          : <span className="text-muted-foreground">-</span>}
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.email || "—"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.email || "-"}</td>
                       <td className="px-4 py-2.5">
                         <div className="flex justify-end gap-1">
                           <Button

@@ -64,7 +64,7 @@ export async function GET(request: Request) {
       // Own leaves
       leaves = leaves.filter((l) => l.applicantUid === session.uid);
     } else if (dept && session.role === "HOD") {
-      // HOD viewing dept leaves for approval — requires HOD's department
+      // HOD viewing dept leaves for approval - requires HOD's department
       const hodDoc = await getUserDoc(db, session.collegeId, session.uid);
       const hodDept = hodDoc?.department ?? "";
       leaves = leaves.filter(

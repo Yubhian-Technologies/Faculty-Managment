@@ -11,7 +11,7 @@ const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 export async function POST(request: Request) {
   try {
     // HOD (indent + purchase-clearance GRN), or Principal/VP (emergency
-    // purchase-clearance GRN — see /principal/purchase-clearance).
+    // purchase-clearance GRN - see /principal/purchase-clearance).
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
 
     const formData = await request.formData();

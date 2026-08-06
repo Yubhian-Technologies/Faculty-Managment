@@ -9,7 +9,7 @@ import { PROFILES_COL, initBalancesForYear } from "@/lib/leave/balanceEngine";
 
 // A faculty member's employment type, gender, marital status, date of joining
 // and department are already set by HR/admin when the FacultyMember record was
-// created — the leave profile must mirror them, not let the faculty redefine
+// created - the leave profile must mirror them, not let the faculty redefine
 // them during self-service setup.
 function facultyDefaults(faculty: FirebaseFirestore.DocumentData) {
   const f = faculty as Partial<FacultyMember>;
@@ -49,7 +49,7 @@ async function loadFacultyDefaults(
   return facultyDefaults(snap.docs[0].data());
 }
 
-// ─── GET — fetch profile (own, or specific uid for HOD/Principal) ─────────────
+// ─── GET - fetch profile (own, or specific uid for HOD/Principal) ─────────────
 
 export async function GET(request: Request) {
   try {
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
   }
 }
 
-// ─── PUT — create/update profile (own, or specific uid for HOD/Principal) ─────
+// ─── PUT - create/update profile (own, or specific uid for HOD/Principal) ─────
 
 export async function PUT(request: Request) {
   try {
@@ -114,7 +114,7 @@ export async function PUT(request: Request) {
     const isNew = !existing.exists;
 
     // A faculty member setting up their own profile cannot override the
-    // employment details HR already recorded — enforce it server-side
+    // employment details HR already recorded - enforce it server-side
     // regardless of what the client sends.
     if (resolvedUid === session.uid && session.role === "PANEL_MEMBER") {
       const locked = await loadFacultyDefaults(db, session.collegeId, resolvedUid);

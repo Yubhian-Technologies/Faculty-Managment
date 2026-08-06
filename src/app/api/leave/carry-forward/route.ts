@@ -16,7 +16,7 @@ const EL_CODE: LeaveTypeCodeV2 = "EL";
 const EL_CARRY_CAP = 300;
 
 // POST /api/leave/carry-forward
-// Body: { targetYear?: number }  — defaults to current calendar year
+// Body: { targetYear?: number }  - defaults to current calendar year
 // Action: for every employee in the college with an EL balance for targetYear,
 //   computes carry-forward = min(300, opening + credited - used)
 //   and writes a next-year EL balance doc with opening = carryForward.
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
           updatedAt: now,
         });
       } else {
-        // Already exists — update opening with carry-forward (idempotent re-run)
+        // Already exists - update opening with carry-forward (idempotent re-run)
         batch.update(toRef, {
           opening: carryForward,
           carriedForward: carryForward,

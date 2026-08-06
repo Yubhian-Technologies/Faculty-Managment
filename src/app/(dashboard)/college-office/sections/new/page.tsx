@@ -20,7 +20,7 @@ function ordinalYear(year: number) {
 
 // Derives the admission batch (e.g. "2023-2027") from the college's current
 // academic session (e.g. "2025-26"), the section's year-of-study, and the
-// course's total duration — a Year-2 section in a 4-year course during the
+// course's total duration - a Year-2 section in a 4-year course during the
 // 2025-26 session was admitted in 2024 and passes out in 2028.
 function computeBatch(currentSessionLabel: string, durationYears: number, sectionYear: number): string {
   const startYear = parseInt(currentSessionLabel.slice(0, 4), 10);
@@ -76,12 +76,12 @@ export default function NewSectionOfficePage() {
     fetch("/api/college/academic-sessions")
       .then((r) => r.json() as Promise<{ academicSessions: AcademicSession[] }>)
       .then((d) => setCurrentSession((d.academicSessions ?? []).find((s) => s.isCurrent) ?? null))
-      .catch(() => { /* non-critical — batch just won't auto-fill */ });
+      .catch(() => { /* non-critical - batch just won't auto-fill */ });
   }, []);
 
   // Pre-filling department from either a course link (e.g. "Add Section" from
   // a course's page) or a department-filtered link (e.g. "Add Section" from
-  // the Sections list with a department tab active) — a single effect so the
+  // the Sections list with a department tab active) - a single effect so the
   // two sources can never race and set `form.departmentId` to two different
   // values in the same tick. An explicit departmentId wins over one inferred
   // from a course, since it reflects the more specific filter the user was
@@ -150,7 +150,7 @@ export default function NewSectionOfficePage() {
   }
 
   // A sub-department (secondary department, e.g. "BS - Physics") never has
-  // courses of its own — it's a specialization within its parent's program —
+  // courses of its own - it's a specialization within its parent's program -
   // so fall back to the parent's courses too, otherwise the dropdown is
   // empty and a section can never be created for it.
   const coursesInDepartment = useMemo(() => {
@@ -181,7 +181,7 @@ export default function NewSectionOfficePage() {
     if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
     if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
     if (secondaryDepartmentOptions.length > 0 && !form.secondaryDepartment) {
-      toast({ variant: "destructive", title: "Secondary Department is required — pick which branch this section promotes into" });
+      toast({ variant: "destructive", title: "Secondary Department is required - pick which branch this section promotes into" });
       return;
     }
 
@@ -252,12 +252,12 @@ export default function NewSectionOfficePage() {
                 >
                   <SelectTrigger><SelectValue placeholder="Select secondary department" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">— None —</SelectItem>
+                    <SelectItem value="none">- None -</SelectItem>
                     {secondaryDepartmentOptions.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Which branch this section&apos;s whole cohort promotes into next year — that branch&apos;s HOD gets
+                  Which branch this section&apos;s whole cohort promotes into next year - that branch&apos;s HOD gets
                   automatic view-only access to this section&apos;s students, roster, and assigned faculty.
                 </p>
               </div>
@@ -316,8 +316,8 @@ export default function NewSectionOfficePage() {
               />
               <p className="text-xs text-muted-foreground">
                 {currentSession
-                  ? `Admission year to passout year — auto-filled from the current academic session (${currentSession.label}); adjust if needed.`
-                  : "Admission year to passout year — set a current Academic Session to auto-fill this."}
+                  ? `Admission year to passout year - auto-filled from the current academic session (${currentSession.label}); adjust if needed.`
+                  : "Admission year to passout year - set a current Academic Session to auto-fill this."}
               </p>
             </div>
 
@@ -331,7 +331,7 @@ export default function NewSectionOfficePage() {
                   <SelectValue placeholder="Select faculty incharge" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">— Not assigned —</SelectItem>
+                  <SelectItem value="none">- Not assigned -</SelectItem>
                   {facultyList.map((f) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}

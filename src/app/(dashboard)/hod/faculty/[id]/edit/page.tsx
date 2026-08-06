@@ -195,7 +195,7 @@ export default function EditFacultyPage() {
         setTeachingRows(rows);
         setOriginalTeachingRows(rows);
       })
-      .catch(() => { /* non-critical — teaching assignments can be added fresh */ })
+      .catch(() => { /* non-critical - teaching assignments can be added fresh */ })
       .finally(() => setTeachingLoaded(true));
   }, [facultyId]);
 
@@ -477,7 +477,7 @@ export default function EditFacultyPage() {
               <CardContent className="space-y-3">
                 {pendingPreference && originalTeachingRows.length === 0 && teachingRows.length > 0 && (
                   <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
-                    Pre-filled from the course/subjects set during hiring — pick a section for each row below to activate it.
+                    Pre-filled from the course/subjects set during hiring - pick a section for each row below to activate it.
                   </p>
                 )}
                 <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />

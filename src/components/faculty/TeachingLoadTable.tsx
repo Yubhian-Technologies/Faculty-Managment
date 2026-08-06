@@ -23,12 +23,12 @@ function LoadTable({ rows, showPastColumns }: { rows: TeachingLoadRow[]; showPas
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className={`border-b last:border-b-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
-              <td className="p-2 whitespace-nowrap">{r.academicYear || "—"}</td>
-              <td className="p-2 whitespace-nowrap">{formatClassColumn(r) || "—"}</td>
-              <td className="p-2 whitespace-nowrap">{r.subject || "—"}</td>
-              <td className="p-2 whitespace-nowrap">{r.hoursPerWeek ?? "—"}</td>
-              {showPastColumns && <td className="p-2 whitespace-nowrap">{r.passPercentage != null ? `${r.passPercentage}%` : "—"}</td>}
-              {showPastColumns && <td className="p-2 whitespace-nowrap">{r.studentFeedback != null ? `${r.studentFeedback}%` : "—"}</td>}
+              <td className="p-2 whitespace-nowrap">{r.academicYear || "-"}</td>
+              <td className="p-2 whitespace-nowrap">{formatClassColumn(r) || "-"}</td>
+              <td className="p-2 whitespace-nowrap">{r.subject || "-"}</td>
+              <td className="p-2 whitespace-nowrap">{r.hoursPerWeek ?? "-"}</td>
+              {showPastColumns && <td className="p-2 whitespace-nowrap">{r.passPercentage != null ? `${r.passPercentage}%` : "-"}</td>}
+              {showPastColumns && <td className="p-2 whitespace-nowrap">{r.studentFeedback != null ? `${r.studentFeedback}%` : "-"}</td>}
             </tr>
           ))}
         </tbody>
@@ -37,12 +37,12 @@ function LoadTable({ rows, showPastColumns }: { rows: TeachingLoadRow[]; showPas
   );
 }
 
-// Read-only preview of the same Teaching Load tables the resume renders — kept
+// Read-only preview of the same Teaching Load tables the resume renders - kept
 // as two separate tables (Current vs Past) rather than intermixed, matching the
 // resume's layout, so what the HOD sees here matches what gets downloaded.
 export function TeachingLoadTable({ groups }: Props) {
   if (groups.current.length === 0 && groups.past.length === 0) {
-    return <p className="text-xs text-muted-foreground">No teaching load data yet — add current teaching assignments above or past/present records under Academic Profile.</p>;
+    return <p className="text-xs text-muted-foreground">No teaching load data yet - add current teaching assignments above or past/present records under Academic Profile.</p>;
   }
 
   return (

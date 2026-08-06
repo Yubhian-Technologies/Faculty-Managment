@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import type { NavVisibilitySettings } from "@/types";
 
 // Any logged-in college-scoped user reads their own role's hidden modules/items
-// for their own college — used by Sidebar/MobileDrawer/BottomNav to filter nav
+// for their own college - used by Sidebar/MobileDrawer/BottomNav to filter nav
 // client-side. Not sensitive: it only reveals which of the user's own nav items
 // are hidden, nothing about other roles or colleges.
 export async function GET() {

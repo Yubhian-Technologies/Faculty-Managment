@@ -13,7 +13,7 @@ import type { BudgetRequest } from "@/types";
 
 type Row = BudgetRequest & { collegeId: string; collegeName: string };
 
-// Non-Goods emergency requests Finance has already approved — Finance can attach a
+// Non-Goods emergency requests Finance has already approved - Finance can attach a
 // report here (any file form) for the requesting Principal/VP to view. Goods requests
 // don't appear: they continue into the existing Purchase Clearance pipeline instead.
 export function EmergencyReportUpload() {
@@ -24,7 +24,7 @@ export function EmergencyReportUpload() {
 
   function load() {
     setIsLoading(true);
-    // FINANCE is a GLOBAL role overseeing every college — fan out across all
+    // FINANCE is a GLOBAL role overseeing every college - fan out across all
     // of them instead of whichever college the sidebar has "selected".
     fetch("/api/finance/budget-requests/overview?status=FINANCE_APPROVED&isEmergency=true")
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
@@ -98,7 +98,7 @@ export function EmergencyReportUpload() {
                       Emergency · Non-Goods
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">{item.title} · {item.collegeName} — requested by {item.hodName} on {formatDate(item.createdAt)}</p>
+                  <p className="text-xs text-muted-foreground">{item.title} · {item.collegeName} - requested by {item.hodName} on {formatDate(item.createdAt)}</p>
                 </div>
               </div>
             </CardHeader>
@@ -111,7 +111,7 @@ export function EmergencyReportUpload() {
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
                 >
                   <FileText className="h-4 w-4" />
-                  {item.reportFileName ?? "View Report"} — sent to Principal
+                  {item.reportFileName ?? "View Report"} - sent to Principal
                 </a>
               ) : (
                 <div>

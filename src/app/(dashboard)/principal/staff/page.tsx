@@ -78,7 +78,7 @@ export default function PrincipalStaffPage() {
     }
   }
 
-  // Group by role for a scannable layout — order roughly follows seniority/function.
+  // Group by role for a scannable layout - order roughly follows seniority/function.
   const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
   // Must match the roles PRINCIPAL/VICE_PRINCIPAL can edit in /api/college/users/[uid] (loadTargetInScope).
   const EDITABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"];
@@ -142,14 +142,14 @@ export default function PrincipalStaffPage() {
                             {g.role === "HOD" && (
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-1.5">
-                                  {u.department || "—"}
+                                  {u.department || "-"}
                                   {parentDeptName(u.department) && (
                                     <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName(u.department)}</Badge>
                                   )}
                                 </div>
                               </td>
                             )}
-                            {g.role === "COLLEGE_STAFF" && <td className="px-4 py-2.5">{u.designation || "—"}</td>}
+                            {g.role === "COLLEGE_STAFF" && <td className="px-4 py-2.5">{u.designation || "-"}</td>}
                             <td className="px-4 py-2.5">
                               <Badge variant={u.isActive === false ? "secondary" : "default"} className="text-xs">
                                 {u.isActive === false ? "Inactive" : "Active"}

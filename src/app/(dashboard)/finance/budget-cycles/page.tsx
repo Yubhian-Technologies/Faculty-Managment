@@ -107,12 +107,12 @@ export default function FinanceBudgetCyclesPage() {
 
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>{selected?.title} — Department Status</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{selected?.title} - Department Status</DialogTitle></DialogHeader>
           {isLoadingDetail ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : deptRequests.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {selected?.status === "PENDING_APPROVAL" ? "Not yet approved — departments haven't been notified." : "No departments found."}
+              {selected?.status === "PENDING_APPROVAL" ? "Not yet approved - departments haven't been notified." : "No departments found."}
             </p>
           ) : (
             <div className="divide-y">

@@ -164,7 +164,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [hodForm, setHodForm] = useState<FeedbackForm>(defaultFeedback());
   const [isSubmittingHodFeedback, setIsSubmittingHodFeedback] = useState(false);
 
-  // HOD acts as HR — behavioural/culture-fit assessment during panel interview phase
+  // HOD acts as HR - behavioural/culture-fit assessment during panel interview phase
   const [hrSelectedCandidate, setHrSelectedCandidate] = useState<Candidate | null>(null);
   const [hrForm, setHrForm] = useState<HrForm>(defaultHrForm());
   const [isSubmittingHrFeedback, setIsSubmittingHrFeedback] = useState(false);
@@ -241,7 +241,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
 
   useEffect(() => { void load(); }, [id]);
 
-  // Panel members submit from their own tabs while this page sits open —
+  // Panel members submit from their own tabs while this page sits open -
   // refetch on refocus so submitted/pending status doesn't go stale.
   useEffect(() => {
     function onFocus() { void load(); }
@@ -527,7 +527,7 @@ ${institution}`;
     <div className="space-y-6">
       <PageHeader
         title={batch.position}
-        description={`${batch.department} — ${formatDate(batch.interviewDate)}`}
+        description={`${batch.department} - ${formatDate(batch.interviewDate)}`}
       />
 
       {batch.principalNotes && (
@@ -562,7 +562,7 @@ ${institution}`;
         ))}
       </div>
 
-      {/* Interview Setup — HOD fills venue, documents, demo room, and coordinator */}
+      {/* Interview Setup - HOD fills venue, documents, demo room, and coordinator */}
       {batch.currentPhase === "HOD_FINAL_SETUP" && (
         <Card>
           <CardHeader>
@@ -688,7 +688,7 @@ ${institution}`;
                   </SelectContent>
                 </Select>
                 {selectedCoordinator && !selectedCoordinator.userUid && (
-                  <p className="text-xs text-muted-foreground">No login account — notification skipped.</p>
+                  <p className="text-xs text-muted-foreground">No login account - notification skipped.</p>
                 )}
               </div>
             </div>
@@ -702,7 +702,7 @@ ${institution}`;
         </Card>
       )}
 
-      {/* Send Call Letters — only between setup complete and demo day */}
+      {/* Send Call Letters - only between setup complete and demo day */}
       {batch.setupComplete && !batch.demoComplete && candidates.length > 0 && (
         <Card id="call-letters" className="border-blue-200 bg-blue-50/30">
           <CardHeader>
@@ -873,7 +873,7 @@ ${institution}`;
       </Card>
 
 
-      {/* ── STEP A: Demo complete — HOD reviews student scores ─────────────────── */}
+      {/* ── STEP A: Demo complete - HOD reviews student scores ─────────────────── */}
       {(batch.currentPhase === "IN_PROGRESS" || batch.currentPhase === "PANEL_INTERVIEW" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED") && (
         <Card>
           <CardHeader>
@@ -940,7 +940,7 @@ ${institution}`;
         </Card>
       )}
 
-      {/* ── HOD's own assessment — shown when HOD is also a panel member ──────── */}
+      {/* ── HOD's own assessment - shown when HOD is also a panel member ──────── */}
       {batch.currentPhase === "PANEL_INTERVIEW" && (batch.panelMemberUids as string[]).includes(myUid) && (() => {
         const hodSubmittedFor = panelFeedback.filter((f) => f.panelUid === myUid).map((f) => f.candidateId);
         const allDone = candidates.length > 0 && candidates.every((c) => hodSubmittedFor.includes(c.id));
@@ -1034,9 +1034,9 @@ ${institution}`;
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="ACCEPT">Accept — Recommend for hiring</SelectItem>
-                            <SelectItem value="MAYBE">Maybe — Needs further review</SelectItem>
-                            <SelectItem value="REJECT">Reject — Not suitable</SelectItem>
+                            <SelectItem value="ACCEPT">Accept - Recommend for hiring</SelectItem>
+                            <SelectItem value="MAYBE">Maybe - Needs further review</SelectItem>
+                            <SelectItem value="REJECT">Reject - Not suitable</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1088,7 +1088,7 @@ ${institution}`;
         );
       })()}
 
-      {/* ── HR Assessment — HOD fills behavioural/culture-fit for each candidate ─ */}
+      {/* ── HR Assessment - HOD fills behavioural/culture-fit for each candidate ─ */}
       {batch.currentPhase === "PANEL_INTERVIEW" && (() => {
         const hrSubmittedFor = hrFeedback.map((f) => f.candidateId);
         const allDone = candidates.length > 0 && candidates.every((c) => hrSubmittedFor.includes(c.id));
@@ -1209,7 +1209,7 @@ ${institution}`;
         );
       })()}
 
-      {/* ── STEP C: Panel scoring open — HOD sees summary ───────────────────────── */}
+      {/* ── STEP C: Panel scoring open - HOD sees summary ───────────────────────── */}
       {(batch.currentPhase === "PANEL_INTERVIEW" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED") && (
         <>
           <Card>

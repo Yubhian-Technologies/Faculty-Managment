@@ -85,7 +85,7 @@ export async function PATCH(
       demoComplete?: boolean;
     };
 
-    // Guard against an arbitrary/typo'd phase string being persisted — keep in
+    // Guard against an arbitrary/typo'd phase string being persisted - keep in
     // sync with the BatchPhase union in src/types/recruitment.ts.
     const VALID_PHASES = [
       "PRINCIPAL_REVIEW",
@@ -195,7 +195,7 @@ export async function PATCH(
         collegeId: session.collegeId,
         toUid: batchData.hodUid,
         type: "INTERVIEW_PLAN_APPROVED",
-        title: "Interview Plan Approved — Please Set Up Logistics",
+        title: "Interview Plan Approved - Please Set Up Logistics",
         message: `Your interview plan for ${batchData.position} has been approved. Please add the venue, required documents, demo classroom, and coordinator.`,
         link: `/hod/batches/${id}`,
         read: false,

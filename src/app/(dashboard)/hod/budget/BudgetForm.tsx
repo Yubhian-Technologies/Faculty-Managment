@@ -120,7 +120,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
         </div>
       )}
 
-      {/* Section 1 — Budget Information */}
+      {/* Section 1 - Budget Information */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Budget Information</CardTitle>
@@ -156,7 +156,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
         </CardContent>
       </Card>
 
-      {/* Section 2 — Non Recurring */}
+      {/* Section 2 - Non Recurring */}
       <Card>
         <CardContent className="pt-6">
           <BudgetCategorySection
@@ -169,7 +169,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
         </CardContent>
       </Card>
 
-      {/* Section 3 — Recurring */}
+      {/* Section 3 - Recurring */}
       <Card>
         <CardContent className="pt-6">
           <BudgetCategorySection

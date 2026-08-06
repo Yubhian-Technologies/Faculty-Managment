@@ -1,12 +1,12 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { NotificationType } from "@/types";
 
-// Generic, module-agnostic workflow notification framework — not specific to
+// Generic, module-agnostic workflow notification framework - not specific to
 // Budget or any other domain. A workflow route calls emitWorkflowNotification
 // when ownership of a task moves to the next responsible user(s), and
 // resolveWorkflowNotifications when that task is completed. Any future module
 // (Leave, Indent, Purchase Clearance, ...) can adopt these at its own
-// transition points without touching this file — src/lib/notify.ts's plain
+// transition points without touching this file - src/lib/notify.ts's plain
 // notify()/notifyRole() are untouched and still used by every existing caller.
 
 function isAlreadyExists(err: unknown): boolean {
@@ -61,7 +61,7 @@ export async function emitWorkflowNotification(params: EmitWorkflowNotificationP
     });
   } catch (err) {
     if (!isAlreadyExists(err)) throw err;
-    // Already emitted for this event — nothing to do.
+    // Already emitted for this event - nothing to do.
   }
 }
 
@@ -73,7 +73,7 @@ export interface ResolveWorkflowNotificationsParams {
 }
 
 // Marks every actionable, unresolved notification tied to this workflow
-// entity as resolved — they stop appearing as login popups but remain in
+// entity as resolved - they stop appearing as login popups but remain in
 // notification history. Safe to call even if nothing matches.
 export async function resolveWorkflowNotifications(params: ResolveWorkflowNotificationsParams): Promise<void> {
   const { db, collegeId, entityType, entityId } = params;

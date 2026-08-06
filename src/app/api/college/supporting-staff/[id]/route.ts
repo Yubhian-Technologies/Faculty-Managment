@@ -99,7 +99,7 @@ export async function PATCH(
       if ((snap.data() as { staffCategory?: SupportingStaffCategory }).staffCategory !== requiredCategory) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
-      // Category is locked to the caller's role — HOD/College Office can't
+      // Category is locked to the caller's role - HOD/College Office can't
       // reassign a record into the other role's territory via edit.
       if (body.staffCategory !== undefined && body.staffCategory !== requiredCategory) {
         return NextResponse.json({ error: "Cannot change staff category" }, { status: 403 });

@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   }
 }
 
-// Adds the next sequential year (1, 2, 3, …) for the college — the client
+// Adds the next sequential year (1, 2, 3, …) for the college - the client
 // never chooses a yearNumber, it just asks to "add a year" and the server
 // appends the next one, keeping the sequence gap-free.
 export async function POST(request: Request) {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 }
 
 // Removes only the most-recently-added year (highest yearNumber), keeping the
-// sequence gap-free — blocked if any Section already exists for that year.
+// sequence gap-free - blocked if any Section already exists for that year.
 export async function DELETE(request: Request) {
   try {
     const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL");
@@ -81,7 +81,7 @@ export async function DELETE(request: Request) {
       .get();
     if (!sectionsWithYear.empty) {
       return NextResponse.json(
-        { error: `Cannot remove Year ${last.yearNumber} — sections already exist for it` },
+        { error: `Cannot remove Year ${last.yearNumber} - sections already exist for it` },
         { status: 400 }
       );
     }

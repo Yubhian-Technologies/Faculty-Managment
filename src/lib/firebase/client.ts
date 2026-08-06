@@ -19,7 +19,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Analytics is browser-only — lazy load to avoid SSR errors
+// Analytics is browser-only - lazy load to avoid SSR errors
 export async function getAnalyticsInstance() {
   if (typeof window === "undefined") return null;
   const { getAnalytics, isSupported } = await import("firebase/analytics");

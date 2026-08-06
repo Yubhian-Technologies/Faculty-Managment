@@ -125,7 +125,7 @@ export interface NonTechnicalProfile {
 // One collection, staffCategory discriminant, two mutually-exclusive optional
 // sub-profiles gated by staffCategory. Technical and Non-Technical share
 // Personal/Qualification/Employment/Training/Awards/Documents scaffolding but
-// have entirely disjoint skills/responsibilities/certification vocabularies —
+// have entirely disjoint skills/responsibilities/certification vocabularies -
 // two optional sub-objects avoids duplicating the shared scaffolding across
 // two full parallel collections while keeping irrelevant fields off any record.
 export interface SupportingStaffProfileFields {
@@ -138,7 +138,7 @@ export interface SupportingStaffProfileFields {
 export interface SupportingStaffMember {
   id: string;
   collegeId: string;
-  department?: string; // optional — unlike FacultyMember.department, many roles are college-wide
+  department?: string; // optional - unlike FacultyMember.department, many roles are college-wide
   employeeId: string;
   name: string;
   email?: string;
@@ -154,7 +154,7 @@ export interface SupportingStaffMember {
   profilePhotoUrl?: string;
   collegeEmail: string; // login username
 
-  // Personal/statutory fields — same shape as FacultyMember's own block, built
+  // Personal/statutory fields - same shape as FacultyMember's own block, built
   // via the shared buildPersonalDetailsUpdate() helper server-side.
   gender?: "Male" | "Female" | "Other";
   dateOfBirth?: Timestamp;
@@ -189,6 +189,6 @@ export interface SupportingStaffMember {
   updatedAt: Timestamp;
 }
 
-// GET list response shape — mirrors FacultyMember list items (no accessLevel
+// GET list response shape - mirrors FacultyMember list items (no accessLevel
 // tagging needed here since Supporting Staff has no sub-department concept).
 export type SupportingStaffListItem = SupportingStaffMember;

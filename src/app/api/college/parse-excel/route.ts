@@ -5,10 +5,10 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import ExcelJS from "exceljs";
 import type { CellValue } from "exceljs";
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB — matches the 500-row cap the import pages enforce
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB - matches the 500-row cap the import pages enforce
 
 // Excel cells come back as strings, numbers, Dates, or rich objects (formula
-// results, hyperlinks, rich text runs) depending on how the sheet was authored —
+// results, hyperlinks, rich text runs) depending on how the sheet was authored -
 // normalize all of them to the plain strings the import pipeline expects, same
 // convention as CSV text (dates as YYYY-MM-DD).
 function cellToString(value: CellValue): string {
@@ -25,13 +25,13 @@ function cellToString(value: CellValue): string {
   return String(value).trim();
 }
 
-// Parses an uploaded .xlsx workbook's first sheet into rows of plain strings —
+// Parses an uploaded .xlsx workbook's first sheet into rows of plain strings -
 // run server-side (real Node exceljs) rather than in the browser, since
 // exceljs's separate browser bundle has proven unreliable at reading files
 // (works fine for the exports elsewhere in the app, which only ever write).
 export async function POST(request: Request) {
   try {
-    // Any college-scoped role that can reach a bulk-import page may parse a file here —
+    // Any college-scoped role that can reach a bulk-import page may parse a file here -
     // this endpoint only converts bytes to text rows, it never touches Firestore.
     await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE");
 

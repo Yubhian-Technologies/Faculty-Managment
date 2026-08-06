@@ -29,7 +29,7 @@ type UserRow = Record<string, unknown> & FMSUser;
 const GLOBAL_SCOPE = "__system__";
 const LOCATION_PREFIX = "loc:";
 
-// Super Admin only edits the photo for the roles it directly administers — everyone
+// Super Admin only edits the photo for the roles it directly administers - everyone
 // else's photo is edited from their own manager's dashboard (Principal for HOD/VP,
 // HOD for faculty) and is still visible here, just not editable.
 const PHOTO_EDITABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "ADMINISTRATION", "MANAGEMENT"];
@@ -186,7 +186,7 @@ export default function UsersPage() {
             <Globe className="h-3 w-3" />System-Wide
           </span>
         ) : (
-          <span>{(row.department as string) || "—"}</span>
+          <span>{(row.department as string) || "-"}</span>
         ),
     },
     {
@@ -204,7 +204,7 @@ export default function UsersPage() {
       render: (row) => {
         // Edit (including the photo) is available for the 6 roles Super Admin
         // administers. Reset/Activate/Deactivate only exist for college-scoped
-        // users today. Delete also works for global (Management) users — but not
+        // users today. Delete also works for global (Management) users - but not
         // location-scoped (Administration) ones, since the delete route doesn't
         // know how to clean up a locationUsers doc yet.
         const isCollegeScoped = !!(row.collegeId as string);
@@ -382,7 +382,7 @@ export default function UsersPage() {
                 type="password"
                 // Without this, a field this generic (no name/id/autocomplete
                 // hint) is exactly what Chrome's password manager targets for
-                // an autofill suggestion — and since it can't know this sets
+                // an autofill suggestion - and since it can't know this sets
                 // *someone else's* password, it offers the one saved for this
                 // origin under the currently logged-in Super Admin's own
                 // account. "new-password" tells it this isn't a login field

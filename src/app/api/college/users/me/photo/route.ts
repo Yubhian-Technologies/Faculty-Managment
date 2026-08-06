@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 export async function PATCH(request: Request) {
   try {
-    // Self-service only — the target uid always comes from the verified session,
+    // Self-service only - the target uid always comes from the verified session,
     // never from the request body, so a user can only ever update their own photo.
     const session = await requireCollegeMember(
       "PRINCIPAL",
@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
     if (photoUrl === undefined) {
       return NextResponse.json({ error: "photoUrl is required" }, { status: 400 });
     }
-    // Empty string clears the photo — everything else must be a real upload of ours.
+    // Empty string clears the photo - everything else must be a real upload of ours.
     if (photoUrl !== "") {
       if (!photoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
         return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });

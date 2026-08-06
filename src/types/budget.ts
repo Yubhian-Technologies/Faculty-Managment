@@ -11,7 +11,7 @@ export type BudgetRequestStatus =
   | "PRINCIPAL_REJECTED"             // terminal
   | "FINANCE_APPROVED"               // terminal; FinanceBudget auto-created
   | "FINANCE_REJECTED"               // terminal
-  // Emergency requests (Principal/VP → Management → Finance) — see isEmergency below
+  // Emergency requests (Principal/VP → Management → Finance) - see isEmergency below
   | "PENDING_MANAGEMENT_APPROVAL"    // Principal/VP submitted, awaiting Management
   | "RETURNED_TO_PRINCIPAL"          // Management or Finance sent it back; owner can edit + resubmit
   | "MANAGEMENT_REJECTED";           // terminal
@@ -57,7 +57,7 @@ export interface BudgetRequestItem {
   customFields?: BudgetExtraFieldDef[]; // ad-hoc fields the HOD added for this item only, via "+ Add Field"
 }
 
-// HOD-set priority per category group — HOD dashboard only (see
+// HOD-set priority per category group - HOD dashboard only (see
 // BudgetCategorySection's showPriority prop). Optional so existing stored
 // groups without it still normalize/render fine everywhere else.
 export type BudgetPriority = "NORMAL" | "PRIORITY_1" | "PRIORITY_2" | "PRIORITY_3";
@@ -85,7 +85,7 @@ export interface BudgetApprovalAction {
   remarks?: string;
 }
 
-// Goods vs Non-Goods classification for emergency requests — derived server-side
+// Goods vs Non-Goods classification for emergency requests - derived server-side
 // from which section (Non-Recurring vs Recurring) the request's items live in.
 export type EmergencyRequestType = "GOODS" | "NON_GOODS";
 
@@ -97,7 +97,7 @@ export interface BudgetRequest {
   department: string;
   academicYear: string;
   title: string;
-  requestDate: string; // ISO date-time string — defaults to submission time
+  requestDate: string; // ISO date-time string - defaults to submission time
   nonRecurring: BudgetCategoryGroup[];
   recurring: BudgetCategoryGroup[];
   status: BudgetRequestStatus;
@@ -126,7 +126,7 @@ export interface BudgetRequest {
 // Finance releases an institution-wide budget cycle instead of creating a
 // single department's budget directly. Once the Principal approves it, one
 // BudgetRequest per active department is auto-created with status
-// PENDING_SUBMISSION (see src/app/api/college/budget-cycles/[id]/route.ts) —
+// PENDING_SUBMISSION (see src/app/api/college/budget-cycles/[id]/route.ts) -
 // there is no separate "DepartmentBudget" table; BudgetRequest already is one.
 
 export type BudgetCycleStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "RETURNED";
@@ -273,7 +273,7 @@ export function itemTitleOptionsForCategory(category: string): string[] {
 }
 
 // How many staff a Staff Salaries line item covers. Unset/empty means the
-// item predates this field (or used "Custom" pricing) — treated as 1 so old
+// item predates this field (or used "Custom" pricing) - treated as 1 so old
 // requests keep totalling the same way they always did.
 function itemHeadcount(item: BudgetRequestItem): number {
   const raw = item.extras.headcount;
@@ -312,7 +312,7 @@ export function reconcileExtrasForCategory(items: BudgetRequestItem[], category:
 }
 
 // Docs created before the Recurring/Non-Recurring restructure don't have these
-// fields — default them so every consumer can assume the arrays always exist.
+// fields - default them so every consumer can assume the arrays always exist.
 export function normalizeBudgetRequest<T extends { nonRecurring?: BudgetCategoryGroup[]; recurring?: BudgetCategoryGroup[] }>(
   req: T
 ): T & { nonRecurring: BudgetCategoryGroup[]; recurring: BudgetCategoryGroup[] } {

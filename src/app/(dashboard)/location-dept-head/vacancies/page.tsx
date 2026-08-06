@@ -56,7 +56,7 @@ export default function DeptHeadVacanciesPage() {
               badge={<StatusBadge status={v.status} />}
               fields={[
                 { label: "Required", value: v.requiredCount },
-                { label: "Qualification", value: v.qualification ?? "—" },
+                { label: "Qualification", value: v.qualification ?? "-" },
                 { label: "Date", value: formatDate(v.createdAt as Parameters<typeof formatDate>[0]) },
               ]}
             />
@@ -76,7 +76,7 @@ export default function DeptHeadVacanciesPage() {
           columns={[
             { key: "position", header: "Position" },
             { key: "department", header: "Department" },
-            { key: "qualification", header: "Qualification", render: (r) => (r as unknown as DeptVacancyRequest).qualification ?? "—" },
+            { key: "qualification", header: "Qualification", render: (r) => (r as unknown as DeptVacancyRequest).qualification ?? "-" },
             { key: "requiredCount", header: "Count", render: (r) => (r as unknown as DeptVacancyRequest).requiredCount },
             {
               key: "status",

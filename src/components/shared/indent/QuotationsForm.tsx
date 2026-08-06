@@ -42,7 +42,7 @@ export function QuotationsForm({ quotations, selectedQuotationId, onChange, onSe
   return (
     <div className="space-y-3">
       {list.length === 0 && (
-        <p className="text-sm text-muted-foreground">No quotations added yet{!readOnly && ` — add at least ${MIN_QUOTATIONS}`}.</p>
+        <p className="text-sm text-muted-foreground">No quotations added yet{!readOnly && ` - add at least ${MIN_QUOTATIONS}`}.</p>
       )}
 
       {list.map((q, i) => {
@@ -98,11 +98,11 @@ export function QuotationsForm({ quotations, selectedQuotationId, onChange, onSe
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Expected Delivery</p>
-                  <p className="font-medium">{q.expectedDeliveryDate ? formatDate(new Date(q.expectedDeliveryDate)) : "—"}</p>
+                  <p className="font-medium">{q.expectedDeliveryDate ? formatDate(new Date(q.expectedDeliveryDate)) : "-"}</p>
                 </div>
                 <div className="sm:col-span-3">
                   <p className="text-xs text-muted-foreground">Terms &amp; Conditions</p>
-                  <p className="mt-1 rounded bg-background p-2">{q.termsAndConditions || "—"}</p>
+                  <p className="mt-1 rounded bg-background p-2">{q.termsAndConditions || "-"}</p>
                 </div>
               </div>
             ) : (

@@ -48,9 +48,9 @@ export default function PanelFeedbackPage() {
       header: "Avg Rating",
       render: (row) => {
         const ratings = row.ratings as Record<string, number> | undefined;
-        if (!ratings) return "—";
+        if (!ratings) return "-";
         const vals = Object.values(ratings).filter((v) => v > 0);
-        if (vals.length === 0) return "—";
+        if (vals.length === 0) return "-";
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
         return `${avg.toFixed(1)} / 5`;
       },
@@ -61,7 +61,7 @@ export default function PanelFeedbackPage() {
       hideOnMobile: true,
       render: (row) => {
         const c = (row.comments as string) || "";
-        return c.length > 60 ? c.slice(0, 60) + "…" : c || <span className="text-muted-foreground text-xs">—</span>;
+        return c.length > 60 ? c.slice(0, 60) + "…" : c || <span className="text-muted-foreground text-xs">-</span>;
       },
     },
     {

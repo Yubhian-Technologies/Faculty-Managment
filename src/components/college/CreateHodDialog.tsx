@@ -78,7 +78,7 @@ export function CreateHodDialog({ department, onCreated }: CreateHodDialogProps)
           onSubmit={(e) => {
             // DialogContent renders through a Portal (to document.body), but
             // React's synthetic events bubble through the *component* tree,
-            // not the DOM tree — so without this, submitting this form also
+            // not the DOM tree - so without this, submitting this form also
             // bubbles up and fires whatever page-level <form onSubmit> this
             // dialog happens to be rendered inside (e.g. the Edit/Add
             // Department form), prematurely saving *that* form and
