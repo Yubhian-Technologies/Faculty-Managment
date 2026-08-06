@@ -1,7 +1,7 @@
 # Faculty Management System (FMS) - Repository Context
 
 A multi-tenant Faculty Management System for a group of colleges, covering recruitment,
-leave, payroll, appraisal, grievance, attendance, teaching load, training, budget, and a
+payroll, appraisal, grievance, attendance, teaching load, training, budget, and a
 read-only faculty-analytics "Management" dashboard.
 
 ## Tech Stack
@@ -68,7 +68,7 @@ Server-side Firebase access: `getAdminDb()` / `getAdminAuth()` / `getAdminStorag
 ## Route Layout
 
 - `src/app/(dashboard)/<role-path>/…` - one route group per role: `accounts`, `admin-office`, `administration`, `college-office`, `finance`, `hod`, `hr-admin`, `location-dept-head`, `management`, `panel`, `principal`, `super-admin`, `vice-principal`. Pages are client components fetching from API routes.
-- `src/app/api/` mirrors tenancy: `admin/` (super admin), `college/` (college-scoped - the largest group, includes all budget/recruitment/leave/attendance/payroll routes), `location/` (location-scoped), `management/` (cross-college read views), plus `leave/`, `auth/`, `email/`, `pdf/`, `upload/`, `public/`.
+- `src/app/api/` mirrors tenancy: `admin/` (super admin), `college/` (college-scoped - the largest group, includes all budget/recruitment/attendance/payroll routes), `location/` (location-scoped), `management/` (cross-college read views), plus `auth/`, `email/`, `pdf/`, `upload/`, `public/`.
 - Public (no-login) pages: `/login`, `/careers/[collegeId]` (candidate application), `/feedback/[id]` (student feedback), `/location-interview/[id]`.
 - `/panel/interviews` is shared: any staff role added to an interview panel can access it (see `ROLE_PATH_MAP` in `src/proxy.ts`).
 
@@ -76,10 +76,9 @@ Nav is centrally defined in `src/components/layout/navConfig.ts` (`NAV_ITEMS`, `
 
 ## Domain Modules
 
-Types live in `src/types/*.ts`, barrel-exported via `src/types/index.ts`. `FacultyMember` (`core.ts`) is the central entity - leave, attendance, payroll, and appraisal records all reference `facultyId`.
+Types live in `src/types/*.ts`, barrel-exported via `src/types/index.ts`. `FacultyMember` (`core.ts`) is the central entity - attendance, payroll, and appraisal records all reference `facultyId`.
 
 - **Recruitment** (`recruitment.ts`) - the largest module: vacancy request → HR/Admin approval → hiring batch + interviews (panel scoring) → decision → offer letter (PDF, emailed) → faculty provisioning. Shared logic: `src/lib/firestore/hiring.ts`, `src/hooks/useHiring*.ts`. Statuses: `WorkflowStatus` (`core.ts`).
-- **Leave** (`leave.ts`) - leave math lives in `src/lib/leave/` (`balanceEngine`, `ruleEngine`, `dayCounter`, `seedData`), not in routes/pages.
 - **Attendance** (`attendance.ts`), **Payroll** (`payroll.ts`), **Appraisal** (`appraisal.ts`), **Grievance** (`grievance.ts`), **Teaching** (`teaching.ts`), **Training** (`training.ts`), **Documents** (`documents.ts`) - each self-contained under its type file + matching API/page routes.
 - **Finance** (`finance.ts`) - Finance-internal: `FinanceBudget` (allocation ledger), `FinanceBudgetRequest` (a separate manual "log a request" flow, unrelated to the HOD budget workflow below), expense requests, fund allocation, purchase clearance, receipts, reports. PDF/Excel export helpers in `src/lib/pdf/financeReportTemplate.ts` and `src/lib/finance/exportExcel.ts`.
 - **Budget** (`budget.ts`) - the HOD → Principal → Finance department budget-proposal workflow. See dedicated section below; this is the most recently built/iterated module.
@@ -173,7 +172,7 @@ Shared building blocks: `src/components/shared` (`DataTable`, `PageHeader`, `Sta
 - `colleges/{id}/budgetRequests/{id}` - HOD→Principal→Finance proposals (see Budget section)
 - `colleges/{id}/financeBudgets/{id}`, `colleges/{id}/financeBudgetRequests/{id}` - Finance-internal ledger/manual-request flow
 - `colleges/{id}/auditLogs/{id}`, `colleges/{id}/financeAuditLogs/{id}`, `colleges/{id}/notifications/{id}`
-- Recruitment/leave/attendance/payroll/appraisal/grievance/teaching/training collections nested under `colleges/{id}/...`, one per module, matching the type files in `src/types/`.
+- Recruitment/attendance/payroll/appraisal/grievance/teaching/training collections nested under `colleges/{id}/...`, one per module, matching the type files in `src/types/`.
 
 Firestore security rules (`firestore.rules`) generally allow direct client reads/writes gated by role for simpler collections, but Finance's ledger collections (`financeBudgets`, `financeBudgetRequests`) explicitly block all client writes (`allow write: if false`) - mutations there are server-route-only via the Admin SDK.
 
@@ -188,11 +187,11 @@ Source of truth: `src/components/layout/navConfig.ts` (`NAV_ITEMS` = full deskto
 - **ADMIN_OFFICE** (`/admin-office`) - Dashboard only.
 - **LOCATION_DEPT_HEAD** (`/location-dept-head`) - Dashboard; _Hiring_: Hiring Requests, My Candidates, My Interviews.
 - **VICE_PRINCIPAL** (`/vice-principal`) - Dashboard; _Hiring_: General Admin Vacancies; then shares the entire Principal block below (Hiring Requests → Reports) since VP has equal authority to Principal.
-- **PRINCIPAL** (`/principal`, shared with VICE*PRINCIPAL) - Dashboard; \_Institution*: Hiring Requests, Departments, Staff, Interview Plans, Hiring Decisions; _Administration_: Leave Approvals, Attendance Report, Payroll, Budget, Budget Report, Training Approvals, Grievance Desk, Documents, Reports.
-- **HOD** (`/hod`) - Dashboard; _Department_: Faculty, Sections; Leave Approvals, Leave Profiles; _My Work_: My Leave, My Attendance, Teaching Load, Teaching Assignments, My Payslips, Budget, Indents, Purchase Clearance, My Appraisal, Training, Grievance, My Documents; _Hiring_: Hiring Pipeline, Candidates.
+- **PRINCIPAL** (`/principal`, shared with VICE*PRINCIPAL) - Dashboard; \_Institution*: Hiring Requests, Departments, Staff, Interview Plans, Hiring Decisions; _Administration_: Attendance Report, Payroll, Budget, Budget Report, Training Approvals, Grievance Desk, Documents, Reports.
+- **HOD** (`/hod`) - Dashboard; _Department_: Faculty, Sections; _My Work_: My Attendance, Teaching Load, Teaching Assignments, My Payslips, Budget, Indents, Purchase Clearance, My Appraisal, Training, Grievance, My Documents; _Hiring_: Hiring Pipeline, Candidates.
 - **COLLEGE_OFFICE** (`/college-office`) - Dashboard, Documents, Candidates.
 - **COLLEGE_STAFF** (`/college-staff`, dynamic-title roles: Dean, IQAC Coordinator, T&P, etc.) - Dashboard only.
-- **PANEL_MEMBER** (`/panel`, "Faculty" in UI) - Dashboard, Leave, Attendance, Teaching Load, Students, Payslips, My Feedback, Appraisal, Training, Grievance, My Documents. ("My Interviews" is injected dynamically into the sidebar only when the user is assigned to an interview panel - see `Sidebar.tsx`.)
+- **PANEL_MEMBER** (`/panel`, "Faculty" in UI) - Dashboard, Attendance, Teaching Load, Students, Payslips, My Feedback, Appraisal, Training, Grievance, My Documents. ("My Interviews" is injected dynamically into the sidebar only when the user is assigned to an interview panel - see `Sidebar.tsx`.)
 - **ACCOUNTS** (`/accounts`) - Dashboard, Salary Records, Offer Letters.
 - **FINANCE** (`/finance`) - Dashboard; _Budgets_: Budget Management, Budget Approvals, Budget Report; _Approvals_: Fund Allocation, Expense Requests, Purchase Finance Clearance, Indent Approvals; _Payments_: Payments, Receipts; _Reports_: Financial Reports, Audit & Compliance.
 - **PURCHASE_DEPT** (`/purchase`) - Dashboard, Pending Requests, Latest Requests, All Requests; _Organization_: Browse by Location.

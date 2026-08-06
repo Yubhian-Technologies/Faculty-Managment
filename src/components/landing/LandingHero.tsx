@@ -5,7 +5,6 @@ import {
   ArrowRight,
   LayoutGrid,
   CalendarCheck,
-  ClipboardCheck,
   Bell,
   TrendingUp,
   CalendarClock,
@@ -91,13 +90,6 @@ function DashboardCards({ variant }: { variant: "floating" | "grid" }) {
           </div>
           <p className="mt-1 text-lg font-bold text-foreground">96%</p>
         </Card>
-        <Card className="border-border/80 p-3 shadow-sm">
-          <div className="flex items-center gap-2 text-primary">
-            <ClipboardCheck className="h-4 w-4" />
-            <span className="text-xs font-semibold">Leave Approval</span>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">2 pending review</p>
-        </Card>
       </div>
     );
   }
@@ -145,17 +137,6 @@ function DashboardCards({ variant }: { variant: "floating" | "grid" }) {
           <Bell className="h-4 w-4" />
           <span className="text-xs font-semibold">3 New</span>
         </div>
-      </Card>
-
-      <Card
-        className="landing-float absolute -left-4 bottom-16 w-44 border-border/80 p-3.5 shadow-lg"
-        style={{ animationDelay: "2s" }}
-      >
-        <div className="flex items-center gap-2 text-primary">
-          <ClipboardCheck className="h-4 w-4" />
-          <span className="text-xs font-semibold">Leave Approval</span>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">2 pending review</p>
       </Card>
 
       <Card
