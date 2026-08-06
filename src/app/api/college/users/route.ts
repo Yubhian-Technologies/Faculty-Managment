@@ -14,7 +14,7 @@ const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", 
 // `department` - the sub-department itself, and this account's actual scope,
 // only becomes real once POST /api/college/departments links them via
 // hodUid, which is where the "only within your own department" check lives).
-const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD"];
+const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "ANNEXURE"];
 // One holder per role per college - same rule as administration/college-staff route.
 const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
 
@@ -97,14 +97,18 @@ export async function POST(request: Request) {
       department?: string;
       staffType?: "teaching" | "supporting";
       designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Dean - R&D")
+      annexure?: string; // HOD-entered reference number/label for ANNEXURE role (e.g. "1", "2")
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation } = body;
+    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, annexure } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    if (role === "ANNEXURE" && !annexure) {
+      return NextResponse.json({ error: "annexure is required" }, { status: 400 });
     }
     // Uploaded before the account exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific uid.
@@ -175,6 +179,7 @@ export async function POST(request: Request) {
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),
         ...(designation ? { designation } : {}),
+        ...(annexure ? { annexure } : {}),
         ...(academicProfile ? { academicProfile } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         ...buildPersonalDetailsUpdate(body),
