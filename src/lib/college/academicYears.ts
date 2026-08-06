@@ -1,6 +1,6 @@
 // Shared academic-year helpers used by college/academic-years/route.ts and the
 // admin/colleges "Academic Years" UI. Years are added sequentially (1, 2, 3, …)
-// by Location Admin / Principal — a college can have any number of years of
+// by Location Admin / Principal - a college can have any number of years of
 // study (3-year diploma, 4-year B.Tech, 5-year, etc.), so there's no fixed
 // upper bound and no on/off toggle, just ordinal labels generated on the fly.
 

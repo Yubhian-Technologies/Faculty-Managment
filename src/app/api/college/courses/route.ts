@@ -21,8 +21,8 @@ export async function GET(request: Request) {
         if (deptSnap.empty) {
           departmentId = "__none__";
         } else {
-          // A sub-department never owns courses of its own — it shares its
-          // parent's program — so a sub-HOD resolves courses against the
+          // A sub-department never owns courses of its own - it shares its
+          // parent's program - so a sub-HOD resolves courses against the
           // parent instead, same fallback already used for section creation.
           const deptData = deptSnap.docs[0].data() as { parentDepartmentId?: string };
           departmentId = deptData.parentDepartmentId ?? deptSnap.docs[0].id;

@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const filename = `${Date.now()}_${(file as File).name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const path = `colleges/${session.collegeId}/resumes/${filename}`;
 
-    // Generate a download token — this is how Firebase Storage client SDK creates
+    // Generate a download token - this is how Firebase Storage client SDK creates
     // permanent public-readable URLs without requiring any ACL changes or UBLA workarounds.
     const downloadToken = randomUUID();
 

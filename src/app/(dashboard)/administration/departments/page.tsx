@@ -44,7 +44,7 @@ export default function LocationDeptsPage() {
               title={d.name}
               subtitle={d.deptHeadName ?? "No dept head assigned"}
               badge={<Badge variant={d.isActive ? "default" : "secondary"}>{d.isActive ? "Active" : "Inactive"}</Badge>}
-              fields={[{ label: "Dept Head", value: d.deptHeadName ?? "—" }]}
+              fields={[{ label: "Dept Head", value: d.deptHeadName ?? "-" }]}
             />
           ))}
         </div>

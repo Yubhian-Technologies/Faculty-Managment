@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember, requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// GET — Super Admin retrieves all General Admin vacancy requests
+// GET - Super Admin retrieves all General Admin vacancy requests
 export async function GET() {
   try {
     const session = await requireSuperAdmin();
@@ -27,7 +27,7 @@ export async function GET() {
   }
 }
 
-// POST — Vice Principal (PRINCIPAL role) submits a General Admin vacancy request
+// POST - Vice Principal (PRINCIPAL role) submits a General Admin vacancy request
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");

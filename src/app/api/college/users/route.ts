@@ -11,11 +11,11 @@ const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", 
 // HOD is included so a main HOD can create a Sub-HOD login (see
 // hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
 // posts role: "HOD" with the not-yet-created sub-department's name as
-// `department` — the sub-department itself, and this account's actual scope,
+// `department` - the sub-department itself, and this account's actual scope,
 // only becomes real once POST /api/college/departments links them via
 // hodUid, which is where the "only within your own department" check lives).
 const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "ANNEXURE"];
-// One holder per role per college — same rule as administration/college-staff route.
+// One holder per role per college - same rule as administration/college-staff route.
 const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
 
 export async function GET(request: Request) {
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
         return an.localeCompare(bn);
       });
 
-    // A college has exactly one Principal — deduplicate to avoid showing test duplicates
+    // A college has exactly one Principal - deduplicate to avoid showing test duplicates
     if (includeAll) {
       let principalSeen = false;
       users = users.filter((u) => {
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
-    // Enforce role-based creation rules — Vice Principal mirrors Principal's authority.
+    // Enforce role-based creation rules - Vice Principal mirrors Principal's authority.
     if ((session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") && !PRINCIPAL_ROLES.includes(role)) {
       return NextResponse.json(
         { error: `Principal can only create: ${PRINCIPAL_ROLES.join(", ")}` },

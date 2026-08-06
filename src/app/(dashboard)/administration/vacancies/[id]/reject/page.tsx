@@ -81,7 +81,7 @@ export default function RejectVacancyPage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Reject Hiring Request" description={vacancy ? `${vacancy.position} — ${vacancy.department}` : undefined} />
+      <PageHeader title="Reject Hiring Request" description={vacancy ? `${vacancy.position} - ${vacancy.department}` : undefined} />
 
       <Card>
         <CardHeader>

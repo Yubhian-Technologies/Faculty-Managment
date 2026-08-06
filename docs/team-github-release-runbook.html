@@ -7,12 +7,12 @@
 <style>
   /* ---------- Design plan ----------
      Color:  ink #1c2430 (text) / paper #f4f4f0 (ground, cool-neutral, not cream)
-             surface #ffffff / line #dbd8cc / accent #a9722e (brass — academic-ledger,
+             surface #ffffff / line #dbd8cc / accent #a9722e (brass - academic-ledger,
              not the generic terracotta-on-cream pairing) / semantic live #245a3c,
              beta #8a5a1f, off #9c3d24.
      Type:   display = institutional serif (Iowan Old Style / Palatino stack) for
              headings and the git-graph labels; body = system sans for long-form
-             reading; mono = ui-monospace for branch names, paths, code, chips —
+             reading; mono = ui-monospace for branch names, paths, code, chips -
              mono is not just "utility" here, it's part of the subject's own
              vernacular (git refs, config keys).
      Layout: single reading column (~740px), hairline rules between sections,
@@ -347,13 +347,13 @@
 <div class="page">
 
 <header class="cover">
-  <p class="eyebrow">Internal engineering runbook — Faculty Management System</p>
+  <p class="eyebrow">Internal engineering runbook - Faculty Management System</p>
   <h1>Shipping FMS section by section</h1>
-  <p class="dek">A branching model, ownership map, and release process for eight teams building twenty roles across five product sections — so production stops drifting from main every time a section ships.</p>
+  <p class="dek">A branching model, ownership map, and release process for eight teams building twenty roles across five product sections - so production stops drifting from main every time a section ships.</p>
   <div class="meta">
     <span>Draft v1</span>
     <span>Last updated 1 Aug 2026</span>
-    <span>Owner: engineering lead — assign a name and put it here</span>
+    <span>Owner: engineering lead - assign a name and put it here</span>
   </div>
 </header>
 
@@ -367,26 +367,26 @@
     <li><a href="#github">5. GitHub mechanics</a></li>
     <li><a href="#release">6. Release checklist</a></li>
     <li><a href="#cadence">7. Planning cadence</a></li>
-    <li><a href="#appendix">8. Appendix — current branch audit</a></li>
+    <li><a href="#appendix">8. Appendix - current branch audit</a></li>
   </ol>
 </nav>
 
 <section id="problem">
-  <p class="section-label">01 — Context</p>
+  <p class="section-label">01 - Context</p>
   <h2>The problem, concretely</h2>
-  <p>This isn't hypothetical. The repo already shows the failure mode: <code>production</code> has a commit whose message is literally <em>"tabs are hidden except hiring and management"</em> — someone went file-by-file commenting out nav entries and gating specific pages to control what's visible in production. That works exactly once. The next time <code>main</code> moves forward, someone has to redo that reconciliation by hand, because production's history has diverged into its own branch of edits rather than staying a clean mirror of main.</p>
+  <p>This isn't hypothetical. The repo already shows the failure mode: <code>production</code> has a commit whose message is literally <em>"tabs are hidden except hiring and management"</em> - someone went file-by-file commenting out nav entries and gating specific pages to control what's visible in production. That works exactly once. The next time <code>main</code> moves forward, someone has to redo that reconciliation by hand, because production's history has diverged into its own branch of edits rather than staying a clean mirror of main.</p>
   <p>Two structural gaps are causing this, and both get worse as team count grows:</p>
   <ul>
     <li><strong>No release mechanism below "whole app."</strong> The only way to hide an unfinished section from production today is to physically remove or comment out the code that renders it, on a branch that then has to be kept in sync by hand.</li>
-    <li><strong>No ownership boundaries.</strong> Shared files — <code>navConfig.ts</code>, <code>types/core.ts</code>, <code>proxy.ts</code>, the shared UI kit — get touched by every team, on every feature, so they're the highest-conflict surface in the repo and nobody is accountable for their shape.</li>
+    <li><strong>No ownership boundaries.</strong> Shared files - <code>navConfig.ts</code>, <code>types/core.ts</code>, <code>proxy.ts</code>, the shared UI kit - get touched by every team, on every feature, so they're the highest-conflict surface in the repo and nobody is accountable for their shape.</li>
   </ul>
   <p>Everything below fixes those two gaps directly: <a href="#gating">§3</a> replaces branch-level hiding with a config flag, and <a href="#ownership">§4</a> assigns real owners to the shared surfaces.</p>
 </section>
 
 <section id="branching">
-  <p class="section-label">02 — Git</p>
+  <p class="section-label">02 - Git</p>
   <h2>Branching model</h2>
-  <p>Trunk-based, not GitFlow, and not long-lived personal branches. One integration line, short-lived branches feeding it, and a production line that only ever fast-forwards from main — it never accumulates commits of its own.</p>
+  <p>Trunk-based, not GitFlow, and not long-lived personal branches. One integration line, short-lived branches feeding it, and a production line that only ever fast-forwards from main - it never accumulates commits of its own.</p>
 
   <div class="graph-wrap">
     <div class="graph">
@@ -435,31 +435,31 @@
     <table>
       <thead><tr><th>Branch</th><th>Purpose</th><th>Who commits directly</th></tr></thead>
       <tbody>
-        <tr><td><code>main</code></td><td>Always integrated, always deployable to staging. Every merged PR lands here first.</td><td>Nobody — PR only</td></tr>
-        <tr><td><code>production</code></td><td>Deploy target. Fast-forwarded from <code>main</code> at release time. Carries no commits main doesn't have.</td><td>Nobody — fast-forward only, via release PR/tag</td></tr>
+        <tr><td><code>main</code></td><td>Always integrated, always deployable to staging. Every merged PR lands here first.</td><td>Nobody - PR only</td></tr>
+        <tr><td><code>production</code></td><td>Deploy target. Fast-forwarded from <code>main</code> at release time. Carries no commits main doesn't have.</td><td>Nobody - fast-forward only, via release PR/tag</td></tr>
         <tr><td><code>feat/&lt;section&gt;-&lt;desc&gt;</code></td><td>One ticket, one branch, off <code>main</code>. Merged and deleted within days.</td><td>The engineer working the ticket</td></tr>
         <tr><td><code>fix/&lt;section&gt;-&lt;desc&gt;</code></td><td>Same lifecycle as <code>feat/*</code>, for bug fixes.</td><td>The engineer working the fix</td></tr>
       </tbody>
     </table>
   </div>
-  <p>You already use this naming pattern in places — <code>feat/speed-insights</code>, <code>fix/disable-lint-during-build</code> are good examples already in the repo. The gap isn't the convention, it's that it isn't applied consistently, and branches aren't deleted after merge (see <a href="#appendix">§8</a>).</p>
+  <p>You already use this naming pattern in places - <code>feat/speed-insights</code>, <code>fix/disable-lint-during-build</code> are good examples already in the repo. The gap isn't the convention, it's that it isn't applied consistently, and branches aren't deleted after merge (see <a href="#appendix">§8</a>).</p>
 
   <h3>Rules</h3>
   <ul>
-    <li>No direct pushes to <code>main</code> or <code>production</code> — PR required, enforced by branch protection (<a href="#github">§5</a>).</li>
+    <li>No direct pushes to <code>main</code> or <code>production</code> - PR required, enforced by branch protection (<a href="#github">§5</a>).</li>
     <li>Branch from <code>main</code>, always. Never branch from another feature branch or from <code>production</code>.</li>
-    <li>Keep feature branches short-lived — rebase or merge <code>main</code> in daily if the ticket runs past 2–3 days, so divergence never compounds.</li>
-    <li>Delete the branch on merge (GitHub can do this automatically on PR merge — turn that setting on).</li>
+    <li>Keep feature branches short-lived - rebase or merge <code>main</code> in daily if the ticket runs past 2–3 days, so divergence never compounds.</li>
+    <li>Delete the branch on merge (GitHub can do this automatically on PR merge - turn that setting on).</li>
   </ul>
 </section>
 
 <section id="gating">
-  <p class="section-label">03 — Release mechanism</p>
+  <p class="section-label">03 - Release mechanism</p>
   <h2>Section gating: flags, not branches</h2>
   <p>The fix for "release one section at a time" is a config flag that every code path reads, not a branch that physically excludes code. <code>main</code> and <code>production</code> build from the same source; what differs is which sections are switched on.</p>
 
   <div class="callout">
-    <p>You already have this pattern in the codebase — <strong><code>ROLE_SCOPE</code></strong> in <code>src/types/core.ts</code> is described as "the single source of truth... old duplicated literals now all import this." Section flags are the same idea, applied to release state instead of role scope.</p>
+    <p>You already have this pattern in the codebase - <strong><code>ROLE_SCOPE</code></strong> in <code>src/types/core.ts</code> is described as "the single source of truth... old duplicated literals now all import this." Section flags are the same idea, applied to release state instead of role scope.</p>
   </div>
 
   <h3>Proposed source of truth</h3>
@@ -498,7 +498,7 @@ export function isSectionVisible(section: SectionKey, role: UserRole): boolean {
       </tbody>
     </table>
   </div>
-  <p>This is exactly the reconciliation work done by hand in this session's <code>production</code> merge — the flag makes it a one-line change instead of a conflict-resolution exercise, every single release.</p>
+  <p>This is exactly the reconciliation work done by hand in this session's <code>production</code> merge - the flag makes it a one-line change instead of a conflict-resolution exercise, every single release.</p>
 
   <h3>Flag states</h3>
   <table>
@@ -512,15 +512,15 @@ export function isSectionVisible(section: SectionKey, role: UserRole): boolean {
 </section>
 
 <section id="ownership">
-  <p class="section-label">04 — People</p>
+  <p class="section-label">04 - People</p>
   <h2>Team &amp; section ownership</h2>
-  <p>Eight teams and five sections isn't 1:1 — don't force it. Recruitment/Hiring is explicitly the largest module in the architecture doc, so it likely needs two teams; a Platform team owns the shared surfaces every section touches. Fill in real names — the shape below is the starting point:</p>
+  <p>Eight teams and five sections isn't 1:1 - don't force it. Recruitment/Hiring is explicitly the largest module in the architecture doc, so it likely needs two teams; a Platform team owns the shared surfaces every section touches. Fill in real names - the shape below is the starting point:</p>
 
   <div class="table-wrap">
     <table>
       <thead><tr><th>Section</th><th>Owning team</th><th>Key paths</th><th>Status</th></tr></thead>
       <tbody>
-        <tr><td>Platform / Core</td><td>Team 1</td><td><code>types/core.ts</code>, <code>navConfig.ts</code>, <code>proxy.ts</code>, <code>lib/auth/</code>, <code>components/shared</code>, <code>components/ui</code></td><td>—</td></tr>
+        <tr><td>Platform / Core</td><td>Team 1</td><td><code>types/core.ts</code>, <code>navConfig.ts</code>, <code>proxy.ts</code>, <code>lib/auth/</code>, <code>components/shared</code>, <code>components/ui</code></td><td>-</td></tr>
         <tr><td>Hiring / Recruitment</td><td>Teams 2–3</td><td><code>app/api/college/{vacancy-requests,candidates,hiring-batches,offer-letters}</code>, <code>lib/firestore/hiring.ts</code></td><td><span class="chip chip--live">live</span></td></tr>
         <tr><td>Budget &amp; Finance</td><td>Team 4</td><td><code>app/api/college/budget-*</code>, <code>app/api/college/finance-*</code>, <code>lib/budget/</code>, <code>lib/finance/</code></td><td><span class="chip chip--beta">beta</span></td></tr>
         <tr><td>Leave &amp; Attendance</td><td>Team 5</td><td><code>app/api/college/leave-applications</code>, <code>app/api/college/attendance</code>, <code>lib/leave/</code></td><td><span class="chip chip--off">off</span></td></tr>
@@ -529,10 +529,10 @@ export function isSectionVisible(section: SectionKey, role: UserRole): boolean {
       </tbody>
     </table>
   </div>
-  <p style="font-size:13px;color:var(--muted);margin-top:-10px;">Adjust section names and team count to your actual five — the point is every section and every shared surface has exactly one accountable team, not that this exact split is correct.</p>
+  <p style="font-size:13px;color:var(--muted);margin-top:-10px;">Adjust section names and team count to your actual five - the point is every section and every shared surface has exactly one accountable team, not that this exact split is correct.</p>
 
   <h3>Enforce it with CODEOWNERS</h3>
-  <p>Your route layout already splits by scope (<code>app/(dashboard)/hod/</code>, <code>app/api/college/budget-*</code>, …), so the boundaries mostly already exist — <code>CODEOWNERS</code> just makes them binding:</p>
+  <p>Your route layout already splits by scope (<code>app/(dashboard)/hod/</code>, <code>app/api/college/budget-*</code>, …), so the boundaries mostly already exist - <code>CODEOWNERS</code> just makes them binding:</p>
   <pre><code>/src/types/core.ts              @platform-team
 /src/components/layout/         @platform-team
 /src/proxy.ts                   @platform-team
@@ -544,7 +544,7 @@ export function isSectionVisible(section: SectionKey, role: UserRole): boolean {
 </section>
 
 <section id="github">
-  <p class="section-label">05 — Mechanics</p>
+  <p class="section-label">05 - Mechanics</p>
   <h2>GitHub mechanics</h2>
 
   <h3>Branch protection</h3>
@@ -555,22 +555,22 @@ export function isSectionVisible(section: SectionKey, role: UserRole): boolean {
 
   <h3>Every PR</h3>
   <ul>
-    <li>Title format: <code>[section] short description</code> — e.g. <code>[budget] fix fund allocation rounding</code>.</li>
+    <li>Title format: <code>[section] short description</code> - e.g. <code>[budget] fix fund allocation rounding</code>.</li>
     <li>Body answers: which section, which flag state it ships under, how it was tested.</li>
-    <li>CI green before merge — you already have working <code>build</code>/<code>typecheck</code> commands (via the Node 24 direct-binary workaround noted in the repo), wire them into a GitHub Actions workflow if one doesn't exist yet.</li>
+    <li>CI green before merge - you already have working <code>build</code>/<code>typecheck</code> commands (via the Node 24 direct-binary workaround noted in the repo), wire them into a GitHub Actions workflow if one doesn't exist yet.</li>
   </ul>
 
   <h3>Project tracking</h3>
-  <p>One GitHub Project board, with a <strong>Section</strong> field (Hiring / Budget / Leave / Payroll / Teaching / Platform) rather than one board per team — that way a section lead can filter to their column regardless of which team picked up the ticket, and cross-section dependencies stay visible in one place.</p>
+  <p>One GitHub Project board, with a <strong>Section</strong> field (Hiring / Budget / Leave / Payroll / Teaching / Platform) rather than one board per team - that way a section lead can filter to their column regardless of which team picked up the ticket, and cross-section dependencies stay visible in one place.</p>
 </section>
 
 <section id="release">
-  <p class="section-label">06 — Process</p>
+  <p class="section-label">06 - Process</p>
   <h2>Release checklist</h2>
   <p>Before a section's flag moves from <span class="chip chip--beta">beta</span> to <span class="chip chip--live">live</span> in production:</p>
   <ol>
-    <li>Every API route the section touches has a <code>requireCollegeMember</code>/<code>requireRole</code>/<code>requireLocationMember</code> guard — no open endpoints.</li>
-    <li>Every nav entry the section adds resolves to a real, data-backed page — no placeholder "coming soon" screens left reachable (this repo just shipped one of these live by accident on <code>/panel/teaching</code>; make this check explicit so it doesn't happen again).</li>
+    <li>Every API route the section touches has a <code>requireCollegeMember</code>/<code>requireRole</code>/<code>requireLocationMember</code> guard - no open endpoints.</li>
+    <li>Every nav entry the section adds resolves to a real, data-backed page - no placeholder "coming soon" screens left reachable (this repo just shipped one of these live by accident on <code>/panel/teaching</code>; make this check explicit so it doesn't happen again).</li>
     <li>Writes create the matching <code>AuditLog</code> entry and <code>AppNotification</code>s, per the unions in <code>types/core.ts</code>.</li>
     <li><code>next build</code> and typecheck both pass clean on the exact commit being released.</li>
     <li>Section lead signs off in the release PR description; Platform team reviews any changes to shared files it touched.</li>
@@ -579,40 +579,40 @@ export function isSectionVisible(section: SectionKey, role: UserRole): boolean {
 </section>
 
 <section id="cadence">
-  <p class="section-label">07 — Planning</p>
+  <p class="section-label">07 - Planning</p>
   <h2>Planning cadence</h2>
-  <p><code>AGENTS.md</code> is already a real architecture doc — most projects this size don't have one. Keep it living: every section owner updates its relevant paragraph when their module's shape changes, not just when someone happens to notice it's stale.</p>
+  <p><code>AGENTS.md</code> is already a real architecture doc - most projects this size don't have one. Keep it living: every section owner updates its relevant paragraph when their module's shape changes, not just when someone happens to notice it's stale.</p>
   <ul>
     <li><strong>Weekly section-lead sync</strong> (15 min): each of the five section leads states flag state, what's blocking a state change, and any shared-surface change they need from Platform.</li>
-    <li><strong>Roadmap doc</strong>: one row per section — target beta date, target live date, owning team. Lives in <code>docs/</code> alongside the existing docs, same convention.</li>
+    <li><strong>Roadmap doc</strong>: one row per section - target beta date, target live date, owning team. Lives in <code>docs/</code> alongside the existing docs, same convention.</li>
     <li><strong>This doc</strong>: keep it updated in <code>docs/</code> once the team names and section list are filled in, so it's a repo artifact, not tribal knowledge someone has to re-explain to the next new hire.</li>
   </ul>
 </section>
 
 <section id="appendix">
-  <p class="section-label">08 — Cleanup</p>
-  <h2>Appendix — current branch audit</h2>
+  <p class="section-label">08 - Cleanup</p>
+  <h2>Appendix - current branch audit</h2>
   <p>What exists in the repo today, and what to do with it under the model above:</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Branch</th><th>Recommended action</th></tr></thead>
       <tbody>
-        <tr><td><code>main</code></td><td>Keep — integration branch</td></tr>
-        <tr><td><code>production</code></td><td>Keep — stop accepting direct commits; fast-forward only from here on</td></tr>
-        <tr><td><code>faculty-details-updates</code></td><td>Merged into both — delete</td></tr>
+        <tr><td><code>main</code></td><td>Keep - integration branch</td></tr>
+        <tr><td><code>production</code></td><td>Keep - stop accepting direct commits; fast-forward only from here on</td></tr>
+        <tr><td><code>faculty-details-updates</code></td><td>Merged into both - delete</td></tr>
         <tr><td><code>hiring-pipeline-complete</code></td><td>Check if merged; delete if so, else open a PR</td></tr>
         <tr><td><code>feat/speed-insights</code></td><td>Check if merged; delete if so, else open a PR</td></tr>
         <tr><td><code>fix/disable-lint-during-build</code></td><td>Check if merged; delete if so, else open a PR</td></tr>
         <tr><td><code>fix/revert-eslint-config</code></td><td>Check if merged; delete if so, else open a PR</td></tr>
-        <tr><td><code>Management_dashboard</code> / <code>Management_Dashboard</code></td><td>Two branches, casing apart — confirm which is real, delete the duplicate immediately before someone commits to the wrong one</td></tr>
-        <tr><td><code>guna</code>, <code>siva</code>, <code>sivaathmika</code>, <code>prasad-dev</code>, <code>testing</code></td><td>Personal/scratch branches — exactly the pattern this doc replaces. Ask each owner to open a PR for anything still needed, then delete</td></tr>
+        <tr><td><code>Management_dashboard</code> / <code>Management_Dashboard</code></td><td>Two branches, casing apart - confirm which is real, delete the duplicate immediately before someone commits to the wrong one</td></tr>
+        <tr><td><code>guna</code>, <code>siva</code>, <code>sivaathmika</code>, <code>prasad-dev</code>, <code>testing</code></td><td>Personal/scratch branches - exactly the pattern this doc replaces. Ask each owner to open a PR for anything still needed, then delete</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
 <footer>
-  Starting point, not gospel — swap in real team names, your actual five section names, and adjust the release checklist to match your QA process. Once it reflects reality, keep it current in <code>docs/</code>.
+  Starting point, not gospel - swap in real team names, your actual five section names, and adjust the release checklist to match your QA process. Once it reflects reality, keep it current in <code>docs/</code>.
 </footer>
 
 </div>

@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     }
 
     // An HOD may only create a sub-department under their own department,
-    // and only when their Principal has enabled sub-departments for it —
+    // and only when their Principal has enabled sub-departments for it -
     // this is what "sub-HOD" management looks like: it's just this same
     // POST, scoped to a parentDepartmentId the caller owns.
     let parentDepartmentId: string | undefined;
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-    // Keep the HOD's own profile department in sync — faculty-requirement
+    // Keep the HOD's own profile department in sync - faculty-requirement
     // and other HOD-scoped routes resolve department from their user doc,
     // not from the department's hodUid pointer.
     if (hodUid) {
@@ -164,7 +164,7 @@ export async function DELETE(request: Request) {
     }
     const dept = deptSnap.data() as { name: string; hodUid?: string; parentDepartmentId?: string };
 
-    // An HOD may only delete a sub-department under their own department —
+    // An HOD may only delete a sub-department under their own department -
     // this is the "sub-HOD" management surface, not general department admin.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
@@ -173,7 +173,7 @@ export async function DELETE(request: Request) {
       }
     }
 
-    // Refuse to delete a department that still has sub-departments — otherwise
+    // Refuse to delete a department that still has sub-departments - otherwise
     // a main department can be removed while its sub-department (and that
     // sub-department's own students/sections) are still intact, orphaning the
     // sub-department's `parentDepartmentId` pointer. Cleanup must go
@@ -192,7 +192,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Refuse to delete a department that still has students or sections —
+    // Refuse to delete a department that still has students or sections -
     // deleting it would silently orphan their `department` string references.
     const [studentsSnap, sectionsSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("students").where("department", "==", dept.name).limit(1).get(),
@@ -205,7 +205,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Keep the (sub-)HOD's own profile in sync — otherwise their account is
+    // Keep the (sub-)HOD's own profile in sync - otherwise their account is
     // left pointing at a department that no longer exists.
     if (dept.hodUid) {
       await db.collection("colleges").doc(collegeId).collection("users").doc(dept.hodUid)
@@ -249,8 +249,8 @@ export async function PATCH(request: Request) {
     const db = getAdminDb();
     const deptRef = db.collection("colleges").doc(session.collegeId).collection("departments").doc(deptId);
 
-    // A (main) HOD may only manage their own sub-departments here — the
-    // "sub-HOD" management surface, not general department admin — and only
+    // A (main) HOD may only manage their own sub-departments here - the
+    // "sub-HOD" management surface, not general department admin - and only
     // a safe subset of fields: reassigning the Sub-HOD and cross-listing.
     // Renaming, deactivating, or nesting further sub-departments stays
     // Principal/VP-only.
@@ -294,7 +294,7 @@ export async function PATCH(request: Request) {
     }
 
     // Assigned years must be a subset of the years this college has actually
-    // opened (Location Admin's Academic Years toggle) — mirrors the same
+    // opened (Location Admin's Academic Years toggle) - mirrors the same
     // check already done for Section creation in college/sections/route.ts.
     if (updates.assignedYears) {
       const academicYearsSnap = await db
@@ -320,7 +320,7 @@ export async function PATCH(request: Request) {
     const now = new Date();
 
     // Keep the outgoing/incoming HOD's own profile department in sync with
-    // the assignment — faculty-requirement and other HOD-scoped routes
+    // the assignment - faculty-requirement and other HOD-scoped routes
     // resolve department from their user doc, not from hodUid.
     if (updates.hodUid !== undefined) {
       const deptSnap = await deptRef.get();

@@ -89,7 +89,7 @@ export function SupportingStaffProfileView({ profile, staffCategory }: Props) {
           </Section>
 
           <Section number={6} title="Achievements">
-            <p className="text-sm whitespace-pre-wrap">{technical?.innovationsAndAutomation || "—"}</p>
+            <p className="text-sm whitespace-pre-wrap">{technical?.innovationsAndAutomation || "-"}</p>
             {(technical?.achievements ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
               technical?.achievements.map((a, i) => (
                 <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -153,7 +153,7 @@ export function SupportingStaffProfileView({ profile, staffCategory }: Props) {
       )}
 
       <Section number={7} title="Others">
-        <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "—"}</p>
+        <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "-"}</p>
       </Section>
     </div>
   );

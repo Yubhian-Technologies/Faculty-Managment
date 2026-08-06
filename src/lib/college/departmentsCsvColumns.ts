@@ -1,4 +1,4 @@
-// Shared department CSV column definitions — used by the bulk-import template
+// Shared department CSV column definitions - used by the bulk-import template
 // and upload page (src/app/(dashboard)/principal/departments/import/page.tsx).
 
 export interface DepartmentCsvColumn {
@@ -18,6 +18,6 @@ export const COLUMNS: DepartmentCsvColumn[] = [
 
 export const HINTS = [
   "Short Code: 2-10 uppercase letters, used in reports and batch IDs",
-  "HOD Email must match an existing HOD account's login email — create the HOD first (via \"+ Create HOD\" on the Add Department page) if they don't have one yet",
+  "HOD Email must match an existing HOD account's login email - create the HOD first (via \"+ Create HOD\" on the Add Department page) if they don't have one yet",
   "Leave HOD Email blank to add the department without an HOD; assign one later from the Departments page",
 ];

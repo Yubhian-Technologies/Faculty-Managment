@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import type { Department } from "@/types";
 
-// Sub-departments are one level deep only — a sub-department never has
+// Sub-departments are one level deep only - a sub-department never has
 // sub-departments of its own (see Department.parentDepartmentId in
 // types/core.ts). So an HOD whose own department already *is* a
-// sub-department has nothing to do on the "Sub-Departments" page — it would
+// sub-department has nothing to do on the "Sub-Departments" page - it would
 // only ever show the "not enabled" empty state. This tells the nav to hide
 // that link entirely for them, rather than leave a permanently-dead page in
 // their sidebar.

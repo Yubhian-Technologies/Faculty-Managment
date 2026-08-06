@@ -91,7 +91,7 @@ export async function verifyFirebaseToken(token: string): Promise<FirebaseTokenP
     throw new Error(`Invalid token issuer: ${payload.iss}`);
   }
 
-  // Normalise uid — Firebase uses both sub and user_id
+  // Normalise uid - Firebase uses both sub and user_id
   payload.uid = payload.user_id ?? payload.sub;
   return payload;
 }

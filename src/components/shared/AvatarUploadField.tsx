@@ -12,7 +12,7 @@ const MAX_SIZE_MB = 2;
 interface AvatarUploadFieldProps {
   name: string;
   photoUrl?: string;
-  /** uid or facultyId this photo belongs to — used to name the Storage object. */
+  /** uid or facultyId this photo belongs to - used to name the Storage object. */
   targetId: string;
   onUploaded: (url: string) => void;
   /** Shown as a "Delete" action next to "Change" once a photo exists. */
@@ -22,7 +22,7 @@ interface AvatarUploadFieldProps {
 
 // Uploads a photo to Storage for someone OTHER than the signed-in user (Principal
 // editing a HOD/Vice Principal, HOD editing a faculty record). Unlike
-// ProfilePhotoUpload, this does not persist the URL itself — the caller is an
+// ProfilePhotoUpload, this does not persist the URL itself - the caller is an
 // existing edit form that saves `profilePhotoUrl` together with its other fields.
 export function AvatarUploadField({ name, photoUrl, targetId, onUploaded, onDeleted, className }: AvatarUploadFieldProps) {
   const { toast } = useToast();
@@ -30,7 +30,7 @@ export function AvatarUploadField({ name, photoUrl, targetId, onUploaded, onDele
   const [uploading, setUploading] = useState(false);
 
   const handleFileSelect = async (file: File) => {
-    // FileUpload only enforces size — MIME type still needs checking (drag & drop bypasses `accept`).
+    // FileUpload only enforces size - MIME type still needs checking (drag & drop bypasses `accept`).
     if (!ACCEPTED_TYPES.includes(file.type)) {
       toast({ variant: "destructive", title: "Only PNG or JPEG images are allowed" });
       return;

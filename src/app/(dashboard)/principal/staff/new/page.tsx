@@ -12,14 +12,14 @@ import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS } from "@/types";
 import type { Department, UserRole } from "@/types";
 
-// Roles a Principal/VP can create here — must match PRINCIPAL_ROLES in
+// Roles a Principal/VP can create here - must match PRINCIPAL_ROLES in
 // src/app/api/college/users/route.ts.
 const CREATABLE_ROLES: UserRole[] = [
   "HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF",
   "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL",
 ];
 
-// One holder per college — matches COLLEGE_SINGLETON_ROLES on the API route.
+// One holder per college - matches COLLEGE_SINGLETON_ROLES on the API route.
 const SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
 
 export default function NewStaffPage() {
@@ -113,7 +113,7 @@ export default function NewStaffPage() {
                   <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                   <SelectContent>
                     {departments.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No departments found — ask Principal to add one under Departments</div>
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No departments found - ask Principal to add one under Departments</div>
                     ) : (
                       departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)
                     )}

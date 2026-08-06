@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         );
       }
 
-      // Staff-salary items are re-priced/re-counted from server-side records —
+      // Staff-salary items are re-priced/re-counted from server-side records -
       // see applySalaryStructurePricing for why the client values aren't trusted.
       const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring, department);
       const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring, department);
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
         timestamp: now,
       });
 
-      // Nothing to notify — Management works pull-style (visits the page to see
+      // Nothing to notify - Management works pull-style (visits the page to see
       // what's pending), since notifications are gated on collegeId and MANAGEMENT
       // sessions carry none.
       return NextResponse.json({ id: ref.id }, { status: 201 });
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Staff-salary items are re-priced/re-counted from server-side records —
+    // Staff-salary items are re-priced/re-counted from server-side records -
     // see applySalaryStructurePricing for why the client values aren't trusted.
     const nonRecurring = await applySalaryStructurePricing(db, session.collegeId, submittedNonRecurring, department);
     const recurring = await applySalaryStructurePricing(db, session.collegeId, submittedRecurring, department);
@@ -213,7 +213,7 @@ export async function POST(request: Request) {
       .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
       .get();
 
-    // Actionable — the Principal/VP is the next responsible party until they
+    // Actionable - the Principal/VP is the next responsible party until they
     // verify/reject/return it (resolved in budget-requests/[id]/route.ts on
     // that action). dedupeKey includes the history length as a "round"
     // counter: 0 at first submission, so a later resubmit (history grows)

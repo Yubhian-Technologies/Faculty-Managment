@@ -11,11 +11,11 @@ import type {
 } from "@/types";
 
 // Same resolver as faculty/students CSV imports (src/app/api/college/
-// students/import-excel/route.ts) — accepts a department's short Code (e.g.
+// students/import-excel/route.ts) - accepts a department's short Code (e.g.
 // "CSE", the template's own sample value) or its full name and normalizes to
 // the canonical `name`. Without this, a row typed with a code got stored
 // verbatim (e.g. department: "CSE"), which never matches the exact-string
-// department filter the HOD's own Supporting Staff list queries by — the
+// department filter the HOD's own Supporting Staff list queries by - the
 // record was created successfully but simply never appeared for them again.
 function buildDepartmentResolver(
   departmentsSnap: FirebaseFirestore.QuerySnapshot
@@ -186,7 +186,7 @@ type ImportRow = {
 };
 
 // See src/app/api/college/faculty/import/route.ts for why sane()/parseDate()
-// guard this way — same lenient-Excel-date and out-of-range-year footguns apply here.
+// guard this way - same lenient-Excel-date and out-of-range-year footguns apply here.
 function sane(d: Date): Date | undefined {
   const year = d.getFullYear();
   return Number.isFinite(d.getTime()) && year >= 1900 && year <= 2100 ? d : undefined;
@@ -218,7 +218,7 @@ function parseList(raw: string | undefined): string[] {
   return (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-// Comma-separated free text mapped against an enum's label vocabulary — items
+// Comma-separated free text mapped against an enum's label vocabulary - items
 // that don't match anything in `map` are dropped with a warning rather than
 // silently discarded, same as every other unrecognized-value case in this route.
 function mapList<T extends string>(
@@ -286,7 +286,7 @@ function technicalCertifications(row: ImportRow, empId: string, dropped: (empId:
     .filter((c): c is VendorCertificationEntry => !!c);
 }
 
-// Builds the full SupportingStaffProfileFields object for a row — qualifications
+// Builds the full SupportingStaffProfileFields object for a row - qualifications
 // are shared across both categories; technicalProfile/nonTechnicalProfile are
 // mutually exclusive, matching the manual "Add Staff" form's SupportingStaffProfileFields
 // shape (src/types/supportingStaff.ts) so import and manual entry stay compatible.
@@ -397,10 +397,10 @@ export async function POST(request: Request) {
       const rowNum = i + 2;
 
       const dropped = (empId: string, label: string, raw: string | undefined) => {
-        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored — invalid value ("${raw?.trim()}")` });
+        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored - invalid value ("${raw?.trim()}")` });
       };
 
-      if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "—", error: "Employee ID is required" }); continue; }
+      if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Joining date is required" }); continue; }
 
@@ -414,7 +414,7 @@ export async function POST(request: Request) {
       const staffCategory: SupportingStaffCategory = CATEGORY_MAP[categoryKey] ?? requiredCategory ?? "TECHNICAL";
       if (row.staffCategory?.trim() && !CATEGORY_MAP[categoryKey]) dropped(empId, "Staff Category", row.staffCategory);
 
-      // Each role can only import into its own category — Technical (HOD, per
+      // Each role can only import into its own category - Technical (HOD, per
       // department) and Non-Technical (College Office, college-wide) are kept separate.
       if (requiredCategory && staffCategory !== requiredCategory) {
         failed.push({ row: rowNum, employeeId: empId, error: `${session.role === "HOD" ? "HOD" : "College Office"} can only import ${supportingStaffCategoryLabel(requiredCategory)} staff` });
@@ -435,7 +435,7 @@ export async function POST(request: Request) {
       const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
 
       const joiningDate = parseDate(row.joiningDate);
-      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date — use YYYY-MM-DD" }); continue; }
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date - use YYYY-MM-DD" }); continue; }
       const dateOfBirth = parseDate(row.dateOfBirth);
       if (row.dateOfBirth?.trim() && !dateOfBirth) dropped(empId, "Date of birth", row.dateOfBirth);
       const ratificationDate = parseDate(row.ratificationDate);

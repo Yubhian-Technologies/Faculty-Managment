@@ -137,7 +137,7 @@ export interface Candidate {
 
 // A batch is created directly at PRINCIPAL_REVIEW (the HOD has already
 // collected candidates and set up the panel before submitting) and only
-// moves forward from there — there is no pre-batch "collection"/"setup"
+// moves forward from there - there is no pre-batch "collection"/"setup"
 // phase in the data model.
 export type BatchPhase =
   | "PRINCIPAL_REVIEW"        // Awaiting principal approval

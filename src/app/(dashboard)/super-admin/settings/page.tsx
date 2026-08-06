@@ -17,9 +17,9 @@ import { ROLE_LABELS } from "@/types";
 import { getNavItemsForRole, groupNavItemsByModule, getRolesWithNavModules } from "@/components/layout/navConfig";
 
 const REGULATORY_BODIES: { value: RegulatoryBody; label: string }[] = [
-  { value: "UGC", label: "UGC — University Grants Commission" },
-  { value: "AICTE", label: "AICTE — All India Council for Technical Education" },
-  { value: "NAAC", label: "NAAC — National Assessment and Accreditation Council" },
+  { value: "UGC", label: "UGC - University Grants Commission" },
+  { value: "AICTE", label: "AICTE - All India Council for Technical Education" },
+  { value: "NAAC", label: "NAAC - National Assessment and Accreditation Council" },
   { value: "STATE", label: "State Regulatory Body" },
 ];
 
@@ -375,10 +375,10 @@ export default function SuperAdminSettingsPage() {
 // ─── Navigation Visibility ──────────────────────────────────────────────────
 // Per-college, per-role control over which sidebar modules (and individual
 // items within a module, e.g. HOD's "My Work") are visible. Backed by
-// colleges/{collegeId}/settings/navVisibility — see
+// colleges/{collegeId}/settings/navVisibility - see
 // src/app/api/admin/settings/nav-visibility/route.ts.
 
-// Computed once from NAV_ITEMS — any role with at least one `section`-grouped
+// Computed once from NAV_ITEMS - any role with at least one `section`-grouped
 // item shows up here automatically, no manual list to keep in sync.
 const NAV_VISIBILITY_ROLES: UserRole[] = getRolesWithNavModules();
 
@@ -448,7 +448,7 @@ function NavVisibilitySection() {
       <CardHeader>
         <CardTitle className="text-base">Navigation Visibility</CardTitle>
         <CardDescription>
-          Hide unfinished modules (or individual items within a module) from a role&apos;s sidebar — per college, without a code change.
+          Hide unfinished modules (or individual items within a module) from a role&apos;s sidebar - per college, without a code change.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">

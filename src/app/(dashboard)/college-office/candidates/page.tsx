@@ -97,7 +97,7 @@ export default function CollegeOfficeCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Status overview of Principal-approved candidates — verify documents from the Documents tab"
+        description="Status overview of Principal-approved candidates - verify documents from the Documents tab"
       />
 
       <DataTable

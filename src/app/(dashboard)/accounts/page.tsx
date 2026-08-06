@@ -59,7 +59,7 @@ export default function AccountsDashboard() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Offer Letters</p>
-                <p className="text-xl font-bold">—</p>
+                <p className="text-xl font-bold">-</p>
               </div>
             </CardContent>
           </Card>

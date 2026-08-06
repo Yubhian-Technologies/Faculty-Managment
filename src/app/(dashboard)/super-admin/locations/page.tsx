@@ -56,7 +56,7 @@ export default function LocationsPage() {
               title={loc.name}
               subtitle={loc.city}
               badge={<Badge variant={loc.isActive ? "default" : "secondary"}>{loc.isActive ? "Active" : "Inactive"}</Badge>}
-              fields={[{ label: "State", value: loc.state ?? "—" }]}
+              fields={[{ label: "State", value: loc.state ?? "-" }]}
               actions={
                 <Button size="sm" variant="outline" onClick={() => void toggleActive(loc)}>
                   {loc.isActive ? "Deactivate" : "Activate"}

@@ -48,7 +48,7 @@ export default function TeachingAssignmentsPage() {
   useEffect(() => { load(); }, []);
 
   const key = `${courseId}_${year}`;
-  // Sub-department sections are view-only for a parent HOD — exclude them here
+  // Sub-department sections are view-only for a parent HOD - exclude them here
   // so both the staffing-gap finder and the assign-faculty form only ever
   // operate on sections this HOD can actually edit.
   const sections = useMemo(
@@ -100,7 +100,7 @@ export default function TeachingAssignmentsPage() {
   }, [subjects, sections, assignments, courseId, year]);
 
   // Subjects already staffed for the section picked in the assign-faculty form shouldn't be
-  // offered again there — pick a different subject or remove the existing assignment first.
+  // offered again there - pick a different subject or remove the existing assignment first.
   const availableSubjectsForAssign = assignForm.sectionId
     ? subjects.filter((s) => !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id))
     : subjects;

@@ -46,7 +46,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -76,7 +76,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
         return row;
       }).filter((r) => Object.values(r).some((v) => v.trim()));
 
-      if (dataRows.length === 0) { setParseError("No data rows found after the header — check that your data starts on the row right after the header, with no blank rows in between."); return; }
+      if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }
       if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
 
       setRows(dataRows);
@@ -105,7 +105,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
         setRows([]);
       }
     } catch {
-      toast({ variant: "destructive", title: "Network error — import failed" });
+      toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
     }
@@ -157,7 +157,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. &quot;DOJ&quot; for Joining Date)</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;DOJ&quot; for Joining Date)</p>
             </div>
           </button>
           {parseError && (
@@ -209,7 +209,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
-                            {row[c.key] || <span className="text-muted-foreground/40">—</span>}
+                            {row[c.key] || <span className="text-muted-foreground/40">-</span>}
                           </td>
                         ))}
                       </tr>

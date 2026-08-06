@@ -78,7 +78,7 @@ export function DataTable<T extends Record<string, unknown>>({
             className="pl-9"
             // A plain, un-hinted text input is exactly what a browser's
             // autofill heuristics latch onto (e.g. offering the logged-in
-            // user's own saved email) — this table is used to search
+            // user's own saved email) - this table is used to search
             // *other* people's records, so autofill here is never correct.
             autoComplete="off"
           />
@@ -156,7 +156,7 @@ export function DataTable<T extends Record<string, unknown>>({
                           col.className
                         )}
                       >
-                        {col.render ? col.render(row) : String(row[col.key] ?? "—")}
+                        {col.render ? col.render(row) : String(row[col.key] ?? "-")}
                       </td>
                     ))}
                   </tr>

@@ -188,7 +188,7 @@ export interface OnDutyRequest {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Leave Module V2 — comprehensive rule-engine-driven module
+// Leave Module V2 - comprehensive rule-engine-driven module
 // Collections: leaveTypes (root), colleges/{id}/leaveBalancesV2,
 //              colleges/{id}/leaveRequests, colleges/{id}/employeeLeaveProfiles
 // ─────────────────────────────────────────────────────────────────────────────

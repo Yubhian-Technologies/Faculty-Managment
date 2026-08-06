@@ -31,7 +31,7 @@ export function IncomingBudgetRequests() {
   const [mode, setMode] = useState<"idle" | "approve" | "reject" | "return" | "reconsider">("idle");
   const [fiscalYear, setFiscalYear] = useState(defaultFiscalYear());
   const [remarks, setRemarks] = useState("");
-  // Items left unticked ("not approved") land here awaiting a per-item reason —
+  // Items left unticked ("not approved") land here awaiting a per-item reason -
   // ticked items need no entry at all, since ticked == approved is the default.
   // itemId -> "title (category)"
   const [flaggedItems, setFlaggedItems] = useState<Record<string, string>>({});
@@ -40,7 +40,7 @@ export function IncomingBudgetRequests() {
 
   function load() {
     setIsLoading(true);
-    // FINANCE is a GLOBAL role overseeing every college — this must fan out
+    // FINANCE is a GLOBAL role overseeing every college - this must fan out
     // across all of them, not just whichever college happens to be the
     // sidebar's currently "selected" one (see /api/finance/budget-requests/overview).
     fetch("/api/finance/budget-requests/overview?status=L1_FROZEN")
@@ -105,7 +105,7 @@ export function IncomingBudgetRequests() {
     }
     setActingId(request.id);
     try {
-      // Target this request's own college explicitly — it may not be whichever
+      // Target this request's own college explicitly - it may not be whichever
       // college the sidebar currently has "selected" (see load() above).
       const res = await fetch(`/api/college/budget-requests/${request.id}?collegeId=${encodeURIComponent(request.collegeId)}`, {
         method: "PATCH",
@@ -303,13 +303,13 @@ export function IncomingBudgetRequests() {
                       <Label className="text-sm font-medium text-red-800">Items not approved</Label>
                       <div className="space-y-1.5 rounded-md border bg-background p-2">
                         {Object.keys(flaggedItems).length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No items unticked — untick items above first.</p>
+                          <p className="text-xs text-muted-foreground">No items unticked - untick items above first.</p>
                         ) : (
                           Object.entries(flaggedItems).map(([itemId, label]) => (
                             <div key={itemId} className="text-sm space-y-0.5">
                               <p className="font-medium">{label}</p>
                               <p className={`text-xs ${itemReasons[itemId]?.trim() ? "text-muted-foreground" : "text-destructive"}`}>
-                                {itemReasons[itemId]?.trim() || "No reason added yet — click \"Add Reason\" on this item above."}
+                                {itemReasons[itemId]?.trim() || "No reason added yet - click \"Add Reason\" on this item above."}
                               </p>
                             </div>
                           ))

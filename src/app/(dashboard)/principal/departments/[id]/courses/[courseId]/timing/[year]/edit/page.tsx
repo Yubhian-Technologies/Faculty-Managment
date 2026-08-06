@@ -114,7 +114,7 @@ export default function CourseYearTimingPage() {
         const json = await res.json() as { error?: string };
         throw new Error(json.error ?? "Failed to save timings");
       }
-      toast({ variant: "success", title: `Timings saved for ${course?.name ?? "course"} — Year ${yearNum}` });
+      toast({ variant: "success", title: `Timings saved for ${course?.name ?? "course"} - Year ${yearNum}` });
       router.push(`/principal/departments/${id}`);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save timings" });
@@ -134,7 +134,7 @@ export default function CourseYearTimingPage() {
   return (
     <div className="max-w-2xl">
       <PageHeader
-        title={`${course?.name ?? "Course"} — Year ${yearNum} Timings`}
+        title={`${course?.name ?? "Course"} - Year ${yearNum} Timings`}
         description="Set college hours, periods and breaks for this course-year"
       />
 

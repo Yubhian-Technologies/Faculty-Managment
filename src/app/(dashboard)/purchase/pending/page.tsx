@@ -19,7 +19,7 @@ import {
   type IndentRequest,
 } from "@/types";
 
-// Statuses that mean "sitting in Purchase Dept's own queue, waiting on them" —
+// Statuses that mean "sitting in Purchase Dept's own queue, waiting on them" -
 // same rule for both request types since financePurchaseClearance's PATCH route
 // mirrors indentRequests' state machine through this stage.
 const ACTIONABLE = new Set(["PENDING_PURCHASE_REVIEW", "RETURNED_TO_PURCHASE"]);
@@ -78,7 +78,7 @@ export default function PurchasePendingPage() {
       ) : rows.length === 0 ? (
         <EmptyState
           title="Nothing pending"
-          description="You're caught up — no indent or purchase clearance requests are waiting on you right now."
+          description="You're caught up - no indent or purchase clearance requests are waiting on you right now."
           icon={<Clock className="h-8 w-8" />}
         />
       ) : (

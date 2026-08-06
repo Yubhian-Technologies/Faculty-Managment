@@ -44,13 +44,13 @@ export async function POST(request: Request) {
     let attachments: { filename: string; content: Buffer }[] | undefined;
 
     if (body.type === "INTERVIEW_INVITATION") {
-      subject = `Interview Invitation — ${body.data.position as string}`;
+      subject = `Interview Invitation - ${body.data.position as string}`;
       html = interviewInvitationEmail(body.data as Parameters<typeof interviewInvitationEmail>[0]);
     } else if (body.type === "OFFER_LETTER") {
-      subject = `Offer Letter — ${body.data.collegeName as string}`;
+      subject = `Offer Letter - ${body.data.collegeName as string}`;
       html = offerLetterEmail(body.data as Parameters<typeof offerLetterEmail>[0]);
 
-      // No headless-browser dependency in this deployment (see /api/pdf/generate) —
+      // No headless-browser dependency in this deployment (see /api/pdf/generate) -
       // attach the letter as a downloadable HTML file instead of a rendered PDF.
       const letterData = body.data as unknown as OfferLetterData & { position?: string };
       const letterHtml = getOfferLetterHTML({ ...letterData, designation: letterData.designation ?? letterData.position ?? "" });
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       html = `<p>${String(body.data.message ?? "")}</p>`;
     }
 
-    // Send asynchronously — don't await in prod for faster API response
+    // Send asynchronously - don't await in prod for faster API response
     transporter.sendMail({
       from: `"${process.env.EMAIL_FROM_NAME ?? "Vishnu People"}" <${process.env.EMAIL_FROM}>`,
       to: body.to,

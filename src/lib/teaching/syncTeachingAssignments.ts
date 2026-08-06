@@ -12,7 +12,7 @@ async function parseError(res: Response): Promise<string> {
 // Diffs `originalRows` (as loaded from the server) against `currentRows` (as edited in
 // TeachingAssignmentsEditor) and persists the difference via the teaching-assignments /
 // timetable-slots APIs. Returns any error messages encountered (partial failures do not
-// throw — the caller decides how to surface them).
+// throw - the caller decides how to surface them).
 export async function syncTeachingAssignments(
   facultyId: string,
   facultyName: string,
@@ -22,7 +22,7 @@ export async function syncTeachingAssignments(
   const errors: string[] = [];
 
   // A row counts as removed if it's gone entirely, or if it's still present but was cleared
-  // back to "None" (courseId/sectionId/subjectId emptied) — both cases must delete the
+  // back to "None" (courseId/sectionId/subjectId emptied) - both cases must delete the
   // existing assignment server-side, not just leave it stale.
   const removedRows = originalRows.filter((o) => {
     if (!o.id) return false;
@@ -65,7 +65,7 @@ export async function syncTeachingAssignments(
     const original = originalRows.find((o) => o.id === row.id);
 
     if (row.isPast) {
-      // Past rows have no weekly schedule to diff — just persist the record's
+      // Past rows have no weekly schedule to diff - just persist the record's
       // fields (academic year/semester/hours/pass %) if they've changed.
       if (
         original?.assignmentAcademicYear !== row.assignmentAcademicYear ||
@@ -91,7 +91,7 @@ export async function syncTeachingAssignments(
     }
 
     // Current (non-past) rows: academic year/semester can still change even
-    // though there's no pass % — persist those independently of the slot diffing below.
+    // though there's no pass % - persist those independently of the slot diffing below.
     if (original?.assignmentAcademicYear !== row.assignmentAcademicYear || original?.assignmentSemester !== row.assignmentSemester) {
       const res = await fetch(`/api/college/teaching-assignments/${row.id}`, {
         method: "PATCH",

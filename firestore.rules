@@ -57,7 +57,7 @@ service cloud.firestore {
       return isCollegeMember(collegeId) && hasAnyRole(['PURCHASE_DEPT', 'SUPER_ADMIN']);
     }
 
-    // MANAGEMENT is global (no collegeId claim) — unlike the college-scoped roles
+    // MANAGEMENT is global (no collegeId claim) - unlike the college-scoped roles
     // above, this deliberately does not take a collegeId param.
     function isManagement() {
       return hasRole('MANAGEMENT');
@@ -98,7 +98,7 @@ service cloud.firestore {
       allow write: if false; // server-only via Admin SDK
     }
 
-    // Legacy super-admin registry, superseded by systemUsers — no code path
+    // Legacy super-admin registry, superseded by systemUsers - no code path
     // writes here anymore, kept read-locked to its own owner for any leftover docs.
     match /superAdmins/{uid} {
       allow read: if isOwner(uid);
@@ -106,7 +106,7 @@ service cloud.firestore {
     }
 
     // Root-level platform config singletons (e.g. platformConfig/facultyNorms),
-    // distinct from any college-scoped data — SUPER_ADMIN-managed, staff-readable
+    // distinct from any college-scoped data - SUPER_ADMIN-managed, staff-readable
     // per doc (see /api/admin/settings/faculty-norms).
     match /platformConfig/{docId} {
       allow read: if isAuthenticated();
@@ -143,7 +143,7 @@ service cloud.firestore {
       }
 
       // NOTE: faculty norms actually live at the root-level `platformConfig/facultyNorms`
-      // singleton (see /api/admin/settings/faculty-norms), not a per-college subcollection —
+      // singleton (see /api/admin/settings/faculty-norms), not a per-college subcollection -
       // there is no `colleges/{id}/facultyNorms` doc written by any code path.
 
       // ─── [ ACADEMIC STRUCTURE ] ─────────────────────────────────────────────
@@ -320,7 +320,7 @@ service cloud.firestore {
         allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
       }
 
-      // Newer leave engine (src/lib/leave/*) — leaveRequests/leaveApprovalSteps/
+      // Newer leave engine (src/lib/leave/*) - leaveRequests/leaveApprovalSteps/
       // leaveBalancesV2 supersede leaveApplications/leaveBalances above for staff
       // who apply for their own leave regardless of role (not just PANEL_MEMBER).
       match /employeeLeaveProfiles/{profileId} {

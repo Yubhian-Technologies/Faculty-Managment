@@ -496,7 +496,7 @@ export default function LeaveApplyPage() {
                 </div>
               )}
 
-              {/* Acknowledgement — no other employment during leave */}
+              {/* Acknowledgement - no other employment during leave */}
               <label className="flex items-start gap-2 cursor-pointer">
                 <input
                   type="checkbox"

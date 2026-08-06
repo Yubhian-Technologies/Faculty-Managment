@@ -76,11 +76,11 @@ export default function NewCollegePage() {
                 </SelectTrigger>
                 <SelectContent>
                   {locations.length === 0 && (
-                    <SelectItem value="_none" disabled>No locations found — add a location first</SelectItem>
+                    <SelectItem value="_none" disabled>No locations found - add a location first</SelectItem>
                   )}
                   {locations.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
-                      {l.name} — {l.city}
+                      {l.name} - {l.city}
                     </SelectItem>
                   ))}
                 </SelectContent>

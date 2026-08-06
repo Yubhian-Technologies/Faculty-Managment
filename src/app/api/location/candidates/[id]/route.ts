@@ -67,7 +67,7 @@ export async function PATCH(request: Request, { params }: Params) {
       return NextResponse.json({ ok: true, status: newStatus });
     }
 
-    // Candidate submits their own bio data (no auth required check — public form uses candidateId token)
+    // Candidate submits their own bio data (no auth required check - public form uses candidateId token)
     if (body.bioData) {
       await ref.update({ bioData: body.bioData, bioDataSubmitted: true, updatedAt: now });
       return NextResponse.json({ ok: true });

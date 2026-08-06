@@ -18,12 +18,12 @@ import {
 } from "@/types";
 
 // Contacting Purchase Dept happens two ways: a freeform clearance request, or
-// a GOODS-type indent (NON_GOODS indents skip Purchase Dept entirely — see
-// IndentRequestType in src/types/indent.ts) — both are shown here together.
+// a GOODS-type indent (NON_GOODS indents skip Purchase Dept entirely - see
+// IndentRequestType in src/types/indent.ts) - both are shown here together.
 type Row = Record<string, unknown> &
   (
     // sourceRequestId set = auto-created when Finance approved the linked budget
-    // request (see budget-requests/[id]/route.ts) — title/amount are copied
+    // request (see budget-requests/[id]/route.ts) - title/amount are copied
     // from that budget, so it needs its own label to avoid looking like a
     // second, duplicate budget request.
     | { kind: "CLEARANCE"; id: string; title: string; amount: number; status: string; createdAt: unknown; href: string; sourceRequestId?: string }

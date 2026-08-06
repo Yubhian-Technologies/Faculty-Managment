@@ -76,7 +76,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 
-/* Hide native number-input spin buttons (up/down arrows) across the app —
+/* Hide native number-input spin buttons (up/down arrows) across the app -
    they conflict with mouse-wheel scrolling over a focused numeric field. */
 input[type="number"] {
   -moz-appearance: textfield;

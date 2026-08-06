@@ -31,7 +31,7 @@ export async function resolveUserName(db: Firestore, collegeId: string, uid: str
 // HOD -> filtered to their own department (real Firestore .where, fails closed to an
 // empty result if the HOD has no department set, never falls back to "all").
 // PRINCIPAL / VICE_PRINCIPAL / FINANCE / SUPER_ADMIN -> unscoped (all-departments view).
-// Callers must NOT chain .orderBy() onto the result — where(department) + orderBy(other
+// Callers must NOT chain .orderBy() onto the result - where(department) + orderBy(other
 // field) needs a composite index; sort in-memory after .get() instead (same idiom as
 // leave-applications/route.ts).
 export async function scopeBudgetQueryByDepartment(
