@@ -1,20 +1,20 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember, requireSuperAdmin } from "@/lib/auth/verifySession";
+import { requireCollegeMember, requireRole } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// GET - Super Admin retrieves all General Admin vacancy requests
+// GET — Super Admin sees every request; Principal/VP see only their own college's submissions.
 export async function GET() {
   try {
-    const session = await requireSuperAdmin();
-    void session;
+    const session = await requireRole("SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
 
     const db = getAdminDb();
-    const snap = await db
-      .collection("generalAdminVacancies")
-      .orderBy("createdAt", "desc")
-      .get();
+    let query: FirebaseFirestore.Query = db.collection("generalAdminVacancies");
+    if (session.role !== "SUPER_ADMIN") {
+      query = query.where("collegeId", "==", session.collegeId);
+    }
+    const snap = await query.orderBy("createdAt", "desc").get();
 
     const requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ vacancyRequests: requests });

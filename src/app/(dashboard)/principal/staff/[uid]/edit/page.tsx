@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -108,12 +109,11 @@ export default function EditStaffPage() {
       .finally(() => setLoaded(true));
   }, [uid, router]);
 
+  const isValid = !!name.trim() && !!email.trim() && (role !== "HOD" || !!department);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) {
-      toast({ variant: "destructive", title: "Name is required" });
-      return;
-    }
+    if (!isValid) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/college/users/${uid}`, {
@@ -122,9 +122,9 @@ export default function EditStaffPage() {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim(),
-          collegeEmail,
-          employeeId,
-          phone,
+          collegeEmail: collegeEmail.trim(),
+          employeeId: employeeId.trim(),
+          phone: phone.trim(),
           ...(role === "HOD" ? { department } : {}),
           ...(role === "COLLEGE_STAFF" ? { designation } : {}),
           ...personalDetails,
@@ -148,14 +148,22 @@ export default function EditStaffPage() {
 
   if (!loaded || !role) {
     return (
-      <div className="max-w-xl">
+      <div className="max-w-xl space-y-4">
+        <Button variant="ghost" size="sm" onClick={() => router.push("/principal/staff")}>
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Staff
+        </Button>
         <PageHeader title="Edit Staff Member" description="Loading…" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-xl space-y-4">
+      <Button variant="ghost" size="sm" onClick={() => router.push("/principal/staff")}>
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        Back to Staff
+      </Button>
       <PageHeader title={`Edit ${ROLE_LABELS[role]}`} description="Update this staff member's account and profile details" />
 
       <Card>
@@ -169,7 +177,7 @@ export default function EditStaffPage() {
               </div>
               <div className="grid flex-1 grid-cols-1 gap-4">
                 <div className="space-y-2">
-                  <Label>Full Name *</Label>
+                  <Label>Full Name <span className="text-destructive">*</span></Label>
                   <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
                 </div>
                 <div className="space-y-2">
@@ -181,7 +189,7 @@ export default function EditStaffPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Email</Label>
+                <Label>Email <span className="text-destructive">*</span></Label>
                 <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
               </div>
               <div className="space-y-2">
@@ -194,7 +202,7 @@ export default function EditStaffPage() {
               </div>
               {role === "HOD" && (
                 <div className="space-y-2">
-                  <Label>Department</Label>
+                  <Label>Department <span className="text-destructive">*</span></Label>
                   <Select value={department} onValueChange={setDepartment}>
                     <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                     <SelectContent>
@@ -213,7 +221,7 @@ export default function EditStaffPage() {
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={saving}>Save Changes</Button>
+              <Button type="submit" loading={saving} disabled={!isValid}>Save Changes</Button>
             </div>
           </form>
         </CardContent>
