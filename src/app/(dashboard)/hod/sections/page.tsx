@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Upload, Eye, Network } from "lucide-react";
+import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Eye, Network } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -162,9 +162,11 @@ export default function HODSectionsPage() {
         description="Manage class sections, assign faculty incharge, and track student count"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" asChild>
+            {/* Import Students - temporarily hidden, not removed. Re-enable by
+                uncommenting this button. */}
+            {/* <Button variant="outline" asChild>
               <Link href="/hod/students/import"><Upload className="h-4 w-4 mr-2" />Import Students</Link>
-            </Button>
+            </Button> */}
             <Button onClick={openCreate} disabled={courses.length === 0}>
               <Plus className="h-4 w-4 mr-2" />Add Section
             </Button>
