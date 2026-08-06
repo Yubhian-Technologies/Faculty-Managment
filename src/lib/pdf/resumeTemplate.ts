@@ -264,15 +264,15 @@ function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boole
   return `<table class="data-table"><tr><th>Academic Year</th><th>Year / Branch / Semester / Section</th><th>Subject</th><th>Hr/Week</th>${pastHeaders}</tr>${body}</table>`;
 }
 
-/** Renders the Current / Past Teaching Assignments tables under their own
+/** Renders the Current / Previous Teaching Assignments tables under their own
  *  labeled subheadings, kept visually separate rather than intermixed -
- *  Pass % only ever applies to (and is only shown on) the Past table. */
+ *  Pass % only ever applies to (and is only shown on) the Previous table. */
 function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }): string {
   const currentBlock = groups.current.length
     ? `<div class="subheading">Current Teaching Assignments</div>${renderTeachingLoadTable(groups.current, false)}`
     : "";
   const pastBlock = groups.past.length
-    ? `<div class="subheading">Past Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Pass % + Feedback %
+    ? `<div class="subheading">Previous Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Pass % + Feedback %
     : "";
   return currentBlock + pastBlock;
 }

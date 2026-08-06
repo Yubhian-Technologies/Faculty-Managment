@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "./Reveal";
@@ -25,10 +26,10 @@ export function LandingCta() {
         </p>
         <div className="mt-8">
           <Button asChild size="lg" variant="secondary" className="shadow-lg">
-            <a href={LOGIN_URL}>
+            <Link href={LOGIN_URL}>
               Login Now
               <ArrowRight className="h-4 w-4" />
-            </a>
+            </Link>
           </Button>
         </div>
       </Reveal>

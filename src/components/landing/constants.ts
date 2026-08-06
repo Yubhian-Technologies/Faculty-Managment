@@ -3,9 +3,10 @@
 export const VISHNU_LOGO_URL =
   "https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png";
 
-/** Every "Login" entry point on the public landing page sends visitors to the
- *  main Vishnu People site rather than this app's own /login route. */
-export const LOGIN_URL = "https://vishnupeople.in";
+/** Every "Login" entry point on the public landing page routes here — the app's
+ *  own sign-in page. Internal route, so link to it with next/link rather than a
+ *  plain <a>, to get client-side navigation instead of a full page reload. */
+export const LOGIN_URL = "/login";
 
 export const NAV_SECTIONS = [
   { id: "home", label: "Home" },

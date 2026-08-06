@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import type { StudentListItem } from "@/types";
 
 function ordinalYear(year: number) {
@@ -16,6 +17,7 @@ function ordinalYear(year: number) {
 }
 
 export default function IncomingStudentsPage() {
+  const user = useAuthStore((s) => s.user);
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -23,15 +25,19 @@ export default function IncomingStudentsPage() {
     setIsLoading(true);
     fetch("/api/college/students")
       .then((r) => r.json() as Promise<{ students: StudentListItem[] }>)
-      .then((d) => setStudents((d.students ?? []).filter((s) => s.accessLevel === "secondary")))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load incoming students" }))
+      // secondaryDepartment (not the broader accessLevel === "secondary" tag,
+      // which also covers sub-department students) is what actually marks a
+      // student pre-registered here while primarily enrolled elsewhere - see
+      // useIncomingStudents for the full explanation.
+      .then((d) => setStudents((d.students ?? []).filter((s) => s.secondaryDepartment === user?.department)))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load first year students" }))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [user?.department]);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Incoming Students"
+        title="First Year Students"
         description="Students who've pre-registered your department while primarily enrolled elsewhere (e.g. 1st years under Basic Science) - view only until they're promoted into your department"
       />
 
@@ -42,7 +48,7 @@ export default function IncomingStudentsPage() {
           ) : students.length === 0 ? (
             <div className="py-16">
               <EmptyState
-                title="No incoming students yet"
+                title="No first year students yet"
                 description="Students registered to your department by the College Office (while sitting under another department) will show up here."
                 icon={<Users className="h-8 w-8" />}
               />

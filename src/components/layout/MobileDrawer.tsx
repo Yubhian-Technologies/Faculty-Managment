@@ -36,7 +36,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hasIncomingStudents } = useIncomingStudents();
-  const { isSubDepartment } = useIsSubDepartmentHod();
+  const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -46,7 +46,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
 
   const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
     .filter((item) => hasIncomingStudents || item.href !== "/hod/students/incoming")
-    .filter((item) => !isSubDepartment || item.href !== "/hod/settings/sub-departments");
+    .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];

@@ -9,9 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
+import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { toast } from "@/hooks/useToast";
+import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS } from "@/types";
-import type { Department, UserRole } from "@/types";
+import type { Department, FacultyProfileFields, UserRole } from "@/types";
 
 type StaffUser = {
   uid: string;
@@ -22,15 +26,20 @@ type StaffUser = {
   phone?: string;
   role: UserRole;
   department?: string;
-};
+  designation?: string;
+  profilePhotoUrl?: string;
+  academicProfile?: Partial<FacultyProfileFields>;
+} & Record<string, unknown>;
 
 export default function EditStaffPage() {
-  const params = useParams<{ uid: string }>();
   const router = useRouter();
-  const [user, setUser] = useState<StaffUser | null>(null);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const params = useParams<{ uid: string }>();
+  const uid = params.uid;
+
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -38,36 +47,76 @@ export default function EditStaffPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
+  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
 
   useEffect(() => {
-    setIsLoading(true);
-    Promise.all([
-      fetch(`/api/college/users/${params.uid}`).then((r) => r.json() as Promise<{ user?: StaffUser; error?: string }>),
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
-    ])
-      .then(([userData, deptData]) => {
-        if (!userData.user) throw new Error(userData.error ?? "Not found");
-        setUser(userData.user);
-        setName(userData.user.name ?? "");
-        setEmail(userData.user.email ?? "");
-        setCollegeEmail(userData.user.collegeEmail ?? "");
-        setEmployeeId(userData.user.employeeId ?? "");
-        setPhone(userData.user.phone ?? "");
-        setDepartment(userData.user.department ?? "");
-        setDepartments((deptData.departments ?? []).filter((d) => d.isActive));
-      })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff member" }))
-      .finally(() => setIsLoading(false));
-  }, [params.uid]);
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
+      .catch(() => { /* only needed for the HOD department picker */ });
+  }, []);
 
-  const isValid = !!name.trim() && !!email.trim() && (user?.role !== "HOD" || !!department);
+  useEffect(() => {
+    if (!uid) return;
+    fetch(`/api/college/users/${uid}`)
+      .then((r) => r.json() as Promise<{ user?: StaffUser; error?: string }>)
+      .then(({ user }) => {
+        if (!user) {
+          toast({ variant: "destructive", title: "Staff account not found" });
+          router.push("/principal/staff");
+          return;
+        }
+        setRole(user.role);
+        setName(user.name ?? "");
+        setEmail(user.email ?? "");
+        setCollegeEmail(user.collegeEmail ?? "");
+        setEmployeeId(user.employeeId ?? "");
+        setPhone(user.phone ?? "");
+        setDepartment(user.department ?? "");
+        setDesignation(user.designation ?? "");
+        setPhotoUrl(user.profilePhotoUrl || undefined);
+        setAcademicProfile(user.academicProfile ?? {});
+        setPersonalDetails({
+          gender: (user.gender as string) ?? "",
+          dateOfBirth: toDateInputValue(user.dateOfBirth as Parameters<typeof toDateInputValue>[0]),
+          legalName: (user.legalName as string) ?? "",
+          fatherName: (user.fatherName as string) ?? "",
+          motherName: (user.motherName as string) ?? "",
+          religion: (user.religion as string) ?? "",
+          caste: (user.caste as string) ?? "",
+          aadharNo: (user.aadharNo as string) ?? "",
+          panNo: (user.panNo as string) ?? "",
+          passportNumber: (user.passportNumber as string) ?? "",
+          emergencyContactName: (user.emergencyContactName as string) ?? "",
+          emergencyContactPhone: (user.emergencyContactPhone as string) ?? "",
+          ratificationStatus: (user.ratificationStatus as string) ?? "",
+          ratificationDate: toDateInputValue(user.ratificationDate as Parameters<typeof toDateInputValue>[0]),
+          maritalStatus: (user.maritalStatus as string) ?? "",
+          spouseName: (user.spouseName as string) ?? "",
+          numberOfChildren: user.numberOfChildren as number | undefined,
+          referral: (user.referral as string) ?? "",
+          nativePlace: (user.nativePlace as string) ?? "",
+          temporaryAddress: (user.temporaryAddress as string) ?? "",
+          permanentSameAsTemporary: (user.permanentSameAsTemporary as boolean) ?? false,
+          permanentAddress: (user.permanentAddress as string) ?? "",
+          bloodGroup: (user.bloodGroup as string) ?? "",
+        });
+      })
+      .catch(() => toast({ variant: "destructive", title: "Failed to load staff account" }))
+      .finally(() => setLoaded(true));
+  }, [uid, router]);
+
+  const isValid = !!name.trim() && !!email.trim() && (role !== "HOD" || !!department);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!user || !isValid) return;
+    if (!isValid) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/college/users/${user.uid}`, {
+      const res = await fetch(`/api/college/users/${uid}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -76,15 +125,19 @@ export default function EditStaffPage() {
           collegeEmail: collegeEmail.trim(),
           employeeId: employeeId.trim(),
           phone: phone.trim(),
-          ...(user.role === "HOD" ? { department } : {}),
+          ...(role === "HOD" ? { department } : {}),
+          ...(role === "COLLEGE_STAFF" ? { designation } : {}),
+          ...personalDetails,
+          academicProfile,
+          ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: "Failed to update", description: json.error });
+        toast({ variant: "destructive", title: json.error ?? "Failed to update staff account" });
         return;
       }
-      toast({ variant: "success", title: "Staff member updated" });
+      toast({ variant: "success", title: "Staff account updated" });
       router.push("/principal/staff");
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
@@ -93,17 +146,14 @@ export default function EditStaffPage() {
     }
   }
 
-  if (isLoading) {
-    return <div className="h-64 rounded-xl border bg-muted/30 animate-pulse" />;
-  }
-  if (!user) {
+  if (!loaded || !role) {
     return (
-      <div className="space-y-4">
+      <div className="max-w-xl space-y-4">
         <Button variant="ghost" size="sm" onClick={() => router.push("/principal/staff")}>
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Staff
         </Button>
-        <p className="text-sm text-muted-foreground">Staff member not found.</p>
+        <PageHeader title="Edit Staff Member" description="Loading…" />
       </div>
     );
   }
@@ -114,28 +164,30 @@ export default function EditStaffPage() {
         <ArrowLeft className="h-4 w-4 mr-1" />
         Back to Staff
       </Button>
-      <PageHeader title="Edit Staff" description={`${ROLE_LABELS[user.role]} account details`} />
+      <PageHeader title={`Edit ${ROLE_LABELS[role]}`} description="Update this staff member's account and profile details" />
+
       <Card>
-        <CardHeader><CardTitle className="text-base">Staff Details</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
-            {user.role === "HOD" && (
-              <div className="space-y-2">
-                <Label>Department <span className="text-destructive">*</span></Label>
-                <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                  <SelectContent>
-                    {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+            <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
+              <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
+                <Label>Profile Photo</Label>
+                <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={setPhotoUrl} onDeleted={() => setPhotoUrl("")} />
               </div>
-            )}
+              <div className="grid flex-1 grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label>Full Name <span className="text-destructive">*</span></Label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+                </div>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Full Name <span className="text-destructive">*</span></Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
-              </div>
               <div className="space-y-2">
                 <Label>Email <span className="text-destructive">*</span></Label>
                 <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
@@ -148,17 +200,49 @@ export default function EditStaffPage() {
                 <Label>Employee ID</Label>
                 <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="Optional" />
               </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
-              </div>
+              {role === "HOD" && (
+                <div className="space-y-2">
+                  <Label>Department <span className="text-destructive">*</span></Label>
+                  <Select value={department} onValueChange={setDepartment}>
+                    <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                    <SelectContent>
+                      {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {role === "COLLEGE_STAFF" && (
+                <div className="space-y-2">
+                  <Label>Designation</Label>
+                  <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Dean - R&D, IQAC Coordinator" />
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.push("/principal/staff")}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
               <Button type="submit" loading={saving} disabled={!isValid}>Save Changes</Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
+        <CardContent>
+          <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
+        <CardContent>
+          <AcademicProfileFields
+            value={academicProfile}
+            onChange={setAcademicProfile}
+            includeTeachingAssignment={false}
+            hideFinancialModule
+          />
         </CardContent>
       </Card>
     </div>
