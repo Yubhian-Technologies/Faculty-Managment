@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -89,7 +90,7 @@ export function LandingNavbar() {
 
         <div className="hidden md:block">
           <Button asChild>
-            <a href={LOGIN_URL}>Login</a>
+            <Link href={LOGIN_URL}>Login</Link>
           </Button>
         </div>
 
@@ -127,7 +128,7 @@ export function LandingNavbar() {
             </button>
           ))}
           <Button asChild className="mt-2">
-            <a href={LOGIN_URL}>Login</a>
+            <Link href={LOGIN_URL}>Login</Link>
           </Button>
         </div>
       </div>

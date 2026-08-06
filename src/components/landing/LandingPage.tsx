@@ -9,7 +9,7 @@ import { LandingFooter } from "./LandingFooter";
 
 /** Public marketing page shown at "/" to unauthenticated visitors, before the
  *  existing login flow. Purely presentational — every "Login" entry point
- *  leaves for LOGIN_URL (see ./constants); no auth/session logic lives here. */
+ *  routes to LOGIN_URL (see ./constants); no auth/session logic lives here. */
 export function LandingPage() {
   return (
     <div className="landing-page min-h-screen bg-background">

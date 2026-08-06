@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
   LayoutGrid,
@@ -204,10 +205,10 @@ export function LandingHero() {
                 size="lg"
                 className="w-full transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:w-auto"
               >
-                <a href={LOGIN_URL}>
+                <Link href={LOGIN_URL}>
                   Login
                   <ArrowRight className="h-4 w-4" />
-                </a>
+                </Link>
               </Button>
               <Button
                 asChild
