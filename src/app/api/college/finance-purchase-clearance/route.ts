@@ -25,7 +25,7 @@ function toMillis(value: unknown): number {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "PURCHASE_DEPT", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "PURCHASE_DEPT", "FINANCE", "MANAGEMENT", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 

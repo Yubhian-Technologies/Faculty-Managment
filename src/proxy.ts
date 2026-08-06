@@ -3,7 +3,21 @@ import type { NextRequest } from "next/server";
 import { ROLE_DASHBOARD_PATHS, rolesInheritedBy } from "@/types/core";
 import type { UserRole } from "@/types/core";
 
-const PUBLIC_PATHS = ["/login", "/careers", "/feedback", "/api/auth", "/location-interview"];
+// "/" is public so signed-out visitors land on the marketing page (src/app/page.tsx)
+// instead of being force-redirected to /login before it can render; that page
+// still client-side redirects signed-in users to their dashboard as before.
+// The matcher's "public/" exclusion below doesn't actually cover files served
+// from the public/ folder (Next.js serves them at the site root, not under
+// /public/), so images that page references need to be listed here explicitly.
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/careers",
+  "/feedback",
+  "/api/auth",
+  "/location-interview",
+  "/about-team-illustration.png",
+];
 
 // /panel/interviews is shared - any staff role can be added as a panel member
 const PANEL_INTERVIEWS_PATH = "/panel/interviews";
