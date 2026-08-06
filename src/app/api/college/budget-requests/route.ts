@@ -17,7 +17,7 @@ function toMillis(value: unknown): number {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "FINANCE", "SUPER_ADMIN");
+    const session = await requireCollegeContext(request, "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "FINANCE", "MANAGEMENT", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const budgetCycleId = searchParams.get("budgetCycleId");
