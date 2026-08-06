@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { UsersRound, Plus, Mail, Phone } from "lucide-react";
+import { UsersRound, Plus, Mail, Phone, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -154,14 +154,19 @@ export default function PrincipalStaffPage() {
                               </Badge>
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                loading={togglingUid === u.uid}
-                                onClick={() => void toggleActive(u)}
-                              >
-                                {u.isActive === false ? "Activate" : "Deactivate"}
-                              </Button>
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" asChild>
+                                  <Link href={`/principal/staff/${u.uid}/edit`}><Pencil className="h-3.5 w-3.5 mr-1" />Edit</Link>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  loading={togglingUid === u.uid}
+                                  onClick={() => void toggleActive(u)}
+                                >
+                                  {u.isActive === false ? "Activate" : "Deactivate"}
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}

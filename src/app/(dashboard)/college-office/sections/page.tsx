@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Plus, GraduationCap, UserCog, Upload, Eye, Trash2, Pencil } from "lucide-react";
+import { Users, Plus, GraduationCap, UserCog, Eye, Trash2, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -141,12 +141,14 @@ export default function OfficeSectionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Sections"
-        description="Class sections across every department - create sections and import student rosters"
+        description="Class sections across every department - create sections and manage student rosters"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" asChild>
+            {/* Import Students - temporarily hidden, not removed. Re-enable by
+                uncommenting this button. */}
+            {/* <Button variant="outline" asChild>
               <Link href="/college-office/students/import"><Upload className="h-4 w-4 mr-2" />Import Students</Link>
-            </Button>
+            </Button> */}
             <Button onClick={openCreate} disabled={courses.length === 0}>
               <Plus className="h-4 w-4 mr-2" />Add Section
             </Button>

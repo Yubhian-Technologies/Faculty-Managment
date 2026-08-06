@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Upload, Users, UserCog } from "lucide-react";
+import { ArrowLeft, Users, UserCog } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,11 +86,13 @@ export default function SectionRosterPage() {
             <Button variant="outline" asChild>
               <Link href="/hod/sections"><ArrowLeft className="h-4 w-4 mr-1" />Back to Sections</Link>
             </Button>
-            {section.accessLevel !== "secondary" && (
+            {/* Import Students - temporarily hidden, not removed. Re-enable by
+                uncommenting this button. */}
+            {/* {section.accessLevel !== "secondary" && (
               <Button asChild>
                 <Link href="/hod/students/import"><Upload className="h-4 w-4 mr-1" />Import Students</Link>
               </Button>
-            )}
+            )} */}
           </div>
         }
       />
@@ -124,7 +126,7 @@ export default function SectionRosterPage() {
             <div className="py-16">
               <EmptyState
                 title="No students in this section yet"
-                description="Import a roster to get started."
+                description="Students will show up here once added."
                 icon={<Users className="h-8 w-8" />}
               />
             </div>

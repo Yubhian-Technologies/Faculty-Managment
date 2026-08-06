@@ -22,7 +22,9 @@ async function loadTargetInScope(
   const target = targetSnap.data() as { role: string; department?: string };
 
   if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
-    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"].includes(target.role)) {
+    // Matches CREATABLE_ROLES in principal/staff/new/page.tsx - every role a
+    // Principal/VP can create here, they can also view/edit/deactivate.
+    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER"].includes(target.role)) {
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
   } else if (session.role === "HOD") {

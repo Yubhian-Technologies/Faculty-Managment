@@ -42,7 +42,7 @@ function LoadTable({ rows, showPastColumns }: { rows: TeachingLoadRow[]; showPas
 // resume's layout, so what the HOD sees here matches what gets downloaded.
 export function TeachingLoadTable({ groups }: Props) {
   if (groups.current.length === 0 && groups.past.length === 0) {
-    return <p className="text-xs text-muted-foreground">No teaching load data yet - add current teaching assignments above or past/present records under Academic Profile.</p>;
+    return <p className="text-xs text-muted-foreground">No teaching load data yet - add current teaching assignments above or previous/present records under Academic Profile.</p>;
   }
 
   return (
@@ -55,7 +55,7 @@ export function TeachingLoadTable({ groups }: Props) {
       )}
       {groups.past.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Past Teaching Assignments</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Previous Teaching Assignments</p>
           <LoadTable rows={groups.past} showPastColumns />
         </div>
       )}

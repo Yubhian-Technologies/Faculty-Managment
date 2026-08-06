@@ -114,7 +114,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
-  { label: "Incoming Students", href: "/hod/students/incoming", iconName: "UserPlus", roles: ["HOD"] },
+  { label: "First Year Students", href: "/hod/students/incoming", iconName: "UserPlus", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },

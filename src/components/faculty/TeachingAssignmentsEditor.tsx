@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Course, Section, Subject, CourseYearTiming, DayOfWeek } from "@/types";
+import type { Course, Department, Section, Subject, CourseYearTiming, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
+import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 
 export interface StagedSlot {
   localId: string;
@@ -68,6 +69,7 @@ interface Props {
 
 export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [sectionsCache, setSectionsCache] = useState<Record<string, Section[]>>({});
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
   const [timingCache, setTimingCache] = useState<Record<string, CourseYearTiming | null>>({});
@@ -77,6 +79,14 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
     fetch("/api/college/courses")
       .then((r) => r.json() as Promise<{ courses: Course[] }>)
       .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => { /* non-critical */ });
+    // Needed to disambiguate same-named sections in the Section picker below -
+    // e.g. two "Section A"s both owned by Basic Science but cross-listed to
+    // different branches (CSE vs ECE), or one owned by a parent department and
+    // another by its sub-department - see sectionDisplayLabel.
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => setDepartments(d.departments ?? []))
       .catch(() => { /* non-critical */ });
   }, []);
 
@@ -195,7 +205,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
             <Plus className="h-3.5 w-3.5 mr-1" />Add Course
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => addRow(true)}>
-            <History className="h-3.5 w-3.5 mr-1" />Add Past Teaching Assignment
+            <History className="h-3.5 w-3.5 mr-1" />Add Previous Teaching Assignment
           </Button>
         </div>
       </div>
@@ -210,7 +220,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
       )}
       {value.filter((r) => r.isPast).length > 0 && (
         <div className="space-y-3 border-t pt-3">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Past</p>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Previous</p>
           {value.filter((r) => r.isPast).map(renderRow)}
         </div>
       )}
@@ -249,7 +259,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
           <div key={row.localId} className="space-y-3 rounded-md bg-muted/30 p-3">
             {row.isPast && (
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                <History className="h-3 w-3" />Past Teaching Assignment
+                <History className="h-3 w-3" />Previous Teaching Assignment
               </span>
             )}
             <div className="flex items-start gap-2">
@@ -278,7 +288,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                     <SelectTrigger><SelectValue placeholder="Section" /></SelectTrigger>
                     <SelectContent>
                       {sections.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">No sections for this year</div>}
-                      {sections.map((s) => <SelectItem key={s.id} value={s.id}>Section {s.name}</SelectItem>)}
+                      {sections.map((s) => <SelectItem key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
