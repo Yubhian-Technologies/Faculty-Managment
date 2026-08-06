@@ -11,8 +11,7 @@ const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsA
 // "this person's own details" depending on how their account was provisioned:
 //  - PANEL_MEMBER (hired through the Faculty Register) gets a THIN login doc at
 //    colleges/{id}/users/{uid} plus a separate, richer FacultyMember record
-//    (colleges/{id}/facultyMembers/{facultyId}) linked back via userUid - see
-//    loadFacultyDefaults in leave/profile's route for the same lookup pattern.
+//    (colleges/{id}/facultyMembers/{facultyId}) linked back via userUid.
 //  - HOD/PRINCIPAL/VICE_PRINCIPAL (provisioned via POST /api/college/users) have
 //    no separate FacultyMember record at all - their academicProfile and personal
 //    details live directly ON their own colleges/{id}/users/{uid} doc.

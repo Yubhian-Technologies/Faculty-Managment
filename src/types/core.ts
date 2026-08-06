@@ -428,7 +428,7 @@ export interface NavVisibilitySettings {
 }
 
 // ─── Faculty Member (central entity across all modules) ───────────────────────
-// All leave, attendance, payroll, appraisal records reference facultyId
+// All attendance, payroll, appraisal records reference facultyId
 
 export type Designation =
   | "PROFESSOR"
@@ -920,10 +920,7 @@ export type NotificationType =
   | "HIRING_REJECTED"
   | "OFFER_LETTER_GENERATED"
   | "COORDINATOR_ASSIGNED"
-  // Leave & Attendance
-  | "LEAVE_PENDING_APPROVAL"
-  | "LEAVE_APPROVED"
-  | "LEAVE_REJECTED"
+  // Permission & On-Duty
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"
   | "ON_DUTY_APPROVED"
@@ -1027,12 +1024,7 @@ export type AuditAction =
   | "SUPPORTING_STAFF_CREATED"
   | "SUPPORTING_STAFF_UPDATED"
   | "SUPPORTING_STAFF_DELETED"
-  // Leave module
-  | "LEAVE_APPLIED"
-  | "LEAVE_HOD_APPROVED"
-  | "LEAVE_PRINCIPAL_APPROVED"
-  | "LEAVE_REJECTED"
-  | "LEAVE_CANCELLED"
+  // Permission & On-Duty
   | "PERMISSION_APPLIED"
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"
