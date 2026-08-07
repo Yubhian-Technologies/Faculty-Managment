@@ -40,6 +40,13 @@ type SectionForm = {
   facultyInchargeName: string;
 };
 
+type ClassLeaderForm = {
+  email: string;
+  password: string;
+};
+
+const EMPTY_CLASS_LEADER: ClassLeaderForm = { email: "", password: "" };
+
 export default function NewSectionOfficePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -60,6 +67,7 @@ export default function NewSectionOfficePage() {
     facultyInchargeUid: "",
     facultyInchargeName: "",
   });
+  const [classLeader, setClassLeader] = useState<ClassLeaderForm>(EMPTY_CLASS_LEADER);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -184,6 +192,17 @@ export default function NewSectionOfficePage() {
       toast({ variant: "destructive", title: "Secondary Department is required - pick which branch this section promotes into" });
       return;
     }
+    const wantsClassLeader = classLeader.email.trim() || classLeader.password;
+    if (wantsClassLeader) {
+      if (!classLeader.email.trim() || !classLeader.password) {
+        toast({ variant: "destructive", title: "Fill in both Class Leader fields, or leave them both blank" });
+        return;
+      }
+      if (classLeader.password.length < 6) {
+        toast({ variant: "destructive", title: "Class Leader password must be at least 6 characters" });
+        return;
+      }
+    }
 
     setSaving(true);
     try {
@@ -206,7 +225,28 @@ export default function NewSectionOfficePage() {
         toast({ variant: "destructive", title: json.error ?? "Failed to save" });
         return;
       }
-      toast({ variant: "success", title: "Section created" });
+      const { id: newSectionId } = await res.json() as { id: string };
+
+      if (wantsClassLeader) {
+        const clRes = await fetch("/api/college/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: classLeader.email.trim(),
+            password: classLeader.password,
+            role: "CLASS_LEADER",
+            sectionId: newSectionId,
+          }),
+        });
+        if (!clRes.ok) {
+          const clJson = await clRes.json() as { error?: string };
+          toast({ variant: "destructive", title: "Section created, but Class Leader login failed", description: clJson.error ?? "You can add it later from the section's Edit page." });
+          router.push("/college-office/sections");
+          return;
+        }
+      }
+
+      toast({ variant: "success", title: "Section created", description: wantsClassLeader ? "Class Leader login created too." : undefined });
       router.push("/college-office/sections");
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
@@ -337,6 +377,37 @@ export default function NewSectionOfficePage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div key="class-leader" className="space-y-4 pt-4 border-t">
+              <div>
+                <Label className="text-sm font-semibold">Class Leader Login (optional)</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Create a login for this section&apos;s class leader now, or leave blank and add one later from Edit.
+                  Just an email and password - the login isn&apos;t tied to a specific student&apos;s name, since who holds
+                  the role can change per your college&apos;s rules.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  autoComplete="off"
+                  value={classLeader.email}
+                  onChange={(e) => setClassLeader((c) => ({ ...c, email: e.target.value }))}
+                  placeholder="classleader@college.edu"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Temporary Password</Label>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={classLeader.password}
+                  onChange={(e) => setClassLeader((c) => ({ ...c, password: e.target.value }))}
+                  placeholder="Min 6 characters"
+                />
+              </div>
             </div>
 
             <div key="actions" className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
