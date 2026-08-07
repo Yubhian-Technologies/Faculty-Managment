@@ -26,7 +26,8 @@ export type UserRole =
   | "ACCOUNTS"
   | "FINANCE"
   | "PURCHASE_DEPT"
-  | "STUDENT";
+  | "STUDENT"
+  | "CLASS_LEADER";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -50,6 +51,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   FINANCE: "Finance",
   PURCHASE_DEPT: "Purchase Department",
   STUDENT: "Student",
+  CLASS_LEADER: "Class Leader",
 };
 
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
@@ -74,6 +76,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   FINANCE: "/finance",
   PURCHASE_DEPT: "/purchase",
   STUDENT: "/feedback",
+  CLASS_LEADER: "/class-leader",
 };
 
 // ─── Role Level & Scope hierarchy (L0–L6) ────────────────────────────────────
@@ -105,6 +108,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   PANEL_MEMBER: 5,
   ANNEXURE: 5,
   STUDENT: 6,
+  CLASS_LEADER: 6,
 };
 
 // Human-readable header for each level, used to group role pickers (Add User).
@@ -145,6 +149,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   PANEL_MEMBER: "COLLEGE",
   ANNEXURE: "COLLEGE",
   STUDENT: "COLLEGE",
+  CLASS_LEADER: "COLLEGE",
 };
 
 function scopeRank(scope: RoleScope): 0 | 1 | 2 {
@@ -225,6 +230,8 @@ export interface FMSUser {
   department?: string;      // for HOD / LOCATION_DEPT_HEAD
   locationDeptId?: string;  // for LOCATION_DEPT_HEAD
   annexure?: string;        // HOD-entered reference number/label, for ANNEXURE role
+  sectionId?: string;       // for CLASS_LEADER - the one Section this login is bound to
+  sectionName?: string;     // for CLASS_LEADER - denormalized Section.name
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
@@ -847,6 +854,8 @@ export interface Section {
   batch: string;             // admission batch e.g. "2023-2027"
   facultyInchargeUid?: string;
   facultyInchargeName?: string;
+  classLeaderUid?: string;
+  classLeaderName?: string;
   studentCount: number;
   // Secondary — view-only access for one or more other departments' HODs,
   // e.g. a shared first-year section whose roster splits across several

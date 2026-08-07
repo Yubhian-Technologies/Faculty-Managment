@@ -15,6 +15,9 @@ const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", 
 // only becomes real once POST /api/college/departments links them via
 // hodUid, which is where the "only within your own department" check lives).
 const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "ANNEXURE"];
+// College Office may only create Class Leader logins - one per Section, bound
+// via `sectionId` below (see college-office/sections/new and .../[id]/edit).
+const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
 // One holder per role per college - same rule as administration/college-staff route.
 const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
 
@@ -85,10 +88,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
 
     const body = (await request.json()) as {
-      name: string;
+      name?: string; // not required for CLASS_LEADER - auto-generated below (role rotates by college rules)
       email: string;
       collegeEmail?: string;
       employeeId?: string;
@@ -98,17 +101,24 @@ export async function POST(request: Request) {
       staffType?: "teaching" | "supporting";
       designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Dean - R&D")
       annexure?: string; // HOD-entered reference number/label for ANNEXURE role (e.g. "1", "2")
+      sectionId?: string; // required when role === "CLASS_LEADER" - the Section this login is bound to
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, annexure } = body;
+    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, annexure, sectionId } = body;
 
-    if (!name || !email || !password || !role) {
+    if (!email || !password || !role) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    if (role !== "CLASS_LEADER" && !name) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     if (role === "ANNEXURE" && !annexure) {
       return NextResponse.json({ error: "annexure is required" }, { status: 400 });
+    }
+    if (role === "CLASS_LEADER" && !sectionId) {
+      return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
     }
     // Uploaded before the account exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific uid.
@@ -129,9 +139,35 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
+    if (session.role === "COLLEGE_OFFICE" && !OFFICE_ROLES.includes(role)) {
+      return NextResponse.json(
+        { error: `College Office can only create: ${OFFICE_ROLES.join(", ")}` },
+        { status: 403 }
+      );
+    }
 
     const collegeId = session.collegeId;
     const db = getAdminDb();
+
+    // Class Leader: resolve + validate the target Section, derive
+    // department/sectionName from it (never trust the client), and enforce
+    // one class leader per section.
+    let sectionRef: FirebaseFirestore.DocumentReference | null = null;
+    let sectionData: { department?: string; name?: string; classLeaderUid?: string } | null = null;
+    if (role === "CLASS_LEADER") {
+      sectionRef = db.collection("colleges").doc(collegeId).collection("sections").doc(sectionId!);
+      const sectionSnap = await sectionRef.get();
+      if (!sectionSnap.exists) {
+        return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      }
+      sectionData = sectionSnap.data() as { department?: string; name?: string; classLeaderUid?: string };
+      if (sectionData.classLeaderUid) {
+        return NextResponse.json(
+          { error: "This section already has a Class Leader login. Remove it first to create a new one." },
+          { status: 409 }
+        );
+      }
+    }
 
     // Enforce one holder per role per college for Office/Placement Dept/Library/Exam Cell
     if (COLLEGE_SINGLETON_ROLES.includes(role)) {
@@ -158,9 +194,18 @@ export async function POST(request: Request) {
         .get();
       resolvedDepartment = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
     }
+    // Class Leader: department/sectionName always come from the Section itself
+    if (role === "CLASS_LEADER" && sectionData) {
+      resolvedDepartment = sectionData.department ?? "";
+    }
+
+    // Class Leader logins aren't tied to one fixed student's identity - the
+    // role can rotate (e.g. a boys' rep / girls' rep) per college rules - so
+    // Office never enters a name; every such login gets this generic label.
+    const resolvedName = role === "CLASS_LEADER" ? "Class Representative" : name!;
 
     // Create Firebase Auth user via REST API (no firebase-admin/auth required)
-    const uid = await createFirebaseUser(email, password, name);
+    const uid = await createFirebaseUser(email, password, resolvedName);
 
     const now = new Date();
     await db
@@ -171,7 +216,7 @@ export async function POST(request: Request) {
       .set({
         uid,
         collegeId,
-        name,
+        name: resolvedName,
         email,
         ...(body.collegeEmail ? { collegeEmail: body.collegeEmail } : {}),
         ...(body.employeeId ? { employeeId: body.employeeId } : {}),
@@ -180,6 +225,7 @@ export async function POST(request: Request) {
         ...(body.staffType ? { staffType: body.staffType } : {}),
         ...(designation ? { designation } : {}),
         ...(annexure ? { annexure } : {}),
+        ...(role === "CLASS_LEADER" ? { sectionId, sectionName: sectionData?.name ?? "" } : {}),
         ...(academicProfile ? { academicProfile } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         ...buildPersonalDetailsUpdate(body),
@@ -190,9 +236,15 @@ export async function POST(request: Request) {
 
     // Role mapping for Firestore-based session resolution
     await db.collection("systemUsers").doc(uid).set({
-      uid, role, collegeId, email, name,
+      uid, role, collegeId, email, name: resolvedName,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
+
+    // Link the login back onto its Section so office/HOD timetable-adjacent
+    // views can show who the class leader is without a reverse lookup.
+    if (role === "CLASS_LEADER" && sectionRef) {
+      await sectionRef.update({ classLeaderUid: uid, classLeaderName: resolvedName, updatedAt: now });
+    }
 
     // Audit log
     let creatorName = "Unknown";
@@ -211,7 +263,7 @@ export async function POST(request: Request) {
         performedBy: session.uid,
         performedByName: creatorName,
         targetId: uid,
-        details: { email, role, name, department: resolvedDepartment },
+        details: { email, role, name: resolvedName, department: resolvedDepartment },
         timestamp: now,
       });
 

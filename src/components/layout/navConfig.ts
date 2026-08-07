@@ -191,6 +191,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Leave", href: "/finance/leave", iconName: "CalendarClock", roles: ["FINANCE"], section: "Personal" },
   { label: "Apply for Leave", href: "/finance/leave/apply", iconName: "CalendarPlus", roles: ["FINANCE"] },
 
+  // Class Leader
+  { label: "Dashboard", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },
+  { label: "Timetable", href: "/class-leader/timetable", iconName: "CalendarDays", roles: ["CLASS_LEADER"] },
+
   // Purchase Department
   { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
   { label: "Pending Requests", href: "/purchase/pending", iconName: "Clock", roles: ["PURCHASE_DEPT"], section: "Requests" },
@@ -413,4 +417,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   STUDENT: [],
   ANNEXURE: [],
+  CLASS_LEADER: [
+    { label: "Home", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },
+    { label: "Timetable", href: "/class-leader/timetable", iconName: "CalendarDays", roles: ["CLASS_LEADER"] },
+  ],
 };
