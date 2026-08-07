@@ -44,9 +44,11 @@ export async function GET(request: Request) {
   }
 }
 
-// HOD (own dept) / Principal / Vice Principal override a profile's category
-// defaults - e.g. correcting an auto-derived isTeachingStaff/dateOfJoining, or
-// manually re-categorizing vacation <-> non-vacation.
+// HOD (own dept) / Principal / Vice Principal override an auto-derived
+// profile - e.g. correcting isTeachingStaff/dateOfJoining, or manually
+// re-categorizing vacation <-> non-vacation. Every profile already exists by
+// the time this is reachable (GET/the roster auto-create it) - this is a
+// pure edit, never a required setup step.
 export async function PUT(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
@@ -65,12 +67,14 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const profileRef = PROFILES_COL(session.collegeId, db).doc(body.uid);
-    const snap = await profileRef.get();
-    if (!snap.exists) {
-      return NextResponse.json({ error: "Profile not found - load it via GET first" }, { status: 404 });
+    // Auto-create if somehow not already present, rather than requiring a
+    // separate setup step before an override can be saved.
+    const existing = await getOrCreateProfile(db, session.collegeId, body.uid);
+    if (!existing) {
+      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
+    const profileRef = PROFILES_COL(session.collegeId, db).doc(body.uid);
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.staffCategory) updates.staffCategory = body.staffCategory;
     if (body.isTeachingStaff !== undefined) updates.isTeachingStaff = body.isTeachingStaff;

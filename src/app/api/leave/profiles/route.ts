@@ -5,11 +5,13 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { getOrCreateProfile } from "@/lib/leave/profile";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
-import type { EmployeeLeaveProfile } from "@/types/leave";
 
-// Roster of department (HOD) or college-wide (Principal/VP) faculty, joined
-// with their leave profile setup status - drives /hod/leave/profiles.
+// Roster of department (HOD) or college-wide (Principal/VP) faculty - every
+// entry's leave profile is auto-created here if it doesn't already exist yet
+// (from their FacultyMember designation), so there is never a "not set up"
+// state to show - only ever an existing, editable profile.
 export async function GET() {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
@@ -22,30 +24,28 @@ export async function GET() {
       facultyQuery = facultyQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
     }
 
-    const [facultySnap, profilesSnap, settings] = await Promise.all([
+    const [facultySnap, settings] = await Promise.all([
       facultyQuery.get(),
-      collegeRef.collection("employeeLeaveProfiles").get(),
       loadCollegeSettings(db, session.collegeId),
     ]);
 
-    const profilesByUid = new Map<string, EmployeeLeaveProfile>();
-    profilesSnap.docs.forEach((d) => profilesByUid.set(d.id, { id: d.id, ...d.data() } as EmployeeLeaveProfile));
-
-    const roster = facultySnap.docs
+    const facultyList = facultySnap.docs
       .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
-      .filter((f) => !!f.userUid)
-      .map((f) => {
-        const profile = profilesByUid.get(f.userUid!);
+      .filter((f) => !!f.userUid);
+
+    const roster = await Promise.all(
+      facultyList.map(async (f) => {
+        const profile = await getOrCreateProfile(db, session.collegeId, f.userUid!);
         return {
           uid: f.userUid!,
           name: f.name,
           department: f.department,
           designation: f.designation,
-          hasProfile: !!profile,
           staffCategory: profile?.staffCategory,
           effectiveCategory: profile ? computeEffectiveCategory(profile, settings.newJoiningYears) : undefined,
         };
-      });
+      })
+    );
 
     return NextResponse.json({ roster });
   } catch (err) {
