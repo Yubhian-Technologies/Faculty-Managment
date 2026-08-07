@@ -47,11 +47,6 @@ export default function SuperAdminSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Faculty Norms are per-college (colleges/{id}/settings/general) - pick a
-  // college to view/edit, same pattern as the Navigation Visibility section below.
-  const [normsColleges, setNormsColleges] = useState<College[]>([]);
-  const [normsCollegeId, setNormsCollegeId] = useState<string>("");
-
   // Form state
   const [regulatoryBody, setRegulatoryBody] = useState<RegulatoryBody>("UGC");
   const [studentFacultyRatio, setStudentFacultyRatio] = useState("15");
@@ -63,21 +58,9 @@ export default function SuperAdminSettingsPage() {
   const [positionNorms, setPositionNorms] = useState<PositionNorm[]>([]);
 
   useEffect(() => {
-    fetch("/api/admin/colleges")
-      .then((r) => r.json() as Promise<{ colleges: College[] }>)
-      .then(({ colleges: c }) => {
-        setNormsColleges(c);
-        if (c.length > 0) setNormsCollegeId((prev) => prev || c[0].id);
-      })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
-  }, []);
-
-  useEffect(() => {
-    if (!normsCollegeId) return;
-    setIsLoading(true);
-    fetch(`/api/college/settings/general?collegeId=${normsCollegeId}`)
-      .then((r) => r.json() as Promise<{ settings: FacultyNorms }>)
-      .then(({ settings: n }) => {
+    fetch("/api/admin/settings/faculty-norms")
+      .then((r) => r.json() as Promise<{ norms: FacultyNorms }>)
+      .then(({ norms: n }) => {
         setNorms(n);
         setRegulatoryBody(n.regulatoryBody);
         setStudentFacultyRatio(String(n.studentFacultyRatio));
@@ -90,7 +73,7 @@ export default function SuperAdminSettingsPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load settings" }))
       .finally(() => setIsLoading(false));
-  }, [normsCollegeId]);
+  }, []);
 
   function updatePosition(index: number, field: keyof PositionNorm, value: string | number) {
     setPositionNorms((prev) =>
@@ -116,18 +99,12 @@ export default function SuperAdminSettingsPage() {
       return;
     }
 
-    if (!normsCollegeId) {
-      toast({ variant: "destructive", title: "Select a college first" });
-      return;
-    }
-
     setIsSaving(true);
     try {
-      const res = await fetch("/api/college/settings/general", {
+      const res = await fetch("/api/admin/settings/faculty-norms", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          collegeId: normsCollegeId,
           regulatoryBody,
           studentFacultyRatio: sfr,
           teachingHoursPerWeek: thw,
@@ -138,7 +115,7 @@ export default function SuperAdminSettingsPage() {
             professor: minQualProf,
           },
           positionNorms,
-        } satisfies Partial<FacultyNorms> & { collegeId: string }),
+        } satisfies Partial<FacultyNorms>),
       });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Faculty norms saved", description: "Changes will be reflected across all vacancy requests." });
@@ -164,22 +141,8 @@ export default function SuperAdminSettingsPage() {
     <div className="max-w-3xl space-y-6">
       <PageHeader
         title="Faculty Norms Configuration"
-        description="Set government-mandated faculty requirements used to validate vacancy requests - configured per college"
+        description="Set government-mandated faculty requirements used to validate vacancy requests"
       />
-
-      <div className="max-w-sm space-y-2">
-        <Label>College</Label>
-        <Select value={normsCollegeId} onValueChange={setNormsCollegeId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select a college" />
-          </SelectTrigger>
-          <SelectContent>
-            {normsColleges.map((c) => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
 
       {/* Last updated banner */}
       {norms?.updatedAt && (

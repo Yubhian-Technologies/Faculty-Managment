@@ -1,7 +1,6 @@
 // Re-export all module types so existing `import { X } from "@/types"` still works
 
 export * from "./core";
-export * from "./leave";
 export * from "./supportingStaff";
 export * from "./recruitment";
 export * from "./attendance";
