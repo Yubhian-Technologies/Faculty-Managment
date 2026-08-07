@@ -7,7 +7,6 @@ import {
   Plus,
   ArrowRight,
   UsersRound,
-  CalendarClock,
   ClipboardCheck,
   TrendingUp,
   GraduationCap,
@@ -30,12 +29,10 @@ import type { Department, VacancyRequest, HiringBatch } from "@/types";
 
 const HOD_MODULES = [
   { label: "Faculty", description: "Department faculty list", href: "/hod/faculty", icon: UsersRound, color: "bg-blue-50 text-blue-600" },
-  { label: "Leave Approvals", description: "Approve faculty leave", href: "/hod/leave-approvals", icon: CalendarClock, color: "bg-emerald-50 text-emerald-600" },
   { label: "Hiring", description: "Pipeline · candidates · sessions", href: "/hod/pipeline", icon: ClipboardPlus, color: "bg-indigo-50 text-indigo-600" },
 ];
 
 const PERSONAL_MODULES = [
-  { label: "My Leave", description: "Apply & track leave", href: "/hod/leave", icon: CalendarClock, color: "bg-sky-50 text-sky-600" },
   { label: "My Attendance", description: "Attendance records", href: "/hod/attendance", icon: ClipboardCheck, color: "bg-violet-50 text-violet-600" },
   { label: "Teaching Load", description: "Subjects & timetable", href: "/hod/teaching", icon: BookOpen, color: "bg-orange-50 text-orange-600" },
   { label: "My Payslips", description: "Salary & payslips", href: "/hod/payslips", icon: Wallet, color: "bg-green-50 text-green-600" },

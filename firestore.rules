@@ -302,55 +302,6 @@ service cloud.firestore {
         allow delete: if isSuperAdmin();
       }
 
-      // ─── [ LEAVE MODULE ] ───────────────────────────────────────────────────
-
-      match /leaveApplications/{appId} {
-        allow read: if isStaff(collegeId);
-        // Faculty (PANEL_MEMBER role) can apply for leave
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        // HOD approves; Principal approves earned/maternity leave
-        allow update: if isHODorAbove(collegeId) ||
-          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
-            && resource.data.status == 'PENDING');
-        allow delete: if isSuperAdmin();
-      }
-
-      match /leaveBalances/{balanceId} {
-        allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
-      }
-
-      // Newer leave engine (src/lib/leave/*) - leaveRequests/leaveApprovalSteps/
-      // leaveBalancesV2 supersede leaveApplications/leaveBalances above for staff
-      // who apply for their own leave regardless of role (not just PANEL_MEMBER).
-      match /employeeLeaveProfiles/{profileId} {
-        allow read: if isStaff(collegeId);
-        allow create: if (isHODorAbove(collegeId) || isCollegeOffice(collegeId) ||
-          (isStaff(collegeId) && request.resource.data.uid == request.auth.uid)) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) ||
-          (isStaff(collegeId) && resource.data.uid == request.auth.uid);
-        allow delete: if isSuperAdmin();
-      }
-
-      match /leaveRequests/{requestId} {
-        allow read: if isStaff(collegeId);
-        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) ||
-          (isStaff(collegeId) && resource.data.employeeId == request.auth.uid);
-        allow delete: if isSuperAdmin();
-      }
-
-      match /leaveApprovalSteps/{stepId} {
-        allow read: if isStaff(collegeId);
-        allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
-        allow update, delete: if isSuperAdmin();
-      }
-
-      match /leaveBalancesV2/{balanceId} {
-        allow read: if isStaff(collegeId);
-        allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
-      }
-
       match /permissionRequests/{reqId} {
         allow read: if isStaff(collegeId);
         allow create: if isStaff(collegeId) && hasCollegeId(collegeId);

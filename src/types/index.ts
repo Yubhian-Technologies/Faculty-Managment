@@ -3,7 +3,6 @@
 export * from "./core";
 export * from "./supportingStaff";
 export * from "./recruitment";
-export * from "./leave";
 export * from "./attendance";
 export * from "./payroll";
 export * from "./teaching";

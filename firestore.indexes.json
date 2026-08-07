@@ -19,16 +19,6 @@
     { "collectionGroup": "panelFeedback", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "candidateId", "order": "ASCENDING" }, { "fieldPath": "panelUid", "order": "ASCENDING" }] },
     { "collectionGroup": "studentFeedback", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "candidateId", "order": "ASCENDING" }, { "fieldPath": "submittedAt", "order": "DESCENDING" }] },
 
-    { "collectionGroup": "leaveApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "leaveApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "fromDate", "order": "ASCENDING" }] },
-    { "collectionGroup": "leaveApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-
-    { "collectionGroup": "leaveRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
-    { "collectionGroup": "leaveRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "employeeId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
-
-    { "collectionGroup": "leaveBalancesV2", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
-    { "collectionGroup": "leaveBalancesV2", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "leaveTypeCode", "order": "ASCENDING" }, { "fieldPath": "year", "order": "ASCENDING" }] },
-
     { "collectionGroup": "permissionRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" }] },
     { "collectionGroup": "permissionRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "department", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }] },
     { "collectionGroup": "onDutyRequests", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "facultyId", "order": "ASCENDING" }, { "fieldPath": "fromDate", "order": "DESCENDING" }] },
