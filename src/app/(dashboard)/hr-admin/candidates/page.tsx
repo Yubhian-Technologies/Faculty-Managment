@@ -122,7 +122,7 @@ export default function HRCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Faculty Candidates"
-        description="Review candidates — shortlist for interview or reject"
+        description="Review candidates - shortlist for interview or reject"
         actions={<Button onClick={() => router.push("/hr-admin/candidates/new")}>+ Add Candidate</Button>}
       />
 
@@ -135,9 +135,9 @@ export default function HRCandidatesPage() {
               subtitle={`${c.department} · ${c.appliedPosition}`}
               badge={<StatusBadge status={c.status} />}
               fields={[
-                { label: "Email", value: c.email ?? "—" },
-                { label: "Phone", value: c.phone ?? "—" },
-                { label: "Qualification", value: c.qualification ?? "—" },
+                { label: "Email", value: c.email ?? "-" },
+                { label: "Phone", value: c.phone ?? "-" },
+                { label: "Qualification", value: c.qualification ?? "-" },
               ]}
               actions={c.status === "PENDING" ? (
                 <>
@@ -167,9 +167,9 @@ export default function HRCandidatesPage() {
           columns={[
             { key: "name", header: "Name" },
             { key: "department", header: "Department" },
-            { key: "qualification", header: "Qualification", render: (r) => (r as unknown as LocationCandidate).qualification ?? "—" },
-            { key: "email", header: "Email", render: (r) => (r as unknown as LocationCandidate).email ?? "—" },
-            { key: "phone", header: "Phone", render: (r) => (r as unknown as LocationCandidate).phone ?? "—" },
+            { key: "qualification", header: "Qualification", render: (r) => (r as unknown as LocationCandidate).qualification ?? "-" },
+            { key: "email", header: "Email", render: (r) => (r as unknown as LocationCandidate).email ?? "-" },
+            { key: "phone", header: "Phone", render: (r) => (r as unknown as LocationCandidate).phone ?? "-" },
             { key: "addedByRole", header: "Added By", render: (r) => (r as unknown as LocationCandidate).addedByRole === "LOCATION_DEPT_HEAD" ? "Dept Head" : "HR Admin" },
             { key: "createdAt", header: "Added", render: (r) => formatDate((r as unknown as LocationCandidate).createdAt as Parameters<typeof formatDate>[0]) },
             { key: "actions", header: "Action", render: (r) => renderActions(r as unknown as LocationCandidate) },

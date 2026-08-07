@@ -246,7 +246,7 @@ export default function NewVacancyPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="flex-1 space-y-1">
               <Label className="text-xs text-muted-foreground">Department</Label>
-              <p className="text-sm font-medium">{user?.department ?? "—"}</p>
+              <p className="text-sm font-medium">{user?.department ?? "-"}</p>
             </div>
             <Badge variant="secondary" className="text-xs shrink-0">Auto-filled</Badge>
           </CardContent>
@@ -361,7 +361,7 @@ export default function NewVacancyPage() {
                     {highlightedCadre && requirement && (() => {
                       const row = requirement.cadre.find((c) => c.key === highlightedCadre);
                       return row?.gap ? (
-                        <p className="text-xs text-red-600">Cadre gap: {row.gap} — auto-filled</p>
+                        <p className="text-xs text-red-600">Cadre gap: {row.gap} - auto-filled</p>
                       ) : row?.surplus ? (
                         <p className="text-xs text-blue-600">Surplus of {row.surplus}. Verify before submitting.</p>
                       ) : null;

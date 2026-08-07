@@ -166,9 +166,9 @@ export const PURCHASE_CLEARANCE_STATUS_LABELS: Record<PurchaseClearanceStatus, s
   PENDING_FINANCE_REVIEW: "Pending Finance Review",
   RETURNED_TO_PURCHASE: "Returned to Purchase Dept",
   REJECTED: "Rejected by Finance",
-  APPROVED: "Approved — Ready to Purchase",
-  GOODS_PURCHASED: "Goods Purchased — Awaiting GRN",
-  COMPLETED: "Completed — GRN Confirmed",
+  APPROVED: "Approved - Ready to Purchase",
+  GOODS_PURCHASED: "Goods Purchased - Awaiting GRN",
+  COMPLETED: "Completed - GRN Confirmed",
 };
 
 export interface PurchaseClearanceHistoryEntry {
@@ -176,7 +176,7 @@ export interface PurchaseClearanceHistoryEntry {
   by: string;
   byName: string;
   // PRINCIPAL/VICE_PRINCIPAL only appear when the clearance was auto-created
-  // from an emergency (GOODS) budget request — see isEmergency below.
+  // from an emergency (GOODS) budget request - see isEmergency below.
   byRole: "HOD" | "PRINCIPAL" | "VICE_PRINCIPAL" | "PURCHASE_DEPT" | "FINANCE";
   at: Timestamp;
   remarks?: string;
@@ -193,7 +193,7 @@ export interface PurchaseQuotation {
 export interface FinancePurchaseClearance {
   id: string;
   collegeId: string;
-  // Owner of the request — a real HOD when raised manually, or a Principal/
+  // Owner of the request - a real HOD when raised manually, or a Principal/
   // Vice Principal's own uid/name when auto-created from an emergency (GOODS)
   // budget request they raised (see isEmergency below).
   hodUid: string;
@@ -204,15 +204,15 @@ export interface FinancePurchaseClearance {
   budgetId?: string;
   status: PurchaseClearanceStatus;
   history: PurchaseClearanceHistoryEntry[];
-  // Vendor quotations — sourced by Purchase Dept, locked once sent to Finance
+  // Vendor quotations - sourced by Purchase Dept, locked once sent to Finance
   quotations: PurchaseQuotation[];
   selectedQuotationId?: string;
   sourceRequestId?: string; // links back to colleges/{id}/budgetRequests/{id}, if auto-created from an approved budget request
-  // True when auto-created from an emergency budget request — hodUid then
+  // True when auto-created from an emergency budget request - hodUid then
   // belongs to the Principal/VP who raised it, not an HOD, and the GRN step
   // must route to /principal/purchase-clearance instead of /hod/purchase-clearance.
   isEmergency?: boolean;
-  // GRN (Goods Receipt Note) — set by the owner (HOD, or Principal/VP for an
+  // GRN (Goods Receipt Note) - set by the owner (HOD, or Principal/VP for an
   // emergency request) once goods are confirmed received
   grnUrl?: string;
   grnFileName?: string;
@@ -302,8 +302,8 @@ export const FINANCE_AUDIT_ACTION_LABELS: Record<FinanceAuditAction, string> = {
   PURCHASE_CLEARANCE_RETURNED_TO_PURCHASE: "Purchase Clearance Returned to Purchase Dept",
   PURCHASE_CLEARANCE_FINANCE_APPROVED: "Purchase Clearance Approved by Finance",
   PURCHASE_CLEARANCE_FINANCE_REJECTED: "Purchase Clearance Rejected by Finance",
-  PURCHASE_CLEARANCE_GOODS_PURCHASED: "Purchase Clearance — Goods Purchased",
-  PURCHASE_CLEARANCE_GRN_UPLOADED: "Purchase Clearance — GRN Uploaded",
+  PURCHASE_CLEARANCE_GOODS_PURCHASED: "Purchase Clearance - Goods Purchased",
+  PURCHASE_CLEARANCE_GRN_UPLOADED: "Purchase Clearance - GRN Uploaded",
   RECEIPT_RECORDED: "Receipt Recorded",
   RECEIPT_VERIFIED: "Receipt Verified",
 };

@@ -76,7 +76,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 
-/* Hide native number-input spin buttons (up/down arrows) across the app —
+/* Hide native number-input spin buttons (up/down arrows) across the app -
    they conflict with mouse-wheel scrolling over a focused numeric field. */
 input[type="number"] {
   -moz-appearance: textfield;
@@ -96,4 +96,77 @@ input[type="number"]::-webkit-outer-spin-button {
   background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+}
+
+/* ─── Public landing page ────────────────────────────────────────────────── */
+html:has(.landing-page) {
+  scroll-behavior: smooth;
+}
+
+@keyframes landing-fade-up {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+@keyframes landing-blob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(18px, -26px) scale(1.06); }
+  66% { transform: translate(-14px, 14px) scale(0.96); }
+}
+@keyframes landing-glow-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+}
+
+/* Scroll-reveal — starts hidden, animates in once its element intersects the
+   viewport (see useRevealOnScroll). Applied as a plain className so it works
+   without any animation library. */
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.landing-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Entrance animation for above-the-fold hero content — plays immediately
+   rather than waiting on an intersection observer. */
+.landing-enter {
+  animation: landing-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.landing-float {
+  animation: landing-float 6s ease-in-out infinite;
+}
+.landing-blob {
+  animation: landing-blob 14s ease-in-out infinite;
+}
+.landing-glow {
+  animation: landing-glow-pulse 5s ease-in-out infinite;
+}
+
+/* Faint mesh accent for hero backgrounds — built from the theme's own border
+   color so it never introduces a hardcoded color, just a very low-opacity line grid. */
+.landing-grid-mesh {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 44px 44px;
+  opacity: 0.35;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 40%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.landing-page) { scroll-behavior: auto; }
+  .landing-reveal, .landing-enter, .landing-float, .landing-blob, .landing-glow {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

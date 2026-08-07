@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { BudgetRequest } from "@/types";
 
-// Shared by src/app/api/management/emergency-budget-requests/[id]/route.ts — the sole
+// Shared by src/app/api/management/emergency-budget-requests/[id]/route.ts - the sole
 // write path MANAGEMENT has. Kept out of the route file so both it and any future
 // caller share one transaction-guarded implementation instead of duplicating it.
 

@@ -1,7 +1,7 @@
 // Builds an fms-session cookie exactly the way src/app/api/auth/session/route.ts
 // does: base64(JSON) wrapped in a JWT-shaped `header.<payload>.signature`
 // string. verifySession.ts (src/lib/auth/verifySession.ts) only base64-decodes
-// this — it is NOT cryptographically verified on read — so a test can mint a
+// this - it is NOT cryptographically verified on read - so a test can mint a
 // valid session for any role/uid/collegeId without a real Firebase login.
 // See SEC-01 in the QA test plan: this is a deliberate test-suite shortcut
 // that doubles as a documented security finding, not an oversight.
@@ -68,7 +68,7 @@ export async function loginViaFirebaseAuth(
 ): Promise<string> {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   if (!apiKey) throw new Error("NEXT_PUBLIC_FIREBASE_API_KEY is required for AUTH_MODE=login");
-  if (!user.password) throw new Error(`No password configured for ${user.email} — set its TEST_*_PASSWORD env var`);
+  if (!user.password) throw new Error(`No password configured for ${user.email} - set its TEST_*_PASSWORD env var`);
 
   const signInRes = await request.post(
     `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,

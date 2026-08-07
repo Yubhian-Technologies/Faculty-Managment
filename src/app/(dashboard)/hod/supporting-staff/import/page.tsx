@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { COLUMNS, HINTS } from "@/lib/supportingStaff/csvColumns";
+import { getSupportingStaffColumns, getSupportingStaffHints } from "@/lib/supportingStaff/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
@@ -17,6 +17,9 @@ type ImportResult = {
   failed: { row: number; employeeId: string; error: string }[];
   warnings: { row: number; employeeId: string; warning: string }[];
 };
+
+const COLUMNS = getSupportingStaffColumns("TECHNICAL");
+const HINTS = getSupportingStaffHints("TECHNICAL");
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -30,7 +33,7 @@ export default function HODSupportingStaffImportPage() {
   function downloadTemplate() {
     const headers = COLUMNS.map((c) => c.label);
     const sample1 = COLUMNS.map((c) => c.sample);
-    downloadCSV(toCSV([headers, sample1]), "supporting_staff_import_template.csv");
+    downloadCSV(toCSV([headers, sample1]), "technical_staff_import_template.csv");
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -43,7 +46,7 @@ export default function HODSupportingStaffImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -73,7 +76,7 @@ export default function HODSupportingStaffImportPage() {
         return row;
       }).filter((r) => Object.values(r).some((v) => v.trim()));
 
-      if (dataRows.length === 0) { setParseError("No data rows found after the header — check that your data starts on the row right after the header, with no blank rows in between."); return; }
+      if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }
       if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
 
       setRows(dataRows);
@@ -102,7 +105,7 @@ export default function HODSupportingStaffImportPage() {
         setRows([]);
       }
     } catch {
-      toast({ variant: "destructive", title: "Network error — import failed" });
+      toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
     }
@@ -116,8 +119,8 @@ export default function HODSupportingStaffImportPage() {
   return (
     <div className="max-w-5xl space-y-6">
       <PageHeader
-        title="Import Supporting Staff"
-        description="Bulk upload Technical and Non-Technical staff records from a CSV file"
+        title="Import Technical Staff"
+        description="Bulk upload Technical staff records from a CSV file"
         actions={
           <Button variant="outline" asChild>
             <Link href="/hod/supporting-staff"><ArrowLeft className="h-4 w-4 mr-1" />Back to Supporting Staff</Link>
@@ -154,7 +157,7 @@ export default function HODSupportingStaffImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. &quot;DOJ&quot; for Joining Date)</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;DOJ&quot; for Joining Date)</p>
             </div>
           </button>
           {parseError && (
@@ -206,7 +209,7 @@ export default function HODSupportingStaffImportPage() {
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
-                            {row[c.key] || <span className="text-muted-foreground/40">—</span>}
+                            {row[c.key] || <span className="text-muted-foreground/40">-</span>}
                           </td>
                         ))}
                       </tr>

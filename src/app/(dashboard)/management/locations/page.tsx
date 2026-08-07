@@ -65,7 +65,7 @@ export default function ManagementLocationsPage() {
               title={loc.name}
               subtitle={loc.city}
               badge={<Badge variant={loc.isActive ? "default" : "secondary"}>{loc.isActive ? "Active" : "Inactive"}</Badge>}
-              fields={[{ label: "State", value: loc.state ?? "—" }]}
+              fields={[{ label: "State", value: loc.state ?? "-" }]}
               actions={
                 <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(loc)}>
                   <Trash2 className="h-3.5 w-3.5 text-destructive" />

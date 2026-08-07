@@ -138,6 +138,9 @@ export interface ResumeData {
   phone?: string;
   profilePhotoUrl?: string;
   collegeName?: string;
+  /** Uploaded Resume/CV file (Faculty edit page Documents section) - distinct
+   *  from this generated document, surfaced as a link when present. */
+  resumeUrl?: string;
 
   joiningDate?: TimestampLike;
   employmentType?: string;
@@ -180,7 +183,7 @@ export interface ResumeData {
   academicProfile?: FacultyProfileFieldsLike;
 
   /** Live current teaching-assignment rows (course/section/subject), distinct from the
-   *  Module 2 3-course summary — only populated for roles whose details page shows this
+   *  Module 2 3-course summary - only populated for roles whose details page shows this
    *  (e.g. HOD's Faculty edit page). */
   teachingAssignments?: {
     courseName?: string;
@@ -205,14 +208,14 @@ function esc(value: unknown): string {
     .replace(/>/g, "&gt;");
 }
 
-/** Centered, ruled section heading, e.g. "EDUCATION" — always renders (rather than
+/** Centered, ruled section heading, e.g. "EDUCATION" - always renders (rather than
  *  disappearing when a module is empty) so the document reads as complete even when
  *  a person's record hasn't had that module filled in yet. */
 function sectionTitle(title: string): string {
   return `<div class="section-title">${esc(title)}</div>`;
 }
 
-/** Two-line entry header used by Education / Experience / Projects — bold title
+/** Two-line entry header used by Education / Experience / Projects - bold title
  *  + right-aligned meta on the first line, plain subtitle + bold right-aligned
  *  meta (usually dates) on the second. Either line's right side may be omitted. */
 function entry(title: string, titleRight: string, subtitle?: string, subtitleRight?: string): string {
@@ -246,8 +249,8 @@ function detailTable(rows: string): string {
   return `<div class="fgrid">${rows}</div>`;
 }
 
-/** Renders one Teaching Load table — Academic Year / Year-Branch-Semester-Section /
- *  Subject / Hr-Week (+ Pass % + Student Feedback % for past) — leaving cells
+/** Renders one Teaching Load table - Academic Year / Year-Branch-Semester-Section /
+ *  Subject / Hr-Week (+ Pass % + Student Feedback % for past) - leaving cells
  *  blank where a given row's source doesn't carry that field. */
 function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boolean): string {
   if (!rows.length) return "";
@@ -261,21 +264,21 @@ function renderTeachingLoadTable(rows: TeachingLoadRow[], showPastColumns: boole
   return `<table class="data-table"><tr><th>Academic Year</th><th>Year / Branch / Semester / Section</th><th>Subject</th><th>Hr/Week</th>${pastHeaders}</tr>${body}</table>`;
 }
 
-/** Renders the Current / Past Teaching Assignments tables under their own
- *  labeled subheadings, kept visually separate rather than intermixed —
- *  Pass % only ever applies to (and is only shown on) the Past table. */
+/** Renders the Current / Previous Teaching Assignments tables under their own
+ *  labeled subheadings, kept visually separate rather than intermixed -
+ *  Pass % only ever applies to (and is only shown on) the Previous table. */
 function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: TeachingLoadRow[] }): string {
   const currentBlock = groups.current.length
     ? `<div class="subheading">Current Teaching Assignments</div>${renderTeachingLoadTable(groups.current, false)}`
     : "";
   const pastBlock = groups.past.length
-    ? `<div class="subheading">Past Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Pass % + Feedback %
+    ? `<div class="subheading">Previous Teaching Assignments</div>${renderTeachingLoadTable(groups.past, true)}`  // true = show Pass % + Feedback %
     : "";
   return currentBlock + pastBlock;
 }
 
 /** Renders a section's heading + body together, or nothing at all when the
- *  body is empty — a person's record with no data for a module simply
+ *  body is empty - a person's record with no data for a module simply
  *  doesn't get a module in their resume, rather than a placeholder. */
 function renderSection(title: string, body: string): string {
   return body.trim() ? `${sectionTitle(title)}${body}` : "";
@@ -290,7 +293,7 @@ function degreeEntry(label: string, d?: DegreeDetail): string {
     entry(
       d.universityOrInstitute || label,
       d.yearOfCompletion ? String(d.yearOfCompletion) : "",
-      `${label}${d.degreeAndBranch ? ` — ${d.degreeAndBranch}` : ""}`,
+      `${label}${d.degreeAndBranch ? ` - ${d.degreeAndBranch}` : ""}`,
       d.percentageOrDivision || ""
     ) + certLink
   );
@@ -332,6 +335,7 @@ export function getResumeHTML(data: ResumeData): string {
     data.collegeName ? `College: ${esc(data.collegeName)}` : "",
     data.phone ? `Mobile: ${esc(data.phone)}` : "",
     data.employeeId ? `Employee ID: ${esc(data.employeeId)}` : "",
+    data.resumeUrl ? `<a href="${esc(data.resumeUrl)}" target="_blank" style="color:#1d4ed8;text-decoration:none;">View Uploaded Resume ↗</a>` : "",
   ].filter(Boolean);
 
   // ── Education ────────────────────────────────────────────────────────────
@@ -342,7 +346,7 @@ export function getResumeHTML(data: ResumeData): string {
     degreeEntry("Undergraduate", ap?.ugDetails);
   const educationExtras = bullets([
     highestQualification && !ap?.phdDetails && !ap?.pgDetails && !ap?.ugDetails && `Highest Qualification: ${esc(highestQualification)}`,
-    (ap?.phdStatus || ap?.phdMode) && `PhD Status: ${esc(ap?.phdStatus) || "—"} (${esc(ap?.phdMode) || "mode not recorded"})`,
+    (ap?.phdStatus || ap?.phdMode) && `PhD Status: ${esc(ap?.phdStatus) || "-"} (${esc(ap?.phdMode) || "mode not recorded"})`,
     ap?.phdSupervisorName && `PhD Supervisor: ${esc(ap.phdSupervisorName)}`,
     ap?.fellowshipsReceived && `Fellowships Received: ${esc(ap.fellowshipsReceived)}`,
     ap?.gateQualifiedYear && `GATE Qualified: ${esc(ap.gateQualifiedYear)}${ap.gateScore ? ` (Score: ${esc(ap.gateScore)})` : ""}`,
@@ -377,7 +381,7 @@ export function getResumeHTML(data: ResumeData): string {
   const experienceBody = experienceEntry + experienceBullets + previousInstitutionEntries;
 
   // ── Teaching load ────────────────────────────────────────────────────────
-  // Current and past assignments, kept as two separate tables — current
+  // Current and past assignments, kept as two separate tables - current
   // course/section assignments + the Module 2 course summary vs. structured
   // past assignments (past rows carry a pass %, current ones never do).
   const teachingLoadBullets = bullets([
@@ -520,7 +524,7 @@ export function getResumeHTML(data: ResumeData): string {
   html, body { margin: 0; padding: 0; }
   body { font-family: Calibri, Arial, Helvetica, sans-serif; font-size: 12.5px; line-height: 1.45; color: #111827; background: #ffffff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
-  /* Free-flowing document — spans as many A4 pages as the content needs, with
+  /* Free-flowing document - spans as many A4 pages as the content needs, with
      the top/bottom breathing room supplied per-page via page.pdf()'s margin. */
   .page { width: 210mm; background: #ffffff; padding: 0 15mm; }
 
@@ -533,7 +537,7 @@ export function getResumeHTML(data: ResumeData): string {
   .college { font-size: 12px; color: #4b5563; margin-top: 2px; }
   .contact-block { text-align: right; font-size: 11.5px; line-height: 1.6; white-space: nowrap; }
 
-  /* Centered with flexbox (not padding + line-height) — html2canvas approximates
+  /* Centered with flexbox (not padding + line-height) - html2canvas approximates
      font baseline position with a measurement heuristic that isn't always exact,
      so text drifts within symmetric padding instead of sitting truly centered.
      Flex centering is geometric, not font-metric-based, so it renders correctly. */
@@ -554,9 +558,9 @@ export function getResumeHTML(data: ResumeData): string {
   .subheading:first-child { margin-top: 0; }
   .empty-note { font-size: 12px; color: #6b7280; font-style: italic; margin: 3px 0 8px; }
 
-  /* Compact 2-up key/value grid — used for personal/financial facts, which are
+  /* Compact 2-up key/value grid - used for personal/financial facts, which are
      simple label:value pairs rather than narrative achievements. Built with
-     flexbox + explicit width/margin (not CSS Grid) — html2canvas 1.x only
+     flexbox + explicit width/margin (not CSS Grid) - html2canvas 1.x only
      recognizes display:grid as a display-type flag and never actually lays
      out grid tracks, so a real grid here would collapse to a single column
      (misaligned) in the generated PDF even though it looks fine in a browser. */
@@ -609,7 +613,7 @@ export function getResumeHTML(data: ResumeData): string {
   ${renderSection("Other Information", otherInfoBody)}
   ${renderSection("Financial Standing", financialBody)}
 
-  <div class="footer">Generated on ${esc(formatDate(new Date()))} — Confidential, for internal institutional use only.</div>
+  <div class="footer">Generated on ${esc(formatDate(new Date()))} - Confidential, for internal institutional use only.</div>
 </div>
 </body>
 </html>`;

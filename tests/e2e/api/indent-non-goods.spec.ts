@@ -1,4 +1,4 @@
-// Flow D — Indent Request (Non-Goods): HOD -> Finance direct, Purchase Dept never involved.
+// Flow D - Indent Request (Non-Goods): HOD -> Finance direct, Purchase Dept never involved.
 // Cases reference the IDs in the published QA test plan (IND-N-*).
 
 import { test, expect } from "@playwright/test";
@@ -6,7 +6,7 @@ import { ApiClient } from "../support/apiClient";
 import { testUsers } from "../support/testUsers";
 import { nonGoodsIndentBody, indentItem } from "../support/builders";
 
-test.describe("Flow D — Indent Request (Non-Goods)", () => {
+test.describe("Flow D - Indent Request (Non-Goods)", () => {
   let hod: ApiClient;
   let purchase: ApiClient;
   let finance: ApiClient;

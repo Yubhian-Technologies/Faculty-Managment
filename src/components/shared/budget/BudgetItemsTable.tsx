@@ -75,7 +75,7 @@ export function BudgetItemsTable({ items, onChange, readOnly = false, category, 
 
   // Headcount per designation+employmentType, used to auto-total a Staff
   // Salaries line item across every active faculty member at that designation
-  // rather than just one — only needed while editing (read-only views render
+  // rather than just one - only needed while editing (read-only views render
   // the count already frozen into extras.headcount by the server).
   const [headcountByKey, setHeadcountByKey] = useState<Map<string, number>>(new Map());
   useEffect(() => {
@@ -268,11 +268,11 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
           {cfg.extraFields.map((f) => (
             <td key={f.key} className="px-3 py-2">
               {f.key === "salaryStructureId"
-                ? (selectedSalaryStructure ? salaryStructureLabel(selectedSalaryStructure) : item.extras[f.key] || "—")
+                ? (selectedSalaryStructure ? salaryStructureLabel(selectedSalaryStructure) : item.extras[f.key] || "-")
                 : item.extras[f.key]}
             </td>
           ))}
-          {isStaffSalaries && <td className="px-3 py-2">{staffCount || "—"}</td>}
+          {isStaffSalaries && <td className="px-3 py-2">{staffCount || "-"}</td>}
           <td className="px-3 py-2">{formatCurrency(item.price)}</td>
           <td className="px-3 py-2 font-medium">{formatCurrency(itemTotal(item, category))}</td>
           {selectable && (
@@ -330,7 +330,7 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
                     <SelectValue placeholder={`Select ${f.label.toLowerCase()}`} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={CUSTOM_SALARY_OPTION}>— Custom (enter manually) —</SelectItem>
+                    <SelectItem value={CUSTOM_SALARY_OPTION}>- Custom (enter manually) -</SelectItem>
                     {(f.key === "salaryStructureId" ? salaryStructures : []).map((s) => (
                       <SelectItem key={s.id} value={s.id}>{salaryStructureLabel(s)}</SelectItem>
                     ))}
@@ -352,7 +352,7 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
           ))}
           {isStaffSalaries && (
             <td className="px-3 py-2 text-muted-foreground">
-              {staffCount ? `${staffCount} active` : selectedSalaryStructure ? "0 active" : "—"}
+              {staffCount ? `${staffCount} active` : selectedSalaryStructure ? "0 active" : "-"}
             </td>
           )}
           <td className="px-3 py-2">
@@ -414,7 +414,7 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
                 <div key={f.key} className="flex items-center gap-1.5 rounded-md border bg-background px-2 py-1">
                   <span className="text-xs text-muted-foreground">{f.label}:</span>
                   {readOnly ? (
-                    <span className="text-xs font-medium">{item.extras[f.key] || "—"}</span>
+                    <span className="text-xs font-medium">{item.extras[f.key] || "-"}</span>
                   ) : (
                     <>
                       <Input

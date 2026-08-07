@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { UsersRound, Plus, Mail, Phone } from "lucide-react";
+import { UsersRound, Plus, Mail, Phone, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -78,8 +78,8 @@ export default function PrincipalStaffPage() {
     }
   }
 
-  // Group by role for a scannable layout — order roughly follows seniority/function.
-  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF", "OFFICE", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+  // Group by role for a scannable layout - order roughly follows seniority/function.
+  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
   const grouped = ROLE_ORDER
     .map((role) => ({ role, users: staff.filter((u) => u.role === role) }))
     .filter((g) => g.users.length > 0);
@@ -140,28 +140,33 @@ export default function PrincipalStaffPage() {
                             {g.role === "HOD" && (
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-1.5">
-                                  {u.department || "—"}
+                                  {u.department || "-"}
                                   {parentDeptName(u.department) && (
                                     <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName(u.department)}</Badge>
                                   )}
                                 </div>
                               </td>
                             )}
-                            {g.role === "COLLEGE_STAFF" && <td className="px-4 py-2.5">{u.designation || "—"}</td>}
+                            {g.role === "COLLEGE_STAFF" && <td className="px-4 py-2.5">{u.designation || "-"}</td>}
                             <td className="px-4 py-2.5">
                               <Badge variant={u.isActive === false ? "secondary" : "default"} className="text-xs">
                                 {u.isActive === false ? "Inactive" : "Active"}
                               </Badge>
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                loading={togglingUid === u.uid}
-                                onClick={() => void toggleActive(u)}
-                              >
-                                {u.isActive === false ? "Activate" : "Deactivate"}
-                              </Button>
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" asChild>
+                                  <Link href={`/principal/staff/${u.uid}/edit`}><Pencil className="h-3.5 w-3.5 mr-1" />Edit</Link>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  loading={togglingUid === u.uid}
+                                  onClick={() => void toggleActive(u)}
+                                >
+                                  {u.isActive === false ? "Activate" : "Deactivate"}
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}

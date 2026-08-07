@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Upload, Eye, Network } from "lucide-react";
+import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Eye, Network } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -74,7 +74,7 @@ export default function HODSectionsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Own department + its sub-departments — the set a main HOD can reassign an
+  // Own department + its sub-departments - the set a main HOD can reassign an
   // existing section between (handing it to a Sub-HOD to run, or pulling it
   // back). Empty for a Sub-HOD (their department has no children of its own),
   // so the picker below simply doesn't render for them.
@@ -162,9 +162,11 @@ export default function HODSectionsPage() {
         description="Manage class sections, assign faculty incharge, and track student count"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" asChild>
+            {/* Import Students - temporarily hidden, not removed. Re-enable by
+                uncommenting this button. */}
+            {/* <Button variant="outline" asChild>
               <Link href="/hod/students/import"><Upload className="h-4 w-4 mr-2" />Import Students</Link>
-            </Button>
+            </Button> */}
             <Button onClick={openCreate} disabled={courses.length === 0}>
               <Plus className="h-4 w-4 mr-2" />Add Section
             </Button>
@@ -333,7 +335,7 @@ export default function HODSectionsPage() {
                         </div>
                       </div>
 
-                      {/* Department assignment — only rendered for a main HOD whose
+                      {/* Department assignment - only rendered for a main HOD whose
                           department has sub-departments; lets them hand this section
                           to a Sub-HOD (or pull it back) without recreating it. */}
                       {deptOptions.length > 1 && sec.accessLevel !== "secondary" && (

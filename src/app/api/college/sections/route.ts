@@ -28,12 +28,12 @@ export async function GET(request: Request) {
 
     let primaryQuery: FirebaseFirestore.Query = sectionsColl;
     // A parent HOD gets full ("primary") access to their own sub-departments'
-    // sections too — they own the whole department tree, same as the
+    // sections too - they own the whole department tree, same as the
     // sub-HOD who runs that sub-department day to day (see
     // assertHodOwnsSection in sections/[id]/route.ts, which mirrors this).
     // The one case that stays genuinely "secondary" (view-only) is a section
     // explicitly cross-listed to this department via `secondaryDepartments`
-    // (inherited from the owning Department at creation) — a different,
+    // (inherited from the owning Department at creation) - a different,
     // unrelated top-level department's section, not part of this HOD's own
     // tree. Same shape as the students route.
     let childDeptQuery: FirebaseFirestore.Query | null = null;
@@ -90,7 +90,13 @@ export async function GET(request: Request) {
     // `studentCount` used to be a manually-typed capacity estimate ("Student
     // Intake"); now that rosters are actually imported, overwrite it with the
     // real enrolled count per (department, section, year) instead of trusting
-    // the stored field, which nothing writes anymore.
+    // the stored field, which nothing writes anymore. The key also includes
+    // the section's own cross-listed department (or "" if none): two
+    // sections can otherwise share the exact same (department, name, year)
+    // when they're cross-listed to different branches - e.g. two "A"s under
+    // Basic Science, one feeding CSE and one ECE - and without this, both
+    // would be double-counted into a single merged total instead of their
+    // own real counts.
     const deptNames = Array.from(new Set(sections.map((s) => s.department as string).filter(Boolean)));
     if (deptNames.length > 0) {
       const chunks: string[][] = [];
@@ -107,14 +113,16 @@ export async function GET(request: Request) {
       const countMap = new Map<string, number>();
       for (const snap of studentSnaps) {
         for (const d of snap.docs) {
-          const s = d.data() as { department?: string; section?: string; year?: number };
-          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}`;
+          const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string };
+          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}`;
           countMap.set(key, (countMap.get(key) ?? 0) + 1);
         }
       }
 
       for (const sec of sections) {
-        const key = `${sec.department as string}|${sec.name as string}|${sec.year as number}`;
+        const secondaryDepts = sec.secondaryDepartments as string[] | undefined;
+        const secondary = secondaryDepts?.length === 1 ? secondaryDepts[0].toLowerCase() : "";
+        const key = `${sec.department as string}|${sec.name as string}|${sec.year as number}|${secondary}`;
         sec.studentCount = countMap.get(key) ?? 0;
       }
     }
@@ -181,7 +189,7 @@ export async function POST(request: Request) {
     // Resolve the owning department: HOD uses their own. Principal/VP/Office
     // pick a department explicitly (a course can be shared by a parent
     // department and its sub-departments, e.g. BS's "B.Sc" course is also
-    // used by BS-Physics/BS-Maths — so the course's own departmentId alone
+    // used by BS-Physics/BS-Maths - so the course's own departmentId alone
     // can no longer determine which one a new section belongs to). Fall back
     // to deriving it from the course for any older caller that doesn't send
     // departmentId.
@@ -204,9 +212,9 @@ export async function POST(request: Request) {
     }
 
     // A department can only hold sections for years the Principal/VP has
-    // actually assigned it (see Department.assignedYears) — otherwise the
+    // actually assigned it (see Department.assignedYears) - otherwise the
     // year-allocation feature is purely decorative. This same lookup also
-    // validates the section's own cross-listed (secondary) department — a
+    // validates the section's own cross-listed (secondary) department - a
     // department/sub-department can be configured with several possible
     // destinations (e.g. a shared first-year sub-department feeding both CSE
     // and ECE), but each individual section commits to exactly one, since

@@ -21,7 +21,7 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 
 // Principal/VP move a cohort of REGULAR students to a different department's
 // section for the next year (PROMOTE), or mark a final-year cohort complete
-// (GRADUATE). Targets a single destination per call — the "bulk-by-section
+// (GRADUATE). Targets a single destination per call - the "bulk-by-section
 // with per-student override" UX (src/app/(dashboard)/principal/promotions)
 // groups students by their resolved target and fires one call per group.
 export async function POST(request: Request) {
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     }
     if (studentIds.length > MAX_STUDENTS_PER_CALL) {
       return NextResponse.json(
-        { error: `At most ${MAX_STUDENTS_PER_CALL} students per call — split into multiple requests` },
+        { error: `At most ${MAX_STUDENTS_PER_CALL} students per call - split into multiple requests` },
         { status: 400 }
       );
     }

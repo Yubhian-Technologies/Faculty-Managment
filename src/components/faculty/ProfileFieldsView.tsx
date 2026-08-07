@@ -138,7 +138,7 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {teaching?.courses.map((c, i) => (
                   <div key={i} className="rounded-md bg-background shadow-sm border p-2">
-                    <p className="text-sm font-medium">{c.code} — {c.name}</p>
+                    <p className="text-sm font-medium">{c.code} - {c.name}</p>
                     <p className="text-xs text-muted-foreground">{c.weeklyCreditHours} hrs/week</p>
                   </div>
                 ))}
@@ -213,12 +213,12 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
         <div className="rounded-lg border bg-muted/20 shadow-sm p-3 space-y-2">
           <SubLabel>Patents</SubLabel>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Indian — Filed" value={patents?.indianFiled} />
-            <Field label="Indian — Published" value={patents?.indianPublished} />
-            <Field label="Indian — Granted" value={patents?.indianGranted} />
-            <Field label="Intl — Filed" value={patents?.internationalFiled} />
-            <Field label="Intl — Published" value={patents?.internationalPublished} />
-            <Field label="Intl — Granted" value={patents?.internationalGranted} />
+            <Field label="Indian - Filed" value={patents?.indianFiled} />
+            <Field label="Indian - Published" value={patents?.indianPublished} />
+            <Field label="Indian - Granted" value={patents?.indianGranted} />
+            <Field label="Intl - Filed" value={patents?.internationalFiled} />
+            <Field label="Intl - Published" value={patents?.internationalPublished} />
+            <Field label="Intl - Granted" value={patents?.internationalGranted} />
           </div>
           <Field label="Details" value={patents?.details} />
         </div>
@@ -362,7 +362,7 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
       )}
 
       <Section number={7} title="Others">
-        <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "—"}</p>
+        <p className="text-sm whitespace-pre-wrap">{p.otherInformation || "-"}</p>
       </Section>
 
       <Section number={8} title="Teaching Documentation (NBA/AICTE)">

@@ -87,6 +87,7 @@ export default function EditFacultyPage() {
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [joiningLetterUrl, setJoiningLetterUrl] = useState<string>("");
   const [appointmentLetterUrl, setAppointmentLetterUrl] = useState<string>("");
+  const [resumeUrl, setResumeUrl] = useState<string>("");
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [teachingLoaded, setTeachingLoaded] = useState(false);
@@ -156,6 +157,7 @@ export default function EditFacultyPage() {
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
         setJoiningLetterUrl((m.joiningLetterUrl as string) ?? "");
         setAppointmentLetterUrl((m.appointmentLetterUrl as string) ?? "");
+        setResumeUrl((m.resumeUrl as string) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
       .finally(() => setLoading(false));
@@ -193,7 +195,7 @@ export default function EditFacultyPage() {
         setTeachingRows(rows);
         setOriginalTeachingRows(rows);
       })
-      .catch(() => { /* non-critical — teaching assignments can be added fresh */ })
+      .catch(() => { /* non-critical - teaching assignments can be added fresh */ })
       .finally(() => setTeachingLoaded(true));
   }, [facultyId]);
 
@@ -256,6 +258,7 @@ export default function EditFacultyPage() {
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
           joiningLetterUrl,
           appointmentLetterUrl,
+          resumeUrl,
         }),
       });
       if (res.status === 409) {
@@ -448,6 +451,14 @@ export default function EditFacultyPage() {
                   onUploaded={(url) => setAppointmentLetterUrl(url)}
                   onRemoved={() => setAppointmentLetterUrl("")}
                 />
+                <DocumentUploadField
+                  label="Resume / CV"
+                  value={resumeUrl || undefined}
+                  uploadEndpoint="/api/upload/faculty-document"
+                  extraFields={{ facultyId, docType: "resume" }}
+                  onUploaded={(url) => setResumeUrl(url)}
+                  onRemoved={() => setResumeUrl("")}
+                />
               </CardContent>
             </Card>
           </div>
@@ -466,7 +477,7 @@ export default function EditFacultyPage() {
               <CardContent className="space-y-3">
                 {pendingPreference && originalTeachingRows.length === 0 && teachingRows.length > 0 && (
                   <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-2">
-                    Pre-filled from the course/subjects set during hiring — pick a section for each row below to activate it.
+                    Pre-filled from the course/subjects set during hiring - pick a section for each row below to activate it.
                   </p>
                 )}
                 <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />

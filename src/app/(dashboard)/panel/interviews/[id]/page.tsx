@@ -84,7 +84,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
       fetch(`/api/college/panel-feedback?batchId=${id}`)
         .then((r) => r.json() as Promise<{ feedback: { candidateId: string; panelUid: string }[] }>)
         // GET returns every panelist's feedback for non-PANEL_MEMBER roles (Principal/VP/HOD
-        // included, since they're often panel members too) — only count MY OWN submissions,
+        // included, since they're often panel members too) - only count MY OWN submissions,
         // otherwise another panelist scoring first would wrongly lock me out of scoring at all.
         .then((d) => d.feedback.filter((f) => f.panelUid === myUid).map((f) => f.candidateId)),
     ])
@@ -160,7 +160,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
     <div className="space-y-6">
       <PageHeader
         title={batch.position}
-        description={`${batch.department} — ${formatDate(batch.interviewDate)}`}
+        description={`${batch.department} - ${formatDate(batch.interviewDate)}`}
       />
 
       {/* Batch Info */}
@@ -267,9 +267,9 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ACCEPT">Accept — Recommend for hiring</SelectItem>
-                      <SelectItem value="MAYBE">Maybe — Needs further review</SelectItem>
-                      <SelectItem value="REJECT">Reject — Not suitable</SelectItem>
+                      <SelectItem value="ACCEPT">Accept - Recommend for hiring</SelectItem>
+                      <SelectItem value="MAYBE">Maybe - Needs further review</SelectItem>
+                      <SelectItem value="REJECT">Reject - Not suitable</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

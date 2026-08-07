@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
+import { FacultyModuleTabs } from "@/components/faculty/FacultyModuleTabs";
 import { toast } from "@/hooks/useToast";
 import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
@@ -16,7 +17,7 @@ import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } fro
 import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment } from "@/types";
 
 function fmtDate(val: unknown): string {
-  if (!val) return "—";
+  if (!val) return "-";
   try {
     const ts = val as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
     const d = typeof ts?.toDate === "function"
@@ -26,9 +27,9 @@ function fmtDate(val: unknown): string {
         : ts?.seconds != null
           ? new Date(ts.seconds * 1000)
           : null;
-    if (!d || isNaN(d.getTime())) return "—";
+    if (!d || isNaN(d.getTime())) return "-";
     return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-  } catch { return "—"; }
+  } catch { return "-"; }
 }
 
 function fmtExp(val: unknown): string {
@@ -36,7 +37,7 @@ function fmtExp(val: unknown): string {
   return String(+(Number(val).toFixed(1)));
 }
 
-// INTERVIEW_DONE faculty haven't actually joined yet — their joiningDate is the
+// INTERVIEW_DONE faculty haven't actually joined yet - their joiningDate is the
 // proposed date from the offer letter, so it reads as an expectation, not a fact.
 function joiningLabel(status: unknown): string {
   return status === "INTERVIEW_DONE" ? "Expected to join" : "Joined";
@@ -110,7 +111,7 @@ export default function HODFacultyPage() {
         const taRes = await fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(row.id as string)}`);
         const taData = await taRes.json() as { assignments?: unknown[] };
         teachingAssignments = taData.assignments ?? [];
-      } catch { /* non-critical — resume still generates without the live teaching-load table */ }
+      } catch { /* non-critical - resume still generates without the live teaching-load table */ }
       await downloadResumePdf({ ...row, teachingAssignments, collegeName }, (row.employeeId as string) || (row.name as string));
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
@@ -293,6 +294,8 @@ export default function HODFacultyPage() {
           </div>
         }
       />
+
+      <FacultyModuleTabs facultyHref="/hod/faculty" supportingStaffHref="/hod/supporting-staff" />
 
       <div className="flex gap-2 flex-wrap">
         {STATUS_TABS.map((tab) => (

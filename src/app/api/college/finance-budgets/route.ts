@@ -5,7 +5,7 @@ import { requireCollegeContext } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
 // Finance no longer creates department budgets directly (department, purpose,
-// allocatedAmount) — that bypassed the department entirely. Every doc in this
+// allocatedAmount) - that bypassed the department entirely. Every doc in this
 // collection is now auto-created when a budget-requests doc is FINANCE_APPROVED
 // (src/app/api/college/budget-requests/[id]/route.ts), which itself is only
 // reachable via a Budget Cycle (src/app/api/college/budget-cycles). This route

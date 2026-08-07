@@ -1,7 +1,7 @@
 // Exercises the real login form end-to-end (Firebase client sign-in ->
 // POST /api/auth/session -> proxy.ts redirect to the role's dashboard).
 // Requires TEST_HOD_EMAIL / TEST_HOD_PASSWORD (or another role's pair) to be
-// set — this is the one spec in the suite that does NOT use cookie
+// set - this is the one spec in the suite that does NOT use cookie
 // injection, since its whole point is to verify the login path itself.
 
 import { test, expect } from "@playwright/test";

@@ -110,7 +110,7 @@ export default function FinanceBrowseDepartmentsPage() {
               <CardContent className="p-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-semibold">Budget Requests — Regular / Emergency</p>
+                  <p className="text-sm font-semibold">Budget Requests - Regular / Emergency</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className="text-xs">Regular ({regularBudgetCount})</Badge>
@@ -122,7 +122,7 @@ export default function FinanceBrowseDepartmentsPage() {
               <CardContent className="p-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <PackageCheck className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-semibold">Indents — Goods / Non-Goods</p>
+                  <p className="text-sm font-semibold">Indents - Goods / Non-Goods</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className="text-xs">Goods ({goodsIndentCount})</Badge>

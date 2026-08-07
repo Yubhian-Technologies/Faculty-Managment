@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Plus, Upload } from "lucide-react";
+import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,9 +70,12 @@ export default function StudentsPage() {
         title="Students"
         description="Roster for your assigned sections"
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/panel/students/import"><Upload className="h-4 w-4 mr-1.5" />Bulk Import</Link>
-          </Button>
+          // Import Students - temporarily hidden, not removed. Re-enable by
+          // uncommenting this button.
+          // <Button variant="outline" asChild>
+          //   <Link href="/panel/students/import"><Upload className="h-4 w-4 mr-1.5" />Bulk Import</Link>
+          // </Button>
+          undefined
         }
       />
 

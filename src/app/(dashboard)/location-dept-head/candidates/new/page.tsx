@@ -77,7 +77,7 @@ export default function NewLocationDeptHeadCandidatePage() {
 
             <div className="space-y-2">
               <Label>Department</Label>
-              <Input value={form.department || "—"} disabled className="bg-muted text-muted-foreground" />
+              <Input value={form.department || "-"} disabled className="bg-muted text-muted-foreground" />
               <p className="text-xs text-muted-foreground">Candidates are added for your own department only.</p>
             </div>
 

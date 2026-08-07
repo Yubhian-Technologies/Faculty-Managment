@@ -3,9 +3,23 @@ import type { NextRequest } from "next/server";
 import { ROLE_DASHBOARD_PATHS, rolesInheritedBy } from "@/types/core";
 import type { UserRole } from "@/types/core";
 
-const PUBLIC_PATHS = ["/login", "/careers", "/feedback", "/api/auth", "/location-interview"];
+// "/" is public so signed-out visitors land on the marketing page (src/app/page.tsx)
+// instead of being force-redirected to /login before it can render; that page
+// still client-side redirects signed-in users to their dashboard as before.
+// The matcher's "public/" exclusion below doesn't actually cover files served
+// from the public/ folder (Next.js serves them at the site root, not under
+// /public/), so images that page references need to be listed here explicitly.
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/careers",
+  "/feedback",
+  "/api/auth",
+  "/location-interview",
+  "/about-team-illustration.png",
+];
 
-// /panel/interviews is shared — any staff role can be added as a panel member
+// /panel/interviews is shared - any staff role can be added as a panel member
 const PANEL_INTERVIEWS_PATH = "/panel/interviews";
 
 // Per-role *own* (and explicitly-shared) path prefixes. Inherited lower-level
@@ -16,19 +30,19 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   ADMINISTRATION: ["/administration"],
   HR_ADMIN: ["/hr-admin"],
   ADMIN_OFFICE: ["/admin-office"],
-  OFFICE: ["/office"],
   PLACEMENT_DEPT: ["/placement-dept"],
   LIBRARY: ["/library"],
   EXAM_CELL: ["/exam-cell"],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
   PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH],
-  // Vice Principal mirrors Principal's authority (see AGENTS.md) — full access
+  // Vice Principal mirrors Principal's authority (see AGENTS.md) - full access
   // to /principal/* alongside its own /vice-principal home.
   VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH],
   HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH],
   COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH],
   COLLEGE_STAFF: ["/college-staff"],
   PANEL_MEMBER: ["/panel", "/coordinator"],
+  ANNEXURE: ["/annexure"],
   ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH],
   FINANCE: ["/finance"],
   PURCHASE_DEPT: ["/purchase"],
@@ -41,7 +55,7 @@ function isPublicPath(pathname: string): boolean {
 }
 
 // A role may reach its own paths plus the dashboards of every lower-level role it
-// inherits within scope (L0–L6 hierarchy). This is coarse path gating only —
+// inherits within scope (L0–L6 hierarchy). This is coarse path gating only -
 // real tenant/data isolation is still enforced by the per-route API guards.
 function allowedPathsForRole(role: string): string[] {
   const own = ROLE_PATH_MAP[role] ?? [];

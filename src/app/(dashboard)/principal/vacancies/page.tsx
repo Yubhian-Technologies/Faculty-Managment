@@ -88,7 +88,7 @@ export default function PrincipalVacanciesPage() {
               header: "Category",
               render: (row) => {
                 const cat = (row as unknown as VacancyRequest).positionCategory;
-                const label = cat === "TEACHING" ? "Teaching" : cat === "SUPPORTING_STAFF" ? "Support Staff" : cat ?? "—";
+                const label = cat === "TEACHING" ? "Teaching" : cat === "SUPPORTING_STAFF" ? "Support Staff" : cat ?? "-";
                 return <Badge variant="secondary" className="text-xs">{label}</Badge>;
               },
             },

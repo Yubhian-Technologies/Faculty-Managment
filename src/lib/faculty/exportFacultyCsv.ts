@@ -1,4 +1,4 @@
-// Full-detail faculty CSV export — flattens a FacultyMember (+ academicProfile)
+// Full-detail faculty CSV export - flattens a FacultyMember (+ academicProfile)
 // into the same column set the bulk-import template accepts (src/lib/faculty/csvColumns.ts),
 // so import and export stay round-trippable for every field except the
 // relational "Current Teaching" summary (informational only, not re-importable).
@@ -6,7 +6,12 @@
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
 import { COLUMNS, TEACHING_SUMMARY_COLUMN } from "@/lib/faculty/csvColumns";
-import type { FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import { ADMIN_RESPONSIBILITY_CATEGORY_LABELS, TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, AWARD_CATEGORY_LABELS } from "@/types";
+import type {
+  FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution,
+  FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, PromotionRecord, AdminResponsibilityEntry,
+  TrainingEntry, ProfessionalMembership, AwardEntry, CourseFileEntry,
+} from "@/types";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -38,11 +43,49 @@ function publicationCells(items: Publication[] | undefined, i: number): [string,
     : ["", "", "", "", ""];
 }
 
-function projectCells(projects: FundedProject[] | undefined, i: number): [string, string, string, string, string] {
+function projectCells(projects: FundedProject[] | undefined, i: number): [string, string, string, string, string, string] {
   const p = projects?.[i];
   return p
-    ? [p.title ?? "", p.fundingAgency ?? "", p.grantAmountLakhs ? String(p.grantAmountLakhs) : "", p.year ? String(p.year) : "", p.status ?? ""]
+    ? [p.title ?? "", p.fundingAgency ?? "", p.grantAmountLakhs ? String(p.grantAmountLakhs) : "", p.year ? String(p.year) : "", p.status ?? "", p.piOrCoPi === "CO_PI" ? "Co-PI" : p.piOrCoPi === "PI" ? "PI" : ""]
+    : ["", "", "", "", "", ""];
+}
+
+function promotionCells(items: PromotionRecord[] | undefined, i: number): [string, string, string] {
+  const p = items?.[i];
+  return p ? [p.fromDesignation ?? "", p.toDesignation ?? "", p.effectiveYear ? String(p.effectiveYear) : ""] : ["", "", ""];
+}
+
+function adminRespCells(items: AdminResponsibilityEntry[] | undefined, i: number): [string, string, string, string] {
+  const a = items?.[i];
+  return a
+    ? [ADMIN_RESPONSIBILITY_CATEGORY_LABELS[a.category] ?? a.category, a.description ?? "", a.fromYear ? String(a.fromYear) : "", a.toYear ? String(a.toYear) : ""]
+    : ["", "", "", ""];
+}
+
+function trainingCells(items: TrainingEntry[] | undefined, i: number): [string, string, string, string, string] {
+  const t = items?.[i];
+  return t
+    ? [TRAINING_ENTRY_TYPE_LABELS[t.type] ?? t.type, t.title ?? "", t.organizer ?? "", t.year ? String(t.year) : "", t.durationDays ? String(t.durationDays) : ""]
     : ["", "", "", "", ""];
+}
+
+function membershipCells(items: ProfessionalMembership[] | undefined, i: number): [string, string, string, string] {
+  const m = items?.[i];
+  return m
+    ? [PROFESSIONAL_BODY_LABELS[m.body] ?? m.body, m.otherName ?? "", m.membershipId ?? "", m.sinceYear ? String(m.sinceYear) : ""]
+    : ["", "", "", ""];
+}
+
+function awardCells(items: AwardEntry[] | undefined, i: number): [string, string, string, string] {
+  const a = items?.[i];
+  return a
+    ? [AWARD_CATEGORY_LABELS[a.category] ?? a.category, a.title ?? "", a.awardingBody ?? "", a.year ? String(a.year) : ""]
+    : ["", "", "", ""];
+}
+
+function courseFileCells(items: CourseFileEntry[] | undefined, i: number): [string, string, string] {
+  const c = items?.[i];
+  return c ? [c.courseCode ?? "", c.courseName ?? "", c.academicYear ?? ""] : ["", "", ""];
 }
 
 function consultancyCells(items: ConsultancyProject[] | undefined, i: number): [string, string, string, string, string] {
@@ -67,10 +110,12 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
   const [ugDegree, ugUniv, ugPct, ugYear] = degreeCells(p.ugDetails);
   const [pgDegree, pgUniv, pgPct, pgYear] = degreeCells(p.pgDetails);
   const [phdDegree, phdUniv, phdPct, phdYear] = degreeCells(p.phdDetails);
+  const [postdocDegree, postdocUniv, postdocPct, postdocYear] = degreeCells(p.postDoctoralDetails);
 
   const row: Record<string, string> = {
     employeeId: s(faculty.employeeId),
     name: s(faculty.name),
+    apaarFacultyId: s(faculty.apaarFacultyId),
     email: s(faculty.email),
     phone: s(faculty.phone),
     designation: s(faculty.designation),
@@ -79,6 +124,8 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     employmentType: s(faculty.employmentType),
     status: s(faculty.status),
     joiningDate: toDateInputValue(faculty.joiningDate),
+    dateOfJoiningDepartment: toDateInputValue(faculty.dateOfJoiningDepartment),
+    aicteEligible: yesNo(faculty.aicteEligible),
     experienceYears: s(faculty.experienceYears),
     internalExperience: s(faculty.internalExperience),
     externalExperience: s(faculty.externalExperience),
@@ -111,11 +158,13 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     temporaryAddress: s(faculty.temporaryAddress),
     permanentSameAsTemporary: yesNo(faculty.permanentSameAsTemporary),
     permanentAddress: s(faculty.permanentAddress),
+    resumeUrl: s(faculty.resumeUrl),
 
     highestQualification: s(p.highestQualification),
     ug_degreeAndBranch: ugDegree, ug_university: ugUniv, ug_percentage: ugPct, ug_year: ugYear,
     pg_degreeAndBranch: pgDegree, pg_university: pgUniv, pg_percentage: pgPct, pg_year: pgYear,
     phd_degreeAndBranch: phdDegree, phd_university: phdUniv, phd_percentage: phdPct, phd_year: phdYear,
+    postdoc_degreeAndBranch: postdocDegree, postdoc_university: postdocUniv, postdoc_percentage: postdocPct, postdoc_year: postdocYear,
     phdStatus: s(p.phdStatus),
     phdMode: s(p.phdMode),
     phdSupervisorName: s(p.phdSupervisorName),
@@ -136,6 +185,9 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     totalCitations: s(p.totalCitations),
     hIndex: s(p.hIndex),
     i10Index: s(p.i10Index),
+    googleScholarId: s(p.googleScholarId),
+    scopusAuthorId: s(p.scopusAuthorId),
+    orcidId: s(p.orcidId),
 
     patentIndianFiled: s(p.patents?.indianFiled),
     patentIndianPublished: s(p.patents?.indianPublished),
@@ -155,6 +207,11 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     certificationsAndFdps: s(p.certificationsAndFdps),
     professionalBodyMemberships: s(p.professionalBodyMemberships),
     notableAwards: s(p.notableAwards),
+    presentSalary: s(p.presentSalary),
+    grossAnnualCTC: s(p.grossAnnualCTC),
+    incrementsAwarded: s(p.incrementsAwarded),
+    fundingConsultancyRevenue: s(p.fundingConsultancyRevenue),
+    otherInformation: s(p.otherInformation),
 
     currentTeachingSummary: teachingSummary,
   };
@@ -170,9 +227,9 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     row[`publication${n}_title`] = pubTitle; row[`publication${n}_coAuthors`] = pubCoAuthors; row[`publication${n}_journal`] = pubJournal;
     row[`publication${n}_year`] = pubYear; row[`publication${n}_indexing`] = pubIndexing;
 
-    const [pTitle, pAgency, pAmount, pYear, pStatus] = projectCells(p.fundedProjects, n - 1);
+    const [pTitle, pAgency, pAmount, pYear, pStatus, pRole] = projectCells(p.fundedProjects, n - 1);
     row[`project${n}_title`] = pTitle; row[`project${n}_agency`] = pAgency; row[`project${n}_amount`] = pAmount;
-    row[`project${n}_year`] = pYear; row[`project${n}_status`] = pStatus;
+    row[`project${n}_year`] = pYear; row[`project${n}_status`] = pStatus; row[`project${n}_role`] = pRole;
 
     const [cTitle, cClient, cRevenue, cYear, cStatus] = consultancyCells(p.consultancyProjects, n - 1);
     row[`consultancy${n}_title`] = cTitle; row[`consultancy${n}_client`] = cClient; row[`consultancy${n}_revenue`] = cRevenue;
@@ -181,8 +238,30 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     const [labDetails, labOutcomes] = labCells(p.labsEstablished, n - 1);
     row[`lab${n}_details`] = labDetails; row[`lab${n}_outcomes`] = labOutcomes;
 
+    const [promoFrom, promoTo, promoYear] = promotionCells(p.promotionHistory, n - 1);
+    row[`promotion${n}_fromDesignation`] = promoFrom; row[`promotion${n}_toDesignation`] = promoTo; row[`promotion${n}_effectiveYear`] = promoYear;
+
+    const [arCategory, arDescription, arFromYear, arToYear] = adminRespCells(p.adminResponsibilityEntries, n - 1);
+    row[`adminResp${n}_category`] = arCategory; row[`adminResp${n}_description`] = arDescription;
+    row[`adminResp${n}_fromYear`] = arFromYear; row[`adminResp${n}_toYear`] = arToYear;
+
+    const [trType, trTitle, trOrganizer, trYear, trDuration] = trainingCells(p.trainingEntries, n - 1);
+    row[`training${n}_type`] = trType; row[`training${n}_title`] = trTitle; row[`training${n}_organizer`] = trOrganizer;
+    row[`training${n}_year`] = trYear; row[`training${n}_durationDays`] = trDuration;
+
+    const [memBody, memOtherName, memId, memSinceYear] = membershipCells(p.professionalMemberships, n - 1);
+    row[`membership${n}_body`] = memBody; row[`membership${n}_otherName`] = memOtherName;
+    row[`membership${n}_membershipId`] = memId; row[`membership${n}_sinceYear`] = memSinceYear;
+
     const [bookTitle, bookPublisher, bookYear] = bookCells(p.authoredBooks, n - 1);
     row[`book${n}_title`] = bookTitle; row[`book${n}_publisher`] = bookPublisher; row[`book${n}_year`] = bookYear;
+
+    const [awCategory, awTitle, awBody, awYear] = awardCells(p.awardEntries, n - 1);
+    row[`award${n}_category`] = awCategory; row[`award${n}_title`] = awTitle;
+    row[`award${n}_awardingBody`] = awBody; row[`award${n}_year`] = awYear;
+
+    const [cfCode, cfName, cfYear] = courseFileCells(p.courseFilesAndCoPoMapping, n - 1);
+    row[`courseFile${n}_courseCode`] = cfCode; row[`courseFile${n}_courseName`] = cfName; row[`courseFile${n}_academicYear`] = cfYear;
   });
 
   return row;

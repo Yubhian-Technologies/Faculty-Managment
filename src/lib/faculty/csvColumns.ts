@@ -1,4 +1,4 @@
-// Shared faculty CSV column definitions — used by both the bulk-import template
+// Shared faculty CSV column definitions - used by both the bulk-import template
 // (src/app/(dashboard)/hod/faculty/import/page.tsx) and the full-detail export
 // (src/lib/faculty/exportFacultyCsv.ts), so the two stay in sync.
 
@@ -14,7 +14,9 @@ export interface FacultyCsvColumn {
 export const COLUMNS: FacultyCsvColumn[] = [
   { key: "employeeId",        label: "Employee ID",                  required: true,  sample: "VIT001", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
   { key: "name",               label: "Name",                         required: true,  sample: "Dr. A. Ravi Kumar", aliases: ["Faculty Name", "Full Name", "Employee Name"] },
+  { key: "apaarFacultyId",     label: "APAAR Faculty ID",             required: false, sample: "", aliases: ["APAAR ID"] },
   { key: "email",              label: "Personal Email",               required: true,  sample: "ravi@gmail.com", aliases: ["Email", "Email ID", "Personal Email ID"] },
+  { key: "password",          label: "Login Password (min 8 characters, optional)", required: false, sample: "", aliases: ["Password", "Login Password"] },
   { key: "phone",              label: "Phone",                        required: false, sample: "9876543210", aliases: ["Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",        label: "Designation",                  required: true,  sample: "Asst. Prof." },
   { key: "qualification",      label: "Qualification",                required: true,  sample: "M.Tech" },
@@ -22,6 +24,8 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "employmentType",     label: "Employment Type",              required: true,  sample: "Regular", aliases: ["Employment", "Type of Employment"] },
   { key: "status",             label: "Status (Active/On Leave/Resigned/Retired)", required: false, sample: "Active", aliases: ["Status"] },
   { key: "joiningDate",        label: "Joining Date (YYYY-MM-DD)",    required: true,  sample: "2020-06-01", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
+  { key: "dateOfJoiningDepartment", label: "Date of Joining Department (YYYY-MM-DD)", required: false, sample: "", aliases: ["Department Joining Date"] },
+  { key: "aicteEligible",      label: "AICTE Eligible (Yes/No)",      required: false, sample: "Yes" },
   { key: "experienceYears",    label: "Total Experience (Years)",      required: false, sample: "5" },
   { key: "internalExperience", label: "Internal Exp (Years)",         required: false, sample: "3" },
   { key: "externalExperience", label: "External Exp (Years)",         required: false, sample: "1" },
@@ -56,7 +60,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "permanentSameAsTemporary", label: "Permanent Same as Temporary (Yes/No)", required: false, sample: "Yes" },
   { key: "permanentAddress",  label: "Permanent Address",            required: false, sample: "" },
 
-  // ─── Academic Profile (Modules 1-5) — all optional ───────────────────────────
+  // ─── Academic Profile (Modules 1-5) - all optional ───────────────────────────
   { key: "highestQualification",   label: "Highest Qualification Earned",       required: false, sample: "Ph.D" },
   { key: "ug_degreeAndBranch",     label: "UG Degree & Branch",                 required: false, sample: "B.Tech CSE" },
   { key: "ug_university",          label: "UG University/Institute",            required: false, sample: "JNTU Kakinada" },
@@ -68,8 +72,12 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "pg_year",                label: "PG Year of Completion",              required: false, sample: "2011" },
   { key: "phd_degreeAndBranch",    label: "PhD Degree & Branch",                required: false, sample: "Ph.D CSE" },
   { key: "phd_university",         label: "PhD University/Institute",           required: false, sample: "IIT Hyderabad" },
-  { key: "phd_percentage",         label: "PhD Percentage/Division",            required: false, sample: "—" },
+  { key: "phd_percentage",         label: "PhD Percentage/Division",            required: false, sample: "-" },
   { key: "phd_year",               label: "PhD Year of Completion",             required: false, sample: "2017" },
+  { key: "postdoc_degreeAndBranch", label: "Post-Doctoral Degree & Branch",     required: false, sample: "" },
+  { key: "postdoc_university",     label: "Post-Doctoral University/Institute", required: false, sample: "" },
+  { key: "postdoc_percentage",     label: "Post-Doctoral Percentage/Division",  required: false, sample: "" },
+  { key: "postdoc_year",           label: "Post-Doctoral Year of Completion",   required: false, sample: "" },
   { key: "phdStatus",              label: "Ph.D. Status (Awarded/Pursuing)",    required: false, sample: "Awarded" },
   { key: "phdMode",                label: "Ph.D. Mode (Full-Time/Part-Time)",   required: false, sample: "Full-Time" },
   { key: "phdSupervisorName",      label: "Ph.D. Project Supervisor Name",      required: false, sample: "Dr. S. Rao" },
@@ -77,6 +85,15 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "gateQualifiedYear",      label: "GATE Qualified Year",                required: false, sample: "2009" },
   { key: "gateScore",              label: "GATE Score",                         required: false, sample: "650" },
   { key: "netSletQualificationYear", label: "NET/SLET Qualification Year",      required: false, sample: "2010" },
+  { key: "promotion1_fromDesignation", label: "Promotion 1 - From Designation", required: false, sample: "" },
+  { key: "promotion1_toDesignation",   label: "Promotion 1 - To Designation",   required: false, sample: "" },
+  { key: "promotion1_effectiveYear",   label: "Promotion 1 - Effective Year",   required: false, sample: "" },
+  { key: "promotion2_fromDesignation", label: "Promotion 2 - From Designation", required: false, sample: "" },
+  { key: "promotion2_toDesignation",   label: "Promotion 2 - To Designation",   required: false, sample: "" },
+  { key: "promotion2_effectiveYear",   label: "Promotion 2 - Effective Year",   required: false, sample: "" },
+  { key: "promotion3_fromDesignation", label: "Promotion 3 - From Designation", required: false, sample: "" },
+  { key: "promotion3_toDesignation",   label: "Promotion 3 - To Designation",   required: false, sample: "" },
+  { key: "promotion3_effectiveYear",   label: "Promotion 3 - Effective Year",   required: false, sample: "" },
   { key: "previousInstitution1_name",  label: "Previous Institution 1 - Name",        required: false, sample: "" },
   { key: "previousInstitution1_designation", label: "Previous Institution 1 - Designation", required: false, sample: "" },
   { key: "previousInstitution1_years", label: "Previous Institution 1 - Years Worked", required: false, sample: "" },
@@ -122,21 +139,27 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "totalCitations",         label: "Total Citations",                    required: false, sample: "45" },
   { key: "hIndex",                 label: "H-Index",                            required: false, sample: "4" },
   { key: "i10Index",               label: "i10-Index",                          required: false, sample: "2" },
+  { key: "googleScholarId",        label: "Google Scholar ID",                  required: false, sample: "" },
+  { key: "scopusAuthorId",         label: "Scopus Author ID",                   required: false, sample: "" },
+  { key: "orcidId",                label: "ORCID iD",                           required: false, sample: "" },
   { key: "project1_title",         label: "Funded Project 1 - Title",           required: false, sample: "" },
   { key: "project1_agency",        label: "Funded Project 1 - Funding Agency",  required: false, sample: "" },
   { key: "project1_amount",        label: "Funded Project 1 - Grant Amount (₹L)", required: false, sample: "" },
   { key: "project1_year",          label: "Funded Project 1 - Year",            required: false, sample: "" },
   { key: "project1_status",        label: "Funded Project 1 - Status",          required: false, sample: "" },
+  { key: "project1_role",          label: "Funded Project 1 - Role (PI/Co-PI)", required: false, sample: "" },
   { key: "project2_title",         label: "Funded Project 2 - Title",           required: false, sample: "" },
   { key: "project2_agency",        label: "Funded Project 2 - Funding Agency",  required: false, sample: "" },
   { key: "project2_amount",        label: "Funded Project 2 - Grant Amount (₹L)", required: false, sample: "" },
   { key: "project2_year",          label: "Funded Project 2 - Year",            required: false, sample: "" },
   { key: "project2_status",        label: "Funded Project 2 - Status",          required: false, sample: "" },
+  { key: "project2_role",          label: "Funded Project 2 - Role (PI/Co-PI)", required: false, sample: "" },
   { key: "project3_title",         label: "Funded Project 3 - Title",           required: false, sample: "" },
   { key: "project3_agency",        label: "Funded Project 3 - Funding Agency",  required: false, sample: "" },
   { key: "project3_amount",        label: "Funded Project 3 - Grant Amount (₹L)", required: false, sample: "" },
   { key: "project3_year",          label: "Funded Project 3 - Year",            required: false, sample: "" },
   { key: "project3_status",        label: "Funded Project 3 - Status",          required: false, sample: "" },
+  { key: "project3_role",          label: "Funded Project 3 - Role (PI/Co-PI)", required: false, sample: "" },
   { key: "consultancy1_title",     label: "Consultancy 1 - Title",              required: false, sample: "" },
   { key: "consultancy1_client",    label: "Consultancy 1 - Client/Agency",      required: false, sample: "" },
   { key: "consultancy1_revenue",   label: "Consultancy 1 - Revenue (₹L)",       required: false, sample: "" },
@@ -171,9 +194,53 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "lab2_outcomes",          label: "New Lab 2 - Outcomes",               required: false, sample: "" },
   { key: "lab3_details",           label: "New Lab 3 - Facility Details",       required: false, sample: "" },
   { key: "lab3_outcomes",          label: "New Lab 3 - Outcomes",               required: false, sample: "" },
-  { key: "administrativeResponsibilities", label: "Administrative Responsibilities Held (+achievements)", required: false, sample: "" },
-  { key: "certificationsAndFdps",  label: "Certifications/FDPs (NPTEL/Coursera/AICTE)", required: false, sample: "" },
-  { key: "professionalBodyMemberships", label: "Professional Body Memberships (IEEE/ACM/CSI)", required: false, sample: "" },
+
+  // Structured entries matching the Add/Edit Faculty form's repeating groups -
+  // the free-text fields below (administrativeResponsibilities, certificationsAndFdps,
+  // professionalBodyMemberships, notableAwards) are legacy: the form only
+  // displays them read-only now, it doesn't let you edit them, use these instead.
+  { key: "adminResp1_category",    label: "Admin Responsibility 1 - Category",  required: false, sample: "" },
+  { key: "adminResp1_description", label: "Admin Responsibility 1 - Description", required: false, sample: "" },
+  { key: "adminResp1_fromYear",    label: "Admin Responsibility 1 - From Year", required: false, sample: "" },
+  { key: "adminResp1_toYear",      label: "Admin Responsibility 1 - To Year (blank = ongoing)", required: false, sample: "" },
+  { key: "adminResp2_category",    label: "Admin Responsibility 2 - Category",  required: false, sample: "" },
+  { key: "adminResp2_description", label: "Admin Responsibility 2 - Description", required: false, sample: "" },
+  { key: "adminResp2_fromYear",    label: "Admin Responsibility 2 - From Year", required: false, sample: "" },
+  { key: "adminResp2_toYear",      label: "Admin Responsibility 2 - To Year (blank = ongoing)", required: false, sample: "" },
+  { key: "adminResp3_category",    label: "Admin Responsibility 3 - Category",  required: false, sample: "" },
+  { key: "adminResp3_description", label: "Admin Responsibility 3 - Description", required: false, sample: "" },
+  { key: "adminResp3_fromYear",    label: "Admin Responsibility 3 - From Year", required: false, sample: "" },
+  { key: "adminResp3_toYear",      label: "Admin Responsibility 3 - To Year (blank = ongoing)", required: false, sample: "" },
+  { key: "administrativeResponsibilities", label: "Administrative Responsibilities Held (+achievements) - legacy, read-only in the form", required: false, sample: "" },
+  { key: "training1_type",         label: "Training 1 - Type",                  required: false, sample: "" },
+  { key: "training1_title",        label: "Training 1 - Title",                 required: false, sample: "" },
+  { key: "training1_organizer",    label: "Training 1 - Organizer",             required: false, sample: "" },
+  { key: "training1_year",         label: "Training 1 - Year",                  required: false, sample: "" },
+  { key: "training1_durationDays", label: "Training 1 - Duration (Days)",       required: false, sample: "" },
+  { key: "training2_type",         label: "Training 2 - Type",                  required: false, sample: "" },
+  { key: "training2_title",        label: "Training 2 - Title",                 required: false, sample: "" },
+  { key: "training2_organizer",    label: "Training 2 - Organizer",             required: false, sample: "" },
+  { key: "training2_year",         label: "Training 2 - Year",                  required: false, sample: "" },
+  { key: "training2_durationDays", label: "Training 2 - Duration (Days)",       required: false, sample: "" },
+  { key: "training3_type",         label: "Training 3 - Type",                  required: false, sample: "" },
+  { key: "training3_title",        label: "Training 3 - Title",                 required: false, sample: "" },
+  { key: "training3_organizer",    label: "Training 3 - Organizer",             required: false, sample: "" },
+  { key: "training3_year",         label: "Training 3 - Year",                  required: false, sample: "" },
+  { key: "training3_durationDays", label: "Training 3 - Duration (Days)",       required: false, sample: "" },
+  { key: "certificationsAndFdps",  label: "Certifications/FDPs (NPTEL/Coursera/AICTE) - legacy, read-only in the form", required: false, sample: "" },
+  { key: "membership1_body",         label: "Membership 1 - Body",              required: false, sample: "" },
+  { key: "membership1_otherName",    label: "Membership 1 - Body Name (if Other)", required: false, sample: "" },
+  { key: "membership1_membershipId", label: "Membership 1 - Membership ID",     required: false, sample: "" },
+  { key: "membership1_sinceYear",    label: "Membership 1 - Member Since (Year)", required: false, sample: "" },
+  { key: "membership2_body",         label: "Membership 2 - Body",              required: false, sample: "" },
+  { key: "membership2_otherName",    label: "Membership 2 - Body Name (if Other)", required: false, sample: "" },
+  { key: "membership2_membershipId", label: "Membership 2 - Membership ID",     required: false, sample: "" },
+  { key: "membership2_sinceYear",    label: "Membership 2 - Member Since (Year)", required: false, sample: "" },
+  { key: "membership3_body",         label: "Membership 3 - Body",              required: false, sample: "" },
+  { key: "membership3_otherName",    label: "Membership 3 - Body Name (if Other)", required: false, sample: "" },
+  { key: "membership3_membershipId", label: "Membership 3 - Membership ID",     required: false, sample: "" },
+  { key: "membership3_sinceYear",    label: "Membership 3 - Member Since (Year)", required: false, sample: "" },
+  { key: "professionalBodyMemberships", label: "Professional Body Memberships (IEEE/ACM/CSI) - legacy, read-only in the form", required: false, sample: "" },
   { key: "book1_title",            label: "Authored Book 1 - Title",            required: false, sample: "" },
   { key: "book1_publisher",        label: "Authored Book 1 - Publisher",        required: false, sample: "" },
   { key: "book1_year",             label: "Authored Book 1 - Year",             required: false, sample: "" },
@@ -183,7 +250,19 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "book3_title",            label: "Authored Book 3 - Title",            required: false, sample: "" },
   { key: "book3_publisher",        label: "Authored Book 3 - Publisher",        required: false, sample: "" },
   { key: "book3_year",             label: "Authored Book 3 - Year",             required: false, sample: "" },
-  { key: "notableAwards",          label: "Notable Awards",                     required: false, sample: "" },
+  { key: "award1_category",     label: "Award 1 - Category",                    required: false, sample: "" },
+  { key: "award1_title",        label: "Award 1 - Title",                       required: false, sample: "" },
+  { key: "award1_awardingBody", label: "Award 1 - Awarding Body",               required: false, sample: "" },
+  { key: "award1_year",         label: "Award 1 - Year",                        required: false, sample: "" },
+  { key: "award2_category",     label: "Award 2 - Category",                    required: false, sample: "" },
+  { key: "award2_title",        label: "Award 2 - Title",                       required: false, sample: "" },
+  { key: "award2_awardingBody", label: "Award 2 - Awarding Body",               required: false, sample: "" },
+  { key: "award2_year",         label: "Award 2 - Year",                        required: false, sample: "" },
+  { key: "award3_category",     label: "Award 3 - Category",                    required: false, sample: "" },
+  { key: "award3_title",        label: "Award 3 - Title",                       required: false, sample: "" },
+  { key: "award3_awardingBody", label: "Award 3 - Awarding Body",               required: false, sample: "" },
+  { key: "award3_year",         label: "Award 3 - Year",                        required: false, sample: "" },
+  { key: "notableAwards",          label: "Notable Awards - legacy, read-only in the form", required: false, sample: "" },
 
   // ─── Financial Standing & Budgetary Impact (Module 6) ────────────────────────
   { key: "presentSalary",          label: "Present Salary (₹)",                 required: false, sample: "" },
@@ -193,6 +272,23 @@ export const COLUMNS: FacultyCsvColumn[] = [
 
   // ─── Others (Module 7) ────────────────────────────────────────────────────────
   { key: "otherInformation",       label: "Other Information",                  required: false, sample: "" },
+
+  // ─── Teaching Documentation, NBA/AICTE (Module 8) ─────────────────────────────
+  { key: "courseFile1_courseCode", label: "Course File 1 - Course Code",        required: false, sample: "" },
+  { key: "courseFile1_courseName", label: "Course File 1 - Course Name",        required: false, sample: "" },
+  { key: "courseFile1_academicYear", label: "Course File 1 - Academic Year",    required: false, sample: "" },
+  { key: "courseFile2_courseCode", label: "Course File 2 - Course Code",        required: false, sample: "" },
+  { key: "courseFile2_courseName", label: "Course File 2 - Course Name",        required: false, sample: "" },
+  { key: "courseFile2_academicYear", label: "Course File 2 - Academic Year",    required: false, sample: "" },
+  { key: "courseFile3_courseCode", label: "Course File 3 - Course Code",        required: false, sample: "" },
+  { key: "courseFile3_courseName", label: "Course File 3 - Course Name",        required: false, sample: "" },
+  { key: "courseFile3_academicYear", label: "Course File 3 - Academic Year",    required: false, sample: "" },
+
+  // Resume/CV - Teaching Faculty only, no equivalent on the Supporting Staff
+  // templates (src/lib/supportingStaff/csvColumns.ts). A link to an
+  // already-hosted file (Drive/Storage) - this template can't upload files
+  // directly; use the faculty edit page's Documents section for that.
+  { key: "resumeUrl",              label: "Resume/CV URL",                      required: false, sample: "" },
 ];
 
 export const HINTS = [
@@ -203,12 +299,20 @@ export const HINTS = [
   "Marital Status: Single, Married",
   "Ratification Status: Ratified, Not Ratified",
   "Has PhD: Yes or No",
+  "AICTE Eligible: Yes or No",
+  "Funded Project Role: PI or Co-PI",
+  "Admin Responsibility Category: Coordinator Role, Committee Membership, NBA / NAAC Work, IQAC, Examination Duty, Other",
+  "Training Type: FDP, Workshop, MOOC, Certification, Skill Development, Administrative Training, ERP Training, Office Automation Training, Other",
+  "Membership Body: IEEE, ISTE, CSI, ACM, IEI, Other",
+  "Award Category: Best Teacher Award, Research Award, Appreciation Certificate, Other",
   "Dates must be in YYYY-MM-DD format (e.g. 2020-06-01)",
   "Department is auto-assigned from your HOD profile",
+  "Login Password (optional): fill this in to create the faculty member's login account (as a Panel Member) automatically during import, using their College Email (or Personal Email if no College Email is given) as the login ID - must be at least 8 characters. Leave it blank to skip login creation for that row; you can still set it up later from the Faculty list's \"Set Login\" button.",
+  "Resume/CV URL: an already-hosted link (Drive/Storage) - this template doesn't upload files directly; use the faculty edit page's Documents section to upload one",
 ];
 
 // A column present in the export but never accepted back on import
-// (Current Teaching is relational — sourced from the Teaching Assignments module).
+// (Current Teaching is relational - sourced from the Teaching Assignments module).
 export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
   key: "currentTeachingSummary",
   label: "Current Teaching (Course / Year / Section / Subject)",

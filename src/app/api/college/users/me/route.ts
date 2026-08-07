@@ -5,13 +5,13 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 
-// Fields a Principal/VP must never set about themselves via self-service edit —
+// Fields a Principal/VP must never set about themselves via self-service edit -
 // salary/CTC belongs to the Accounts/Finance payroll domain, not a self-editable profile.
 const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsAwarded", "fundingConsultancyRevenue"];
 
 export async function PATCH(request: Request) {
   try {
-    // Self-service only — the target uid always comes from the verified session,
+    // Self-service only - the target uid always comes from the verified session,
     // never from the request body, mirroring me/photo/route.ts.
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
 
@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
       profilePhotoUrl: string;
     }> & PersonalDetailsInput;
 
-    // Only reject clearly external URLs — path-pattern enforcement is done by
+    // Only reject clearly external URLs - path-pattern enforcement is done by
     // the upload route, so here we just need to block arbitrary external hosts.
     if (
       body.profilePhotoUrl !== undefined &&
@@ -47,7 +47,7 @@ export async function PATCH(request: Request) {
 
     if (body.name !== undefined && body.name.trim()) updates.name = body.name.trim();
     if (body.email !== undefined && body.email.trim()) updates.email = body.email.trim();
-    // HOD doesn't self-assign these — they're set by admin/HR
+    // HOD doesn't self-assign these - they're set by admin/HR
     if (session.role !== "HOD") {
       if (body.collegeEmail !== undefined) updates.collegeEmail = body.collegeEmail;
       if (body.employeeId !== undefined) updates.employeeId = body.employeeId;

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
-  CalendarClock,
   ClipboardCheck,
   BookOpen,
   Wallet,
@@ -31,13 +30,6 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import type { HiringBatch } from "@/types";
 
 const STATIC_MODULES = [
-  {
-    label: "Leave",
-    description: "Apply & track leave",
-    href: "/panel/leave",
-    icon: CalendarClock,
-    color: "bg-blue-50 text-blue-600",
-  },
   {
     label: "Attendance",
     description: "Monthly attendance record",
@@ -130,7 +122,7 @@ export default function FacultyDashboard() {
       />
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">
@@ -138,7 +130,7 @@ export default function FacultyDashboard() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Upcoming Interviews</p>
-              <p className="text-xl font-bold">{isLoading ? "—" : upcomingInterviews.length}</p>
+              <p className="text-xl font-bold">{isLoading ? "-" : upcomingInterviews.length}</p>
             </div>
           </CardContent>
         </Card>
@@ -149,18 +141,7 @@ export default function FacultyDashboard() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Attendance (June)</p>
-              <p className="text-xl font-bold text-emerald-600">—</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-amber-50 text-amber-600">
-              <CalendarClock className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Leave Balance</p>
-              <p className="text-xl font-bold">—</p>
+              <p className="text-xl font-bold text-emerald-600">-</p>
             </div>
           </CardContent>
         </Card>
@@ -171,7 +152,7 @@ export default function FacultyDashboard() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Subjects (Sem)</p>
-              <p className="text-xl font-bold">—</p>
+              <p className="text-xl font-bold">-</p>
             </div>
           </CardContent>
         </Card>
@@ -204,7 +185,7 @@ export default function FacultyDashboard() {
       </div>
       )}
 
-      {/* Interview Panel Assignments — only shown when assigned */}
+      {/* Interview Panel Assignments - only shown when assigned */}
       {(isLoading || batches.length > 0) && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">

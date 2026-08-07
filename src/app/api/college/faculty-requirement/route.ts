@@ -158,7 +158,7 @@ export async function GET(request: Request) {
       cadreRatio: "1:2:6",
       totalRequired,
       totalCurrent,
-      // Sum of per-cadre shortfalls, not (totalRequired - totalCurrent) — a
+      // Sum of per-cadre shortfalls, not (totalRequired - totalCurrent) - a
       // surplus in one cadre (e.g. Asst. Professors) cannot substitute for a
       // shortage in another (e.g. Associate Professor), per the cadre ratio rule.
       totalGap: cadre.reduce((sum, c) => sum + c.gap, 0),

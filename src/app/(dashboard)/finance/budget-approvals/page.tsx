@@ -63,7 +63,7 @@ export default function FinanceBudgetApprovalsPage() {
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Incoming from Departments</h2>
         <p className="text-sm text-muted-foreground -mt-2">
-          Requests HODs submitted and Principals verified (Level 1 freeze) — approving one creates the budget automatically.
+          Requests HODs submitted and Principals verified (Level 1 freeze) - approving one creates the budget automatically.
         </p>
         <IncomingBudgetRequests />
       </div>
@@ -71,7 +71,7 @@ export default function FinanceBudgetApprovalsPage() {
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Emergency Reports</h2>
         <p className="text-sm text-muted-foreground -mt-2">
-          Approved Non-Goods emergency requests — send a report to the requesting Principal / Vice Principal to view.
+          Approved Non-Goods emergency requests - send a report to the requesting Principal / Vice Principal to view.
         </p>
         <EmergencyReportUpload />
       </div>

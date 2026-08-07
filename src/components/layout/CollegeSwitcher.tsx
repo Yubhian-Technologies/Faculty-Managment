@@ -10,11 +10,11 @@ interface CollegeOption {
   name?: string;
 }
 
-// FINANCE and PURCHASE_DEPT are GLOBAL roles with no collegeId of their own —
+// FINANCE and PURCHASE_DEPT are GLOBAL roles with no collegeId of their own -
 // every /api/college/* call they make needs an explicit collegeId (see
 // src/lib/api/collegeFetch.ts). This used to auto-select the first college
 // silently with no visible indicator, which made it impossible to tell (or
-// fix) when it picked a different college than the one you meant to act on —
+// fix) when it picked a different college than the one you meant to act on -
 // e.g. a budget cycle released here landing in a college a Principal on a
 // different college never sees. Now it's a real, visible, switchable control.
 export function CollegeSwitcher() {
@@ -33,7 +33,7 @@ export function CollegeSwitcher() {
       .then((d) => {
         const list = d.colleges ?? [];
         setColleges(list);
-        // Only auto-pick when nothing is selected yet — never override an
+        // Only auto-pick when nothing is selected yet - never override an
         // explicit choice already made (including one persisted from a
         // previous session).
         if (!selectedCollegeId && list.length > 0) setSelectedCollegeId(list[0].id);
