@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { parseExcelFile, parseCSV, matchHeaders, readFileAsText } from "@/lib/utils/csv";
+import { parseExcelFile, parseCSV, matchHeaders, getUnmatchedHeaders, readFileAsText } from "@/lib/utils/csv";
 import type { AcademicYear, Section, StudentRecord } from "@/types";
 
 const GRADUATE = "GRADUATE" as const;
@@ -171,6 +171,11 @@ export default function StudentPromotionsPage() {
       const keyMap = matchHeaders(headers, ALLOTMENT_COLUMNS);
       if (Object.keys(keyMap).length < 2) {
         setAllotmentError('Couldn\'t match the header row - make sure it has "Roll Number", "Department", and "Section" columns.');
+        return;
+      }
+      const unmatchedHeaders = getUnmatchedHeaders(headers, keyMap);
+      if (unmatchedHeaders.length > 0) {
+        setAllotmentError(`These column(s) don't match any template column, so nothing was imported: ${unmatchedHeaders.map((h) => `"${h}"`).join(", ")}. Rename them to match the template or remove them, then re-upload.`);
         return;
       }
 

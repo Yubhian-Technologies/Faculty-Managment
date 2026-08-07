@@ -3,12 +3,22 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { SUPPORTING_STAFF_ROLE_CATEGORY, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
+import {
+  TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
+} from "@/types";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus,
   SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
   TechnicalResponsibility, NonTechnicalResponsibility, ComputerSkill, VendorCertification, VendorCertificationEntry,
 } from "@/types";
+
+function designationLabel(category: SupportingStaffCategory, designation: SupportingStaffDesignation): string {
+  const labels = category === "TECHNICAL" ? TECHNICAL_STAFF_DESIGNATION_LABELS : NON_TECHNICAL_STAFF_DESIGNATION_LABELS;
+  return (labels as Record<string, string>)[designation] ?? designation;
+}
 
 // Same resolver as faculty/students CSV imports (src/app/api/college/
 // students/import-excel/route.ts) - accepts a department's short Code (e.g.
@@ -148,6 +158,7 @@ type ImportRow = {
   employeeId: string;
   name: string;
   email?: string;
+  password?: string;
   phone?: string;
   staffCategory: string;
   designation: string;
@@ -389,8 +400,14 @@ export async function POST(request: Request) {
     const failed: { row: number; employeeId: string; error: string }[] = [];
     const warnings: { row: number; employeeId: string; warning: string }[] = [];
 
-    const batch = db.batch();
-    let batchCount = 0;
+    // Firebase Auth accounts created mid-loop for rows with a Password column -
+    // tracked separately (see src/app/api/college/faculty/import/route.ts for
+    // the same pattern) so they can be torn back down if the batch commit
+    // below fails, rather than left stranded and blocking any retry with the
+    // same email ("email already exists").
+    const createdAuthUids: string[] = [];
+
+    const batch = new ChunkedBatch(db);
 
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
@@ -461,9 +478,34 @@ export async function POST(request: Request) {
         department = session.role === "HOD" ? hodDept : "";
       }
 
+      // Optional login creation - a CSV row with a Password fills in this
+      // staff member's login account right here during import, mirroring the
+      // faculty import's behavior (src/app/api/college/faculty/import/route.ts).
+      let userUid: string | undefined;
+      const passwordRaw = row.password?.trim();
+      const loginEmail = row.collegeEmail?.trim().toLowerCase() || row.email?.trim().toLowerCase();
+      if (passwordRaw) {
+        if (!loginEmail) {
+          warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - a Personal Email or College Email is required to create a login (staff record was still created)" });
+        } else if (passwordRaw.length < 8) {
+          warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - must be at least 8 characters (staff record was still created without a login)" });
+        } else {
+          try {
+            userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
+            createdAuthUids.push(userUid);
+          } catch (err) {
+            const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
+              ? "an account with this email already exists"
+              : err instanceof Error ? err.message : "unknown error";
+            warnings.push({ row: rowNum, employeeId: empId, warning: `Login not created - ${message} (staff record was still created)` });
+          }
+        }
+      }
+
       const docRef = db.collection("colleges").doc(collegeId).collection("supportingStaff").doc();
 
       const payload: Record<string, unknown> = {
+        userUid,
         collegeId,
         department: department || undefined,
         employeeId: empId,
@@ -511,14 +553,49 @@ export async function POST(request: Request) {
       }
 
       batch.set(docRef, payload);
+
+      if (userUid) {
+        const userRef = db.collection("colleges").doc(collegeId).collection("users").doc(userUid);
+        batch.set(userRef, {
+          uid: userUid,
+          collegeId,
+          name: row.name.trim(),
+          email: loginEmail,
+          role: "COLLEGE_STAFF",
+          designation: designationLabel(staffCategory, designation),
+          ...(department ? { department } : {}),
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const sysUserRef = db.collection("systemUsers").doc(userUid);
+        batch.set(sysUserRef, {
+          uid: userUid,
+          role: "COLLEGE_STAFF",
+          collegeId,
+          email: loginEmail,
+          name: row.name.trim(),
+        });
+      }
+
       existingIds.add(empId);
       created.push(empId);
-      batchCount++;
-
-      if (batchCount === 499) break;
     }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (commitErr) {
+      if (createdAuthUids.length > 0) {
+        const { getAdminAuth } = await import("@/lib/firebase/admin");
+        const auth = await getAdminAuth();
+        await Promise.all(createdAuthUids.map((uid) =>
+          auth.deleteUser(uid).catch((cleanupErr) =>
+            console.error(`[supporting-staff/import POST] Failed to roll back orphaned Auth user ${uid}:`, cleanupErr)
+          )
+        ));
+      }
+      throw commitErr;
+    }
 
     return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {

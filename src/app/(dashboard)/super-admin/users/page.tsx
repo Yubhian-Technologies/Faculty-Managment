@@ -20,8 +20,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
-import { ROLE_LABELS } from "@/types";
-import type { FMSUser, UserRole } from "@/types";
+import { ROLE_LABELS, DESIGNATION_LABELS } from "@/types";
+import type { FMSUser, UserRole, Designation } from "@/types";
 import type { College, Location } from "@/types";
 
 type UserRow = Record<string, unknown> & FMSUser;
@@ -175,6 +175,31 @@ export default function UsersPage() {
           {ROLE_LABELS[row.role as keyof typeof ROLE_LABELS] ?? (row.role as string)}
         </Badge>
       ),
+    },
+    {
+      key: "designation",
+      header: "Designation",
+      hideOnMobile: true,
+      // PANEL_MEMBER (faculty) / COLLEGE_STAFF (supporting staff) logins are
+      // linked to a facultyMembers/supportingStaff record - the API merges
+      // that record's details (designation, employeeId, ...) into the row
+      // (see /api/admin/users). Every other role has neither field.
+      render: (row) => {
+        const rawDesignation = row.designation as string | undefined;
+        const label = rawDesignation
+          ? row.role === "PANEL_MEMBER"
+            ? DESIGNATION_LABELS[rawDesignation as Designation] ?? rawDesignation
+            : rawDesignation
+          : null;
+        const employeeId = row.employeeId as string | undefined;
+        if (!label && !employeeId) return <span className="text-muted-foreground">-</span>;
+        return (
+          <div>
+            {label && <p>{label}</p>}
+            {employeeId && <p className="text-xs text-muted-foreground">{employeeId}</p>}
+          </div>
+        );
+      },
     },
     {
       key: "department",

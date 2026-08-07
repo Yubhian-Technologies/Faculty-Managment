@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 import type { Section } from "@/types";
-import { matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 
 const COLUMNS = [
   { key: "sno", label: "S.No", required: false, sample: "1" },
@@ -112,6 +112,11 @@ export default function StudentImportPage() {
       // pointing at the real problem (wrong/missing header row).
       if (Object.keys(keyMap).length === 0) {
         setParseError("None of the columns in this file matched the template. Make sure the header row is the first row, and its wording is close to the template.");
+        return;
+      }
+      const unmatched = getUnmatchedHeaders(headers, keyMap);
+      if (unmatched.length > 0) {
+        setParseError(`These column(s) don't match any template column, so nothing was imported: ${unmatched.map((h) => `"${h}"`).join(", ")}. Rename them to match the template or remove them, then re-upload.`);
         return;
       }
 

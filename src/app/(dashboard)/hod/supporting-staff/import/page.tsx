@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { toCSV, parseCSV, downloadCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { getSupportingStaffColumns, getSupportingStaffHints } from "@/lib/supportingStaff/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
@@ -65,6 +65,11 @@ export default function HODSupportingStaffImportPage() {
       }
       if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("name")) {
         setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
+        return;
+      }
+      const unmatched = getUnmatchedHeaders(headers, keyMap);
+      if (unmatched.length > 0) {
+        setParseError(`These column(s) don't match any template column, so nothing was imported: ${unmatched.map((h) => `"${h}"`).join(", ")}. Rename them to match the template (see the hints above) or remove them, then re-upload.`);
         return;
       }
 
@@ -209,7 +214,9 @@ export default function HODSupportingStaffImportPage() {
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
-                            {row[c.key] || <span className="text-muted-foreground/40">-</span>}
+                            {row[c.key]
+                              ? (c.key === "password" ? "•".repeat(Math.min(row[c.key].length, 10)) : row[c.key])
+                              : <span className="text-muted-foreground/40">-</span>}
                           </td>
                         ))}
                       </tr>

@@ -26,6 +26,7 @@ const PERSONAL_COLUMNS: SupportingStaffCsvColumn[] = [
   { key: "employeeId",        label: "Employee ID",                  required: true,  sample: "STF001", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
   { key: "name",               label: "Name",                         required: true,  sample: "Ramesh Kumar", aliases: ["Staff Name", "Full Name", "Employee Name"] },
   { key: "email",              label: "Personal Email",               required: false, sample: "ramesh@gmail.com", aliases: ["Email", "Email ID", "Personal Email ID"] },
+  { key: "password",          label: "Login Password (min 8 characters, optional)", required: false, sample: "", aliases: ["Password", "Login Password"] },
   { key: "phone",              label: "Phone",                        required: false, sample: "9876543210", aliases: ["Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "staffCategory",      label: "Staff Category",               required: false, sample: "Technical", aliases: ["Category", "Staff Type"] },
   { key: "designation",        label: "Designation",                  required: false, sample: "Lab Assistant" },
@@ -170,6 +171,6 @@ export function getSupportingStaffHints(category: SupportingStaffCategory): stri
       ? "Department is optional - leave blank for centrally-managed roles or for it to default to your own department"
       : "Department is optional - leave blank for centrally-managed roles, or set it to assign this staff member to a specific department",
     "Department accepts either the full name (e.g. \"Computer Science\") or the short Code (e.g. \"CSE\") - it must already exist under Departments, otherwise it's ignored",
-    "Imported records aren't given login access - use \"Add Staff\" instead for staff members who need to log in",
+    "Login Password (optional): fill this in to create this staff member's login account automatically during import, using their College Email (or Personal Email if no College Email is given) as the login ID - must be at least 8 characters. Leave it blank to import the record without a login.",
   ];
 }

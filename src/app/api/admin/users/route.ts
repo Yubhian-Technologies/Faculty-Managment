@@ -38,9 +38,29 @@ export async function GET(request: Request) {
       .collection("users")
       .get();
 
-    const users = snap.docs
-      .map((d) => ({ uid: d.id, ...d.data() }))
-      .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
+    // PANEL_MEMBER (faculty) and COLLEGE_STAFF (supporting staff) login docs
+    // only ever store a thin subset (name/email/role/department/isActive) -
+    // their real details (designation, employeeId, phone, qualifications,
+    // joiningDate, ...) live on the linked facultyMembers/supportingStaff
+    // record (see src/app/api/college/faculty/[id]/login/route.ts and
+    // src/app/api/college/supporting-staff/route.ts). Merge that record in
+    // here so this list (and the "Download resume" button, which just sends
+    // the row as-is) has the full picture instead of only login-account fields.
+    const usersRaw = snap.docs.map((d) => ({ uid: d.id, ...d.data() })) as (Record<string, unknown> & { uid: string; role?: string })[];
+    const users = await Promise.all(
+      usersRaw.map(async (u) => {
+        let linkedCollection: string | null = null;
+        if (u.role === "PANEL_MEMBER") linkedCollection = "facultyMembers";
+        else if (u.role === "COLLEGE_STAFF") linkedCollection = "supportingStaff";
+        if (!linkedCollection) return u;
+
+        const linkedSnap = await db.collection("colleges").doc(collegeId).collection(linkedCollection)
+          .where("userUid", "==", u.uid).limit(1).get();
+        if (linkedSnap.empty) return u;
+        return { ...linkedSnap.docs[0].data(), ...u, recordId: linkedSnap.docs[0].id };
+      })
+    );
+    users.sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
     return NextResponse.json({ users });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {

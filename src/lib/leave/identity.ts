@@ -89,6 +89,20 @@ export async function resolveEmployeeIdentity(
     name: u.name ?? "Unknown",
     department: u.department,
     isTeachingStaff: isAcademicLeadership,
-    dateOfJoining: u.createdAt?.toDate?.() ?? new Date(),
+    // HOD/Principal/Vice Principal login accounts have no FacultyMember
+    // record to source a real joining date from - falling back to this
+    // login's own createdAt (as every other role here does) would wrongly
+    // cycle a freshly-created HOD/Principal/VP account through the
+    // "new-joining" leave category (computeEffectiveCategory in
+    // categoryEngine.ts: reduced CL, no SL/SCL/EL) for a full
+    // newJoiningYears after every re-provisioned login, even though nobody
+    // is appointed to these roles as a brand-new hire. Back-date them well
+    // past any realistic newJoiningYears threshold so they get the same
+    // "vacation" (teaching-staff) entitlements as teaching faculty from day
+    // one - still correctable via the Leave Profile edit screen if a
+    // college ever needs a real date on record.
+    dateOfJoining: isAcademicLeadership
+      ? new Date(new Date().getFullYear() - 50, 0, 1)
+      : (u.createdAt?.toDate?.() ?? new Date()),
   };
 }
