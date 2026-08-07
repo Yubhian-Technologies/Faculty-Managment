@@ -113,6 +113,13 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // Leave module - leave type rules (CL/SL/SCL/EL/OD) are shared across all
+    // colleges, SUPER_ADMIN-managed (see /api/leave/seed).
+    match /leaveTypes/{typeId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
     // Root-level platform audit log (distinct from colleges/{id}/auditLogs below),
     // written by admin-settings routes that have no college context.
     match /auditLogs/{logId} {
@@ -145,6 +152,36 @@ service cloud.firestore {
       // NOTE: faculty norms actually live at the root-level `platformConfig/facultyNorms`
       // singleton (see /api/admin/settings/faculty-norms), not a per-college subcollection —
       // there is no `colleges/{id}/facultyNorms` doc written by any code path.
+      //
+      // Per-college settings singletons (general info, nav visibility, ...) - all
+      // writes happen server-side via the Admin SDK (see /api/college/settings/general,
+      // /api/admin/settings/nav-visibility); this rule is defense-in-depth only.
+      match /settings/{docId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isPrincipal(collegeId);
+      }
+
+      // ─── [ LEAVE MODULE ] ────────────────────────────────────────────────────
+      // Writes happen server-side via the Admin SDK (see /api/leave/*); these
+      // rules are defense-in-depth, matching the pattern used elsewhere in this file.
+
+      match /employeeLeaveProfiles/{uid} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isHODorAbove(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      match /leaveBalances/{docId} {
+        allow read: if isStaff(collegeId);
+        allow write: if false;
+      }
+
+      match /leaveRequests/{requestId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isStaff(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId);
+        allow delete: if isSuperAdmin();
+      }
 
       // ─── [ ACADEMIC STRUCTURE ] ─────────────────────────────────────────────
 

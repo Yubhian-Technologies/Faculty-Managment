@@ -21,6 +21,7 @@ export type UserRole =
   | "LIBRARY"
   | "EXAM_CELL"
   | "PANEL_MEMBER"
+  | "ANNEXURE"
   | "WEBMASTER"
   | "ACCOUNTS"
   | "FINANCE"
@@ -42,7 +43,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
-  PANEL_MEMBER: "Faculty",
+  PANEL_MEMBER: "Teaching Faculty",
+  ANNEXURE: "Annexure",
   WEBMASTER: "Webmaster",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
@@ -66,6 +68,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
   PANEL_MEMBER: "/panel",
+  ANNEXURE: "/annexure",
   WEBMASTER: "/webmaster",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
@@ -100,6 +103,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   EXAM_CELL: 4,
   WEBMASTER: 4,
   PANEL_MEMBER: 5,
+  ANNEXURE: 5,
   STUDENT: 6,
 };
 
@@ -139,6 +143,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   EXAM_CELL: "COLLEGE",
   WEBMASTER: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
+  ANNEXURE: "COLLEGE",
   STUDENT: "COLLEGE",
 };
 
@@ -219,6 +224,7 @@ export interface FMSUser {
   role: UserRole;
   department?: string;      // for HOD / LOCATION_DEPT_HEAD
   locationDeptId?: string;  // for LOCATION_DEPT_HEAD
+  annexure?: string;        // HOD-entered reference number/label, for ANNEXURE role
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
@@ -409,6 +415,10 @@ export interface FacultyNorms {
     professor: string;
   };
   positionNorms: PositionNorm[];
+  // Years of service a "new joining" employee (leave profile: CL + OD only)
+  // must complete before converting into their vacation/non-vacation leave
+  // category - see src/lib/leave/categoryEngine.ts.
+  newJoiningYears: number;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -920,10 +930,11 @@ export type NotificationType =
   | "OFFER_LETTER_GENERATED"
   | "CREDENTIAL_REQUESTED"
   | "COORDINATOR_ASSIGNED"
-  // Leave & Attendance
+  // Leave
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
+  // Permission & On-Duty
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"
   | "ON_DUTY_APPROVED"
@@ -1038,6 +1049,7 @@ export type AuditAction =
   | "LEAVE_PRINCIPAL_APPROVED"
   | "LEAVE_REJECTED"
   | "LEAVE_CANCELLED"
+  // Permission & On-Duty
   | "PERMISSION_APPLIED"
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"

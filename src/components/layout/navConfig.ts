@@ -94,18 +94,17 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
-  { label: "College Members", href: "/principal/college-members", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Leave Approvals", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Attendance Report", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Training Approvals", href: "/principal/training", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Grievance Desk", href: "/principal/grievance", iconName: "AlertCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Payroll", href: "/principal/payslips", iconName: "Wallet", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget" },
-  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Leave Profiles", href: "/principal/leave/profiles", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget" },
   { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Reports", href: "/principal/reports", iconName: "BarChart2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Documents & Reporting" },
   { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
+  { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Apply for Leave", href: "/principal/leave/apply", iconName: "CalendarPlus", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
 
   // HOD
   // Full module set — Super Admin controls which modules/items are actually
@@ -118,6 +117,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
+  { label: "Internal Marks", href: "/hod/internal-marks", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
@@ -126,14 +126,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Hiring Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"], section: "Hiring" },
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
   { label: "Panel Scoring", href: "/panel/interviews", iconName: "ClipboardCheck", roles: ["HOD"] },
-  { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"], section: "My Work" },
-  { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
+  { label: "Past Hirings", href: "/hod/past-hirings", iconName: "History", roles: ["HOD"] },
+  { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "My Work" },
+  { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
+  { label: "Apply for Leave", href: "/hod/leave/apply", iconName: "CalendarPlus", roles: ["HOD"] },
   { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"] },
-  { label: "My Payslips", href: "/hod/payslips", iconName: "Wallet", roles: ["HOD"] },
-  { label: "My Appraisal", href: "/hod/appraisal", iconName: "TrendingUp", roles: ["HOD"] },
-  { label: "Training", href: "/hod/training", iconName: "GraduationCap", roles: ["HOD"] },
-  { label: "Grievance", href: "/hod/grievance", iconName: "AlertCircle", roles: ["HOD"] },
-  { label: "My Documents", href: "/hod/documents", iconName: "FolderOpen", roles: ["HOD"] },
   { label: "My Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"], section: "Personal" },
 
   // College Office
@@ -143,6 +140,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Documents", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
   { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
+  { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], section: "Personal" },
+  { label: "Apply for Leave", href: "/college-office/leave/apply", iconName: "CalendarPlus", roles: ["COLLEGE_OFFICE"] },
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
@@ -151,6 +150,8 @@ export const NAV_ITEMS: NavItem[] = [
 
   // College Staff (dynamic-title roles: Dean, IQAC Coordinator, T&P, etc.)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
+  { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"], section: "Personal" },
+  { label: "Apply for Leave", href: "/college-staff/leave/apply", iconName: "CalendarPlus", roles: ["COLLEGE_STAFF"] },
 
   // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
@@ -158,20 +159,19 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
   { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work" },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
+  { label: "Internal Marks", href: "/panel/internal-marks", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
+  { label: "Apply for Leave", href: "/panel/leave/apply", iconName: "CalendarPlus", roles: ["PANEL_MEMBER"] },
   { label: "Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"] },
-  { label: "Payslips", href: "/panel/payslips", iconName: "Wallet", roles: ["PANEL_MEMBER"], section: "Personal" },
-  { label: "Appraisal", href: "/panel/appraisal", iconName: "TrendingUp", roles: ["PANEL_MEMBER"] },
-  { label: "Training", href: "/panel/training", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
-  { label: "Grievance", href: "/panel/grievance", iconName: "AlertCircle", roles: ["PANEL_MEMBER"] },
-  { label: "My Documents", href: "/panel/documents", iconName: "FolderOpen", roles: ["PANEL_MEMBER"] },
-  { label: "My Profile", href: "/panel/profile", iconName: "UserCircle", roles: ["PANEL_MEMBER"] },
+  { label: "My Profile", href: "/panel/profile", iconName: "UserCircle", roles: ["PANEL_MEMBER"], section: "Personal" },
 
   // Accounts
   { label: "Dashboard", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
   { label: "Hiring — Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
   { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
+  { label: "My Leave", href: "/accounts/leave", iconName: "CalendarClock", roles: ["ACCOUNTS"], section: "Personal" },
+  { label: "Apply for Leave", href: "/accounts/leave/apply", iconName: "CalendarPlus", roles: ["ACCOUNTS"] },
 
   // Finance
   { label: "Dashboard", href: "/finance", iconName: "LayoutDashboard", roles: ["FINANCE"] },
@@ -188,6 +188,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Financial Reports", href: "/finance/reports", iconName: "BarChart3", roles: ["FINANCE"], section: "Reports" },
   { label: "Audit & Compliance", href: "/finance/audit", iconName: "ScrollText", roles: ["FINANCE"] },
   { label: "Browse by Location", href: "/finance/browse", iconName: "MapPin", roles: ["FINANCE"], section: "Organization" },
+  { label: "My Leave", href: "/finance/leave", iconName: "CalendarClock", roles: ["FINANCE"], section: "Personal" },
+  { label: "Apply for Leave", href: "/finance/leave/apply", iconName: "CalendarPlus", roles: ["FINANCE"] },
 
   // Purchase Department
   { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
@@ -410,4 +412,5 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Indents", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
   ],
   STUDENT: [],
+  ANNEXURE: [],
 };
