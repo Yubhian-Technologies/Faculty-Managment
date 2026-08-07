@@ -199,8 +199,10 @@ function computePageBreaks(totalHeight: number, pageHeight: number, ranges: { to
 }
 
 /** Renders `html` off-screen, captures it as a canvas, and slices it into A4
- *  pages inside a jsPDF document saved as `filename` (should end in .pdf). */
-export async function renderHtmlToPdf(html: string, filename: string): Promise<void> {
+ *  pages inside a jsPDF document. Shared core for both renderHtmlToPdf (saves
+ *  to disk) and renderHtmlToPdfBlob (returns bytes, e.g. to attach to an email) —
+ *  keep any future changes to the rendering pipeline in this one place. */
+async function renderHtmlToPdfDocument(html: string): Promise<jsPDF> {
   const container = document.createElement("div");
   container.style.position = "fixed";
   container.style.top = "0";
@@ -271,8 +273,21 @@ export async function renderHtmlToPdf(html: string, filename: string): Promise<v
       cursor = breakAt;
     });
 
-    pdf.save(filename);
+    return pdf;
   } finally {
     document.body.removeChild(container);
   }
+}
+
+/** Renders `html` to a PDF and saves it to disk as `filename` (should end in .pdf). */
+export async function renderHtmlToPdf(html: string, filename: string): Promise<void> {
+  const pdf = await renderHtmlToPdfDocument(html);
+  pdf.save(filename);
+}
+
+/** Renders `html` to a PDF and returns the raw bytes as a Blob — e.g. to attach
+ *  to an outgoing email instead of downloading it to the browser. */
+export async function renderHtmlToPdfBlob(html: string): Promise<Blob> {
+  const pdf = await renderHtmlToPdfDocument(html);
+  return pdf.output("blob");
 }

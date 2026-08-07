@@ -8,7 +8,6 @@ import {
   ChevronUp,
   Clock,
   GitBranch,
-  CheckCircle2,
   XCircle,
   MapPin,
   Monitor,
@@ -18,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Step } from "@/components/shared/PipelineStep";
+import { getCurrentStage, stateForStage, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import type { VacancyRequest, Candidate, HiringBatch, OfferLetter } from "@/types";
@@ -31,20 +32,8 @@ type PipelineEntry = {
   batch: HiringBatch | null;
 };
 
-type StepState = "done" | "current" | "upcoming";
-type PipelineStage = 1 | 2 | 3 | 4;
-
 function isClosed(e: PipelineEntry): boolean {
   return e.vacancy.status === "REJECTED" || e.batch?.currentPhase === "COMPLETED";
-}
-
-// ─── Stage helpers ────────────────────────────────────────────────────────────
-
-function getCurrentStage(vacancy: VacancyRequest, batch: HiringBatch | null): PipelineStage {
-  if (vacancy.status !== "APPROVED") return 1;
-  if (!batch) return 2;
-  if (batch.currentPhase === "COMPLETED" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW") return 4;
-  return 3;
 }
 
 type NextAction = { label: string; href: string; disabled?: boolean; variant?: "default" | "outline" };
@@ -95,74 +84,6 @@ function getNextAction(entry: PipelineEntry, sentCandidateIds: Set<string>): Nex
   return { label: "View Details", href: `/hod/batches/${batch.id}`, variant: "outline" };
 }
 
-// ─── Step Component ───────────────────────────────────────────────────────────
-
-function Step({
-  step,
-  label,
-  sub,
-  state,
-  isLast,
-}: {
-  step: number;
-  label: string;
-  sub: string;
-  state: StepState;
-  isLast?: boolean;
-}) {
-  return (
-    <div className="flex flex-1 items-start min-w-0">
-      <div className="flex flex-col items-center shrink-0">
-        <div
-          className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-colors ${
-            state === "done"
-              ? "bg-green-500 border-green-500 text-white"
-              : state === "current"
-              ? "bg-primary border-primary text-white"
-              : "bg-background border-border text-muted-foreground"
-          }`}
-        >
-          {state === "done" ? <CheckCircle2 className="h-3.5 w-3.5" /> : step}
-        </div>
-        {!isLast && (
-          <div
-            className={`w-0.5 flex-1 min-h-[1rem] mt-1 ${
-              state === "done" ? "bg-green-300" : "bg-border"
-            }`}
-          />
-        )}
-      </div>
-      <div className="ml-2.5 pb-3 min-w-0 flex-1">
-        <p
-          className={`text-xs font-semibold leading-tight truncate ${
-            state === "done"
-              ? "text-green-700"
-              : state === "current"
-              ? "text-primary"
-              : "text-muted-foreground"
-          }`}
-        >
-          {label}
-        </p>
-        <p
-          className={`text-[11px] leading-snug mt-0.5 ${
-            state === "done"
-              ? "text-green-600"
-              : state === "current"
-              ? "text-primary/70"
-              : "text-muted-foreground/60"
-          }`}
-        >
-          {sub}
-        </p>
-      </div>
-      {!isLast && (
-        <div className={`hidden sm:block self-start mt-3 mx-1 h-0.5 w-4 shrink-0 ${state === "done" ? "bg-green-300" : "bg-border"}`} />
-      )}
-    </div>
-  );
-}
-
 // ─── Pipeline Card ────────────────────────────────────────────────────────────
 
 function PipelineCard({
@@ -198,10 +119,8 @@ function PipelineCard({
   const shortlisted = candidates.filter((c) => c.isShortlisted).length;
   const nextAction = getNextAction(entry, sentCandidateIds);
 
-  function stateFor(stage: PipelineStage): StepState {
-    if (stage < currentStage) return "done";
-    if (stage === currentStage) return "current";
-    return "upcoming";
+  function stateFor(stage: PipelineStage) {
+    return stateForStage(stage, currentStage);
   }
 
   const stage1Sub =
@@ -260,8 +179,8 @@ function PipelineCard({
               {" · "}
               Raised {formatDate(vacancy.createdAt)}
               {" · "}
-              {vacancy.availableCount ?? vacancy.requiredCount}{" "}
-              post{(vacancy.availableCount ?? vacancy.requiredCount) !== 1 ? "s" : ""} open
+              {vacancy.requiredCount}{" "}
+              post{vacancy.requiredCount !== 1 ? "s" : ""} open
             </p>
           </div>
           <span className="shrink-0 text-[11px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">

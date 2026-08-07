@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { CalendarClock, Plus, ChevronRight } from "lucide-react";
-import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS } from "@/types/leave";
+import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode } from "@/types/leave";
+import type { LeaveHistoryFilter } from "./LeaveTypeHistoryView";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -26,8 +27,12 @@ interface BalanceEntry {
 
 interface LeaveProfileViewProps {
   uid?: string; // omit to view the signed-in user's own leave profile
-  applyHref: string;
-  odHistoryHref: string;
+  // Omit when uid is set (viewing someone else's profile read-only, e.g.
+  // Principal browsing a faculty member's history) - no Apply button then.
+  applyHref?: string;
+  // Base path for per-type history pages - e.g. "/panel/leave/history" links
+  // to "/panel/leave/history/cl", "/panel/leave/history/od", etc.
+  historyBaseHref: string;
 }
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "pending" | "approved" | "rejected" | "modified"> = {
@@ -38,7 +43,24 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, "pending" | "approved" | "rejec
   CANCELLED: "modified",
 };
 
-export function LeaveProfileView({ uid, applyHref, odHistoryHref }: LeaveProfileViewProps) {
+// Groups requests by leave type for the "Leave History" section, in a fixed,
+// sensible display order - skips types with no requests.
+const GROUP_ORDER: LeaveHistoryFilter[] = ["CL", "SL", "SCL", "EL", "OD", "OTHER"];
+
+function groupByType(requests: LeaveRequest[]): { key: LeaveHistoryFilter; label: string; items: LeaveRequest[] }[] {
+  const groups = new Map<LeaveHistoryFilter, LeaveRequest[]>();
+  for (const r of requests) {
+    const key: LeaveHistoryFilter | undefined = r.isOtherRequest ? "OTHER" : r.leaveTypeCode;
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(r);
+  }
+  return GROUP_ORDER
+    .filter((key) => groups.has(key))
+    .map((key) => ({ key, label: key === "OTHER" ? "Other" : LEAVE_TYPE_LABELS[key], items: groups.get(key)! }));
+}
+
+export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfileViewProps) {
   const [effectiveCategory, setEffectiveCategory] = useState<EffectiveLeaveCategory | null>(null);
   const [balances, setBalances] = useState<BalanceEntry[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -90,31 +112,34 @@ export function LeaveProfileView({ uid, applyHref, odHistoryHref }: LeaveProfile
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         {effectiveCategory && <Badge variant="secondary">{EFFECTIVE_CATEGORY_LABELS[effectiveCategory]}</Badge>}
-        <Button asChild size="sm">
-          <Link href={applyHref}>
-            <Plus className="h-4 w-4 mr-1" />
-            Apply for Leave
-          </Link>
-        </Button>
+        {applyHref && (
+          <Button asChild size="sm">
+            <Link href={applyHref}>
+              <Plus className="h-4 w-4 mr-1" />
+              Apply for Leave
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {trackedBalances.map((b) => (
-          <Card key={b.code}>
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">{b.label}</p>
-              <p className="text-3xl font-bold mt-1">{b.remaining}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                of {b.entitled}
-                {b.used ? ` · ${b.used} used` : ""}
-                {b.pending ? ` · ${b.pending} pending` : ""}
-              </p>
-            </CardContent>
-          </Card>
+          <Link key={b.code} href={`${historyBaseHref}/${b.code.toLowerCase()}`}>
+            <Card className="h-full hover:border-primary transition-colors">
+              <CardContent className="p-4">
+                <p className="text-sm text-muted-foreground">{b.label}</p>
+                <p className="text-3xl font-bold mt-1">{b.remaining}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  of {b.entitled}
+                  {b.used ? ` · ${b.used} used` : ""}
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
 
         {odBalance && (
-          <Link href={odHistoryHref}>
+          <Link href={`${historyBaseHref}/od`}>
             <Card className="h-full hover:border-primary transition-colors">
               <CardContent className="p-4 flex flex-col justify-between h-full">
                 <p className="text-sm text-muted-foreground">{odBalance.label}</p>
@@ -135,9 +160,23 @@ export function LeaveProfileView({ uid, applyHref, odHistoryHref }: LeaveProfile
           {requests.length === 0 ? (
             <EmptyState icon={<CalendarClock className="h-6 w-6" />} title="No leave requests yet" />
           ) : (
-            <div className="space-y-2">
-              {requests.map((r) => (
-                <LeaveHistoryRow key={r.id} request={r} />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
+              {groupByType(requests).map((group) => (
+                <div key={group.key}>
+                  <Link
+                    href={`${historyBaseHref}/${group.key.toLowerCase()}`}
+                    className="flex items-center gap-2 text-sm font-medium mb-2 hover:text-primary w-fit"
+                  >
+                    {group.label}
+                    <span className="text-xs text-muted-foreground font-normal">({group.items.length})</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                  <div className="space-y-2">
+                    {group.items.map((r) => (
+                      <LeaveHistoryRow key={r.id} request={r} />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -149,7 +188,7 @@ export function LeaveProfileView({ uid, applyHref, odHistoryHref }: LeaveProfile
 
 export function LeaveHistoryRow({ request }: { request: LeaveRequest }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">
         <p className="text-sm font-medium">
           {request.isOtherRequest && !request.leaveTypeCode ? "Other" : request.leaveTypeCode}
@@ -160,7 +199,20 @@ export function LeaveHistoryRow({ request }: { request: LeaveRequest }) {
         </p>
         <p className="text-xs text-muted-foreground truncate mt-0.5">{request.reason}</p>
       </div>
-      <Badge variant={STATUS_VARIANT[request.status]}>{LEAVE_REQUEST_STATUS_LABELS[request.status]}</Badge>
+      <div className="flex flex-wrap items-center gap-2">
+        {request.isPaidLeave !== undefined && (
+          <Badge variant={request.isPaidLeave ? "approved" : "modified"}>
+            {request.isPaidLeave ? "Paid" : "Unpaid"}
+          </Badge>
+        )}
+        {!!request.lopDays && (
+          <>
+            <Badge variant="rejected">Extra: {request.lopDays}d</Badge>
+            <Badge variant="rejected">-{request.lopDays}x</Badge>
+          </>
+        )}
+        <Badge variant={STATUS_VARIANT[request.status]}>{LEAVE_REQUEST_STATUS_LABELS[request.status]}</Badge>
+      </div>
     </div>
   );
 }

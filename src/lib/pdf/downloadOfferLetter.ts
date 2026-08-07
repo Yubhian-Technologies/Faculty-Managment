@@ -1,27 +1,21 @@
-import { auth } from "@/lib/firebase/client";
-import type { OfferLetterData } from "@/lib/pdf/offerLetterTemplate";
+import { getOfferLetterHTML, type OfferLetterData } from "@/lib/pdf/offerLetterTemplate";
+import { renderHtmlToPdf, renderHtmlToPdfBlob } from "@/lib/pdf/htmlToPdf";
 
 export async function downloadOfferLetterPdf(
   data: OfferLetterData,
   filenameHint: string
 ): Promise<void> {
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) throw new Error("Not authenticated");
-
-  const res = await fetch("/api/pdf/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ type: "OFFER_LETTER", data }),
-  });
-  if (!res.ok) throw new Error("PDF generation failed");
-
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
   const safeHint = filenameHint.replace(/[^a-zA-Z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "offer-letter";
-  // Falls back to an .html download when puppeteer isn't available server-side (see AGENTS.md).
-  link.download = `offer-letter-${safeHint}.${blob.type.includes("pdf") ? "pdf" : "html"}`;
-  link.click();
-  URL.revokeObjectURL(url);
+  await renderHtmlToPdf(getOfferLetterHTML(data), `offer-letter-${safeHint}.pdf`);
+}
+
+/** Renders the offer letter to a real PDF and returns it as base64 — for
+ *  attaching to the outgoing offer-letter email (see /api/email/send). */
+export async function getOfferLetterPdfBase64(data: OfferLetterData): Promise<string> {
+  const blob = await renderHtmlToPdfBlob(getOfferLetterHTML(data));
+  const buffer = await blob.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
 }

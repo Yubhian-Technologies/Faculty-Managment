@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -46,7 +47,12 @@ export async function GET(request: Request) {
       // Viewing a specific faculty member's assignments - HOD/Principal/SuperAdmin may look up anyone;
       // everyone else (including a faculty viewing their own "Teaching Load") is restricted to themselves.
       const canViewOthers = ["HOD", "PRINCIPAL", "SUPER_ADMIN"].includes(session.role);
-      const facultyId = requestedFacultyId && canViewOthers ? requestedFacultyId : session.uid;
+      // teachingAssignments/timetableSlots key off the FacultyMember doc id, not
+      // the login uid — resolve "myself" through the userUid back-link (see
+      // GET /api/college/faculty/me for the same lookup).
+      const facultyId = requestedFacultyId && canViewOthers
+        ? requestedFacultyId
+        : await resolveFacultyMemberId(db, session.collegeId, session.uid);
 
       assignmentQuery = assignmentQuery.where("facultyId", "==", facultyId);
 

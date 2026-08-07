@@ -7,7 +7,7 @@ export default function FinanceLeavePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="My Leave" description="Your leave balances and request history" />
-      <LeaveProfileView applyHref="/finance/leave/apply" odHistoryHref="/finance/leave/od-history" />
+      <LeaveProfileView applyHref="/finance/leave/apply" historyBaseHref="/finance/leave/history" />
     </div>
   );
 }

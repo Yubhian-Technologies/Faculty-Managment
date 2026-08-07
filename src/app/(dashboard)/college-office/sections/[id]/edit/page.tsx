@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import type { Course, Department, Section } from "@/types";
@@ -33,6 +35,10 @@ const EMPTY_FORM: SectionForm = {
   courseId: "", name: "", year: "", batch: "", facultyInchargeUid: "", facultyInchargeName: "",
 };
 
+type ClassLeaderUser = { uid: string; name: string; email: string };
+type NewClassLeaderForm = { email: string; password: string };
+const EMPTY_NEW_CLASS_LEADER: NewClassLeaderForm = { email: "", password: "" };
+
 export default function EditSectionOfficePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -45,6 +51,16 @@ export default function EditSectionOfficePage() {
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
   const [section, setSection] = useState<SectionRow | null>(null);
+
+  const [classLeaderUser, setClassLeaderUser] = useState<ClassLeaderUser | null>(null);
+  const [classLeaderLoading, setClassLeaderLoading] = useState(false);
+  const [newClassLeader, setNewClassLeader] = useState<NewClassLeaderForm>(EMPTY_NEW_CLASS_LEADER);
+  const [creatingClassLeader, setCreatingClassLeader] = useState(false);
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [removeClassLeaderOpen, setRemoveClassLeaderOpen] = useState(false);
+  const [removingClassLeader, setRemovingClassLeader] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/courses")
@@ -89,6 +105,106 @@ export default function EditSectionOfficePage() {
       })
       .catch(() => { /* non-critical */ });
   }, [section?.department]);
+
+  useEffect(() => {
+    if (!section?.classLeaderUid) { setClassLeaderUser(null); return; }
+    setClassLeaderLoading(true);
+    fetch(`/api/college/users/${section.classLeaderUid}`)
+      .then((r) => r.json() as Promise<{ user?: { uid: string; name: string; email: string } }>)
+      .then((d) => setClassLeaderUser(d.user ? { uid: d.user.uid, name: d.user.name, email: d.user.email } : null))
+      .catch(() => setClassLeaderUser(null))
+      .finally(() => setClassLeaderLoading(false));
+  }, [section?.classLeaderUid]);
+
+  async function handleCreateClassLeader(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newClassLeader.email.trim() || !newClassLeader.password) {
+      toast({ variant: "destructive", title: "Email and password are both required" });
+      return;
+    }
+    if (newClassLeader.password.length < 6) {
+      toast({ variant: "destructive", title: "Password must be at least 6 characters" });
+      return;
+    }
+    setCreatingClassLeader(true);
+    try {
+      const res = await fetch("/api/college/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: newClassLeader.email.trim(),
+          password: newClassLeader.password,
+          role: "CLASS_LEADER",
+          sectionId,
+        }),
+      });
+      const json = await res.json() as { uid?: string; error?: string };
+      if (!res.ok || !json.uid) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to create Class Leader login" });
+        return;
+      }
+      toast({ variant: "success", title: "Class Leader account created" });
+      setNewClassLeader(EMPTY_NEW_CLASS_LEADER);
+      setSection((s) => (s ? { ...s, classLeaderUid: json.uid } : s));
+    } catch {
+      toast({ variant: "destructive", title: "Network error, please try again" });
+    } finally {
+      setCreatingClassLeader(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!classLeaderUser) return;
+    if (resetPasswordValue.length < 6) {
+      toast({ variant: "destructive", title: "Password must be at least 6 characters" });
+      return;
+    }
+    setResettingPassword(true);
+    try {
+      const res = await fetch(`/api/college/users/${classLeaderUser.uid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: resetPasswordValue }),
+      });
+      if (!res.ok) {
+        const json = await res.json() as { error?: string };
+        toast({ variant: "destructive", title: json.error ?? "Failed to reset password" });
+        return;
+      }
+      toast({ variant: "success", title: "Password reset" });
+      setResetPasswordOpen(false);
+      setResetPasswordValue("");
+    } catch {
+      toast({ variant: "destructive", title: "Network error, please try again" });
+    } finally {
+      setResettingPassword(false);
+    }
+  }
+
+  async function handleRemoveClassLeader() {
+    if (!classLeaderUser) return;
+    setRemovingClassLeader(true);
+    try {
+      const res = await fetch(`/api/college/users/${classLeaderUser.uid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      if (!res.ok) {
+        const json = await res.json() as { error?: string };
+        toast({ variant: "destructive", title: json.error ?? "Failed to remove Class Leader login" });
+        return;
+      }
+      toast({ variant: "success", title: "Class Leader login removed" });
+      setClassLeaderUser(null);
+      setSection((s) => (s ? { ...s, classLeaderUid: undefined, classLeaderName: undefined } : s));
+      setRemoveClassLeaderOpen(false);
+    } catch {
+      toast({ variant: "destructive", title: "Network error, please try again" });
+    } finally {
+      setRemovingClassLeader(false);
+    }
+  }
 
   function setF(patch: Partial<SectionForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -254,6 +370,94 @@ export default function EditSectionOfficePage() {
           </form>
         </CardContent>
       </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base">Class Leader Login</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {classLeaderLoading ? (
+            <div className="h-16 rounded-md border bg-muted/30 animate-pulse" />
+          ) : classLeaderUser ? (
+            <div className="space-y-4">
+              <div className="rounded-md border px-3 py-2">
+                <p className="text-sm font-medium">{classLeaderUser.name}</p>
+                <p className="text-xs text-muted-foreground">{classLeaderUser.email}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setResetPasswordOpen(true)}>
+                  Reset Password
+                </Button>
+                <Button type="button" variant="destructive" size="sm" onClick={() => setRemoveClassLeaderOpen(true)}>
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={(e) => void handleCreateClassLeader(e)} className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                No Class Leader login yet for this section - create one below. Just an email and password -
+                the login isn&apos;t tied to a specific student&apos;s name, since who holds the role can change
+                per your college&apos;s rules.
+              </p>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  autoComplete="off"
+                  value={newClassLeader.email}
+                  onChange={(e) => setNewClassLeader((c) => ({ ...c, email: e.target.value }))}
+                  placeholder="classleader@college.edu"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Temporary Password</Label>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={newClassLeader.password}
+                  onChange={(e) => setNewClassLeader((c) => ({ ...c, password: e.target.value }))}
+                  placeholder="Min 6 characters"
+                />
+              </div>
+              <Button type="submit" size="sm" loading={creatingClassLeader}>Create Class Leader</Button>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Class Leader Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>New Password</Label>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={resetPasswordValue}
+              onChange={(e) => setResetPasswordValue(e.target.value)}
+              placeholder="Min 6 characters"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setResetPasswordOpen(false)}>Cancel</Button>
+            <Button type="button" loading={resettingPassword} onClick={() => void handleResetPassword()}>Reset Password</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={removeClassLeaderOpen}
+        onOpenChange={setRemoveClassLeaderOpen}
+        title="Remove Class Leader login?"
+        description={`This deactivates ${classLeaderUser?.name ?? "this"}'s login and frees up this section for a new Class Leader.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => void handleRemoveClassLeader()}
+        loading={removingClassLeader}
+      />
     </div>
   );
 }

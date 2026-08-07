@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { toast } from "@/hooks/useToast";
@@ -14,7 +12,6 @@ type CandidateRow = Record<string, unknown> & Candidate;
 
 function stageBadge(c: CandidateRow) {
   const s = (c as unknown as { currentStage?: string }).currentStage;
-  if (s === "DOCUMENT_VERIFICATION") return <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-xs">Docs Pending</Badge>;
   if (s === "DECISION") return <Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50 text-xs">Sent to Accounts</Badge>;
   return null;
 }
@@ -28,10 +25,10 @@ export default function CollegeOfficeCandidatesPage() {
     fetch("/api/college/candidates")
       .then((r) => r.json() as Promise<{ candidates: CandidateRow[] }>)
       .then((d) => {
-        // Only show post-Principal-decision candidates needing doc verification or sent to accounts
+        // Only show Principal-approved candidates that have been sent to Accounts
         const relevant = (d.candidates ?? []).filter((c) => {
           const stage = (c as unknown as { currentStage?: string }).currentStage;
-          return stage === "DOCUMENT_VERIFICATION" || stage === "DECISION";
+          return stage === "DECISION";
         });
         setCandidates(relevant);
       })
@@ -74,30 +71,13 @@ export default function CollegeOfficeCandidatesPage() {
         </div>
       ),
     },
-    {
-      key: "actions",
-      header: "",
-      render: (row) => {
-        const stage = (row as unknown as { currentStage?: string }).currentStage;
-        if (stage === "DOCUMENT_VERIFICATION") {
-          return (
-            <Button asChild size="sm" variant="outline" className="text-blue-700 border-blue-300">
-              <Link href="/college-office/documents" onClick={(e) => e.stopPropagation()}>
-                Verify in Documents →
-              </Link>
-            </Button>
-          );
-        }
-        return null;
-      },
-    },
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Status overview of Principal-approved candidates - verify documents from the Documents tab"
+        description="Principal-approved candidates that have been sent to Accounts for offer letters"
       />
 
       <DataTable
