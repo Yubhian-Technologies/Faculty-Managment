@@ -42,10 +42,23 @@ service firebase.storage {
         request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
+    function isValidCertificate() {
+      return request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('(application/pdf|image/(jpeg|png|webp))');
+    }
+
     // Candidate resumes — college-scoped, public upload for careers page
     match /colleges/{collegeId}/resumes/{filename} {
       allow read: if isStaff(collegeId);
       allow create: if isValidResume();
+      allow delete: if isStaff(collegeId);
+    }
+
+    // Candidate certificates — college-scoped, public upload via the
+    // candidate-form link sent with the interview call letter
+    match /colleges/{collegeId}/candidateCertificates/{candidateId}/{filename} {
+      allow read: if isStaff(collegeId);
+      allow create: if isValidCertificate();
       allow delete: if isStaff(collegeId);
     }
 

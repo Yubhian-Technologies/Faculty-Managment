@@ -269,24 +269,12 @@ service cloud.firestore {
           allow update, delete: if isSuperAdmin();
         }
 
-        match /hrFeedback/{feedbackId} {
-          allow read: if isStaff(collegeId);
-          allow create: if isCollegeOffice(collegeId) && hasCollegeId(collegeId);
-          allow update: if isCollegeOffice(collegeId) && resource.data.hrUid == request.auth.uid;
-          allow delete: if isSuperAdmin();
-        }
       }
 
       match /hiringSalaryAgreements/{agreementId} {
         allow read: if isHODorAbove(collegeId) || isAccounts(collegeId);
         allow create: if isHODorAbove(collegeId) && hasCollegeId(collegeId);
         allow update: if isHODorAbove(collegeId);
-        allow delete: if isSuperAdmin();
-      }
-
-      match /hiringDocVerifications/{docId} {
-        allow read: if isStaff(collegeId);
-        allow create, update: if isCollegeOffice(collegeId) || isHOD(collegeId);
         allow delete: if isSuperAdmin();
       }
 

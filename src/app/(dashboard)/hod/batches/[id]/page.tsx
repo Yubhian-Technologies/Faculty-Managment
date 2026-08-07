@@ -24,6 +24,8 @@ import {
   ArrowRight,
   Pencil,
   Mail,
+  Copy,
+  FileCheck,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
@@ -63,34 +65,6 @@ const defaultFeedback = (): FeedbackForm => ({
   recommendation: "MAYBE",
   strengths: "",
   weaknesses: "",
-  comments: "",
-});
-
-type HrFeedbackItem = {
-  id: string;
-  candidateId: string;
-  hrUid: string;
-  hrName: string;
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
-  ratings: { attitude: number; teamwork: number; adaptability: number; communication: number; overallFit: number };
-  salaryExpectation?: number;
-  noticePeriod?: string;
-  comments?: string;
-};
-
-type HrForm = {
-  ratings: { attitude: number; teamwork: number; adaptability: number; communication: number; overallFit: number };
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
-  salaryExpectation: string;
-  noticePeriod: string;
-  comments: string;
-};
-
-const defaultHrForm = (): HrForm => ({
-  ratings: { attitude: 0, teamwork: 0, adaptability: 0, communication: 0, overallFit: 0 },
-  recommendation: "MAYBE",
-  salaryExpectation: "",
-  noticePeriod: "",
   comments: "",
 });
 
@@ -134,7 +108,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [facultyList, setFacultyList] = useState<FacultyMember[]>([]);
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
-  const [hrFeedback, setHrFeedback] = useState<HrFeedbackItem[]>([]);
   const [studentFeedbackSummary, setStudentFeedbackSummary] = useState<StudentFeedbackSummary[]>([]);
   const [userMap, setUserMap] = useState<Record<string, FMSUser>>({});
   const [allUsers, setAllUsers] = useState<FMSUser[]>([]);
@@ -163,11 +136,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [hodSelectedCandidate, setHodSelectedCandidate] = useState<Candidate | null>(null);
   const [hodForm, setHodForm] = useState<FeedbackForm>(defaultFeedback());
   const [isSubmittingHodFeedback, setIsSubmittingHodFeedback] = useState(false);
-
-  // HOD acts as HR — behavioural/culture-fit assessment during panel interview phase
-  const [hrSelectedCandidate, setHrSelectedCandidate] = useState<Candidate | null>(null);
-  const [hrForm, setHrForm] = useState<HrForm>(defaultHrForm());
-  const [isSubmittingHrFeedback, setIsSubmittingHrFeedback] = useState(false);
 
   async function load() {
     try {
@@ -198,12 +166,9 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       // Load feedback from demo-complete phase onward
       const postDemo = ["IN_PROGRESS", "PANEL_INTERVIEW", "PRINCIPAL_FINAL_REVIEW", "COMPLETED"].includes(b.currentPhase);
       if (postDemo && cands.length > 0) {
-        const [pfRes, hrRes, sfRes] = await Promise.all([
+        const [pfRes, sfRes] = await Promise.all([
           fetch(`/api/college/panel-feedback?batchId=${id}`)
             .then((r) => r.json() as Promise<{ feedback: PanelFeedbackItem[] }>)
-            .then((d) => d.feedback ?? []),
-          fetch(`/api/college/hr-feedback?batchId=${id}`)
-            .then((r) => r.json() as Promise<{ feedback: HrFeedbackItem[] }>)
             .then((d) => d.feedback ?? []),
           fetch(`/api/college/student-feedback?batchId=${id}`)
             .then((r) => r.json() as Promise<{ feedback: { candidateId: string; ratings: Record<string, number> }[] }>)
@@ -211,7 +176,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         ]);
 
         setPanelFeedback(pfRes);
-        setHrFeedback(hrRes);
 
         // Aggregate student feedback by candidate
         const summaryMap: Record<string, { count: number; sums: Record<string, number> }> = {};
@@ -412,38 +376,13 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  async function submitHrFeedback() {
-    if (!hrSelectedCandidate) return;
-    const allRated = Object.values(hrForm.ratings).every((v) => v > 0);
-    if (!allRated) {
-      toast({ variant: "destructive", title: "Please rate all 5 HR criteria" });
-      return;
-    }
-    setIsSubmittingHrFeedback(true);
-    try {
-      const res = await fetch("/api/college/hr-feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          batchId: id,
-          candidateId: hrSelectedCandidate.id,
-          ratings: hrForm.ratings,
-          recommendation: hrForm.recommendation,
-          salaryExpectation: hrForm.salaryExpectation ? Number(hrForm.salaryExpectation) : undefined,
-          noticePeriod: hrForm.noticePeriod || undefined,
-          comments: hrForm.comments || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "HR assessment submitted" });
-      setHrSelectedCandidate(null);
-      setHrForm(defaultHrForm());
-      void load();
-    } catch {
-      toast({ variant: "destructive", title: "Failed to submit HR assessment" });
-    } finally {
-      setIsSubmittingHrFeedback(false);
-    }
+  function candidateFormUrl(candidate: Candidate) {
+    return `${window.location.origin}/candidate-form/${batch?.collegeId}/${candidate.id}`;
+  }
+
+  function copyFormLink(candidate: Candidate) {
+    void navigator.clipboard.writeText(candidateFormUrl(candidate));
+    toast({ variant: "success", title: "Link copied" });
   }
 
   function sendCallLetter(candidate: Candidate) {
@@ -477,6 +416,9 @@ Kindly bring the following documents for verification:
 
 ${docs}
 • Any other relevant supporting documents
+
+Please complete your bio-data form and upload your certificates before the interview:
+${candidateFormUrl(candidate)}
 
 Please confirm your availability by replying to this email.
 
@@ -722,13 +664,100 @@ ${institution}`;
                     <p className="font-medium text-sm">{c.name}</p>
                     <p className="text-xs text-muted-foreground">{c.email}</p>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => sendCallLetter(c)}>
-                    <Mail className="h-3.5 w-3.5 mr-1.5" />
-                    Send Call Letter
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => copyFormLink(c)}>
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />
+                      Copy Link
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => sendCallLetter(c)}>
+                      <Mail className="h-3.5 w-3.5 mr-1.5" />
+                      Send Call Letter
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Candidate Bio Data — submissions from the public candidate-form link */}
+      {batch.setupComplete && candidates.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileCheck className="h-4 w-4 text-primary" />
+              Candidate Bio Data
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {candidates.map((c) => {
+              const bd = c.bioData;
+              const fields: [string, string | undefined][] = bd
+                ? [
+                    ["Father's Name", bd.fatherName],
+                    ["Mother's Name", bd.motherName],
+                    ["Date of Birth", bd.dateOfBirth],
+                    ["Gender", bd.gender],
+                    ["Marital Status", bd.maritalStatus],
+                    ["Spouse Name", bd.spouseName],
+                    ["Aadhaar No.", bd.aadharNo],
+                    ["PAN No.", bd.panNo],
+                    ["Blood Group", bd.bloodGroup],
+                    ["Emergency Contact", bd.emergencyContactName && bd.emergencyContactPhone ? `${bd.emergencyContactName} (${bd.emergencyContactPhone})` : undefined],
+                    ["Current Employer", bd.currentEmployer],
+                    ["Total Experience", bd.totalExperienceYears ? `${bd.totalExperienceYears} yrs` : undefined],
+                    ["Current CTC", bd.currentCTC],
+                    ["Expected CTC", bd.expectedCTC],
+                    ["Notice Period", bd.noticePeriod],
+                    ["References", bd.references],
+                    ["Additional Info", bd.additionalInfo],
+                  ]
+                : [];
+              return (
+                <div key={c.id} className="p-3 rounded-lg border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-sm">{c.name}</p>
+                    {c.bioDataSubmitted ? (
+                      <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />Submitted
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />Pending
+                      </span>
+                    )}
+                  </div>
+                  {c.bioDataSubmitted && (
+                    <>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3 text-xs">
+                        {fields.filter(([, v]) => v).map(([label, value]) => (
+                          <div key={label}>
+                            <p className="text-muted-foreground">{label}</p>
+                            <p className="font-medium">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {(c.certificates ?? []).length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-1 border-t">
+                          {(c.certificates ?? []).map((cert, i) => (
+                            <a
+                              key={i}
+                              href={cert.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary underline"
+                            >
+                              {cert.name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}
@@ -1079,127 +1108,6 @@ ${institution}`;
                   ) : (
                     <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-sm text-muted-foreground">
                       Select a candidate to submit your assessment.
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })()}
-
-      {/* ── HR Assessment — HOD fills behavioural/culture-fit for each candidate ─ */}
-      {batch.currentPhase === "PANEL_INTERVIEW" && (() => {
-        const hrSubmittedFor = hrFeedback.map((f) => f.candidateId);
-        const allDone = candidates.length > 0 && candidates.every((c) => hrSubmittedFor.includes(c.id));
-        return (
-          <Card className="border-orange-200">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="h-4 w-4 text-orange-500" />
-                HR Assessment (Behavioural / Culture Fit)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {allDone ? (
-                <div className="flex items-center gap-2 text-sm text-green-600 py-2">
-                  <CheckCircle2 className="h-4 w-4" />
-                  HR assessment submitted for all {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}.
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    {candidates.map((c) => {
-                      const done = hrSubmittedFor.includes(c.id);
-                      const selected = hrSelectedCandidate?.id === c.id;
-                      return (
-                        <div
-                          key={c.id}
-                          onClick={() => { if (!done) { setHrSelectedCandidate(c); setHrForm(defaultHrForm()); } }}
-                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${done ? "bg-green-50 border-green-200 cursor-default" : selected ? "border-orange-400 bg-orange-50/50" : "hover:bg-muted"}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-sm">{c.name}</p>
-                              <p className="text-xs text-muted-foreground">{c.email}</p>
-                            </div>
-                            {done ? (
-                              <span className="text-xs text-green-600 font-medium flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />Done</span>
-                            ) : selected ? (
-                              <span className="text-xs text-orange-600 font-medium">Selected</span>
-                            ) : (
-                              <Badge variant="outline" className="text-xs">Rate</Badge>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {hrSelectedCandidate ? (
-                    <div className="space-y-4">
-                      <p className="text-sm font-medium">HR Rating: {hrSelectedCandidate.name}</p>
-                      <div className="space-y-4">
-                        {(
-                          [
-                            ["attitude", "Attitude & Professionalism"],
-                            ["teamwork", "Teamwork & Collaboration"],
-                            ["adaptability", "Adaptability"],
-                            ["communication", "Communication Skills"],
-                            ["overallFit", "Overall Culture Fit"],
-                          ] as [keyof HrForm["ratings"], string][]
-                        ).map(([key, label]) => (
-                          <RatingSelector
-                            key={key}
-                            label={label}
-                            value={hrForm.ratings[key]}
-                            onChange={(v) => setHrForm((f) => ({ ...f, ratings: { ...f.ratings, [key]: v } }))}
-                          />
-                        ))}
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Salary Expectation (₹/yr)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="e.g. 480000"
-                            value={hrForm.salaryExpectation}
-                            onChange={(e) => setHrForm((f) => ({ ...f, salaryExpectation: e.target.value }))}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Notice Period</Label>
-                          <Input
-                            placeholder="e.g. Immediate / 30 days"
-                            value={hrForm.noticePeriod}
-                            onChange={(e) => setHrForm((f) => ({ ...f, noticePeriod: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Recommendation</Label>
-                        <Select value={hrForm.recommendation} onValueChange={(v) => setHrForm((f) => ({ ...f, recommendation: v as HrForm["recommendation"] }))}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ACCEPT">Accept</SelectItem>
-                            <SelectItem value="MAYBE">Maybe</SelectItem>
-                            <SelectItem value="REJECT">Reject</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Comments (optional)</Label>
-                        <Textarea value={hrForm.comments} onChange={(e) => setHrForm((f) => ({ ...f, comments: e.target.value }))} placeholder="Behavioural observations..." rows={2} />
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" onClick={() => { setHrSelectedCandidate(null); setHrForm(defaultHrForm()); }}>Cancel</Button>
-                        <Button size="sm" onClick={() => void submitHrFeedback()} loading={isSubmittingHrFeedback}>Submit HR Assessment</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-sm text-muted-foreground">
-                      Select a candidate to fill HR assessment.
                     </div>
                   )}
                 </div>

@@ -260,8 +260,8 @@ function PipelineCard({
               {" · "}
               Raised {formatDate(vacancy.createdAt)}
               {" · "}
-              {vacancy.availableCount ?? vacancy.requiredCount}{" "}
-              post{(vacancy.availableCount ?? vacancy.requiredCount) !== 1 ? "s" : ""} open
+              {vacancy.requiredCount}{" "}
+              post{vacancy.requiredCount !== 1 ? "s" : ""} open
             </p>
           </div>
           <span className="shrink-0 text-[11px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">

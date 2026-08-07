@@ -35,8 +35,10 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       type: "INTERVIEW_INVITATION" | "OFFER_LETTER" | "GENERAL";
       to: string;
+      cc?: string[];
       subject?: string;
       data: Record<string, unknown>;
+      pdfBase64?: string;
     };
 
     let html = "";
@@ -50,11 +52,17 @@ export async function POST(request: Request) {
       subject = `Offer Letter — ${body.data.collegeName as string}`;
       html = offerLetterEmail(body.data as Parameters<typeof offerLetterEmail>[0]);
 
-      // No headless-browser dependency in this deployment (see /api/pdf/generate) —
-      // attach the letter as a downloadable HTML file instead of a rendered PDF.
-      const letterData = body.data as unknown as OfferLetterData & { position?: string };
-      const letterHtml = getOfferLetterHTML({ ...letterData, designation: letterData.designation ?? letterData.position ?? "" });
-      attachments = [{ filename: "offer-letter.html", content: Buffer.from(letterHtml, "utf8") }];
+      if (body.pdfBase64) {
+        // Real PDF, rendered client-side (see src/lib/pdf/downloadOfferLetter.ts)
+        // and shipped here as bytes — no headless-browser dependency server-side.
+        attachments = [{ filename: "offer-letter.pdf", content: Buffer.from(body.pdfBase64, "base64") }];
+      } else {
+        // Fallback for any caller that hasn't been updated to send pdfBase64 —
+        // matches the pre-PDF behavior exactly.
+        const letterData = body.data as unknown as OfferLetterData & { position?: string };
+        const letterHtml = getOfferLetterHTML({ ...letterData, designation: letterData.designation ?? letterData.position ?? "" });
+        attachments = [{ filename: "offer-letter.html", content: Buffer.from(letterHtml, "utf8") }];
+      }
     } else {
       html = `<p>${String(body.data.message ?? "")}</p>`;
     }
@@ -63,6 +71,7 @@ export async function POST(request: Request) {
     transporter.sendMail({
       from: `"${process.env.EMAIL_FROM_NAME ?? "Vishnu People"}" <${process.env.EMAIL_FROM}>`,
       to: body.to,
+      ...(body.cc?.length ? { cc: body.cc } : {}),
       subject,
       html,
       attachments,

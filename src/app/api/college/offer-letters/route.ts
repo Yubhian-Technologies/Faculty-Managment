@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { provisionFacultyFromOffer } from "@/lib/firestore/facultyProvisioning";
 
 export async function GET(request: Request) {
   try {
@@ -52,15 +51,11 @@ export async function POST(request: Request) {
       joiningDate: string;
       ctcAnnual: number;
       subjects?: string[];
-      collegeEmail: string;
-      facultyPassword: string;
+      termsAndConditions?: string;
     };
 
-    const {
-      candidateId, batchId, candidateName, designation, department, joiningDate, ctcAnnual,
-      collegeEmail, facultyPassword,
-    } = body;
-    if (!candidateId || !batchId || !designation || !department || !joiningDate || !ctcAnnual || !collegeEmail || !facultyPassword) {
+    const { candidateId, batchId, candidateName, designation, department, joiningDate, ctcAnnual } = body;
+    if (!candidateId || !batchId || !designation || !department || !joiningDate || !ctcAnnual) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -83,6 +78,7 @@ export async function POST(request: Request) {
       joiningDate: new Date(joiningDate),
       ctcAnnual,
       subjects: body.subjects ?? [],
+      ...(body.termsAndConditions?.trim() ? { termsAndConditions: body.termsAndConditions.trim() } : {}),
       // No separate draft/review step — HOD sends the offer in the same action.
       status: "SENT",
       generatedBy: actorName,
@@ -94,15 +90,15 @@ export async function POST(request: Request) {
 
     await docRef.set(letter);
 
-    const provisioning = await provisionFacultyFromOffer(db, session.collegeId, docRef.id, {
-      collegeEmail,
-      password: facultyPassword,
-    });
+    // Faculty account creation is deferred until the offer is accepted — see
+    // "Create Faculty Account" on the Offer Letters list.
 
-    // Notify candidate's HOD (e.g. Principal/VP sending on the HOD's behalf)
+    // Notify candidate's HOD (e.g. Principal/VP sending on the HOD's behalf), and
+    // resolve the panel + office staff email list for CC'ing the offer letter email.
     const batchSnap = await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(batchId).get();
+    const ccEmails: string[] = [];
     if (batchSnap.exists) {
-      const batch = batchSnap.data() as { hodUid?: string; position?: string };
+      const batch = batchSnap.data() as { hodUid?: string; position?: string; panelMemberUids?: string[] };
       if (batch.hodUid && batch.hodUid !== session.uid) {
         const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
         await notifRef.set({
@@ -116,9 +112,22 @@ export async function POST(request: Request) {
           createdAt: now,
         });
       }
+
+      const usersColl = db.collection("colleges").doc(session.collegeId).collection("users");
+      const panelUids = (batch.panelMemberUids ?? []).slice(0, 30); // Firestore 'in' cap
+      const [panelSnap, officeSnap] = await Promise.all([
+        panelUids.length > 0
+          ? usersColl.where("__name__", "in", panelUids).get()
+          : Promise.resolve(null),
+        usersColl.where("role", "==", "COLLEGE_OFFICE").get(),
+      ]);
+      for (const d of [...(panelSnap?.docs ?? []), ...officeSnap.docs]) {
+        const email = (d.data() as { email?: string }).email;
+        if (email) ccEmails.push(email);
+      }
     }
 
-    return NextResponse.json({ id: docRef.id, ok: true, provisioning });
+    return NextResponse.json({ id: docRef.id, ok: true, ccEmails: Array.from(new Set(ccEmails)) });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

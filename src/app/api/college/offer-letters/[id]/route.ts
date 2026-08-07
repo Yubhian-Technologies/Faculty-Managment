@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { provisionFacultyFromOffer } from "@/lib/firestore/facultyProvisioning";
 
 export async function PATCH(
   request: Request,
@@ -28,12 +27,6 @@ export async function PATCH(
       .collection("offerLetters")
       .doc(id)
       .update(updates);
-
-    // Auto-create faculty account as soon as the offer letter is sent
-    let provisioning: Awaited<ReturnType<typeof provisionFacultyFromOffer>> | undefined;
-    if (body.status === "SENT") {
-      provisioning = await provisionFacultyFromOffer(db, session.collegeId, id);
-    }
 
     // When candidate formally accepts, mark them APPROVED and flip the faculty
     // record (provisioned as INTERVIEW_DONE when the offer was sent) to ACTIVE —
@@ -68,7 +61,7 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ ok: true, provisioning });
+    return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

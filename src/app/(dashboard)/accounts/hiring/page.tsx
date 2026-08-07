@@ -119,7 +119,7 @@ export default function AccountsHiringPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring — Offer Letters"
-        description="Send offer letters to document-verified candidates and create their faculty accounts"
+        description="Send offer letters to Principal-approved candidates and create their faculty accounts"
       />
 
       {isLoading ? (
@@ -129,7 +129,7 @@ export default function AccountsHiringPage() {
           <CardContent className="p-12 text-center text-muted-foreground">
             <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
             <p className="font-medium">No candidates pending offer letters</p>
-            <p className="text-sm mt-1">Candidates appear here after College Office verifies their documents.</p>
+            <p className="text-sm mt-1">Candidates appear here after the Principal approves their hiring decision.</p>
           </CardContent>
         </Card>
       ) : (

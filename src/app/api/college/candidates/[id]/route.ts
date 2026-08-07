@@ -61,6 +61,10 @@ export async function PATCH(
       name?: string;
       email?: string;
       phone?: string;
+      documentVerification?: { checkedDocs: Record<string, boolean> };
+      expectedSalary?: number;
+      negotiatedSalary?: number;
+      dateOfJoining?: string;
     };
 
     const db = getAdminDb();
@@ -79,7 +83,7 @@ export async function PATCH(
     }
 
     const updates: Record<string, unknown> = { updatedAt: now };
-    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone } = body;
+    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone, documentVerification, expectedSalary, negotiatedSalary, dateOfJoining } = body;
 
     if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
     if (hasArrived !== undefined) {
@@ -100,6 +104,17 @@ export async function PATCH(
     if (name !== undefined) updates.name = name;
     if (email !== undefined) updates.email = email;
     if (phone !== undefined) updates.phone = phone;
+    if (documentVerification !== undefined) {
+      updates.documentVerification = {
+        checkedDocs: documentVerification.checkedDocs,
+        verifiedBy: session.uid,
+        verifiedByName: actorName,
+        verifiedAt: now,
+      };
+    }
+    if (expectedSalary !== undefined) updates.expectedSalary = expectedSalary;
+    if (negotiatedSalary !== undefined) updates.negotiatedSalary = negotiatedSalary;
+    if (dateOfJoining !== undefined) updates.dateOfJoining = dateOfJoining;
 
     await db
       .collection("colleges")
@@ -173,6 +188,19 @@ export async function PATCH(
       });
     }
 
+    if (documentVerification !== undefined) {
+      const checkedCount = Object.values(documentVerification.checkedDocs).filter(Boolean).length;
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "DOCUMENTS_VERIFIED",
+        performedBy: session.uid,
+        performedByName: actorName,
+        targetId: id,
+        details: { checkedCount, totalCount: Object.keys(documentVerification.checkedDocs).length },
+        timestamp: now,
+      });
+    }
+
     const candidateData = candidateSnap.data() as { name?: string; batchId?: string };
 
     // Final Principal decision: notify the HOD, log it, and — if every other
@@ -202,28 +230,6 @@ export async function PATCH(
           });
         }
 
-        // Notify College Office staff to begin document verification
-        if (status === "APPROVED") {
-          const coSnap = await db
-            .collection("colleges")
-            .doc(session.collegeId)
-            .collection("users")
-            .where("role", "==", "COLLEGE_OFFICE")
-            .get();
-          for (const coDoc of coSnap.docs) {
-            await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
-              collegeId: session.collegeId,
-              toUid: coDoc.id,
-              type: "GENERAL",
-              title: "Candidate Approved — Document Verification Required",
-              message: `${candidateData.name ?? "A candidate"} for ${batch.position ?? "the position"} has been approved. Please verify their documents.`,
-              link: `/college-office/candidates`,
-              read: false,
-              createdAt: now,
-            });
-          }
-        }
-
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId,
           action: "HIRING_DECISION_MADE",
@@ -251,7 +257,7 @@ export async function PATCH(
       }
     }
 
-    // Documents verified → notify Accounts to send the offer letter
+    // Candidate approved → notify Accounts to send the offer letter
     if (stage === "DECISION" && status !== "REJECTED") {
       const accountsSnap = await db
         .collection("colleges")
@@ -265,7 +271,7 @@ export async function PATCH(
           toUid: accDoc.id,
           type: "GENERAL",
           title: "Candidate Ready for Offer Letter",
-          message: `${candidateData.name ?? "A candidate"}'s documents are verified. Please send the offer letter.`,
+          message: `${candidateData.name ?? "A candidate"} has been approved. Please send the offer letter.`,
           link: `/accounts/hiring`,
           read: false,
           createdAt: now,

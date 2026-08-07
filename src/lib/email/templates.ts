@@ -64,13 +64,24 @@ export function offerLetterEmail({
   department,
   joiningDate,
   collegeName,
+  termsAndConditions,
 }: {
   candidateName: string;
   position: string;
   department: string;
   joiningDate: string;
   collegeName: string;
+  termsAndConditions?: string;
 }): string {
+  const termsBlock = termsAndConditions?.trim()
+    ? `<div style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <h3 style="color:#0f172a;margin:0 0 8px;font-size:14px;">Terms &amp; Conditions</h3>
+        <ul style="color:#475569;padding-left:18px;margin:0;font-size:14px;line-height:1.7;">
+          ${termsAndConditions.trim().split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<li>${l}</li>`).join("")}
+        </ul>
+      </div>`
+    : "";
+
   return `
 <!DOCTYPE html>
 <html>
@@ -85,6 +96,7 @@ export function offerLetterEmail({
       <p style="color:#0f172a;font-size:16px;">Dear <strong>${candidateName}</strong>,</p>
       <p style="color:#475569;">We are delighted to offer you the position of <strong>${position}</strong> in the <strong>${department}</strong> department. Please find your offer letter attached.</p>
       <p style="color:#475569;font-size:14px;">Please confirm your acceptance by reporting on <strong>${joiningDate}</strong>. Bring all original documents on your joining date.</p>
+      ${termsBlock}
       <p style="color:#0f172a;font-weight:600;">Congratulations and welcome to the team!<br><br>HR Department<br>${collegeName}</p>
     </div>
   </div>

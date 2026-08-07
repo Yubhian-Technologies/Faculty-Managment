@@ -47,7 +47,7 @@ All roles, their labels, and their dashboard home paths are defined in `src/type
 - `src/app/(dashboard)/<role-path>/…` — one route group per role: `super-admin`, `administration`, `hr-admin`, `admin-office`, `location-dept-head`, `principal` (incl. `principal/budget` for Vice Principal budget freeze), `vice-principal`, `hod`, `college-office`, `panel`, `accounts`, `finance`, `coordinator`. Pages are client components that fetch from the API routes.
 - `src/app/api/` is split by scope, mirroring tenancy: `admin/` (super admin — colleges, locations, users, settings, audit-logs, general-admin-vacancies), `college/` (college-scoped — faculty, departments, sections, candidates, hiring-batches, vacancy-requests, offer-letters, leave-applications, attendance, teaching-assignments, salary-records, notifications, budget-requests, finance-* endpoints), `location/` (location-scoped — users, departments, candidates, vacancy-requests, interviews, offers), `administration/principals`, plus `leave/`, `auth/`, `email/`, `pdf/`, `upload/`, `public/`.
 - `src/app/(auth)/` — the `/login` page.
-- Public (no-login) pages: `/login`, `/careers/[collegeId]` (candidate application), `/feedback/[id]` (student feedback), `/location-interview/[id]`.
+- Public (no-login) pages: `/login`, `/careers/[collegeId]` (candidate application), `/feedback/[id]` (student feedback), `/location-interview/[id]`, `/candidate-form/[collegeId]/[candidateId]` (candidate self-service bio-data/certificates, linked from the interview call letter).
 - `/panel/interviews` is intentionally shared: any staff role added to an interview panel may access it (see `ROLE_PATH_MAP` in `src/proxy.ts`). `/coordinator` is similarly shared between `HOD` and `PANEL_MEMBER`.
 
 ### Server-side Firebase

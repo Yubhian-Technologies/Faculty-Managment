@@ -7,10 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { Wand2 } from "lucide-react";
+import { collegeFetch } from "@/lib/api/collegeFetch";
+import { auth } from "@/lib/firebase/client";
+import { getOfferLetterPdfBase64 } from "@/lib/pdf/downloadOfferLetter";
 import type { HiringBatch, Candidate } from "@/types";
 
 type CreateForm = {
@@ -21,30 +24,27 @@ type CreateForm = {
   joiningDate: string;
   ctcAnnual: string;
   subjects: string;
-  collegeEmail: string;
-  facultyPassword: string;
+  termsAndConditions: string;
 };
 
 const emptyForm = (): CreateForm => ({
   batchId: "", candidateId: "", designation: "", department: "", joiningDate: "",
-  ctcAnnual: "", subjects: "", collegeEmail: "", facultyPassword: "",
+  ctcAnnual: "", subjects: "", termsAndConditions: "",
 });
-
-function randomPassword(): string {
-  return Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6).toUpperCase();
-}
 
 export default function NewHodOfferLetterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const presetBatchId = searchParams.get("batchId");
+  const presetCandidateId = searchParams.get("candidateId");
   const [batches, setBatches] = useState<HiringBatch[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [existingLetterCandidateIds, setExistingLetterCandidateIds] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [form, setForm] = useState<CreateForm>(emptyForm());
-  const [sentConfirm, setSentConfirm] = useState<{ name: string; email: string } | null>(null);
+  const [sentConfirm, setSentConfirm] = useState<{ name: string; emailedTo?: string } | null>(null);
+  const [collegeInfo, setCollegeInfo] = useState<{ name: string; address: string }>({ name: "", address: "" });
 
   useEffect(() => {
     Promise.all([
@@ -58,6 +58,13 @@ export default function NewHodOfferLetterPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load" }));
   }, []);
 
+  useEffect(() => {
+    collegeFetch("/api/college/info")
+      .then((r) => r.json() as Promise<{ name: string; address: string }>)
+      .then((d) => setCollegeInfo({ name: d.name, address: d.address }))
+      .catch(() => {});
+  }, []);
+
   // Deep-linked from the pipeline's "Send Offer Letter" button — batch is already
   // known, so skip the manual selection step once batches have loaded.
   useEffect(() => {
@@ -66,6 +73,15 @@ export default function NewHodOfferLetterPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batches, presetBatchId]);
+
+  // Also deep-linked with the candidate already known (e.g. Principal's decision
+  // page) — auto-select once the batch's candidate list has loaded.
+  useEffect(() => {
+    if (presetCandidateId && !form.candidateId && candidates.some((c) => c.id === presetCandidateId)) {
+      handleCandidateChange(presetCandidateId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidates, presetCandidateId]);
 
   async function loadCandidatesForBatch(batchId: string) {
     setLoadingCandidates(true);
@@ -94,12 +110,20 @@ export default function NewHodOfferLetterPage() {
   }
 
   function handleCandidateChange(candidateId: string) {
-    setForm((f) => ({ ...f, candidateId }));
+    const candidate = candidates.find((c) => c.id === candidateId);
+    setForm((f) => ({
+      ...f,
+      candidateId,
+      // Negotiated salary and date of joining are captured by the Principal at
+      // decision time — auto-fill here rather than re-asking for them.
+      ctcAnnual: candidate?.negotiatedSalary != null ? String(candidate.negotiatedSalary) : f.ctcAnnual,
+      joiningDate: candidate?.dateOfJoining ?? f.joiningDate,
+    }));
   }
 
   async function handleSend() {
-    const { batchId, candidateId, designation, department, joiningDate, ctcAnnual, collegeEmail, facultyPassword } = form;
-    if (!batchId || !candidateId || !designation || !department || !joiningDate || !ctcAnnual || !collegeEmail || !facultyPassword) {
+    const { batchId, candidateId, designation, department, joiningDate, ctcAnnual } = form;
+    if (!batchId || !candidateId || !designation || !department || !joiningDate || !ctcAnnual) {
       toast({ variant: "destructive", title: "Fill in all required fields" });
       return;
     }
@@ -118,13 +142,51 @@ export default function NewHodOfferLetterPage() {
           joiningDate,
           ctcAnnual: Number(ctcAnnual),
           subjects: form.subjects.split(",").map((s) => s.trim()).filter(Boolean),
-          collegeEmail,
-          facultyPassword,
+          termsAndConditions: form.termsAndConditions,
         }),
       });
-      const data = await res.json() as { error?: string };
+      const data = await res.json() as { error?: string; ccEmails?: string[] };
       if (!res.ok) throw new Error(data.error ?? "Failed to send offer");
-      setSentConfirm({ name: selectedCandidate?.name ?? "the candidate", email: collegeEmail });
+
+      let emailed = false;
+      if (selectedCandidate?.email) {
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          if (token) {
+            const letterFields = {
+              candidateName: selectedCandidate.name,
+              candidateAddress: selectedCandidate.permanentAddress || selectedCandidate.residenceAddress,
+              designation,
+              department,
+              collegeName: collegeInfo.name,
+              collegeAddress: collegeInfo.address,
+              joiningDate,
+              letterDate: new Date().toLocaleDateString("en-IN"),
+              termsAndConditions: form.termsAndConditions,
+            };
+            const pdfBase64 = await getOfferLetterPdfBase64(letterFields);
+            const emailRes = await fetch("/api/email/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                type: "OFFER_LETTER",
+                to: selectedCandidate.email,
+                cc: data.ccEmails ?? [],
+                data: { ...letterFields, position: designation },
+                pdfBase64,
+              }),
+            });
+            emailed = emailRes.ok;
+          }
+        } catch {
+          // Letter + faculty account are already created — email failure is surfaced via the dialog copy below, not a hard error.
+        }
+      }
+
+      setSentConfirm({
+        name: selectedCandidate?.name ?? "the candidate",
+        emailedTo: emailed ? selectedCandidate?.email : undefined,
+      });
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -136,7 +198,7 @@ export default function NewHodOfferLetterPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Send Offer Letter"
-        description="Generate and send an offer letter, and create the faculty's login in one step"
+        description="Generate and email an offer letter to the candidate"
       />
 
       <Card>
@@ -198,6 +260,15 @@ export default function NewHodOfferLetterPage() {
               <div className="space-y-2">
                 <Label>Annual CTC (₹) *</Label>
                 <Input type="number" min="0" value={form.ctcAnnual} onChange={(e) => setForm((f) => ({ ...f, ctcAnnual: e.target.value }))} placeholder="e.g. 600000" />
+                {(() => {
+                  const candidate = candidates.find((c) => c.id === form.candidateId);
+                  if (candidate?.expectedSalary == null) return null;
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      Candidate&rsquo;s expected salary: ₹{candidate.expectedSalary.toLocaleString("en-IN")}/yr (for reference only — not shown on the offer letter)
+                    </p>
+                  );
+                })()}
               </div>
             </div>
 
@@ -206,22 +277,15 @@ export default function NewHodOfferLetterPage() {
               <Input value={form.subjects} onChange={(e) => setForm((f) => ({ ...f, subjects: e.target.value }))} placeholder="e.g. Data Structures, Algorithms" />
             </div>
 
-            <div className="space-y-3 pt-2 border-t">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Faculty Login</p>
-              <div className="space-y-2">
-                <Label>College Email *</Label>
-                <Input type="email" value={form.collegeEmail} onChange={(e) => setForm((f) => ({ ...f, collegeEmail: e.target.value }))} placeholder="name@vishnu.edu.in" />
-                <p className="text-xs text-muted-foreground">This becomes their login username — not the candidate&rsquo;s personal email.</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Password *</Label>
-                <div className="flex gap-2">
-                  <Input value={form.facultyPassword} onChange={(e) => setForm((f) => ({ ...f, facultyPassword: e.target.value }))} placeholder="Set a login password" />
-                  <Button type="button" variant="outline" size="icon" title="Generate password" onClick={() => setForm((f) => ({ ...f, facultyPassword: randomPassword() }))}>
-                    <Wand2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+            <div className="space-y-2">
+              <Label>Terms &amp; Conditions</Label>
+              <Textarea
+                value={form.termsAndConditions}
+                onChange={(e) => setForm((f) => ({ ...f, termsAndConditions: e.target.value }))}
+                placeholder={"One per line, e.g.\nThis appointment is on a probationary basis for one year.\nSubject to the institution's service rules and regulations."}
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">Included in the offer letter and email. One condition per line.</p>
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
@@ -235,9 +299,12 @@ export default function NewHodOfferLetterPage() {
       <Dialog open={!!sentConfirm} onOpenChange={(o) => { if (!o) { setSentConfirm(null); router.push("/hod/offers"); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Offer Sent & Faculty Account Created</DialogTitle>
+            <DialogTitle>Offer Letter Sent</DialogTitle>
             <DialogDescription>
-              <strong>{sentConfirm?.name}</strong> can now log in with <strong>{sentConfirm?.email}</strong> and the password you set.
+              {sentConfirm?.emailedTo
+                ? <>The offer letter was emailed to <strong>{sentConfirm?.name}</strong> at <strong>{sentConfirm.emailedTo}</strong>, with the interview panel and office staff in CC.</>
+                : <>The offer letter for <strong>{sentConfirm?.name}</strong> could not be emailed automatically — you can resend it from the Offer Letters list.</>}
+              {" "}Once they accept, create their faculty account from the Offer Letters list.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -13,7 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { auth } from "@/lib/firebase/client";
-import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
+import { downloadOfferLetterPdf, getOfferLetterPdfBase64 } from "@/lib/pdf/downloadOfferLetter";
 import { Plus, FileText, CheckCircle2, XCircle, Send, ChevronDown, ChevronUp, UserPlus, Download, Mail } from "lucide-react";
 import type { OfferLetter } from "@/types";
 
@@ -153,23 +153,28 @@ export default function HodOffersPage() {
       const { candidateAddress, candidateEmail, interviewDate } = await fetchLetterExtras(letter);
       if (!candidateEmail) throw new Error("Candidate has no email on file");
 
+      const letterFields = {
+        candidateName: letter.candidateName ?? "",
+        candidateAddress,
+        designation: letter.designation,
+        department: letter.department,
+        collegeName: collegeInfo.name,
+        collegeAddress: collegeInfo.address,
+        interviewDate,
+        joiningDate: formatDate(letter.joiningDate as Parameters<typeof formatDate>[0]),
+        letterDate: formatDate(new Date()),
+        termsAndConditions: letter.termsAndConditions,
+      };
+      const pdfBase64 = await getOfferLetterPdfBase64(letterFields);
+
       const res = await fetch("/api/email/send", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           type: "OFFER_LETTER",
           to: candidateEmail,
-          data: {
-            candidateName: letter.candidateName,
-            candidateAddress,
-            position: letter.designation,
-            department: letter.department,
-            collegeName: collegeInfo.name,
-            collegeAddress: collegeInfo.address,
-            interviewDate,
-            joiningDate: formatDate(letter.joiningDate as Parameters<typeof formatDate>[0]),
-            letterDate: formatDate(new Date()),
-          },
+          data: { ...letterFields, position: letter.designation },
+          pdfBase64,
         }),
       });
       if (!res.ok) throw new Error("Failed to send email");
@@ -289,17 +294,19 @@ export default function HodOffersPage() {
                         <Mail className="h-3.5 w-3.5 mr-1" />
                         Email Candidate
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                        loading={provisioning === letter.id}
-                        onClick={() => void retryProvision(letter)}
-                        title="Retry faculty account creation if it failed when the offer was sent"
-                      >
-                        <UserPlus className="h-3.5 w-3.5 mr-1" />
-                        Retry Faculty Account
-                      </Button>
+                      {letter.status === "ACCEPTED" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                          loading={provisioning === letter.id}
+                          onClick={() => void retryProvision(letter)}
+                          title="Create the faculty's login now that they've accepted"
+                        >
+                          <UserPlus className="h-3.5 w-3.5 mr-1" />
+                          Create Faculty Account
+                        </Button>
+                      )}
                       {letter.status === "SENT" && (
                         <>
                           <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setActionTarget({ id: letter.id, action: "ACCEPTED" })}>
