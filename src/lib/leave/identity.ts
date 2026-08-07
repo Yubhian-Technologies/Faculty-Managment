@@ -1,5 +1,14 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { TEACHING_DESIGNATIONS } from "@/types/core";
+
+// Leave-module definition of "vacation staff" - stricter than core.ts's
+// TEACHING_DESIGNATIONS (which also counts Lab Assistant toward faculty-ratio
+// reporting elsewhere in the app). For leave purposes, vacation staff is only
+// actual classroom teaching designations; every other FacultyMember
+// designation (including Lab Assistant) is non-vacation, same as all other
+// supporting staff.
+const VACATION_DESIGNATIONS = [
+  "PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY",
+];
 
 export interface ResolvedIdentity {
   name: string;
@@ -41,7 +50,7 @@ export async function resolveEmployeeIdentity(
     return {
       name: f.name,
       department: f.department,
-      isTeachingStaff: (TEACHING_DESIGNATIONS as string[]).includes(f.designation),
+      isTeachingStaff: VACATION_DESIGNATIONS.includes(f.designation),
       dateOfJoining: f.joiningDate?.toDate?.() ?? new Date(),
     };
   }
