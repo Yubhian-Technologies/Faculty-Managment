@@ -126,8 +126,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
   { label: "Purchase Clearance", href: "/hod/purchase-clearance", iconName: "Receipt", roles: ["HOD"] },
-  { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
-  { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Hiring Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"], section: "Hiring" },
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
   { label: "Panel Scoring", href: "/panel/interviews", iconName: "ClipboardCheck", roles: ["HOD"] },

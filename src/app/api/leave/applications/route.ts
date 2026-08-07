@@ -10,7 +10,7 @@ import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { REQUESTS_COL, loadBalances, reservePending, computeEntitlement } from "@/lib/leave/balanceEngine";
 import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
-import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
+import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 
@@ -105,6 +105,9 @@ export async function POST(request: Request) {
       if (!leaveType || !leaveType.rules.eligibleCategories.includes(effectiveCategory)) {
         return NextResponse.json({ error: "This leave type isn't available for your leave profile" }, { status: 400 });
       }
+    }
+    if (body.isHalfDay && !(body.leaveTypeCode && HALF_DAY_ELIGIBLE_TYPES.includes(body.leaveTypeCode))) {
+      return NextResponse.json({ error: "Half day is only available for Sick Leave, Special Casual Leave, and On Duty" }, { status: 400 });
     }
 
     const fromDate = new Date(body.fromDate);
