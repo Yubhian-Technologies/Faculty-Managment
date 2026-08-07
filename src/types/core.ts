@@ -42,7 +42,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
-  PANEL_MEMBER: "Teaching Faculty",
+  PANEL_MEMBER: "Faculty",
   ANNEXURE: "Annexure",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
@@ -410,10 +410,6 @@ export interface FacultyNorms {
     professor: string;
   };
   positionNorms: PositionNorm[];
-  // Years of service a "new joining" employee (leave profile: CL + OD only)
-  // must complete before converting into their vacation/non-vacation leave
-  // category - see src/lib/leave/categoryEngine.ts.
-  newJoiningYears: number;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -924,10 +920,6 @@ export type NotificationType =
   | "HIRING_REJECTED"
   | "OFFER_LETTER_GENERATED"
   | "COORDINATOR_ASSIGNED"
-  // Leave
-  | "LEAVE_PENDING_APPROVAL"
-  | "LEAVE_APPROVED"
-  | "LEAVE_REJECTED"
   // Permission & On-Duty
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"
@@ -1032,12 +1024,6 @@ export type AuditAction =
   | "SUPPORTING_STAFF_CREATED"
   | "SUPPORTING_STAFF_UPDATED"
   | "SUPPORTING_STAFF_DELETED"
-  // Leave module
-  | "LEAVE_APPLIED"
-  | "LEAVE_HOD_APPROVED"
-  | "LEAVE_PRINCIPAL_APPROVED"
-  | "LEAVE_REJECTED"
-  | "LEAVE_CANCELLED"
   // Permission & On-Duty
   | "PERMISSION_APPLIED"
   | "PERMISSION_APPROVED"
