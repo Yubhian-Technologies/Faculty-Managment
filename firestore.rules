@@ -63,9 +63,16 @@ service cloud.firestore {
       return hasRole('MANAGEMENT');
     }
 
+    // WEBMASTER is COLLEGE-scoped, not global — one internal account per
+    // college (created by the Principal), provisioning that college's own
+    // official institutional emails.
+    function isWebmaster(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['WEBMASTER', 'SUPER_ADMIN']);
+    }
+
     function isStaff(collegeId) {
       return isCollegeMember(collegeId) && hasAnyRole([
-        'PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'FINANCE', 'PURCHASE_DEPT', 'SUPER_ADMIN'
+        'PRINCIPAL', 'VICE_PRINCIPAL', 'HOD', 'COLLEGE_OFFICE', 'PANEL_MEMBER', 'ACCOUNTS', 'FINANCE', 'PURCHASE_DEPT', 'WEBMASTER', 'SUPER_ADMIN'
       ]);
     }
 
@@ -300,6 +307,16 @@ service cloud.firestore {
         allow read: if isStaff(collegeId);
         allow create, update: if isHODorAbove(collegeId);
         allow delete: if isSuperAdmin();
+      }
+
+      // ─── [ WEBMASTER MODULE ] ───────────────────────────────────────────────
+      // College Office requests an official institutional email once a hire is
+      // finalized; that college's own WEBMASTER fulfills it. All writes happen
+      // server-side via the Admin SDK in /api/college/email-requests routes, so
+      // client rules here only gate direct reads.
+      match /emailRequests/{requestId} {
+        allow read: if isPrincipalOrOffice(collegeId) || isWebmaster(collegeId);
+        allow write: if false;
       }
 
       // ─── [ LEAVE MODULE ] ───────────────────────────────────────────────────

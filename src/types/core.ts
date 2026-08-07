@@ -20,6 +20,7 @@ export type UserRole =
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
+  | "WEBMASTER"
   | "PANEL_MEMBER"
   | "ACCOUNTS"
   | "FINANCE"
@@ -41,6 +42,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
+  WEBMASTER: "Webmaster",
   PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
@@ -63,6 +65,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
+  WEBMASTER: "/webmaster",
   PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
@@ -95,6 +98,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
+  WEBMASTER: 4,
   PANEL_MEMBER: 5,
   STUDENT: 6,
 };
@@ -133,6 +137,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
+  WEBMASTER: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
   STUDENT: "COLLEGE",
 };
@@ -548,6 +553,7 @@ export interface FacultyMember {
   joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
   resumeUrl?: string;              // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
+  officialEmail?: string;         // institutional email address, set by Webmaster once an EmailCreationRequest is fulfilled — distinct from collegeEmail (the FMS login username)
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -914,6 +920,10 @@ export type NotificationType =
   | "HIRING_REJECTED"
   | "OFFER_LETTER_GENERATED"
   | "COORDINATOR_ASSIGNED"
+  // Webmaster (official email provisioning)
+  | "EMAIL_REQUEST_SUBMITTED"
+  | "OFFICIAL_EMAIL_CREATED"
+  | "EMAIL_REQUEST_CANCELLED"
   // Leave & Attendance
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
@@ -1007,6 +1017,10 @@ export type AuditAction =
   | "HIRING_DECISION_MADE"
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
+  // Webmaster module
+  | "EMAIL_REQUEST_CREATED"
+  | "EMAIL_REQUEST_FULFILLED"
+  | "EMAIL_REQUEST_CANCELLED"
   // User management
   | "USER_CREATED"
   | "USER_UPDATED"

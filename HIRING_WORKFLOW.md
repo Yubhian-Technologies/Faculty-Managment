@@ -1,5 +1,7 @@
 # Hiring / Recruitment Workflow — Codebase Trace
 
+*Last verified against commit `4b27fcd` (2026-08-01).*
+
 This traces the *actual* recruitment flow as implemented (not as the type names suggest). There are **three separate, non-interoperating pipelines** in the codebase — they share only the `UserRole` type.
 
 | Pipeline | Tenancy | Where it lives | Complexity |
@@ -22,11 +24,13 @@ This traces the *actual* recruitment flow as implemented (not as the type names 
 3. **Principal (or VP) approves/rejects** — `principal/vacancies/[id]/approve` and `.../reject` pages → `PATCH /api/college/vacancy-requests/[id]` (guard: `PRINCIPAL, VICE_PRINCIPAL, SUPER_ADMIN`).
    - Writes `principalResponse{action, reason, respondedAt, principalUid}`, notifies the HOD, audit log `VACANCY_REQUEST_APPROVED`/`_REJECTED`.
    - An approved vacancy also becomes visible on the public careers page (`/careers/[collegeId]`), which queries `vacancyRequests where status==APPROVED` **directly via the client Firestore SDK**, bypassing the API.
+   - **`DELETE /api/college/vacancy-requests/[id]`** (guard: `HOD, PRINCIPAL, VICE_PRINCIPAL, SUPER_ADMIN`; HOD can only delete their own) — lets a requester withdraw a request, but only while it's still unused: blocked with a 400 if any `HiringBatch` or `Candidate` already references it. Audit log `VACANCY_REQUEST_DELETED`.
 
 ### Stage 2 — Candidate Collection & Batch Creation
 
 4. **HOD adds candidates** — `hod/candidates` page → `POST /api/college/candidates` (guard: `HOD, PRINCIPAL, VICE_PRINCIPAL, SUPER_ADMIN`). Captures `courseId/year/preferredSubjectIds` if the candidate is for a teaching post — this resurfaces later in faculty provisioning (Stage 8).
    - Careers-page applicants are also written here, but client-side (`createCandidate()` in `src/lib/firestore/hiring.ts`), bypassing the API route and its audit log.
+   - Referral capture is now split by type: `referralType: "INTERNAL"` collects `referralCollege`/`referralDesignation`; `referralType: "EXTERNAL"` collects `referralInfluenceType` (defaulting to `"NONE"`) plus a free-text `referralInfluenceOther` when that type is `"OTHER"`.
 5. **HOD shortlists / removes candidates** — `PATCH` / `DELETE /api/college/candidates/[id]`.
 6. **HOD creates a Hiring Batch** — `hod/batches/new` page: pick an `APPROVED` vacancy, interview date/time, shortlisted candidates (must not already belong to a batch), and panel members (Principal + VP are locked-in defaults, plus the HOD).
    → `POST /api/college/hiring-batches` (guard: `HOD, SUPER_ADMIN` only — **VP/Principal cannot create batches**).
@@ -40,6 +44,7 @@ This traces the *actual* recruitment flow as implemented (not as the type names 
 7. `principal/interviews` lists pending batches; `principal/interviews/[id]` shows candidates/resumes/panel and lets the Principal **Approve** or **Reject** (with optional notes).
    → `PATCH /api/college/hiring-batches/[id]` `{status, principalNotes}` (guard on this endpoint is broad: `PRINCIPAL, VICE_PRINCIPAL, HOD, SUPER_ADMIN, COLLEGE_OFFICE, PANEL_MEMBER` — it's reused by every later phase-actor too).
    - On `APPROVED`, `currentPhase` is set straight to **`HOD_FINAL_SETUP`**.
+   - On `REJECTED`, every candidate in `batchData.candidateIds` has its `batchId` cleared (`batchId: ""`) in a batched write — they stay `isShortlisted: true` and are immediately eligible for the HOD to pick into a new batch, instead of being stuck pointing at a dead batch.
    - Notifies the HOD, audit log `INTERVIEW_PLAN_APPROVED`/`_REJECTED`.
 
 ### Stage 4 — Setup (College Office + HOD)
@@ -70,7 +75,7 @@ This traces the *actual* recruitment flow as implemented (not as the type names 
 18. **Submit to Principal** — HOD's batch page → `PATCH hiring-batches/[id]` `{currentPhase: "PRINCIPAL_FINAL_REVIEW"}`, notifying all Principals.
 19. `principal/decisions/[id]` aggregates, per candidate: panel Accept/Reject/Maybe counts + averaged panel ratings, averaged student ratings, and the (rarely-populated) HR feedback record and salary figure.
     - Approve/Reject per candidate → `PATCH candidates/[id]` `{status: "APPROVED"|"REJECTED", ...(APPROVED && {stage: "DOCUMENT_VERIFICATION"})}`.
-    - Once every candidate in the batch has a decision, the client also fires `PATCH hiring-batches/[id]` `{currentPhase: "COMPLETED", status: "COMPLETED"}` — this completion check is **client-side only**; closing the tab mid-way can leave a batch stuck without ever reaching `COMPLETED`.
+    - **Server-enforced**: the same route re-reads every sibling candidate in the batch after each decision (`src/app/api/college/candidates/[id]/route.ts:241-250`) and, once all of them are `APPROVED`/`REJECTED`, itself fires `hiringBatches/[id].update({currentPhase: "COMPLETED", status: "COMPLETED"})` — this does not depend on the browser staying open.
     - The UI says "the College Office will be notified" on approve, but no notification actually fires for this status/stage change.
 
 ### Stage 8 — Offer Letter + Faculty Provisioning (moved to HOD, single-step)
@@ -140,7 +145,6 @@ For institution-wide, non-departmental hiring (e.g. admin staff), submitted dire
 - HR feedback (`HRFeedback`) has a working API but no reachable UI form.
 - `HiringDocVerification` type/collection is fully unused; document verification is done ad-hoc via `Candidate.currentStage`/`status`, duplicated across two College Office pages.
 - `AppointmentLetter` type/template exist but no route ever creates one.
-- Batch completion (`currentPhase: "COMPLETED"`) is a client-side check, not server-enforced — can get stuck if the browser closes mid-decision.
 - A legacy 2-segment public feedback route (`/feedback/[id]/[sub]`) is broken against the current API contract and unreachable from the app.
 - Salary negotiation as a distinct recorded step is gone (`accounts/salary`, `HiringSalaryAgreement`, `POST /api/college/salary-records` all removed) — CTC is now just a field on the offer letter itself, set by whoever sends it.
 

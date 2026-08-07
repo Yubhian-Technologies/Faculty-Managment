@@ -131,6 +131,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
+  { label: "Official Emails", href: "/college-office/email-requests", iconName: "AtSign", roles: ["COLLEGE_OFFICE"] },
 
   // College Staff (dynamic-title roles: Dean, IQAC Coordinator, T&P, etc.)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
@@ -166,6 +167,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Financial Reports", href: "/finance/reports", iconName: "BarChart3", roles: ["FINANCE"], section: "Reports" },
   { label: "Audit & Compliance", href: "/finance/audit", iconName: "ScrollText", roles: ["FINANCE"] },
   { label: "Browse by Location", href: "/finance/browse", iconName: "MapPin", roles: ["FINANCE"], section: "Organization" },
+
+  // Webmaster
+  { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
+  { label: "Email Requests", href: "/webmaster/requests", iconName: "AtSign", roles: ["WEBMASTER"], section: "Email Provisioning" },
+  { label: "History", href: "/webmaster/history", iconName: "History", roles: ["WEBMASTER"] },
 
   // Purchase Department
   { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
@@ -379,6 +385,11 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Pending", href: "/purchase/pending", iconName: "Clock", roles: ["PURCHASE_DEPT"] },
     { label: "Browse", href: "/purchase/browse", iconName: "MapPin", roles: ["PURCHASE_DEPT"] },
     { label: "Indents", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
+  ],
+  WEBMASTER: [
+    { label: "Home", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
+    { label: "Requests", href: "/webmaster/requests", iconName: "AtSign", roles: ["WEBMASTER"] },
+    { label: "History", href: "/webmaster/history", iconName: "History", roles: ["WEBMASTER"] },
   ],
   STUDENT: [],
 };

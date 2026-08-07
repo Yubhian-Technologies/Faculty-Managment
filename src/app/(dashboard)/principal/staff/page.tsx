@@ -79,7 +79,7 @@ export default function PrincipalStaffPage() {
   }
 
   // Group by role for a scannable layout — order roughly follows seniority/function.
-  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF", "WEBMASTER", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
   // Must match the roles PRINCIPAL/VICE_PRINCIPAL can edit in /api/college/users/[uid] (loadTargetInScope).
   const EDITABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"];
   const grouped = ROLE_ORDER
