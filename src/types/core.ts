@@ -1055,6 +1055,7 @@ export type AuditAction =
   // Leave module
   | "LEAVE_APPLIED"
   | "LEAVE_HOD_APPROVED"
+  | "LEAVE_HOD_FORWARDED"
   | "LEAVE_PRINCIPAL_APPROVED"
   | "LEAVE_REJECTED"
   | "LEAVE_CANCELLED"

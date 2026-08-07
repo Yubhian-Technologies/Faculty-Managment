@@ -1,4 +1,7 @@
-import type { LeaveTypeFull } from "@/types/leave";
+import type { LeaveTypeCode, LeaveTypeFull } from "@/types/leave";
+
+// Half day only makes sense for these leave types.
+export const HALF_DAY_ELIGIBLE_TYPES: LeaveTypeCode[] = ["SL", "SCL", "OD"];
 
 export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
   {

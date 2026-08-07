@@ -7,7 +7,7 @@ export default function PrincipalMyLeavePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="My Leave" description="Your leave balances and request history" />
-      <LeaveProfileView applyHref="/principal/leave/apply" odHistoryHref="/principal/leave/od-history" />
+      <LeaveProfileView applyHref="/principal/leave/apply" historyBaseHref="/principal/leave/history" />
     </div>
   );
 }
