@@ -64,7 +64,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
   return (
     <div className="space-y-5">
       {/* Module 1 */}
-      <SectionTitle>Module 1 — General &amp; Academic Profile</SectionTitle>
+      <SectionTitle>Module 1 - General &amp; Academic Profile</SectionTitle>
       <TextInput label="Highest Qualification Earned" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
       <DegreeFields label="UG Details" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
       <DegreeFields label="PG Details" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
@@ -102,7 +102,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         <NumInput label="NET/SLET Qualification Year" value={value.netSletQualificationYear} onChange={(v) => set("netSletQualificationYear", v)} />
       </div>
 
-      <SectionTitle>Module 2 — Previous Experience</SectionTitle>
+      <SectionTitle>Module 2 - Previous Experience</SectionTitle>
       <RepeatingGroup
         title="Previous Experience"
         items={value.previousInstitutions}
@@ -161,7 +161,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       )}
 
       {/* Module 3 */}
-      <SectionTitle>Module 3 — Research Publications</SectionTitle>
+      <SectionTitle>Module 3 - Research Publications</SectionTitle>
       <RepeatingGroup
         title="Publications"
         items={value.publications}
@@ -200,7 +200,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       </div>
 
       {/* Module 4 */}
-      <SectionTitle>Module 4 — Grants, Consultancy &amp; IP</SectionTitle>
+      <SectionTitle>Module 4 - Grants, Consultancy &amp; IP</SectionTitle>
       <RepeatingGroup
         title="Funded Projects"
         items={value.fundedProjects}
@@ -244,12 +244,12 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       <div className="space-y-3 rounded-lg border p-3">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Patents</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <NumInput label="Indian — Filed" value={patents?.indianFiled} onChange={(v) => set("patents", { ...patents, indianFiled: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="Indian — Published" value={patents?.indianPublished} onChange={(v) => set("patents", { ...patents, indianPublished: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="Indian — Granted" value={patents?.indianGranted} onChange={(v) => set("patents", { ...patents, indianGranted: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International — Filed" value={patents?.internationalFiled} onChange={(v) => set("patents", { ...patents, internationalFiled: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International — Published" value={patents?.internationalPublished} onChange={(v) => set("patents", { ...patents, internationalPublished: v } as FacultyProfileFields["patents"])} />
-          <NumInput label="International — Granted" value={patents?.internationalGranted} onChange={(v) => set("patents", { ...patents, internationalGranted: v } as FacultyProfileFields["patents"])} />
+          <NumInput label="Indian - Filed" value={patents?.indianFiled} onChange={(v) => set("patents", { ...patents, indianFiled: v } as FacultyProfileFields["patents"])} />
+          <NumInput label="Indian - Published" value={patents?.indianPublished} onChange={(v) => set("patents", { ...patents, indianPublished: v } as FacultyProfileFields["patents"])} />
+          <NumInput label="Indian - Granted" value={patents?.indianGranted} onChange={(v) => set("patents", { ...patents, indianGranted: v } as FacultyProfileFields["patents"])} />
+          <NumInput label="International - Filed" value={patents?.internationalFiled} onChange={(v) => set("patents", { ...patents, internationalFiled: v } as FacultyProfileFields["patents"])} />
+          <NumInput label="International - Published" value={patents?.internationalPublished} onChange={(v) => set("patents", { ...patents, internationalPublished: v } as FacultyProfileFields["patents"])} />
+          <NumInput label="International - Granted" value={patents?.internationalGranted} onChange={(v) => set("patents", { ...patents, internationalGranted: v } as FacultyProfileFields["patents"])} />
         </div>
         <div className="space-y-2">
           <Label>Details</Label>
@@ -258,7 +258,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       </div>
 
       {/* Module 5 */}
-      <SectionTitle>Module 5 — Mentorship &amp; Institutional Value</SectionTitle>
+      <SectionTitle>Module 5 - Mentorship &amp; Institutional Value</SectionTitle>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2 rounded-lg border p-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ph.D. Scholars Pursuing</p>
@@ -435,7 +435,7 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       {/* Module 6 */}
       {!hideFinancialModule && (
         <>
-          <SectionTitle>Module 6 — Financial Standing &amp; Budgetary Impact</SectionTitle>
+          <SectionTitle>Module 6 - Financial Standing &amp; Budgetary Impact</SectionTitle>
           <div className="space-y-3 rounded-lg border p-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Financial Standing</p>
             <NumInput label="Present Salary (₹)" value={value.presentSalary} onChange={(v) => set("presentSalary", v)} />
@@ -455,19 +455,19 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       )}
 
       {/* Module 7 */}
-      <SectionTitle>Module 7 — Others</SectionTitle>
+      <SectionTitle>Module 7 - Others</SectionTitle>
       <div className="space-y-2">
         <Label>Other Information</Label>
         <Textarea
           value={value.otherInformation ?? ""}
           onChange={(e) => set("otherInformation", e.target.value)}
-          placeholder="Anything not covered above — add it here"
+          placeholder="Anything not covered above - add it here"
           rows={4}
         />
       </div>
 
       {/* Module 8 */}
-      <SectionTitle>Module 8 — Teaching Documentation (NBA/AICTE)</SectionTitle>
+      <SectionTitle>Module 8 - Teaching Documentation (NBA/AICTE)</SectionTitle>
       <RepeatingGroup
         title="Course Files & CO-PO Mapping"
         items={value.courseFilesAndCoPoMapping}

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { toast } from "@/hooks/useToast";
@@ -28,6 +28,7 @@ import {
   FileCheck,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
 import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
 import type { HiringBatch, Candidate, FacultyMember, FMSUser } from "@/types";
 import { useAuthStore } from "@/store/authStore";
@@ -434,12 +435,15 @@ ${batch.hodName}
 Head of Department – ${batch.department}
 ${institution}`;
 
-    // Collect principal and VP emails for CC
-    const ccEmails = allUsers
-      .filter((u) => u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL")
-      .map((u) => u.email)
-      .filter(Boolean)
-      .join(",");
+    // CC: Principal, Vice Principal, College Office, and this batch's selected panel members
+    const panelEmails = batch.panelMemberUids.map((uid) => userMap[uid]?.email).filter(Boolean) as string[];
+    const ccEmails = Array.from(new Set([
+      ...allUsers
+        .filter((u) => u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "COLLEGE_OFFICE")
+        .map((u) => u.email)
+        .filter(Boolean),
+      ...panelEmails,
+    ])).join(",");
 
     const subject = `Interview Call Letter – ${batch.position} | ${institution}`;
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(ccEmails)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -532,11 +536,35 @@ ${institution}`;
             {/* Required Documents */}
             <div className="space-y-2">
               <Label>Required Documents <span className="font-normal text-muted-foreground">(candidates must bring)</span></Label>
+              <Select
+                value=""
+                onValueChange={(doc) => {
+                  if (!requiredDocuments.includes(doc)) {
+                    setRequiredDocuments((prev) => [...prev, doc]);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a document to add..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPE_GROUPS.map((group) => (
+                    <SelectGroup key={group.category}>
+                      <SelectLabel>{group.category}</SelectLabel>
+                      {group.items.map((item) => (
+                        <SelectItem key={item} value={item} disabled={requiredDocuments.includes(item)}>
+                          {item}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
               <div className="flex gap-2">
                 <Input
                   value={newDoc}
                   onChange={(e) => setNewDoc(e.target.value)}
-                  placeholder="e.g. Resume, Aadhar Card, Certificates"
+                  placeholder="Other document not listed above..."
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && newDoc.trim()) {
                       e.preventDefault();
@@ -655,7 +683,7 @@ ${institution}`;
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Click to open Gmail with a pre-filled call letter. Principal and Vice Principal will be automatically added to CC.
+              Click to open Gmail with a pre-filled call letter. Principal, Vice Principal, College Office, and the selected panel members will be automatically added to CC.
             </p>
             <div className="space-y-2">
               {candidates.map((c) => (

@@ -21,6 +21,7 @@ export type UserRole =
   | "LIBRARY"
   | "EXAM_CELL"
   | "PANEL_MEMBER"
+  | "WEBMASTER"
   | "ACCOUNTS"
   | "FINANCE"
   | "PURCHASE_DEPT"
@@ -42,6 +43,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
   PANEL_MEMBER: "Faculty",
+  WEBMASTER: "Webmaster",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
   PURCHASE_DEPT: "Purchase Department",
@@ -64,6 +66,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
   PANEL_MEMBER: "/panel",
+  WEBMASTER: "/webmaster",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
   PURCHASE_DEPT: "/purchase",
@@ -95,6 +98,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
+  WEBMASTER: 4,
   PANEL_MEMBER: 5,
   STUDENT: 6,
 };
@@ -133,6 +137,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
+  WEBMASTER: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
   STUDENT: "COLLEGE",
 };
@@ -913,6 +918,7 @@ export type NotificationType =
   | "HIRING_APPROVED"
   | "HIRING_REJECTED"
   | "OFFER_LETTER_GENERATED"
+  | "CREDENTIAL_REQUESTED"
   | "COORDINATOR_ASSIGNED"
   // Leave & Attendance
   | "LEAVE_PENDING_APPROVAL"
@@ -1008,10 +1014,14 @@ export type AuditAction =
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
   | "DOCUMENTS_VERIFIED"
+  | "JOINING_LETTER_UPLOADED"
+  | "CREDENTIAL_REQUESTED"
+  | "CREDENTIAL_REQUEST_FULFILLED"
   // User management
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_DEACTIVATED"
+  | "USER_PASSWORD_RESET"
   | "PROFILE_PHOTO_UPDATED"
   // Faculty module
   | "FACULTY_CREATED"

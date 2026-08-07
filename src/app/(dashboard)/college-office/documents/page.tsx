@@ -11,7 +11,8 @@ import { Plus, Download, Save } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { downloadDocumentAcknowledgementPdf } from "@/lib/pdf/downloadDocumentAcknowledgement";
-import type { Candidate, HiringBatch } from "@/types";
+import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
+import type { Candidate, HiringBatch, OfferLetter } from "@/types";
 
 export default function CollegeOfficeDocumentsPage() {
   const { user } = useAuth();
@@ -22,18 +23,29 @@ export default function CollegeOfficeDocumentsPage() {
   const [checklists, setChecklists] = useState<Record<string, Record<string, boolean>>>({});
   const [newDocInputs, setNewDocInputs] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [joiningLetterUrls, setJoiningLetterUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     Promise.all([
       fetch("/api/college/candidates").then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
       fetch("/api/college/hiring-batches").then((r) => r.json() as Promise<{ batches: HiringBatch[] }>),
       fetch("/api/college/info").then((r) => r.json() as Promise<{ name: string }>).catch(() => ({ name: "" })),
+      fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferLetter[] }>).catch(() => ({ letters: [] })),
     ])
-      .then(([candidatesRes, batchesRes, infoRes]) => {
-        const decisionStage = (candidatesRes.candidates ?? []).filter((c) => c.currentStage === "DECISION");
+      .then(([candidatesRes, batchesRes, infoRes, offersRes]) => {
+        // Document verification only starts once an offer has actually gone out.
+        const offeredCandidateIds = new Set(
+          (offersRes.letters ?? [])
+            .filter((l) => l.status === "SENT" || l.status === "ACCEPTED")
+            .map((l) => l.candidateId)
+        );
+        const decisionStage = (candidatesRes.candidates ?? []).filter(
+          (c) => c.currentStage === "DECISION" && offeredCandidateIds.has(c.id)
+        );
         setCandidates(decisionStage);
         setBatches(Object.fromEntries((batchesRes.batches ?? []).map((b) => [b.id, b])));
         setCollegeName(infoRes.name ?? "");
+        setJoiningLetterUrls(Object.fromEntries(decisionStage.map((c) => [c.id, c.joiningLetterUrl ?? ""])));
 
         const initialChecklists: Record<string, Record<string, boolean>> = {};
         for (const c of decisionStage) {
@@ -50,6 +62,21 @@ export default function CollegeOfficeDocumentsPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load candidates" }))
       .finally(() => setIsLoading(false));
   }, []);
+
+  async function uploadJoiningLetter(candidateId: string, url: string) {
+    try {
+      const res = await fetch(`/api/college/candidates/${candidateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ joiningLetterUrl: url }),
+      });
+      if (!res.ok) throw new Error();
+      setJoiningLetterUrls((prev) => ({ ...prev, [candidateId]: url }));
+      if (url) toast({ variant: "success", title: "Joining letter saved" });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save joining letter" });
+    }
+  }
 
   function toggleDoc(candidateId: string, doc: string) {
     setChecklists((prev) => ({
@@ -181,6 +208,19 @@ export default function CollegeOfficeDocumentsPage() {
                   <Download className="h-4 w-4 mr-1.5" /> Save &amp; Download Acknowledgement
                 </Button>
               </div>
+
+              {checkedCount === docs.length && docs.length > 0 && (
+                <div className="pt-2 border-t">
+                  <DocumentUploadField
+                    label="Joining Letter"
+                    value={joiningLetterUrls[candidate.id]}
+                    uploadEndpoint="/api/upload/joining-letter"
+                    extraFields={{ candidateId: candidate.id }}
+                    onUploaded={(url) => void uploadJoiningLetter(candidate.id, url)}
+                    onRemoved={() => void uploadJoiningLetter(candidate.id, "")}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         );

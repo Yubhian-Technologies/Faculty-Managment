@@ -88,7 +88,7 @@ export default function HODTimetableGridPage() {
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
       ) : !timing ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          Timings haven&rsquo;t been configured for {course?.name} — {ordinalYear(Number(year))} yet. Ask the Principal to set them up under Departments first.
+          Timings haven&rsquo;t been configured for {course?.name} - {ordinalYear(Number(year))} yet. Ask the Principal to set them up under Departments first.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
@@ -133,7 +133,7 @@ export default function HODTimetableGridPage() {
                               {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
                             </div>
                           ) : (
-                            <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">—</div>
+                            <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">-</div>
                           )}
                         </td>
                       );

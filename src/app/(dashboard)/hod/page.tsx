@@ -7,7 +7,6 @@ import {
   Plus,
   ArrowRight,
   UsersRound,
-  CalendarClock,
   ClipboardCheck,
   TrendingUp,
   GraduationCap,
@@ -30,12 +29,10 @@ import type { Department, VacancyRequest, HiringBatch } from "@/types";
 
 const HOD_MODULES = [
   { label: "Faculty", description: "Department faculty list", href: "/hod/faculty", icon: UsersRound, color: "bg-blue-50 text-blue-600" },
-  { label: "Leave Approvals", description: "Approve faculty leave", href: "/hod/leave-approvals", icon: CalendarClock, color: "bg-emerald-50 text-emerald-600" },
   { label: "Hiring", description: "Pipeline · candidates · sessions", href: "/hod/pipeline", icon: ClipboardPlus, color: "bg-indigo-50 text-indigo-600" },
 ];
 
 const PERSONAL_MODULES = [
-  { label: "My Leave", description: "Apply & track leave", href: "/hod/leave", icon: CalendarClock, color: "bg-sky-50 text-sky-600" },
   { label: "My Attendance", description: "Attendance records", href: "/hod/attendance", icon: ClipboardCheck, color: "bg-violet-50 text-violet-600" },
   { label: "Teaching Load", description: "Subjects & timetable", href: "/hod/teaching", icon: BookOpen, color: "bg-orange-50 text-orange-600" },
   { label: "My Payslips", description: "Salary & payslips", href: "/hod/payslips", icon: Wallet, color: "bg-green-50 text-green-600" },
@@ -52,8 +49,8 @@ export default function HODDashboard() {
   const visibleHodModules = HOD_MODULES.filter((m) => !isHidden(m.href));
   const visiblePersonalModules = PERSONAL_MODULES.filter((m) => !isHidden(m.href));
   // "/hod/vacancy", "/hod/vacancy/new" and "/hod/batches" aren't their own nav
-  // items — they're sub-pages of the "Hiring" module (whose nav entry is
-  // /hod/pipeline) — so gate them off that module's visibility instead.
+  // items - they're sub-pages of the "Hiring" module (whose nav entry is
+  // /hod/pipeline) - so gate them off that module's visibility instead.
   const isHiringHidden = isHidden("/hod/pipeline");
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [batches, setBatches] = useState<HiringBatch[]>([]);
@@ -92,7 +89,7 @@ export default function HODDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name?.split(" ")[0] ?? "HOD"}`}
-        description={`${user?.department ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""} — Department Portal`}
+        description={`${user?.department ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""} - Department Portal`}
         actions={
           !isHiringHidden && (
             <Button asChild>

@@ -7,7 +7,7 @@ interface AuthState {
   user: FMSUser | null;
   firebaseToken: string | null;
   isLoading: boolean;
-  // Global roles (FINANCE, PURCHASE_DEPT) carry no collegeId of their own — they
+  // Global roles (FINANCE, PURCHASE_DEPT) carry no collegeId of their own - they
   // act on whichever college is picked here via the CollegeSwitcher. Ignored by
   // college-scoped roles, whose session already carries a fixed collegeId.
   selectedCollegeId: string | null;

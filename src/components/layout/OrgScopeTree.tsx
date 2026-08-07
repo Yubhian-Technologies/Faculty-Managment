@@ -8,7 +8,7 @@ import { useAuthStore } from "@/store/authStore";
 import type { College, Location, Department } from "@/types";
 
 // Sidebar Location -> College -> Department scope tree, rendered by Sidebar.tsx
-// for both FINANCE and PURCHASE_DEPT — both are GLOBAL roles with no fixed
+// for both FINANCE and PURCHASE_DEPT - both are GLOBAL roles with no fixed
 // college, so every /api/college/* call they make needs an explicit collegeId
 // (see CollegeSwitcher.tsx). Replaces the old header "current college"
 // indicator + its link out to a separate browse page: the whole org tree now

@@ -85,7 +85,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
       <div className="space-y-6">
         <PageHeader
           title="Demo QR Display"
-          description={`${batch.position} — ${batch.department}`}
+          description={`${batch.position} - ${batch.department}`}
         />
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
@@ -97,7 +97,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
     );
   }
 
-  // Fullscreen QR mode — for projecting to class
+  // Fullscreen QR mode - for projecting to class
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50 p-8">
@@ -276,7 +276,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
             <div>
               <p className="text-xs text-muted-foreground">Coordinator</p>
-              <p className="font-medium">{batch.coordinatorName ?? "—"}</p>
+              <p className="font-medium">{batch.coordinatorName ?? "-"}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Interview Mode</p>
@@ -297,9 +297,9 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
               {candidate?.interviewMode === "ONLINE" ? (
                 batch.meetingLink
                   ? <a href={batch.meetingLink} target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline text-xs break-all">{batch.meetingLink}</a>
-                  : <p className="font-medium text-muted-foreground">—</p>
+                  : <p className="font-medium text-muted-foreground">-</p>
               ) : (
-                <p className="font-medium">{batch.demoClassroom ?? "—"}</p>
+                <p className="font-medium">{batch.demoClassroom ?? "-"}</p>
               )}
             </div>
             <div>
@@ -317,7 +317,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
             <div className="flex items-start gap-3">
               <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-green-800">Demo day is done — here's what happens next</p>
+                <p className="font-medium text-sm text-green-800">Demo day is done - here's what happens next</p>
                 <ol className="mt-2 space-y-1 text-xs text-green-700 list-decimal list-inside">
                   <li>HOD reviews student demo scores and opens panel scoring</li>
                   <li>Panel members submit their interview assessments</li>

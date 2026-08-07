@@ -120,7 +120,7 @@ export default function CollegesPage() {
       hideOnMobile: true,
       render: (row) => (
         <div>
-          <p className="text-sm">{row.contactEmail || "—"}</p>
+          <p className="text-sm">{row.contactEmail || "-"}</p>
           <p className="text-xs text-muted-foreground">{row.contactPhone || ""}</p>
         </div>
       ),
@@ -129,7 +129,7 @@ export default function CollegesPage() {
       key: "address",
       header: "Address",
       hideOnMobile: true,
-      render: (row) => <span className="text-sm text-muted-foreground">{row.address || "—"}</span>,
+      render: (row) => <span className="text-sm text-muted-foreground">{row.address || "-"}</span>,
     },
     {
       key: "isActive",

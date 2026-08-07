@@ -1,4 +1,4 @@
-// Flow C — Indent Request (Goods): HOD -> Purchase Dept -> Finance -> Purchase Dept.
+// Flow C - Indent Request (Goods): HOD -> Purchase Dept -> Finance -> Purchase Dept.
 // Cases reference the IDs in the published QA test plan (IND-G-*).
 
 import { test, expect } from "@playwright/test";
@@ -6,7 +6,7 @@ import { ApiClient } from "../support/apiClient";
 import { testUsers } from "../support/testUsers";
 import { goodsIndentBody, quotation, threeQuotations } from "../support/builders";
 
-test.describe("Flow C — Indent Request (Goods)", () => {
+test.describe("Flow C - Indent Request (Goods)", () => {
   let hod: ApiClient;
   let purchase: ApiClient;
   let finance: ApiClient;

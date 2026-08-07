@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
   LayoutGrid,
   CalendarCheck,
-  ClipboardCheck,
   Bell,
   TrendingUp,
   CalendarClock,
@@ -91,13 +91,6 @@ function DashboardCards({ variant }: { variant: "floating" | "grid" }) {
           </div>
           <p className="mt-1 text-lg font-bold text-foreground">96%</p>
         </Card>
-        <Card className="border-border/80 p-3 shadow-sm">
-          <div className="flex items-center gap-2 text-primary">
-            <ClipboardCheck className="h-4 w-4" />
-            <span className="text-xs font-semibold">Leave Approval</span>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">2 pending review</p>
-        </Card>
       </div>
     );
   }
@@ -148,17 +141,6 @@ function DashboardCards({ variant }: { variant: "floating" | "grid" }) {
       </Card>
 
       <Card
-        className="landing-float absolute -left-4 bottom-16 w-44 border-border/80 p-3.5 shadow-lg"
-        style={{ animationDelay: "2s" }}
-      >
-        <div className="flex items-center gap-2 text-primary">
-          <ClipboardCheck className="h-4 w-4" />
-          <span className="text-xs font-semibold">Leave Approval</span>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">2 pending review</p>
-      </Card>
-
-      <Card
         className="landing-float absolute right-0 bottom-4 w-44 border-border/80 p-3.5 shadow-lg"
         style={{ animationDelay: "1.5s" }}
       >
@@ -204,10 +186,10 @@ export function LandingHero() {
                 size="lg"
                 className="w-full transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] sm:w-auto"
               >
-                <a href={LOGIN_URL}>
+                <Link href={LOGIN_URL}>
                   Login
                   <ArrowRight className="h-4 w-4" />
-                </a>
+                </Link>
               </Button>
               <Button
                 asChild

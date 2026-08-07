@@ -11,7 +11,7 @@ import type { DegreeDetail } from "@/types";
 
 // Shared building blocks for the NBA/AICTE-style profile forms (Teaching Faculty's
 // AcademicProfileFields/ProfileFieldsView and Supporting Staff's SupportingStaffProfileFields/
-// SupportingStaffProfileView) — extracted so both modules render identical section/field/
+// SupportingStaffProfileView) - extracted so both modules render identical section/field/
 // repeating-list UI instead of maintaining two near-duplicate copies.
 
 export const EMPTY_DEGREE: DegreeDetail = {
@@ -129,7 +129,7 @@ export function CheckboxGroup<T extends string>({
   );
 }
 
-// Free-form list of strings (e.g. programming languages, operating systems) — type a
+// Free-form list of strings (e.g. programming languages, operating systems) - type a
 // value, press Enter or click Add, remove via the chip's x.
 export function StringListInput({ label, values, onChange, placeholder }: {
   label: string; values: string[] | undefined; onChange: (next: string[]) => void; placeholder?: string;
@@ -193,7 +193,7 @@ export function Field({ label, value }: { label: string; value: string | number 
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value === undefined || value === null || value === "" ? "—" : value}</p>
+      <p className="text-sm font-medium">{value === undefined || value === null || value === "" ? "-" : value}</p>
     </div>
   );
 }

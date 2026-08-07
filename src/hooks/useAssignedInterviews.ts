@@ -9,7 +9,7 @@ export function useAssignedInterviews() {
 
   useEffect(() => {
     const role = user?.role;
-    // Panel membership is a college-scoped concept — Super Admin and
+    // Panel membership is a college-scoped concept - Super Admin and
     // location-scoped roles never have a collegeId, so this call would 401.
     // FINANCE and PURCHASE_DEPT are GLOBAL roles with no fixed collegeId
     // either, and /api/college/hiring-batches doesn't allow them at all

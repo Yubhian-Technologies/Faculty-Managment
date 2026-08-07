@@ -164,7 +164,7 @@ export default function DeptHeadInterviewDetailPage() {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <PageHeader title={interview.title} description="Panel interview — score each candidate below" />
+      <PageHeader title={interview.title} description="Panel interview - score each candidate below" />
 
       <Card>
         <CardContent className="grid grid-cols-2 gap-3 text-sm pt-5">
@@ -193,7 +193,7 @@ export default function DeptHeadInterviewDetailPage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Panel Evaluation (70%) + Student Feedback (30%) — rate each criterion 1–5
+              Panel Evaluation (70%) + Student Feedback (30%) - rate each criterion 1–5
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -212,7 +212,7 @@ export default function DeptHeadInterviewDetailPage() {
                     {already && (
                       <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 text-xs">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Score: {(already.overallScore ?? 0).toFixed(1)}/100 — click to update
+                        Score: {(already.overallScore ?? 0).toFixed(1)}/100 - click to update
                       </Badge>
                     )}
                   </div>

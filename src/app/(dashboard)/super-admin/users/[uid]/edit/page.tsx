@@ -18,11 +18,11 @@ import { ROLE_LABELS, ROLE_SCOPE } from "@/types";
 import type { FacultyProfileFields, UserRole } from "@/types";
 
 // The 6 roles Super Admin directly administers. Scope (COLLEGE/LOCATION/GLOBAL) is
-// read from ROLE_SCOPE — a role's tenancy tier, not something re-declared here —
+// read from ROLE_SCOPE - a role's tenancy tier, not something re-declared here -
 // so this stays correct as roles move between tiers (e.g. ACCOUNTS is LOCATION-
 // scoped, FINANCE/PURCHASE_DEPT are GLOBAL-scoped; only PRINCIPAL is COLLEGE).
 const SUPER_ADMIN_EDITABLE_ROLES: UserRole[] = ["PRINCIPAL", "ACCOUNTS", "FINANCE", "PURCHASE_DEPT", "ADMINISTRATION", "MANAGEMENT"];
-// Role-reassignment dropdown only offers roles within the same (COLLEGE) tier —
+// Role-reassignment dropdown only offers roles within the same (COLLEGE) tier -
 // reassigning across tiers would move the profile doc to a different collection,
 // which this page's PATCH route doesn't do.
 const COLLEGE_SCOPE_ROLES: UserRole[] = SUPER_ADMIN_EDITABLE_ROLES.filter((r) => ROLE_SCOPE[r] === "COLLEGE");
@@ -35,14 +35,14 @@ export default function EditUserPage() {
   const collegeId = searchParams.get("collegeId") ?? "";
   const locationId = searchParams.get("locationId") ?? "";
   const roleParam = (searchParams.get("role") ?? "") as UserRole | "";
-  // Gate on role membership first — HOD/PANEL_MEMBER/etc. share the COLLEGE scope
+  // Gate on role membership first - HOD/PANEL_MEMBER/etc. share the COLLEGE scope
   // tier with PRINCIPAL but aren't Super-Admin-editable at all.
   const isEditableRole = roleParam !== "" && SUPER_ADMIN_EDITABLE_ROLES.includes(roleParam);
   const roleParamScope = isEditableRole ? ROLE_SCOPE[roleParam as UserRole] : undefined;
 
   // College-scoped roles have a full edit form; Location/Global-scoped roles
   // (Administration/Accounts, Management/Finance/Purchase) only get the photo and
-  // Module 6 — Others (no PATCH route exists for their other fields).
+  // Module 6 - Others (no PATCH route exists for their other fields).
   const isCollegeScoped = roleParamScope === "COLLEGE" || (!roleParam && !!collegeId);
 
   const [loading, setLoading] = useState(true);
@@ -110,7 +110,7 @@ export default function EditUserPage() {
         .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
         .finally(() => setLoading(false));
     } else if (roleParamScope === "LOCATION") {
-      // Administration or Accounts — profile lives at locations/{id}/locationUsers.
+      // Administration or Accounts - profile lives at locations/{id}/locationUsers.
       if (!locationId) {
         toast({ variant: "destructive", title: "Missing location context" });
         router.push("/super-admin/users");
@@ -134,7 +134,7 @@ export default function EditUserPage() {
         .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
         .finally(() => setLoading(false));
     } else if (roleParamScope === "GLOBAL") {
-      // Management, Finance, or Purchase — profile lives only in systemUsers.
+      // Management, Finance, or Purchase - profile lives only in systemUsers.
       fetch("/api/admin/users?scope=global")
         .then((r) => r.json() as Promise<{ users?: Record<string, unknown>[] }>)
         .then((data) => {
@@ -338,14 +338,14 @@ export default function EditUserPage() {
             </Card>
           ) : (
             <Card className="mt-6">
-              <CardHeader><CardTitle className="text-base">Module 6 — Others</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Module 6 - Others</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   <Label>Other Information</Label>
                   <Textarea
                     value={academicProfile.otherInformation ?? ""}
                     onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
-                    placeholder="Anything not covered above — add it here"
+                    placeholder="Anything not covered above - add it here"
                     rows={4}
                   />
                   <p className="text-xs text-muted-foreground">Saved together with &quot;Save Changes&quot; above.</p>
@@ -364,19 +364,19 @@ export default function EditUserPage() {
                   <AvatarUploadField name={name || "?"} photoUrl={photoUrl} targetId={uid} onUploaded={handlePhotoUploaded} onDeleted={() => void handlePhotoDeleted()} />
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {ROLE_LABELS[role]} accounts only support editing the profile photo and Module 6 — Others from Super Admin. Name: <strong className="text-foreground">{name}</strong>
+                  {ROLE_LABELS[role]} accounts only support editing the profile photo and Module 6 - Others from Super Admin. Name: <strong className="text-foreground">{name}</strong>
                 </p>
               </div>
             </CardContent>
           </Card>
           <Card className="mt-6">
-            <CardHeader><CardTitle className="text-base">Module 6 — Others</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Module 6 - Others</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-3">
                 <Textarea
                   value={academicProfile.otherInformation ?? ""}
                   onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
-                  placeholder="Anything not covered above — add it here"
+                  placeholder="Anything not covered above - add it here"
                   rows={4}
                 />
                 <div className="flex justify-end">

@@ -7,20 +7,20 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
 
-const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
 // HOD is included so a main HOD can create a Sub-HOD login (see
 // hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
 // posts role: "HOD" with the not-yet-created sub-department's name as
-// `department` — the sub-department itself, and this account's actual scope,
+// `department` - the sub-department itself, and this account's actual scope,
 // only becomes real once POST /api/college/departments links them via
 // hodUid, which is where the "only within your own department" check lives).
-const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD"];
-// One holder per role per college — same rule as administration/college-staff route.
-const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "ANNEXURE"];
+// One holder per role per college - same rule as administration/college-staff route.
+const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "WEBMASTER");
     const { searchParams } = new URL(request.url);
     const roleFilter = searchParams.get("role");
     const allDepts = searchParams.get("allDepts") === "true";
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
         return an.localeCompare(bn);
       });
 
-    // A college has exactly one Principal — deduplicate to avoid showing test duplicates
+    // A college has exactly one Principal - deduplicate to avoid showing test duplicates
     if (includeAll) {
       let principalSeen = false;
       users = users.filter((u) => {
@@ -97,14 +97,18 @@ export async function POST(request: Request) {
       department?: string;
       staffType?: "teaching" | "supporting";
       designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Dean - R&D")
+      annexure?: string; // HOD-entered reference number/label for ANNEXURE role (e.g. "1", "2")
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation } = body;
+    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, annexure } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    if (role === "ANNEXURE" && !annexure) {
+      return NextResponse.json({ error: "annexure is required" }, { status: 400 });
     }
     // Uploaded before the account exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific uid.
@@ -112,7 +116,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
-    // Enforce role-based creation rules — Vice Principal mirrors Principal's authority.
+    // Enforce role-based creation rules - Vice Principal mirrors Principal's authority.
     if ((session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") && !PRINCIPAL_ROLES.includes(role)) {
       return NextResponse.json(
         { error: `Principal can only create: ${PRINCIPAL_ROLES.join(", ")}` },
@@ -175,6 +179,7 @@ export async function POST(request: Request) {
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),
         ...(designation ? { designation } : {}),
+        ...(annexure ? { annexure } : {}),
         ...(academicProfile ? { academicProfile } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
         ...buildPersonalDetailsUpdate(body),

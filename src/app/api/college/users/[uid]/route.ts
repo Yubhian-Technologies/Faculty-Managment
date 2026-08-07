@@ -22,7 +22,9 @@ async function loadTargetInScope(
   const target = targetSnap.data() as { role: string; department?: string };
 
   if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
-    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"].includes(target.role)) {
+    // Matches CREATABLE_ROLES in principal/staff/new/page.tsx - every role a
+    // Principal/VP can create here, they can also view/edit/deactivate.
+    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER"].includes(target.role)) {
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
   } else if (session.role === "HOD") {
@@ -91,7 +93,7 @@ export async function PATCH(
     if (!targetSnap) return NextResponse.json({ error }, { status });
     const target = targetSnap.data() as { role: string };
 
-    // Empty string clears the photo — everything else must be a real upload of ours.
+    // Empty string clears the photo - everything else must be a real upload of ours.
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&

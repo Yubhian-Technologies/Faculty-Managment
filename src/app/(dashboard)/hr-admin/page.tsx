@@ -36,13 +36,13 @@ export default function HRAdminDashboard() {
       label: "Hiring Requests",
       href: "/hr-admin/vacancies",
       icon: ClipboardList,
-      desc: `${pendingVacancies ?? "…"} pending from Dept Heads — forward to Administration`,
+      desc: `${pendingVacancies ?? "…"} pending from Dept Heads - forward to Administration`,
     },
     {
       label: "Candidates",
       href: "/hr-admin/candidates",
       icon: Users,
-      desc: `${pendingCandidates ?? "…"} pending review — shortlist or reject`,
+      desc: `${pendingCandidates ?? "…"} pending review - shortlist or reject`,
     },
     {
       label: "Interview Plans",

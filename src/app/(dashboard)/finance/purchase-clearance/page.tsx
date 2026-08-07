@@ -45,9 +45,9 @@ type IndentRow = {
   collegeId?: string;
   collegeName?: string;
 };
-// Both request types can put Purchase Dept in the loop — a freeform clearance
+// Both request types can put Purchase Dept in the loop - a freeform clearance
 // request, or a GOODS-type indent (NON_GOODS indents skip Purchase Dept
-// entirely, see IndentRequestType in src/types/indent.ts) — shown together so
+// entirely, see IndentRequestType in src/types/indent.ts) - shown together so
 // Finance sees everything currently in flight with Purchase Dept in one list.
 type Row = ClearanceRow | IndentRow;
 
@@ -60,7 +60,7 @@ const SCOPE_LABELS: Record<ClearanceScope, string> = {
 };
 
 // Purchase Dept hasn't forwarded these to Finance yet (still with HOD/Purchase
-// Dept), so Finance shouldn't see them at all — only PENDING_FINANCE_REVIEW
+// Dept), so Finance shouldn't see them at all - only PENDING_FINANCE_REVIEW
 // onward is actually "sent by Purchase Dept". Same status names for both the
 // clearance and indent state machines at this stage.
 const NOT_YET_SENT_TO_FINANCE = new Set(["PENDING_PURCHASE_REVIEW", "REJECTED_BY_PURCHASE", "RETURNED_TO_HOD"]);
@@ -97,7 +97,7 @@ export default function FinancePurchaseClearancePage() {
 
   // Actions mutate whichever college collegeFetch() currently targets
   // (selectedCollegeId), so only the "This College" scope is safe to act on
-  // inline — an aggregated Location/All list must stay read-only to avoid
+  // inline - an aggregated Location/All list must stay read-only to avoid
   // ever approving/rejecting an item against the wrong college.
   const actionable = scope === "COLLEGE";
 
@@ -194,7 +194,7 @@ export default function FinancePurchaseClearancePage() {
         description={
           actionable
             ? "Review vendor quotations and grant financial clearance"
-            : "Read-only view across the selected scope — switch to a specific college to act on a request"
+            : "Read-only view across the selected scope - switch to a specific college to act on a request"
         }
         actions={
           <Select value={scope} onValueChange={(v) => setScope(v as ClearanceScope)}>
@@ -442,7 +442,7 @@ function ClearanceCard({
   );
 }
 
-// GOODS indents shown here for visibility only — acting on them (approve/
+// GOODS indents shown here for visibility only - acting on them (approve/
 // reject/return, disbursement) happens on the Indent Approvals tab, which
 // already has the full action flow for every indent (GOODS and NON_GOODS).
 // Duplicating that flow here would mean two code paths driving the same

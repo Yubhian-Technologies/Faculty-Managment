@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      // No sub-department view-access concept here — an HOD only ever sees
+      // No sub-department view-access concept here - an HOD only ever sees
       // Supporting Staff explicitly assigned to their own department. Records
       // with no department (centrally managed, e.g. Librarian/Accountant)
       // simply don't show for an HOD.
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    // Department is optional — many Supporting Staff roles (Librarian, Accountant,
+    // Department is optional - many Supporting Staff roles (Librarian, Accountant,
     // centrally-hired staff) aren't owned by any single department. Only an HOD
     // caller auto-fills their own department; College Office may leave it blank.
     let department = body.department?.trim() ?? "";

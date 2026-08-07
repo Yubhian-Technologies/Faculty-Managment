@@ -118,7 +118,7 @@ export default function HODPurchaseClearanceDetailPage() {
         throw new Error(err.error ?? "Failed to save GRN");
       }
 
-      toast({ variant: "success", title: "GRN uploaded — goods receipt confirmed" });
+      toast({ variant: "success", title: "GRN uploaded - goods receipt confirmed" });
       setGrnForm(emptyGrnForm());
       setGrnFile(null);
       load();
@@ -156,7 +156,7 @@ export default function HODPurchaseClearanceDetailPage() {
 
       <PageHeader
         title={item.items}
-        description={`${item.department} — raised on ${formatDate(item.createdAt)}`}
+        description={`${item.department} - raised on ${formatDate(item.createdAt)}`}
         actions={
           <Badge variant="outline" className={STATUS_COLOR[item.status]}>
             {PURCHASE_CLEARANCE_STATUS_LABELS[item.status]}

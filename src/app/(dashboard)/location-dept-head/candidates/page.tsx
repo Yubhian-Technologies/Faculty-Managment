@@ -67,9 +67,9 @@ export default function LocationDeptHeadCandidatesPage() {
               subtitle={c.appliedPosition}
               badge={<StatusBadge status={c.status} />}
               fields={[
-                { label: "Email", value: c.email ?? "—" },
-                { label: "Phone", value: c.phone ?? "—" },
-                { label: "Qualification", value: c.qualification ?? "—" },
+                { label: "Email", value: c.email ?? "-" },
+                { label: "Phone", value: c.phone ?? "-" },
+                { label: "Qualification", value: c.qualification ?? "-" },
               ]}
             />
           ))}
@@ -88,9 +88,9 @@ export default function LocationDeptHeadCandidatesPage() {
           columns={[
             { key: "name", header: "Name" },
             { key: "appliedPosition", header: "Applied For" },
-            { key: "qualification", header: "Qualification", render: (r) => (r as unknown as LocationCandidate).qualification ?? "—" },
-            { key: "email", header: "Email", render: (r) => (r as unknown as LocationCandidate).email ?? "—" },
-            { key: "phone", header: "Phone", render: (r) => (r as unknown as LocationCandidate).phone ?? "—" },
+            { key: "qualification", header: "Qualification", render: (r) => (r as unknown as LocationCandidate).qualification ?? "-" },
+            { key: "email", header: "Email", render: (r) => (r as unknown as LocationCandidate).email ?? "-" },
+            { key: "phone", header: "Phone", render: (r) => (r as unknown as LocationCandidate).phone ?? "-" },
             { key: "status", header: "Status", render: (r) => <StatusBadge status={(r as unknown as LocationCandidate).status} /> },
             { key: "createdAt", header: "Added", render: (r) => formatDate((r as unknown as LocationCandidate).createdAt as Parameters<typeof formatDate>[0]) },
           ]}

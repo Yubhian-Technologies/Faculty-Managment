@@ -103,3 +103,37 @@ export function offerLetterEmail({
 </body>
 </html>`;
 }
+
+export function appointmentLetterEmail({
+  candidateName,
+  designation,
+  department,
+  joiningDate,
+  collegeName,
+}: {
+  candidateName: string;
+  designation: string;
+  department: string;
+  joiningDate: string;
+  collegeName: string;
+}): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f8fafc;margin:0;padding:20px;">
+  <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1d4ed8;padding:32px 24px;text-align:center;">
+      <h1 style="color:#fff;margin:0;font-size:22px;">${collegeName}</h1>
+      <p style="color:#bfdbfe;margin:8px 0 0;">Appointment Letter</p>
+    </div>
+    <div style="padding:32px 24px;">
+      <p style="color:#0f172a;font-size:16px;">Dear <strong>${candidateName}</strong>,</p>
+      <p style="color:#475569;">Congratulations! Please find attached your formal appointment letter for the position of <strong>${designation}</strong> in the <strong>${department}</strong> department, effective from <strong>${joiningDate}</strong>.</p>
+      <p style="color:#475569;font-size:14px;">Please report with all original documents on your joining date as noted in the attached letter.</p>
+      <p style="color:#0f172a;font-weight:600;">Welcome aboard!<br><br>${collegeName}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}

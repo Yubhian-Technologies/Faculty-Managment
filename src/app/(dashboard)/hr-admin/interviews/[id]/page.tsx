@@ -329,7 +329,7 @@ export default function HRInterviewDetailPage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Panel Evaluation (70%) — 5 criteria, rated 1–5 · Student Feedback (30%) — 5 criteria, rated 1–5
+              Panel Evaluation (70%) - 5 criteria, rated 1–5 · Student Feedback (30%) - 5 criteria, rated 1–5
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -348,7 +348,7 @@ export default function HRInterviewDetailPage() {
                     {already && (
                       <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 text-xs">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Score: {(already.overallScore ?? 0).toFixed(1)}/100 — click to update
+                        Score: {(already.overallScore ?? 0).toFixed(1)}/100 - click to update
                       </Badge>
                     )}
                   </div>
@@ -445,7 +445,7 @@ export default function HRInterviewDetailPage() {
                         <div>
                           <span className="font-medium">{f.panelName}</span>
                           <span className="text-muted-foreground"> · Overall: {(f.overallScore ?? 0).toFixed(1)}/100 (Panel: {(f.panelScore ?? 0).toFixed(1)} + Student: {(f.studentScore ?? 0).toFixed(1)})</span>
-                          {f.remarks && <span className="text-muted-foreground"> — {f.remarks}</span>}
+                          {f.remarks && <span className="text-muted-foreground"> - {f.remarks}</span>}
                         </div>
                         <StatusBadge status={f.recommendation} />
                       </div>
@@ -458,7 +458,7 @@ export default function HRInterviewDetailPage() {
         </Card>
       )}
 
-      {/* Finalize decisions — visible after interview is completed */}
+      {/* Finalize decisions - visible after interview is completed */}
       {interview.status === "COMPLETED" && (
         <Card className="border-primary/30 bg-primary/5">
           <CardHeader className="pb-3">

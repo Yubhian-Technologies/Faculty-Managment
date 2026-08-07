@@ -1,4 +1,4 @@
-// Flow B — Emergency Budget Request (Principal/VP -> Management -> Finance).
+// Flow B - Emergency Budget Request (Principal/VP -> Management -> Finance).
 // Cases reference the IDs in the published QA test plan (BUD-B-*).
 
 import { test, expect } from "@playwright/test";
@@ -6,7 +6,7 @@ import { ApiClient } from "../support/apiClient";
 import { testUsers } from "../support/testUsers";
 import { emergencyBudgetRequestBody } from "../support/builders";
 
-test.describe("Flow B — Emergency Budget Request", () => {
+test.describe("Flow B - Emergency Budget Request", () => {
   let hod: ApiClient;
   let principal: ApiClient;
   let finance: ApiClient;

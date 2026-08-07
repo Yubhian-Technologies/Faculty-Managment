@@ -11,10 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUpload } from "@/components/shared/FileUpload";
+import { DocumentTypeCombobox } from "@/components/shared/DocumentTypeCombobox";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
 import { Trash2, Plus, CheckCircle2 } from "lucide-react";
-import type { CandidateBioData } from "@/types";
+import type { CandidateBioData, AcademicQualification, WorkExperienceEntry, RelativeInSociety } from "@/types";
 
 interface CandidateInfo {
   name: string;
@@ -29,6 +30,24 @@ function newCertRow(): CertRow {
   return { key: Math.random().toString(36).slice(2), label: "", file: null };
 }
 
+type QualificationRow = AcademicQualification & { file: File | null };
+
+function newQualificationRow(): QualificationRow {
+  return {
+    id: Math.random().toString(36).slice(2),
+    degree: "", institution: "", yearOfPassing: "", percentageOrCGPA: "",
+    file: null,
+  };
+}
+
+function newExperienceRow(): WorkExperienceEntry {
+  return { id: Math.random().toString(36).slice(2), organization: "", designation: "", fromDate: "", toDate: "", responsibilities: "" };
+}
+
+function newRelativeRow(): RelativeInSociety {
+  return { id: Math.random().toString(36).slice(2), name: "", relationship: "", workingLocation: "", profession: "", experience: "" };
+}
+
 export default function CandidateFormPage() {
   const { collegeId, candidateId } = useParams<{ collegeId: string; candidateId: string }>();
 
@@ -39,6 +58,10 @@ export default function CandidateFormPage() {
 
   const [form, setForm] = useState<CandidateBioData>({});
   const [certRows, setCertRows] = useState<CertRow[]>([newCertRow()]);
+  const [qualifications, setQualifications] = useState<QualificationRow[]>([newQualificationRow()]);
+  const [experiences, setExperiences] = useState<WorkExperienceEntry[]>([newExperienceRow()]);
+  const [hasRelatives, setHasRelatives] = useState(false);
+  const [relatives, setRelatives] = useState<RelativeInSociety[]>([newRelativeRow()]);
 
   useEffect(() => {
     fetch(`/api/public/candidate-form/${collegeId}/${candidateId}`)
@@ -64,6 +87,30 @@ export default function CandidateFormPage() {
     setCertRows((prev) => prev.filter((r) => r.key !== key));
   }
 
+  function updateQualificationRow(id: string, patch: Partial<QualificationRow>) {
+    setQualifications((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function removeQualificationRow(id: string) {
+    setQualifications((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  function updateExperienceRow(id: string, patch: Partial<WorkExperienceEntry>) {
+    setExperiences((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function removeExperienceRow(id: string) {
+    setExperiences((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  function updateRelativeRow(id: string, patch: Partial<RelativeInSociety>) {
+    setRelatives((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function removeRelativeRow(id: string) {
+    setRelatives((prev) => prev.filter((r) => r.id !== id));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -80,10 +127,40 @@ export default function CandidateFormPage() {
         certificates.push({ name: row.label.trim() || row.file.name, url });
       }
 
+      const qualifications_: AcademicQualification[] = [];
+      for (const row of qualifications) {
+        if (!row.degree.trim() && !row.institution.trim()) continue;
+        const { file, ...rest } = row;
+        let certificateUrl = rest.certificateUrl;
+        let certificateName = rest.certificateName;
+        if (file) {
+          const fileRef = ref(
+            storage,
+            `colleges/${collegeId}/candidateCertificates/${candidateId}/${Date.now()}_${file.name}`
+          );
+          await uploadBytes(fileRef, file);
+          certificateUrl = await getDownloadURL(fileRef);
+          certificateName = file.name;
+        }
+        qualifications_.push({ ...rest, certificateUrl, certificateName });
+      }
+
+      const experiences_ = experiences.filter((r) => r.organization.trim() || r.designation.trim());
+      const relatives_ = hasRelatives ? relatives.filter((r) => r.name.trim() || r.workingLocation.trim()) : [];
+
       const res = await fetch(`/api/public/candidate-form/${collegeId}/${candidateId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bioData: form, certificates }),
+        body: JSON.stringify({
+          bioData: {
+            ...form,
+            qualifications: qualifications_,
+            experiences: experiences_,
+            hasRelativesInSociety: hasRelatives,
+            relatives: relatives_,
+          },
+          certificates,
+        }),
       });
       if (!res.ok) throw new Error();
       setSubmitted(true);
@@ -133,7 +210,7 @@ export default function CandidateFormPage() {
 
   return (
     <div className="min-h-screen bg-muted/30 py-8 px-4">
-      <div className="max-w-2xl mx-auto space-y-5">
+      <div className="max-w-5xl mx-auto space-y-5">
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold">Interview — Bio Data Form</h1>
           <p className="text-sm text-muted-foreground">Please fill all details and upload your certificates before your interview</p>
@@ -147,7 +224,7 @@ export default function CandidateFormPage() {
           </CardContent>
         </Card>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -226,6 +303,154 @@ export default function CandidateFormPage() {
           </Card>
 
           <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Academic Qualifications</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {qualifications.map((row, i) => (
+                <div key={row.id} className="rounded-lg border p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">Qualification {i + 1}</p>
+                    {qualifications.length > 1 && (
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeQualificationRow(row.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Degree / Course</Label>
+                      <Input value={row.degree} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="e.g. M.Tech" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Institution</Label>
+                      <Input value={row.institution} onChange={(e) => updateQualificationRow(row.id, { institution: e.target.value })} placeholder="College / University name" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Year of Passing</Label>
+                      <Input value={row.yearOfPassing} onChange={(e) => updateQualificationRow(row.id, { yearOfPassing: e.target.value })} placeholder="e.g. 2020" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Percentage / CGPA</Label>
+                      <Input value={row.percentageOrCGPA} onChange={(e) => updateQualificationRow(row.id, { percentageOrCGPA: e.target.value })} placeholder="e.g. 8.5 CGPA" />
+                    </div>
+                  </div>
+                  <FileUpload
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    maxSizeMB={5}
+                    onFileSelect={(file) => updateQualificationRow(row.id, { file })}
+                    label="Upload Certificate"
+                  />
+                </div>
+              ))}
+              <Button type="button" variant="outline" className="w-full" onClick={() => setQualifications((prev) => [...prev, newQualificationRow()])}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Another Qualification
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Work Experience</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {experiences.map((row, i) => (
+                <div key={row.id} className="rounded-lg border p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">Experience {i + 1}</p>
+                    {experiences.length > 1 && (
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeExperienceRow(row.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Organization</Label>
+                      <Input value={row.organization} onChange={(e) => updateExperienceRow(row.id, { organization: e.target.value })} placeholder="College / Company name" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Designation</Label>
+                      <Input value={row.designation} onChange={(e) => updateExperienceRow(row.id, { designation: e.target.value })} placeholder="e.g. Assistant Professor" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>From</Label>
+                      <Input type="month" value={row.fromDate} onChange={(e) => updateExperienceRow(row.id, { fromDate: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>To</Label>
+                      <Input type="month" value={row.toDate} onChange={(e) => updateExperienceRow(row.id, { toDate: e.target.value })} placeholder="Leave blank if current" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Responsibilities (optional)</Label>
+                    <Textarea value={row.responsibilities ?? ""} onChange={(e) => updateExperienceRow(row.id, { responsibilities: e.target.value })} rows={2} />
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" className="w-full" onClick={() => setExperiences((prev) => [...prev, newExperienceRow()])}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Another Experience
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Relatives Working in the Society</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Button type="button" variant={hasRelatives ? "default" : "outline"} onClick={() => setHasRelatives(true)}>Yes</Button>
+                <Button type="button" variant={!hasRelatives ? "default" : "outline"} onClick={() => setHasRelatives(false)}>No</Button>
+              </div>
+              {hasRelatives && (
+                <div className="space-y-4">
+                  {relatives.map((row, i) => (
+                    <div key={row.id} className="rounded-lg border p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">Relative {i + 1}</p>
+                        {relatives.length > 1 && (
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeRelativeRow(row.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Relative&apos;s Name</Label>
+                          <Input value={row.name} onChange={(e) => updateRelativeRow(row.id, { name: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Relationship</Label>
+                          <Input value={row.relationship} onChange={(e) => updateRelativeRow(row.id, { relationship: e.target.value })} placeholder="e.g. Brother, Spouse" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label>Working Location</Label>
+                          <Input value={row.workingLocation} onChange={(e) => updateRelativeRow(row.id, { workingLocation: e.target.value })} placeholder="College / Department" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Profession / Designation</Label>
+                          <Input value={row.profession} onChange={(e) => updateRelativeRow(row.id, { profession: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Experience</Label>
+                        <Input value={row.experience} onChange={(e) => updateRelativeRow(row.id, { experience: e.target.value })} placeholder="e.g. 5 years" />
+                      </div>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" className="w-full" onClick={() => setRelatives((prev) => [...prev, newRelativeRow()])}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Another Relative
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Professional Details</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -267,12 +492,13 @@ export default function CandidateFormPage() {
               {certRows.map((row) => (
                 <div key={row.key} className="rounded-lg border p-3 space-y-2">
                   <div className="flex items-center gap-2">
-                    <Input
-                      value={row.label}
-                      onChange={(e) => updateCertRow(row.key, { label: e.target.value })}
-                      placeholder="e.g. PG Degree Certificate, Experience Letter"
-                      className="flex-1"
-                    />
+                    <div className="flex-1">
+                      <DocumentTypeCombobox
+                        value={row.label}
+                        onChange={(v) => updateCertRow(row.key, { label: v })}
+                        placeholder="Select or search document type..."
+                      />
+                    </div>
                     {certRows.length > 1 && (
                       <Button type="button" variant="ghost" size="icon" onClick={() => removeCertRow(row.key)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -296,7 +522,7 @@ export default function CandidateFormPage() {
 
           <Button
             type="submit"
-            className="w-full"
+            className="w-full md:col-span-2"
             loading={saving}
             disabled={!form.dateOfBirth || !form.gender}
           >

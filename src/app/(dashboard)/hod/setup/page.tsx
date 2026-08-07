@@ -17,7 +17,7 @@ export default function HODSetupPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Show approved batches — these are the ones HOD needs to finalize after College Office sets up
+    // Show approved batches - these are the ones HOD needs to finalize after College Office sets up
     fetch("/api/college/hiring-batches?status=APPROVED")
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))

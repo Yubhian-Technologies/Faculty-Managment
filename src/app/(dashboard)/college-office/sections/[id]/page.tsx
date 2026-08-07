@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Upload, Users, Pencil, ArrowRightLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Users, Pencil, ArrowRightLeft, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,9 +59,9 @@ export default function OfficeSectionRosterPage() {
           toast({ variant: "destructive", title: "Section not found" });
           return null;
         }
-        // Students API scopes by section NAME + year, not id — section names
+        // Students API scopes by section NAME + year, not id - section names
         // aren't unique across departments (or even within one, when two
-        // sections are cross-listed to different branches — e.g. two "A"s
+        // sections are cross-listed to different branches - e.g. two "A"s
         // under Basic Science, one feeding CSE and one ECE), so narrow
         // client-side by department and, when this section is cross-listed,
         // by that cross-listing too.
@@ -155,9 +155,11 @@ export default function OfficeSectionRosterPage() {
             <Button variant="outline" asChild>
               <Link href={`/college-office/sections/${id}/edit`}><Pencil className="h-4 w-4 mr-1" />Edit</Link>
             </Button>
-            <Button asChild>
+            {/* Import Students - temporarily hidden, not removed. Re-enable by
+                uncommenting this button. */}
+            {/* <Button asChild>
               <Link href="/college-office/students/import"><Upload className="h-4 w-4 mr-1" />Import Students</Link>
-            </Button>
+            </Button> */}
           </div>
         }
       />
@@ -173,7 +175,7 @@ export default function OfficeSectionRosterPage() {
             <div className="py-16">
               <EmptyState
                 title="No students in this section yet"
-                description="Import a roster to get started."
+                description="Students will show up here once added."
                 icon={<Users className="h-8 w-8" />}
               />
             </div>
@@ -205,11 +207,11 @@ export default function OfficeSectionRosterPage() {
                       <td className="px-4 py-2.5">
                         {s.secondaryDepartment
                           ? <Badge variant="outline" className="text-xs">{s.secondaryDepartment}</Badge>
-                          : <span className="text-muted-foreground">—</span>}
+                          : <span className="text-muted-foreground">-</span>}
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{s.email || "—"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.gender || "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.guardianContact || "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{s.email || "-"}</td>
                       <td className="px-4 py-2.5">
                         <div className="flex justify-end gap-1">
                           <Button

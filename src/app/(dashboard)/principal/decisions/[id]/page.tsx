@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -261,18 +260,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   <div>
                     <CardTitle className="text-base">{candidate.name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{candidate.email} · {candidate.phone}</p>
-                    {(() => {
-                      const pfSalary = pf.find((f) => f.salaryNegotiated != null);
-                      const salary = pfSalary?.salaryNegotiated;
-                      const notice = pfSalary?.noticePeriod;
-                      if (!salary) return null;
-                      return (
-                        <p className="text-sm font-medium text-primary mt-1">
-                          Salary negotiated: ₹{salary.toLocaleString("en-IN")}/month
-                          {notice ? ` · Notice: ${notice}` : ""}
-                        </p>
-                      );
-                    })()}
                   </div>
                   {decision ? (
                     <Badge
@@ -391,15 +378,10 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                           <CheckCircle2 className="h-4 w-4" />Offer letter sent
                         </span>
                       ) : (
-                        <>
-                          <span className="text-sm text-muted-foreground">Candidate approved.</span>
-                          <Button size="sm" asChild>
-                            <Link href={`/hod/offers/new?batchId=${batch.id}&candidateId=${candidate.id}`}>
-                              <Mail className="h-3.5 w-3.5 mr-1.5" />
-                              Send Offer Letter
-                            </Link>
-                          </Button>
-                        </>
+                        <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5 shrink-0" />
+                          Candidate approved — awaiting the office to send the offer letter.
+                        </span>
                       )}
                     </div>
                   ) : (

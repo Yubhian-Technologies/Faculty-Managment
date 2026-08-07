@@ -12,7 +12,7 @@ import { ROLE_LABELS } from "@/types";
 import { toast } from "@/hooks/useToast";
 import type { Location, UserRole } from "@/types";
 
-// The LOCATION-scoped slice Management is allowed to appoint — must match
+// The LOCATION-scoped slice Management is allowed to appoint - must match
 // MANAGEMENT_CREATABLE in src/app/api/admin/users/route.ts.
 const CREATABLE_ROLES: UserRole[] = ["ADMINISTRATION", "ACCOUNTS"];
 

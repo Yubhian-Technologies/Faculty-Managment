@@ -7,7 +7,7 @@ export type ProvisionResult =
   | { status: "no_email" }
   | { status: "not_found" };
 
-function generatePassword(): string {
+export function generatePassword(): string {
   return randomBytes(9).toString("base64url"); // 12 url-safe chars
 }
 

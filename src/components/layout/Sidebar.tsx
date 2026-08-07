@@ -40,20 +40,20 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hasIncomingStudents } = useIncomingStudents();
-  const { isSubDepartment } = useIsSubDepartmentHod();
+  const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
 
   if (!user) return null;
 
-  // "Incoming Students" is only ever relevant once the office has actually
+  // "First Year Students" is only ever relevant once the office has actually
   // pre-registered a student to this department while enrolling them
-  // elsewhere — hide the link entirely until there's at least one, instead
+  // elsewhere - hide the link entirely until there's at least one, instead
   // of leaving a permanently-empty page in every HOD's sidebar.
-  // "Sub-Departments" is hidden for an HOD whose own department already is a
-  // sub-department — sub-departments are one level deep only, so that page
-  // can never do anything for them.
+  // "Sub-Departments" is hidden unless the HOD's own department both isn't
+  // itself a sub-department and has sub-departments enabled by the Principal
+  // - see useIsSubDepartmentHod for why either gap makes the page a dead end.
   const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
     .filter((item) => hasIncomingStudents || item.href !== "/hod/students/incoming")
-    .filter((item) => !isSubDepartment || item.href !== "/hod/settings/sub-departments");
+    .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
 
   // Inject dynamic nav items based on panel assignments (any role can be a panel member)
   let navItems = baseNavItems;

@@ -3,10 +3,11 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { resolveOfferLetterCcEmails } from "@/lib/firestore/offerLetterCc";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "WEBMASTER");
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get("batchId");
     const candidateId = searchParams.get("candidateId");
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACCOUNTS");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACCOUNTS");
     const body = (await request.json()) as {
       candidateId: string;
       batchId: string;
@@ -66,6 +67,8 @@ export async function POST(request: Request) {
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
 
+    const { ccEmails: uniqueCcEmails, hodUid, position } = await resolveOfferLetterCcEmails(db, session.collegeId, batchId);
+
     const docRef = db.collection("colleges").doc(session.collegeId).collection("offerLetters").doc();
     const letter = {
       id: docRef.id,
@@ -79,13 +82,16 @@ export async function POST(request: Request) {
       ctcAnnual,
       subjects: body.subjects ?? [],
       ...(body.termsAndConditions?.trim() ? { termsAndConditions: body.termsAndConditions.trim() } : {}),
-      // No separate draft/review step — HOD sends the offer in the same action.
+      // No separate draft/review step - HOD sends the offer in the same action.
       status: "SENT",
       generatedBy: actorName,
       generatedByUid: session.uid,
       generatedAt: now,
       createdAt: now,
       updatedAt: now,
+      // Persisted (not just returned) so later actions - e.g. Compose Email on the
+      // Offer Letters list - can CC the same people without recomputing this lookup.
+      ccEmails: uniqueCcEmails,
     };
 
     await docRef.set(letter);
@@ -93,41 +99,22 @@ export async function POST(request: Request) {
     // Faculty account creation is deferred until the offer is accepted — see
     // "Create Faculty Account" on the Offer Letters list.
 
-    // Notify candidate's HOD (e.g. Principal/VP sending on the HOD's behalf), and
-    // resolve the panel + office staff email list for CC'ing the offer letter email.
-    const batchSnap = await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(batchId).get();
-    const ccEmails: string[] = [];
-    if (batchSnap.exists) {
-      const batch = batchSnap.data() as { hodUid?: string; position?: string; panelMemberUids?: string[] };
-      if (batch.hodUid && batch.hodUid !== session.uid) {
-        const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-        await notifRef.set({
-          collegeId: session.collegeId,
-          toUid: batch.hodUid,
-          type: "OFFER_LETTER_CREATED",
-          title: "Offer Letter Sent",
-          message: `An offer letter has been sent to ${candidateName} (${batch.position ?? designation}).`,
-          link: `/hod/offers`,
-          read: false,
-          createdAt: now,
-        });
-      }
-
-      const usersColl = db.collection("colleges").doc(session.collegeId).collection("users");
-      const panelUids = (batch.panelMemberUids ?? []).slice(0, 30); // Firestore 'in' cap
-      const [panelSnap, officeSnap] = await Promise.all([
-        panelUids.length > 0
-          ? usersColl.where("__name__", "in", panelUids).get()
-          : Promise.resolve(null),
-        usersColl.where("role", "==", "COLLEGE_OFFICE").get(),
-      ]);
-      for (const d of [...(panelSnap?.docs ?? []), ...officeSnap.docs]) {
-        const email = (d.data() as { email?: string }).email;
-        if (email) ccEmails.push(email);
-      }
+    // Notify candidate's HOD (the office is sending on the HOD's behalf)
+    if (hodUid && hodUid !== session.uid) {
+      const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
+      await notifRef.set({
+        collegeId: session.collegeId,
+        toUid: hodUid,
+        type: "OFFER_LETTER_GENERATED",
+        title: "Offer Letter Sent",
+        message: `An offer letter has been sent to ${candidateName} (${position ?? designation}).`,
+        link: `/hod/batches/${batchId}`,
+        read: false,
+        createdAt: now,
+      });
     }
 
-    return NextResponse.json({ id: docRef.id, ok: true, ccEmails: Array.from(new Set(ccEmails)) });
+    return NextResponse.json({ id: docRef.id, ok: true, ccEmails: uniqueCcEmails });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

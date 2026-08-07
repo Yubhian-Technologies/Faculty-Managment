@@ -25,7 +25,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground font-normal">{label}</Label>
-      <p className="text-sm font-medium">{value || "—"}</p>
+      <p className="text-sm font-medium">{value || "-"}</p>
     </div>
   );
 }
@@ -86,7 +86,7 @@ export default function HODIndentDetailPage() {
         throw new Error(err.error ?? "Failed to save GRN");
       }
 
-      toast({ variant: "success", title: "GRN uploaded — goods receipt confirmed" });
+      toast({ variant: "success", title: "GRN uploaded - goods receipt confirmed" });
       setGrnForm(emptyGrnForm());
       setGrnFile(null);
       load();
@@ -121,7 +121,7 @@ export default function HODIndentDetailPage() {
 
       <PageHeader
         title={request.title}
-        description={`${request.department} — submitted ${formatDate(request.createdAt)}`}
+        description={`${request.department} - submitted ${formatDate(request.createdAt)}`}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <IndentStatusBadge status={request.status} />
@@ -175,7 +175,7 @@ export default function HODIndentDetailPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p className="text-muted-foreground">
-              Purchased and receipt submitted by {request.receiptUploadedByName} on {request.receiptUploadedAt ? formatDate(request.receiptUploadedAt) : "—"}.
+              Purchased and receipt submitted by {request.receiptUploadedByName} on {request.receiptUploadedAt ? formatDate(request.receiptUploadedAt) : "-"}.
             </p>
             <div className="flex items-center gap-3">
               <span className="font-medium">{formatCurrency(request.receiptAmount ?? 0)}</span>

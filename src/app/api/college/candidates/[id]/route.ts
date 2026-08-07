@@ -62,6 +62,7 @@ export async function PATCH(
       email?: string;
       phone?: string;
       documentVerification?: { checkedDocs: Record<string, boolean> };
+      joiningLetterUrl?: string;
       expectedSalary?: number;
       negotiatedSalary?: number;
       dateOfJoining?: string;
@@ -83,7 +84,7 @@ export async function PATCH(
     }
 
     const updates: Record<string, unknown> = { updatedAt: now };
-    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone, documentVerification, expectedSalary, negotiatedSalary, dateOfJoining } = body;
+    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining } = body;
 
     if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
     if (hasArrived !== undefined) {
@@ -105,12 +106,26 @@ export async function PATCH(
     if (email !== undefined) updates.email = email;
     if (phone !== undefined) updates.phone = phone;
     if (documentVerification !== undefined) {
+      const candidateBatchId = (candidateSnap.data() as { batchId?: string }).batchId;
+      let allVerified = Object.keys(documentVerification.checkedDocs).length > 0
+        && Object.values(documentVerification.checkedDocs).every(Boolean);
+      if (candidateBatchId) {
+        const batchSnap = await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(candidateBatchId).get();
+        const requiredDocuments = (batchSnap.data() as { requiredDocuments?: string[] } | undefined)?.requiredDocuments ?? [];
+        allVerified = requiredDocuments.length === 0 || requiredDocuments.every((d) => documentVerification.checkedDocs[d] === true);
+      }
       updates.documentVerification = {
         checkedDocs: documentVerification.checkedDocs,
         verifiedBy: session.uid,
         verifiedByName: actorName,
         verifiedAt: now,
+        allVerified,
       };
+    }
+    if (joiningLetterUrl !== undefined) {
+      updates.joiningLetterUrl = joiningLetterUrl;
+      updates.joiningLetterUploadedAt = now;
+      updates.joiningLetterUploadedByName = actorName;
     }
     if (expectedSalary !== undefined) updates.expectedSalary = expectedSalary;
     if (negotiatedSalary !== undefined) updates.negotiatedSalary = negotiatedSalary;
@@ -201,6 +216,18 @@ export async function PATCH(
       });
     }
 
+    if (joiningLetterUrl !== undefined) {
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "JOINING_LETTER_UPLOADED",
+        performedBy: session.uid,
+        performedByName: actorName,
+        targetId: id,
+        details: {},
+        timestamp: now,
+      });
+    }
+
     const candidateData = candidateSnap.data() as { name?: string; batchId?: string };
 
     // Final Principal decision: notify the HOD, log it, and — if every other
@@ -257,22 +284,22 @@ export async function PATCH(
       }
     }
 
-    // Candidate approved → notify Accounts to send the offer letter
+    // Candidate approved → notify College Office to send the offer letter
     if (stage === "DECISION" && status !== "REJECTED") {
-      const accountsSnap = await db
+      const officeSnap = await db
         .collection("colleges")
         .doc(session.collegeId)
         .collection("users")
-        .where("role", "==", "ACCOUNTS")
+        .where("role", "==", "COLLEGE_OFFICE")
         .get();
-      for (const accDoc of accountsSnap.docs) {
+      for (const officeDoc of officeSnap.docs) {
         await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
           collegeId: session.collegeId,
-          toUid: accDoc.id,
+          toUid: officeDoc.id,
           type: "GENERAL",
           title: "Candidate Ready for Offer Letter",
           message: `${candidateData.name ?? "A candidate"} has been approved. Please send the offer letter.`,
-          link: `/accounts/hiring`,
+          link: `/college-office/offers/new`,
           read: false,
           createdAt: now,
         });

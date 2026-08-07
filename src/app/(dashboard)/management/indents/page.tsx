@@ -92,7 +92,7 @@ export default function ManagementIndentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget History"
-        description="Complete, org-wide view of every indent request — every step from submission through completion, across all colleges"
+        description="Complete, org-wide view of every indent request - every step from submission through completion, across all colleges"
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">

@@ -233,7 +233,7 @@ export default function FinanceBudgetPage() {
       {/* Department budget overview dialog */}
       <Dialog open={!!selectedDeptName} onOpenChange={(o) => { if (!o) setSelectedDeptName(null); }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Budget Overview — {selectedDept?.department}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Budget Overview - {selectedDept?.department}</DialogTitle></DialogHeader>
           {selectedDept && (
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-3">
@@ -267,7 +267,7 @@ export default function FinanceBudgetPage() {
       {/* Revision history dialog */}
       <Dialog open={!!historyTarget} onOpenChange={(o) => { if (!o) setHistoryTarget(null); }}>
         <DialogContent className="max-w-md" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Revision History — {historyTarget?.department}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Revision History - {historyTarget?.department}</DialogTitle></DialogHeader>
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {historyTarget?.revisions.map((rev, i) => (
               <div key={i} className="rounded-md border p-3 text-sm space-y-1">
@@ -286,7 +286,7 @@ export default function FinanceBudgetPage() {
       {/* Original request dialog */}
       <Dialog open={!!sourceRequest} onOpenChange={(o) => { if (!o) setSourceRequest(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>Original Request — {sourceRequest?.title}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Original Request - {sourceRequest?.title}</DialogTitle></DialogHeader>
           {sourceRequest && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">

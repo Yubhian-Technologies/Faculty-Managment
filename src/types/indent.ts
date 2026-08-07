@@ -5,9 +5,9 @@ import { NON_RECURRING_CATEGORIES, RECURRING_CATEGORIES } from "./budget";
 // Cross-role type: lives outside finance.ts (which stays Finance-internal only).
 // HOD raises an indent against an approved department budget line; Purchase
 // Department sources >=3 vendor quotations and recommends one; Finance reviews
-// and disburses (auto-creating a FinancePayment) — the "green flag".
+// and disburses (auto-creating a FinancePayment) - the "green flag".
 
-// The category an indent is raised against — reuses the same budget category
+// The category an indent is raised against - reuses the same budget category
 // list HODs pick from when submitting a budget request, so Purchase Dept can
 // view indents grouped the same way Finance groups budget line items.
 export const INDENT_CATEGORIES = Array.from(
@@ -16,7 +16,7 @@ export const INDENT_CATEGORIES = Array.from(
 
 // Suggests Goods/Non-Goods from the chosen category (Non-Recurring categories
 // are physical procurement; Recurring ones are typically services/honoraria).
-// Only a default for the form — the HOD can override it either way.
+// Only a default for the form - the HOD can override it either way.
 const NON_RECURRING_SET = new Set<string>(NON_RECURRING_CATEGORIES);
 export function defaultIndentRequestType(category: string): "GOODS" | "NON_GOODS" {
   return NON_RECURRING_SET.has(category) ? "GOODS" : "NON_GOODS";
@@ -25,7 +25,7 @@ export function defaultIndentRequestType(category: string): "GOODS" | "NON_GOODS
 // GOODS indents go through Purchase Dept for vendor-quotation sourcing before
 // Finance disburses. NON_GOODS indents (services, honoraria, staff-facing
 // spend with no physical procurement) skip Purchase Dept entirely and go
-// straight to Finance for direct approval — the "regular flow".
+// straight to Finance for direct approval - the "regular flow".
 export type IndentRequestType = "GOODS" | "NON_GOODS";
 
 export const INDENT_REQUEST_TYPE_LABELS: Record<IndentRequestType, string> = {
@@ -50,7 +50,7 @@ export const INDENT_STATUS_LABELS: Record<IndentStatus, string> = {
   PENDING_FINANCE_REVIEW: "Pending Finance Review",
   RETURNED_TO_PURCHASE: "Returned to Purchase Dept",
   REJECTED: "Rejected by Finance",
-  APPROVED: "Approved — Ready to Purchase",
+  APPROVED: "Approved - Ready to Purchase",
   COMPLETED: "Completed",
 };
 
@@ -115,9 +115,9 @@ export interface IndentRequest {
   receiptUploadedBy?: string;
   receiptUploadedByName?: string;
   receiptUploadedAt?: Timestamp;
-  // GRN (Goods Receipt Note) — set by the HOD once goods are confirmed
+  // GRN (Goods Receipt Note) - set by the HOD once goods are confirmed
   // received. GOODS-only, optional on top of the already-terminal COMPLETED
-  // status (doesn't gate anything downstream — it's the HOD's own confirmation).
+  // status (doesn't gate anything downstream - it's the HOD's own confirmation).
   grnUrl?: string;
   grnFileName?: string;
   grnNumber?: string;

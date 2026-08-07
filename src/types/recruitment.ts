@@ -94,6 +94,34 @@ export type InterviewMode = "ONLINE" | "OFFLINE";
 // the interview call letter. Field names match FacultyMember/PersonalDetailsFields
 // (src/types/core.ts) where they overlap, so this could later prefill
 // hod/faculty/[id]/edit post-hire (not wired up yet).
+export interface AcademicQualification {
+  id: string;
+  degree: string;
+  institution: string;
+  yearOfPassing: string;
+  percentageOrCGPA: string;
+  certificateUrl?: string;
+  certificateName?: string;
+}
+
+export interface WorkExperienceEntry {
+  id: string;
+  organization: string;
+  designation: string;
+  fromDate: string; // yyyy-mm
+  toDate: string;   // yyyy-mm, or "Present"
+  responsibilities?: string;
+}
+
+export interface RelativeInSociety {
+  id: string;
+  name: string;
+  relationship: string;
+  workingLocation: string;
+  profession: string;
+  experience: string;
+}
+
 export interface CandidateBioData {
   fatherName?: string;
   motherName?: string;
@@ -114,6 +142,10 @@ export interface CandidateBioData {
   noticePeriod?: string;
   references?: string;
   additionalInfo?: string;
+  qualifications?: AcademicQualification[];
+  experiences?: WorkExperienceEntry[];
+  hasRelativesInSociety?: boolean;
+  relatives?: RelativeInSociety[];
 }
 
 export interface Candidate {
@@ -160,7 +192,12 @@ export interface Candidate {
     verifiedBy: string;
     verifiedByName: string;
     verifiedAt: Timestamp;
+    allVerified?: boolean; // server-computed: every HiringBatch.requiredDocuments entry checked
   };
+  // Office-uploaded scan of the manually-signed joining letter (post document verification).
+  joiningLetterUrl?: string;
+  joiningLetterUploadedAt?: Timestamp;
+  joiningLetterUploadedByName?: string;
   // Captured by the Principal at final-decision time (see principal/decisions/[id]).
   // negotiatedSalary/dateOfJoining flow automatically into the generated OfferLetter;
   // expectedSalary is retained only for internal reference/comparison.
@@ -294,12 +331,20 @@ export interface OfferLetter {
   status: "DRAFT" | "GENERATED" | "SENT" | "ACCEPTED" | "REJECTED";
   generatedBy: string;
   generatedByUid?: string;
+  ccEmails?: string[]; // Principal/VP/panel/HOD/Accounts - resolved once at send time
+  // Office → Webmaster credential handoff (see /college-office/offers and /webmaster).
+  credentialsRequestedAt?: Timestamp;
+  credentialsRequestedBy?: string;
+  credentialsRequestedByName?: string;
+  credentialsFulfilledAt?: Timestamp;
+  credentialsFulfilledBy?: string;
 }
 
 export interface AppointmentLetter {
   id: string;
   collegeId: string;
   candidateId: string;
+  candidateName?: string;
   batchId: string;
   facultyId?: string;           // set when faculty record is created post-hire
   pdfUrl?: string;
@@ -309,4 +354,5 @@ export interface AppointmentLetter {
   generatedAt: Timestamp;
   status: "DRAFT" | "GENERATED" | "SENT";
   generatedBy: string;
+  generatedByUid?: string;
 }

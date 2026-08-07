@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     let name = (decoded.name as string) ?? "";
     let email = decoded.email ?? "";
 
-    let claimsWereSet = !!role; // already in token — no need to backfill
+    let claimsWereSet = !!role; // already in token - no need to backfill
 
     if (!role) {
       try {
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         if (collegeId) claims.collegeId = collegeId;
         if (locationId) claims.locationId = locationId;
         await adminAuth.setCustomUserClaims(decoded.uid, claims);
-      } catch { /* non-fatal — session still works without custom claims */ }
+      } catch { /* non-fatal - session still works without custom claims */ }
     }
 
     // Fetch full Firestore user profile server-side (bypasses security rules).
