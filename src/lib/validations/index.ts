@@ -203,22 +203,6 @@ export const studentFeedbackSchema = z.object({
 
 export type StudentFeedbackFormData = z.infer<typeof studentFeedbackSchema>;
 
-export const hrFeedbackSchema = z.object({
-  ratings: z.object({
-    attitude: z.number().int().min(1).max(5),
-    teamwork: z.number().int().min(1).max(5),
-    adaptability: z.number().int().min(1).max(5),
-    communication: z.number().int().min(1).max(5),
-    overallFit: z.number().int().min(1).max(5),
-  }),
-  salaryExpectation: z.number().optional(),
-  noticePeriod: z.string().optional(),
-  recommendation: z.enum(["RECOMMENDED", "NOT_RECOMMENDED", "HOLD"]),
-  comments: z.string().optional(),
-});
-
-export type HRFeedbackFormData = z.infer<typeof hrFeedbackSchema>;
-
 // ─── Salary ───────────────────────────────────────────────────────────────────
 
 export const salarySchema = z.object({

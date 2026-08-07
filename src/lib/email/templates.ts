@@ -64,13 +64,24 @@ export function offerLetterEmail({
   department,
   joiningDate,
   collegeName,
+  termsAndConditions,
 }: {
   candidateName: string;
   position: string;
   department: string;
   joiningDate: string;
   collegeName: string;
+  termsAndConditions?: string;
 }): string {
+  const termsBlock = termsAndConditions?.trim()
+    ? `<div style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <h3 style="color:#0f172a;margin:0 0 8px;font-size:14px;">Terms &amp; Conditions</h3>
+        <ul style="color:#475569;padding-left:18px;margin:0;font-size:14px;line-height:1.7;">
+          ${termsAndConditions.trim().split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<li>${l}</li>`).join("")}
+        </ul>
+      </div>`
+    : "";
+
   return `
 <!DOCTYPE html>
 <html>
@@ -85,7 +96,42 @@ export function offerLetterEmail({
       <p style="color:#0f172a;font-size:16px;">Dear <strong>${candidateName}</strong>,</p>
       <p style="color:#475569;">We are delighted to offer you the position of <strong>${position}</strong> in the <strong>${department}</strong> department. Please find your offer letter attached.</p>
       <p style="color:#475569;font-size:14px;">Please confirm your acceptance by reporting on <strong>${joiningDate}</strong>. Bring all original documents on your joining date.</p>
+      ${termsBlock}
       <p style="color:#0f172a;font-weight:600;">Congratulations and welcome to the team!<br><br>HR Department<br>${collegeName}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export function appointmentLetterEmail({
+  candidateName,
+  designation,
+  department,
+  joiningDate,
+  collegeName,
+}: {
+  candidateName: string;
+  designation: string;
+  department: string;
+  joiningDate: string;
+  collegeName: string;
+}): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f8fafc;margin:0;padding:20px;">
+  <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1d4ed8;padding:32px 24px;text-align:center;">
+      <h1 style="color:#fff;margin:0;font-size:22px;">${collegeName}</h1>
+      <p style="color:#bfdbfe;margin:8px 0 0;">Appointment Letter</p>
+    </div>
+    <div style="padding:32px 24px;">
+      <p style="color:#0f172a;font-size:16px;">Dear <strong>${candidateName}</strong>,</p>
+      <p style="color:#475569;">Congratulations! Please find attached your formal appointment letter for the position of <strong>${designation}</strong> in the <strong>${department}</strong> department, effective from <strong>${joiningDate}</strong>.</p>
+      <p style="color:#475569;font-size:14px;">Please report with all original documents on your joining date as noted in the attached letter.</p>
+      <p style="color:#0f172a;font-weight:600;">Welcome aboard!<br><br>${collegeName}</p>
     </div>
   </div>
 </body>

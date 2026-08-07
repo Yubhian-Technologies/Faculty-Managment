@@ -97,9 +97,14 @@ export default function NewCandidatePage() {
         const completedVacancyIds = new Set(
           batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
         );
+        // requiredCount is the actual "posts needed" figure (validated >=1 at
+        // creation). availableCount means "current staff already in this role"
+        // at creation time (see hod/vacancy/new) — a vacancy can and often does
+        // have availableCount 0 (nobody in the role yet) while still needing
+        // candidates, so it must never gate eligibility here.
         const filtered = allVacancies.filter((v) =>
           (dept ? v.department === dept : true) &&
-          (v.availableCount ?? v.requiredCount) > 0 &&
+          v.requiredCount > 0 &&
           !completedVacancyIds.has(v.id)
         );
         setVacancies(filtered);
@@ -521,7 +526,15 @@ export default function NewCandidatePage() {
                 {prefilledVacancyId ? (
                   (() => {
                     const linked = vacancies.find((v) => v.id === prefilledVacancyId);
-                    if (!linked) return null;
+                    if (!linked) {
+                      return (
+                        <p className="text-sm text-destructive">
+                          This hiring request isn&rsquo;t available to link — it may not be approved yet,
+                          have no open posts left, or belong to a different HOD account. Go back and pick
+                          a hiring request from the list below instead.
+                        </p>
+                      );
+                    }
                     const alreadyLinked = linkedCandidatesFor(linked);
                     return (
                       <div className="rounded-lg border-2 border-primary bg-primary/5 px-4 py-3 space-y-1">
@@ -535,7 +548,7 @@ export default function NewCandidatePage() {
                           </div>
                           <div className="text-right shrink-0">
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
-                              {linked.availableCount ?? linked.requiredCount} posts open
+                              {linked.requiredCount} post{linked.requiredCount !== 1 ? "s" : ""} open
                             </span>
                             <p className="text-[10px] text-primary font-medium mt-1">Auto-linked ✓</p>
                           </div>
@@ -620,7 +633,7 @@ export default function NewCandidatePage() {
                           </div>
                           <div className="shrink-0 text-right">
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
-                              {v.availableCount ?? v.requiredCount} post{(v.availableCount ?? v.requiredCount) !== 1 ? "s" : ""} open
+                              {v.requiredCount} post{v.requiredCount !== 1 ? "s" : ""} open
                             </span>
                             {isSelected && (
                               <p className="text-[10px] text-primary font-medium mt-1">Selected ✓</p>
@@ -634,8 +647,8 @@ export default function NewCandidatePage() {
                 <p className="text-xs text-muted-foreground">
                   Select a designation above to auto-filter matching hiring requests. Selecting a card also fills the designation.
                 </p>
-                {errors.vacancyId && <p className="text-sm text-destructive">{errors.vacancyId.message}</p>}
                 </div>}
+                {errors.vacancyId && <p className="text-sm text-destructive">{errors.vacancyId.message}</p>}
               </div>
             )}
 

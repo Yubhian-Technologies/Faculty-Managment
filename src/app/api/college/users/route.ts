@@ -7,7 +7,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { UserRole } from "@/types";
 
-const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
 // HOD is included so a main HOD can create a Sub-HOD login (see
 // hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
 // posts role: "HOD" with the not-yet-created sub-department's name as
@@ -19,11 +19,11 @@ const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "ANNEXURE"];
 // via `sectionId` below (see college-office/sections/new and .../[id]/edit).
 const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
 // One holder per role per college - same rule as administration/college-staff route.
-const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "WEBMASTER");
     const { searchParams } = new URL(request.url);
     const roleFilter = searchParams.get("role");
     const allDepts = searchParams.get("allDepts") === "true";

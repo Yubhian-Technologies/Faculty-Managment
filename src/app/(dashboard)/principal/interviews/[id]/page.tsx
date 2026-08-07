@@ -62,20 +62,20 @@ export default function InterviewDetailPage() {
       .finally(() => setLoadingCandidates(false));
   }, [id]);
 
-  async function handleAction() {
-    if (!detailBatch || !action) return;
+  async function submit(nextAction: "approve" | "reject") {
+    if (!detailBatch) return;
     setLoading(true);
     try {
       const statusMap = { approve: "APPROVED", reject: "REJECTED" } as const;
       const res = await fetch(`/api/college/hiring-batches/${detailBatch.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: statusMap[action], principalNotes: notes }),
+        body: JSON.stringify({ status: statusMap[nextAction], principalNotes: notes }),
       });
       if (!res.ok) throw new Error();
       toast({
         variant: "success",
-        title: action === "approve" ? "Plan approved" : "Plan rejected",
+        title: nextAction === "approve" ? "Plan approved" : "Plan rejected",
         description: "HOD has been notified.",
       });
       router.push("/principal/interviews");
@@ -84,6 +84,23 @@ export default function InterviewDetailPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleAction() {
+    return submit(action ?? "approve");
+  }
+
+  function handleAccept() {
+    setAction("approve");
+    void submit("approve");
+  }
+
+  function handleRejectClick() {
+    if (action !== "reject") {
+      setAction("reject");
+      return;
+    }
+    void submit("reject");
   }
 
   const isPending = detailBatch?.status === "PENDING";
@@ -188,42 +205,30 @@ export default function InterviewDetailPage() {
                 <Button
                   size="sm"
                   variant={action === "approve" ? "default" : "outline"}
-                  onClick={() => setAction("approve")}
-                >Approve</Button>
+                  onClick={handleAccept}
+                  loading={loading && action === "approve"}
+                  disabled={loading}
+                >Accept</Button>
                 <Button
                   size="sm"
                   variant={action === "reject" ? "destructive" : "outline"}
-                  onClick={() => setAction("reject")}
+                  onClick={handleRejectClick}
+                  loading={loading && action === "reject"}
+                  disabled={loading}
                   className={action !== "reject" ? "text-destructive border-destructive hover:bg-destructive/10" : ""}
-                >Reject</Button>
+                >{action === "reject" ? "Confirm Reject" : "Reject"}</Button>
               </div>
 
-              {action === "reject" && (
-                <div className="space-y-1.5">
-                  <Label>Notes (optional)</Label>
-                  <Textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Reason for rejection..."
-                    rows={3}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {isPending && action && (
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button variant="outline" onClick={() => setAction(null)} disabled={loading}>
-                Cancel
-              </Button>
-              <Button
-                variant={action === "reject" ? "destructive" : "default"}
-                onClick={handleAction}
-                loading={loading}
-              >
-                {action === "approve" ? "Approve Plan" : "Reject Plan"}
-              </Button>
+              <div className="space-y-1.5">
+                <Label>Remarks{action === "reject" ? "" : " (select Reject to add)"}</Label>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Reason for rejection..."
+                  rows={3}
+                  disabled={action !== "reject"}
+                />
+              </div>
             </div>
           )}
         </CardContent>

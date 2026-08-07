@@ -22,6 +22,7 @@ export type UserRole =
   | "EXAM_CELL"
   | "PANEL_MEMBER"
   | "ANNEXURE"
+  | "WEBMASTER"
   | "ACCOUNTS"
   | "FINANCE"
   | "PURCHASE_DEPT"
@@ -45,6 +46,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   EXAM_CELL: "Exam Cell",
   PANEL_MEMBER: "Teaching Faculty",
   ANNEXURE: "Annexure",
+  WEBMASTER: "Webmaster",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
   PURCHASE_DEPT: "Purchase Department",
@@ -69,6 +71,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   EXAM_CELL: "/exam-cell",
   PANEL_MEMBER: "/panel",
   ANNEXURE: "/annexure",
+  WEBMASTER: "/webmaster",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
   PURCHASE_DEPT: "/purchase",
@@ -101,6 +104,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
+  WEBMASTER: 4,
   PANEL_MEMBER: 5,
   ANNEXURE: 5,
   STUDENT: 6,
@@ -141,6 +145,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
+  WEBMASTER: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
   ANNEXURE: "COLLEGE",
   STUDENT: "COLLEGE",
@@ -155,7 +160,7 @@ function scopeRank(scope: RoleScope): 0 | 1 | 2 {
 // AND same-or-narrower tenancy scope. A GLOBAL role inherits everything below it;
 // a LOCATION role inherits lower LOCATION/COLLEGE roles; a COLLEGE role inherits
 // only lower COLLEGE roles. Real tenant/data isolation is still enforced by the
-// API guards - this drives coarse path/nav access only.
+// API guards — this drives coarse path/nav access only.
 export function rolesInheritedBy(role: UserRole): UserRole[] {
   const selfLevel = ROLE_LEVEL[role];
   const selfScopeRank = scopeRank(ROLE_SCOPE[role]);
@@ -224,11 +229,11 @@ export interface FMSUser {
   role: UserRole;
   department?: string;      // for HOD / LOCATION_DEPT_HEAD
   locationDeptId?: string;  // for LOCATION_DEPT_HEAD
+  annexure?: string;        // HOD-entered reference number/label, for ANNEXURE role
   sectionId?: string;       // for CLASS_LEADER - the one Section this login is bound to
   sectionName?: string;     // for CLASS_LEADER - denormalized Section.name
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
-  annexure?: string;        // for ANNEXURE role — HOD-entered reference number/label (e.g. "1", "2")
   dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   profilePhotoUrl?: string; // Firebase Storage download URL, same field name as FacultyMember below
 
@@ -314,26 +319,26 @@ export interface Department {
   hodName?: string;
   isActive: boolean;
   // Which of the college's open AcademicYears this department currently
-  // teaches - set by Principal/VP, dynamic per college (not hardcoded).
+  // teaches — set by Principal/VP, dynamic per college (not hardcoded).
   // e.g. a Basic Science dept holds [1] while core branch depts each hold
   // [2, 3, 4] concurrently for their own batches.
   assignedYears?: number[];
   // Sub-department support: a parent department (Principal-created) can be
   // split into several sub-departments (e.g. Basic Science → BS-Maths,
-  // BS-English, ...), each with its own HOD ("sub-HOD" - just a normal HOD
+  // BS-English, ...), each with its own HOD ("sub-HOD" — just a normal HOD
   // account on this child Department doc, no separate role). The parent's
   // HOD gets automatic view-only access to every child's students/sections/
   // assigned faculty; only the child's own HOD can edit it. One level deep
-  // only - child departments never set `hasSubDepartments`.
+  // only — child departments never set `hasSubDepartments`.
   parentDepartmentId?: string;
   hasSubDepartments?: boolean;
   // Cross-listing: other departments whose HODs each get automatic view-only
   // access to every section (and its roster/faculty) created under this
-  // department - set once here by Principal/VP instead of being re-picked
+  // department — set once here by Principal/VP instead of being re-picked
   // by College Office at every section's creation. Mirrors what used to be
   // `Section.secondaryDepartment`, which every new section now inherits
   // from its own department instead of having it chosen per-section. A
-  // department can have more than one - e.g. a shared first-year "Basic
+  // department can have more than one — e.g. a shared first-year "Basic
   // Science" department feeds students on to both CSE and ECE, so both
   // HODs need visibility into its sections ahead of promotion.
   secondaryDepartments?: string[];
@@ -341,7 +346,7 @@ export interface Department {
   updatedAt?: Timestamp;
 }
 
-// ─── Course (a program offered by a Department - engineering, pharmacy, dental, etc.) ──
+// ─── Course (a program offered by a Department — engineering, pharmacy, dental, etc.) ──
 
 export interface Course {
   id: string;
@@ -355,7 +360,7 @@ export interface Course {
   updatedAt?: Timestamp;
 }
 
-// ─── Course-Year Timing (college timings, periods, breaks - per course, per year) ──
+// ─── Course-Year Timing (college timings, periods, breaks — per course, per year) ──
 
 export interface BreakConfig {
   afterPeriod: number;      // e.g. break happens after period 4
@@ -378,9 +383,9 @@ export interface CourseYearTiming {
   updatedAt?: Timestamp;
 }
 
-// ─── Course Academic Year (per course, per year - advancing it bumps active faculty
+// ─── Course Academic Year (per course, per year — advancing it bumps active faculty
 // experience). Distinct from AcademicYear below (a college-wide 1-4 year open/close
-// gate) - the two are unrelated features that happen to share a similar name.
+// gate) — the two are unrelated features that happen to share a similar name.
 
 export interface CourseAcademicYear {
   id: string;                // `${courseId}_year${year}`
@@ -428,7 +433,7 @@ export interface FacultyNorms {
 // ─── Nav visibility (Super Admin controlled module/item hiding) ───────────────
 // hiddenModules hides an entire `NavItem.section` group for a role (every item
 // whose nearest preceding `section` header matches); hiddenItems hides one
-// specific item by href regardless of its module - the mechanism the HOD "My
+// specific item by href regardless of its module — the mechanism the HOD "My
 // Work" submodules use to be hidden individually rather than as a whole group.
 // See computeItemModule / filterVisibleNavItems in components/layout/navConfig.ts.
 export interface NavVisibilitySettings {
@@ -439,7 +444,7 @@ export interface NavVisibilitySettings {
 }
 
 // ─── Faculty Member (central entity across all modules) ───────────────────────
-// All attendance, payroll, appraisal records reference facultyId
+// All leave, attendance, payroll, appraisal records reference facultyId
 
 export type Designation =
   | "PROFESSOR"
@@ -481,11 +486,11 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
   PART_TIME: "Part-Time",
 };
 
-// INTERVIEW_DONE - set by provisionFacultyFromOffer the moment an offer letter is
+// INTERVIEW_DONE — set by provisionFacultyFromOffer the moment an offer letter is
 // sent (a FacultyMember + login already exist at that point, well before the
 // candidate has actually accepted or joined) and flipped to ACTIVE once the offer
 // is marked ACCEPTED (see offer-letters/[id]/route.ts PATCH). Faculty in this
-// status haven't joined yet, so their joiningDate is a proposed/expected date -
+// status haven't joined yet, so their joiningDate is a proposed/expected date —
 // UI should read "Expected to join on <date>", not "Joined".
 export type FacultyStatus = "INTERVIEW_DONE" | "ACTIVE" | "ON_LEAVE" | "RESIGNED" | "RETIRED";
 
@@ -502,23 +507,23 @@ export interface FacultyMember {
   collegeId: string;
   department: string;
   employeeId: string;
-  apaarFacultyId?: string; // NBA/AICTE - APAAR Faculty ID
+  apaarFacultyId?: string; // NBA/AICTE — APAAR Faculty ID
   name: string;
-  email?: string;       // personal email - optional, contact only
+  email?: string;       // personal email — optional, contact only
   phone?: string;
   designation: Designation;
   qualification: string;
   specialization?: string;
   experienceYears: number;
   joiningDate: Timestamp;                  // Date of Joining Institution
-  dateOfJoiningDepartment?: Timestamp;      // Date of Joining Department (NBA/AICTE - may differ from institution)
+  dateOfJoiningDepartment?: Timestamp;      // Date of Joining Department (NBA/AICTE — may differ from institution)
   employmentType: EmploymentType;
   aicteEligible?: boolean;                  // AICTE Eligibility
   status: FacultyStatus;
   userUid?: string;            // links to users/{uid} if they have a system login
   profilePhotoUrl?: string;
 
-  // Carried over from the hiring pipeline when a candidate had a course/subject preference set -
+  // Carried over from the hiring pipeline when a candidate had a course/subject preference set —
   // consumed once by the faculty edit page to pre-fill TeachingAssignmentsEditor rows (course/year/subject
   // known, section left for the HOD to pick). Not cleared automatically; harmless to leave once assignments exist.
   pendingTeachingPreference?: {
@@ -542,7 +547,7 @@ export interface FacultyMember {
   passportNumber?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
-  collegeEmail: string;    // required - this is the faculty member's login username
+  collegeEmail: string;    // required — this is the faculty member's login username
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationDate?: Timestamp;
   maritalStatus?: "Single" | "Married";
@@ -564,7 +569,7 @@ export interface FacultyMember {
 
   joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
-  resumeUrl?: string;              // Resume/CV - Teaching Faculty only, no equivalent on SupportingStaffMember
+  resumeUrl?: string;              // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -605,7 +610,7 @@ export interface PreviousInstitution {
   experienceCertificateUrl?: string;
 }
 
-// Employment Details - Promotion History (NBA/AICTE).
+// Employment Details — Promotion History (NBA/AICTE).
 export interface PromotionRecord {
   fromDesignation: string;
   toDesignation: string;
@@ -660,7 +665,7 @@ export interface AuthoredBook {
   year: number;
 }
 
-// Shared structured "training/FDP" entry - used by Teaching Faculty Module 5 AND both
+// Shared structured "training/FDP" entry — used by Teaching Faculty Module 5 AND both
 // Supporting Staff categories' Training sections (their category-specific types apply).
 export type TrainingEntryType =
   | "FDP" | "WORKSHOP" | "MOOC" | "CERTIFICATION"
@@ -703,7 +708,7 @@ export interface AdminResponsibilityEntry {
   toYear?: number; // blank = ongoing
 }
 
-// Shared award/recognition entry - Teaching Faculty AND both Supporting Staff categories.
+// Shared award/recognition entry — Teaching Faculty AND both Supporting Staff categories.
 export type AwardCategory = "BEST_TEACHER" | "RESEARCH_AWARD" | "APPRECIATION_CERTIFICATE" | "OTHER";
 export const AWARD_CATEGORY_LABELS: Record<AwardCategory, string> = {
   BEST_TEACHER: "Best Teacher Award", RESEARCH_AWARD: "Research Award",
@@ -717,7 +722,7 @@ export interface AwardEntry {
   certificateUrl?: string;
 }
 
-// NBA compliance documentation per course handled - Teaching Information.
+// NBA compliance documentation per course handled — Teaching Information.
 export interface CourseFileEntry {
   courseCode: string;
   courseName: string;
@@ -727,7 +732,7 @@ export interface CourseFileEntry {
 }
 
 export interface FacultyProfileFields {
-  // Module 1 - Academic Qualification
+  // Module 1 — Academic Qualification
   highestQualification: string;
   ugDetails?: DegreeDetail;
   pgDetails?: DegreeDetail;
@@ -744,10 +749,10 @@ export interface FacultyProfileFields {
   // Previous Institutions Worked / Current Teaching Assignment
   teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL
   previousInstitutions: PreviousInstitution[]; // prior institutions worked at, before this one
-  promotionHistory: PromotionRecord[]; // Employment Details - promotions within this institution
+  promotionHistory: PromotionRecord[]; // Employment Details — promotions within this institution
 
-  // Module 3 - Research Publications
-  publications: Publication[]; // individual publication records - title/co-authors/journal/year
+  // Module 3 — Research Publications
+  publications: Publication[]; // individual publication records — title/co-authors/journal/year
   publicationsFirstOrCorrespondingAuthor: number;
   publicationsQ1OrHighImpact: number;
   sciScopusCount: number;
@@ -763,18 +768,18 @@ export interface FacultyProfileFields {
   scopusAuthorId?: string;
   orcidId?: string;
 
-  // Module 4 - Grants, Consultancy & IP
+  // Module 4 — Grants, Consultancy & IP
   fundedProjects: FundedProject[];
   consultancyProjects: ConsultancyProject[];
   patents: PatentSummary;
 
-  // Module 5 - Mentorship & Institutional Value
+  // Module 5 — Mentorship & Institutional Value
   phdScholarsPursuing?: { count: number; universities: string };
   phdScholarsAwarded?: { count: number; universities: string };
   nationalExposure?: string;
   internationalExposure?: string;
   labsEstablished: LabEstablished[];
-  // Legacy free-text fields - kept for backward-compat display of pre-existing data only.
+  // Legacy free-text fields — kept for backward-compat display of pre-existing data only.
   // New entries go into the structured lists below instead (trainingEntries etc.).
   administrativeResponsibilities?: string;
   certificationsAndFdps?: string;
@@ -787,24 +792,24 @@ export interface FacultyProfileFields {
   adminResponsibilityEntries: AdminResponsibilityEntry[];
   awardEntries: AwardEntry[];
 
-  // Module 6 - Financial Standing & Budgetary Impact
-  presentSalary?: number;              // Current Financial Standing - present salary drawn by the faculty member
+  // Module 6 — Financial Standing & Budgetary Impact
+  presentSalary?: number;              // Current Financial Standing — present salary drawn by the faculty member
   grossAnnualCTC?: number;             // Budgetary Impact
   incrementsAwarded?: number;
   fundingConsultancyRevenue?: number;  // offsets salary cost against research/consultancy grants brought into the institution
 
-  // Module 7 - Others
+  // Module 7 — Others
   otherInformation?: string;
 
-  // Module 8 - Teaching Documentation (NBA/AICTE)
+  // Module 8 — Teaching Documentation (NBA/AICTE)
   courseFilesAndCoPoMapping: CourseFileEntry[];
 }
 
-// PRINCIPAL / VICE_PRINCIPAL form variant - no teaching-assignment sub-object
+// PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object
 export type PrincipalAcademicProfile = Omit<FacultyProfileFields, "teachingAssignment">;
 
 // ─── Academic Year ──────────────────────────────────────────────────────────
-// Which years of study exist for a college - added sequentially (1, 2, 3, …)
+// Which years of study exist for a college — added sequentially (1, 2, 3, …)
 // by Location Admin / Principal, not toggled from a fixed set. A program can
 // have any number of years (3-year diploma, 4-year B.Tech, 5-year, etc.), so
 // `yearNumber` is a plain positive integer, not a fixed 1|2|3|4 union.
@@ -852,10 +857,10 @@ export interface Section {
   classLeaderUid?: string;
   classLeaderName?: string;
   studentCount: number;
-  // Secondary - view-only access for one or more other departments' HODs,
+  // Secondary — view-only access for one or more other departments' HODs,
   // e.g. a shared first-year section whose roster splits across several
   // eventual branches. Auto-copied from the owning Department's own
-  // `secondaryDepartments` at section creation (see college/sections POST) -
+  // `secondaryDepartments` at section creation (see college/sections POST) —
   // not chosen per-section. Mirrors StudentRecord.secondaryDepartment's
   // primary/secondary access model, just at the section level (and plural)
   // instead of per-student.
@@ -864,7 +869,7 @@ export interface Section {
   updatedAt: Timestamp;
 }
 
-// GET /api/college/sections response shape - `accessLevel` is computed by the
+// GET /api/college/sections response shape — `accessLevel` is computed by the
 // route per caller, never persisted. "primary" = caller's own department (or
 // caller role sees everyone unscoped, e.g. Principal); "secondary" = view-only,
 // for a parent department's HOD looking at a child sub-department's section.
@@ -879,8 +884,8 @@ export type StudentStatus = "REGULAR" | "DETAINED" | "GRADUATED";
 export interface StudentRecord {
   id: string;
   collegeId: string;
-  department: string;   // primary - full access/control (roster, sections, promotion)
-  section: string;      // Section.name - "A", "B", etc.
+  department: string;   // primary — full access/control (roster, sections, promotion)
+  section: string;      // Section.name — "A", "B", etc.
   year: number;
   rollNumber: string;
   name: string;
@@ -889,7 +894,7 @@ export interface StudentRecord {
   dateOfBirth?: string;        // yyyy-mm-dd, kept as string (no statutory-date math needed)
   guardianContact?: string;
   email?: string;
-  // Secondary - view-only access, for a student pre-registered to a core
+  // Secondary — view-only access, for a student pre-registered to a core
   // branch (e.g. CSE) while physically enrolled under Basic Science in 1st
   // year. Only ever set by the College Office bulk import for exactly this
   // case; cleared automatically when the student is promoted into that
@@ -900,13 +905,13 @@ export interface StudentRecord {
   updatedAt: Timestamp;
 }
 
-// GET /api/college/students response shape - `accessLevel` is computed by the
+// GET /api/college/students response shape — `accessLevel` is computed by the
 // route per caller, never persisted to Firestore. "primary" = full control
 // (own department, or caller role sees everyone unscoped e.g. Principal);
 // "secondary" = view-only (caller's department matches secondaryDepartment).
 export type StudentListItem = StudentRecord & { accessLevel: "primary" | "secondary" };
 
-// Append-only - one entry per (department, section, year) a student has ever
+// Append-only — one entry per (department, section, year) a student has ever
 // been enrolled in, written at creation and at every promotion. There is no
 // `to` field: an entry's end is implicitly the next entry's `from` (or "now"
 // if it's the latest). Lives at
@@ -932,6 +937,7 @@ export type NotificationType =
   | "HIRING_APPROVED"
   | "HIRING_REJECTED"
   | "OFFER_LETTER_GENERATED"
+  | "CREDENTIAL_REQUESTED"
   | "COORDINATOR_ASSIGNED"
   // Leave
   | "LEAVE_PENDING_APPROVAL"
@@ -994,7 +1000,7 @@ export interface AppNotification {
   read: boolean;
   link?: string;
   createdAt: Timestamp;
-  // ─── Workflow notification framework (optional - absent on older docs) ────
+  // ─── Workflow notification framework (optional — absent on older docs) ────
   // See src/lib/notifications/workflowNotifications.ts. `actionable` marks a
   // notification as one that should surface as a login popup until the
   // linked workflow step is completed, at which point the emitting route
@@ -1027,10 +1033,15 @@ export type AuditAction =
   | "HIRING_DECISION_MADE"
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
+  | "DOCUMENTS_VERIFIED"
+  | "JOINING_LETTER_UPLOADED"
+  | "CREDENTIAL_REQUESTED"
+  | "CREDENTIAL_REQUEST_FULFILLED"
   // User management
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_DEACTIVATED"
+  | "USER_PASSWORD_RESET"
   | "PROFILE_PHOTO_UPDATED"
   // Faculty module
   | "FACULTY_CREATED"

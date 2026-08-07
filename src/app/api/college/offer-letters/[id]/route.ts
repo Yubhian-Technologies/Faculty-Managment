@@ -3,14 +3,43 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { provisionFacultyFromOffer } from "@/lib/firestore/facultyProvisioning";
+import { resolveOfferLetterCcEmails } from "@/lib/firestore/offerLetterCc";
+
+// Recomputes the CC list live rather than trusting the value stored at send
+// time - covers letters sent before ccEmails was persisted at all, and stays
+// correct if the panel/HOD/Principal roster changed since.
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "WEBMASTER");
+    const { id } = await params;
+    const db = getAdminDb();
+
+    const letterSnap = await db.collection("colleges").doc(session.collegeId).collection("offerLetters").doc(id).get();
+    if (!letterSnap.exists) {
+      return NextResponse.json({ error: "Offer letter not found" }, { status: 404 });
+    }
+    const batchId = (letterSnap.data() as { batchId?: string }).batchId ?? "";
+    const { ccEmails } = await resolveOfferLetterCcEmails(db, session.collegeId, batchId);
+
+    return NextResponse.json({ ccEmails });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[offer-letters/[id] GET]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
       status?: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED";
@@ -28,12 +57,6 @@ export async function PATCH(
       .collection("offerLetters")
       .doc(id)
       .update(updates);
-
-    // Auto-create faculty account as soon as the offer letter is sent
-    let provisioning: Awaited<ReturnType<typeof provisionFacultyFromOffer>> | undefined;
-    if (body.status === "SENT") {
-      provisioning = await provisionFacultyFromOffer(db, session.collegeId, id);
-    }
 
     // When candidate formally accepts, mark them APPROVED and flip the faculty
     // record (provisioned as INTERVIEW_DONE when the offer was sent) to ACTIVE -
@@ -68,7 +91,7 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ ok: true, provisioning });
+    return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -83,7 +106,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
     const db = getAdminDb();
 

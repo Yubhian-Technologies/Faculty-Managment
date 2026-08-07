@@ -59,20 +59,19 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];
-    // Skip roles that already have a static "Panel Scoring" tab in navConfig.
-    // Also skip for PANEL_MEMBER - their nav is kept minimal (My Work + My Profile only).
-    if (user.role !== "PANEL_MEMBER") {
-      if (hasInterviews && !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)) {
-        injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
-      }
-      if (coordinatorBatchId) {
-        injected.push({
-          label: "Demo Session",
-          href: `/coordinator/${coordinatorBatchId}`,
-          iconName: "QrCode",
-          roles: [user.role],
-        });
-      }
+    // Skip roles that already have a static "Panel Scoring" tab in navConfig
+    // (PANEL_MEMBER included — their static list has no such tab, so this
+    // dynamic injection is the only way they ever get one; matches MobileDrawer).
+    if (hasInterviews && !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)) {
+      injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
+    }
+    if (coordinatorBatchId) {
+      injected.push({
+        label: "Demo Session",
+        href: `/coordinator/${coordinatorBatchId}`,
+        iconName: "QrCode",
+        roles: [user.role],
+      });
     }
     if (injected.length > 0) {
       navItems = [baseNavItems[0], ...injected, ...baseNavItems.slice(1)];

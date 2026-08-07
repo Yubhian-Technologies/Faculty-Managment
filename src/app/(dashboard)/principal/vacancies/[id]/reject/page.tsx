@@ -76,6 +76,14 @@ export default function RejectVacancyPage() {
           <p className="text-sm text-muted-foreground">
             Rejecting <strong>{vacancy?.position}</strong> from {vacancy?.department}.
           </p>
+
+          {vacancy?.justification && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">HOD&apos;s Justification</p>
+              <p className="text-sm whitespace-pre-wrap">{vacancy.justification}</p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="reason">Reason (optional)</Label>
             <Textarea

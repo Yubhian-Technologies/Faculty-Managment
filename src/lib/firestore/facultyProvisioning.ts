@@ -7,7 +7,7 @@ export type ProvisionResult =
   | { status: "no_email" }
   | { status: "not_found" };
 
-function generatePassword(): string {
+export function generatePassword(): string {
   return randomBytes(9).toString("base64url"); // 12 url-safe chars
 }
 
@@ -37,6 +37,7 @@ export async function provisionFacultyFromOffer(
     designation?: string;
     department?: string;
     joiningDate?: { toDate?: () => Date } | string;
+    status?: string;
   };
   if (!letter.candidateId) return { status: "not_found" };
 
@@ -101,28 +102,26 @@ export async function provisionFacultyFromOffer(
   const employeeId = await generateEmployeeId(db, collegeId);
   const department = letter.department ?? candidate.department ?? "";
 
-  await db
-    .collection("colleges")
-    .doc(collegeId)
-    .collection("users")
-    .doc(uid)
-    .set(
-      {
-        uid,
-        collegeId,
-        name,
-        email: collegeEmail,
-        role: "PANEL_MEMBER",
-        department,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      { merge: true }
-    );
-
   const facultyRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
-  await facultyRef.set({
+  const batch = db.batch();
+
+  batch.set(
+    db.collection("colleges").doc(collegeId).collection("users").doc(uid),
+    {
+      uid,
+      collegeId,
+      name,
+      email: collegeEmail,
+      role: "PANEL_MEMBER",
+      department,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  batch.set(facultyRef, {
     collegeId,
     candidateId: letter.candidateId,
     offerId,
@@ -138,10 +137,13 @@ export async function provisionFacultyFromOffer(
     experienceYears: 0,
     joiningDate,
     employmentType: "FULL_TIME",
-    // Not ACTIVE yet - the offer has only just been sent, not accepted, so this
-    // faculty hasn't actually joined. Flipped to ACTIVE when the offer is marked
-    // ACCEPTED (see offer-letters/[id]/route.ts PATCH).
-    status: "INTERVIEW_DONE",
+    // Account creation is normally deferred until after the candidate accepts
+    // (see "Create Faculty Account" on hod/offers), so the accept-time flip in
+    // offer-letters/[id]/route.ts PATCH will already have run and found no
+    // faculty doc yet — go straight to ACTIVE here instead of relying on it.
+    // Falls back to INTERVIEW_DONE for the rarer case of provisioning before
+    // acceptance (e.g. a manual retry on a not-yet-accepted offer).
+    status: letter.status === "ACCEPTED" ? "ACTIVE" : "INTERVIEW_DONE",
     userUid: uid,
     ...(candidate.courseId && candidate.preferredSubjectIds?.length
       ? {
@@ -158,7 +160,13 @@ export async function provisionFacultyFromOffer(
     updatedAt: now,
   });
 
-  await db.collection("systemUsers").doc(uid).set({ uid, role: "PANEL_MEMBER", collegeId, email: collegeEmail, name }, { merge: true });
+  batch.set(
+    db.collection("systemUsers").doc(uid),
+    { uid, role: "PANEL_MEMBER", collegeId, email: collegeEmail, name },
+    { merge: true }
+  );
+
+  await batch.commit();
 
   return { status: "created", facultyId: facultyRef.id, employeeId, generatedPassword };
 }

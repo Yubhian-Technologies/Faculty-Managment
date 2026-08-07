@@ -11,8 +11,8 @@ export interface NavItem {
   section?: string; // optional section header rendered above this item
 }
 
-// A nav item is "active" if its href exactly matches the current path, or -
-// only when no other item in the same list matches exactly - if it's a
+// A nav item is "active" if its href exactly matches the current path, or —
+// only when no other item in the same list matches exactly — if it's a
 // prefix of the path (so a detail/sub-page without its own nav entry still
 // highlights its parent). The exact-match guard prevents a shorter href
 // (e.g. "/super-admin/users") from also lighting up when a sibling item's
@@ -69,30 +69,27 @@ export const NAV_ITEMS: NavItem[] = [
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
 
-  // Annexure
-  { label: "Dashboard", href: "/annexure", iconName: "LayoutDashboard", roles: ["ANNEXURE"] },
-
   // Location Dept Head
   { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
   { label: "Hiring Requests", href: "/location-dept-head/vacancies", iconName: "ClipboardPlus", roles: ["LOCATION_DEPT_HEAD"], section: "Hiring" },
   { label: "My Candidates", href: "/location-dept-head/candidates", iconName: "Users", roles: ["LOCATION_DEPT_HEAD"] },
   { label: "My Interviews", href: "/location-dept-head/interviews", iconName: "CalendarCheck", roles: ["LOCATION_DEPT_HEAD"] },
 
-  // Vice Principal - own dashboard + General Admin Vacancies; everything else
+  // Vice Principal — own dashboard + General Admin Vacancies; everything else
   // is shared with Principal below (VICE_PRINCIPAL added to those roles arrays)
   // since the two roles carry equal authority per AGENTS.md.
   { label: "Dashboard", href: "/vice-principal", iconName: "LayoutDashboard", roles: ["VICE_PRINCIPAL"] },
-  { label: "General Admin Vacancies", href: "/principal/vacancies/general-admin", iconName: "ClipboardPlus", roles: ["VICE_PRINCIPAL"], section: "Hiring" },
+  { label: "General Admin Vacancies", href: "/vice-principal/vacancies", iconName: "ClipboardPlus", roles: ["VICE_PRINCIPAL"], section: "Hiring" },
 
-  // Principal (shared with Vice Principal - see note above)
-  // Full module set - Super Admin controls which modules/items are actually
+  // Principal (shared with Vice Principal — see note above)
+  // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
   { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline" },
-  { label: "Interview Plans", href: "/principal/interviews", iconName: "CalendarCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Interviews & Decisions", href: "/principal/interviews", iconName: "CalendarCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Panel Scoring", href: "/panel/interviews", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Hiring Decisions", href: "/principal/decisions", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Appointment Letters", href: "/principal/appointment-letters", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -103,19 +100,19 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Reports", href: "/principal/reports", iconName: "BarChart2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Documents & Reporting" },
   { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
   { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Apply for Leave", href: "/principal/leave/apply", iconName: "CalendarPlus", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
 
   // HOD
-  // Full module set - Super Admin controls which modules/items are actually
+  // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
   { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
-  { label: "Annexure", href: "/hod/annexure", iconName: "UsersRound", roles: ["HOD"] },
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
-  { label: "First Year Students", href: "/hod/students/incoming", iconName: "UserPlus", roles: ["HOD"] },
+  { label: "Incoming Students", href: "/hod/students/incoming", iconName: "UserPlus", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
@@ -140,17 +137,24 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
   { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
-  { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
+  { label: "Documents", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
+  { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
+  { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
   { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], section: "Personal" },
   { label: "Apply for Leave", href: "/college-office/leave/apply", iconName: "CalendarPlus", roles: ["COLLEGE_OFFICE"] },
+
+  // Webmaster
+  { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
+  { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Accounts" },
+  { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"] },
 
   // College Staff (dynamic-title roles: Dean, IQAC Coordinator, T&P, etc.)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"], section: "Personal" },
   { label: "Apply for Leave", href: "/college-staff/leave/apply", iconName: "CalendarPlus", roles: ["COLLEGE_STAFF"] },
 
-  // Faculty (PANEL_MEMBER) - My Interviews is injected dynamically in Sidebar when assigned
-  // Full module set - Super Admin controls which modules/items are actually
+  // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
+  // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
   { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work" },
@@ -164,7 +168,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Accounts
   { label: "Dashboard", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
-  { label: "Hiring - Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
+  { label: "Hiring — Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
   { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
   { label: "My Leave", href: "/accounts/leave", iconName: "CalendarClock", roles: ["ACCOUNTS"], section: "Personal" },
   { label: "Apply for Leave", href: "/accounts/leave/apply", iconName: "CalendarPlus", roles: ["ACCOUNTS"] },
@@ -222,7 +226,7 @@ export interface NavModuleGroup {
   items: NavItem[];
 }
 
-// Every role that has at least one `section`-grouped item - i.e. every role
+// Every role that has at least one `section`-grouped item — i.e. every role
 // the Super Admin Nav Visibility settings can meaningfully control. Derived
 // from NAV_ITEMS directly so a newly-grouped role shows up automatically,
 // without maintaining a separate hardcoded list in the settings UI.
@@ -237,7 +241,7 @@ export function getRolesWithNavModules(): UserRole[] {
 }
 
 // Groups a role's full (unfiltered) item list by module, for the Super Admin
-// settings UI - always shows every module/item regardless of current hide state.
+// settings UI — always shows every module/item regardless of current hide state.
 export function groupNavItemsByModule(items: NavItem[]): NavModuleGroup[] {
   const groups: NavModuleGroup[] = [];
   items.forEach((item, i) => {
@@ -319,6 +323,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["VICE_PRINCIPAL"] },
     { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["VICE_PRINCIPAL"] },
     // { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["VICE_PRINCIPAL"] },
+    // { label: "Leaves", href: "/principal/leave", iconName: "CalendarClock", roles: ["VICE_PRINCIPAL"] },
   ],
   ADMINISTRATION: [
     { label: "Home", href: "/administration", iconName: "LayoutDashboard", roles: ["ADMINISTRATION"] },
@@ -344,9 +349,6 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   EXAM_CELL: [
     { label: "Home", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   ],
-  ANNEXURE: [
-    { label: "Home", href: "/annexure", iconName: "LayoutDashboard", roles: ["ANNEXURE"] },
-  ],
   LOCATION_DEPT_HEAD: [
     { label: "Home", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
     { label: "Vacancies", href: "/location-dept-head/vacancies", iconName: "ClipboardPlus", roles: ["LOCATION_DEPT_HEAD"] },
@@ -359,6 +361,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL"] },
     { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL"] },
     // { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL"] },
+    // { label: "Leaves", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL"] },
     // { label: "Payroll", href: "/principal/payslips", iconName: "Wallet", roles: ["PRINCIPAL"] },
   ],
   HOD: [
@@ -366,13 +369,21 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"] },
     { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"] },
     { label: "Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"] },
+    // { label: "Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
     // { label: "Payslips", href: "/hod/payslips", iconName: "Wallet", roles: ["HOD"] },
   ],
   COLLEGE_OFFICE: [
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
     { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"] },
     { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"] },
+    { label: "Documents", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"] },
     { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
+    { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
+  ],
+  WEBMASTER: [
+    { label: "Home", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
+    { label: "Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"] },
+    { label: "Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"] },
   ],
   COLLEGE_STAFF: [
     { label: "Home", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
@@ -382,9 +393,10 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Teaching", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"] },
     { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
     { label: "Profile", href: "/panel/profile", iconName: "UserCircle", roles: ["PANEL_MEMBER"] },
+    // { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"] },
     // { label: "Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"] },
     // { label: "Payslips", href: "/panel/payslips", iconName: "Wallet", roles: ["PANEL_MEMBER"] },
-    // My Interviews injected dynamically when assigned - see Sidebar.tsx
+    // My Interviews injected dynamically when assigned — see Sidebar.tsx
   ],
   ACCOUNTS: [
     { label: "Home", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
@@ -404,6 +416,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Indents", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
   ],
   STUDENT: [],
+  ANNEXURE: [],
   CLASS_LEADER: [
     { label: "Home", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },
     { label: "Timetable", href: "/class-leader/timetable", iconName: "CalendarDays", roles: ["CLASS_LEADER"] },

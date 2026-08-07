@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   "/feedback",
   "/api/auth",
   "/location-interview",
+  "/candidate-form",
   "/about-team-illustration.png",
 ];
 
@@ -40,6 +41,7 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH],
   HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH],
   COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH],
+  WEBMASTER: ["/webmaster"],
   COLLEGE_STAFF: ["/college-staff"],
   PANEL_MEMBER: ["/panel", "/coordinator"],
   ANNEXURE: ["/annexure"],

@@ -7,14 +7,12 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { auth } from "@/lib/firebase/client";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
-import { Plus, FileText, CheckCircle2, XCircle, Send, ChevronDown, ChevronUp, UserPlus, Download, Mail } from "lucide-react";
+import { Plus, FileText, CheckCircle2, XCircle, Send, ChevronDown, ChevronUp, KeyRound, Clock, Download, PenLine } from "lucide-react";
 import type { OfferLetter } from "@/types";
 
 type OfferRow = OfferLetter & { id: string };
@@ -29,24 +27,27 @@ function rupees(n: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 }
 
-export default function HodOffersPage() {
+export default function CollegeOfficeOffersPage() {
   const router = useRouter();
   const [letters, setLetters] = useState<OfferRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionTarget, setActionTarget] = useState<{ id: string; action: "ACCEPTED" | "REJECTED" } | null>(null);
   const [isActing, setIsActing] = useState(false);
-  const [provisioning, setProvisioning] = useState<string | null>(null);
+  const [requestingId, setRequestingId] = useState<string | null>(null);
+  const [appointmentLetterCandidateIds, setAppointmentLetterCandidateIds] = useState<Set<string>>(new Set());
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [emailingId, setEmailingId] = useState<string | null>(null);
   const [collegeInfo, setCollegeInfo] = useState<{ name: string; address: string }>({ name: "", address: "" });
-  const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string; employeeId?: string } | null>(null);
 
   async function load() {
     setIsLoading(true);
     try {
-      const letters = await fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferRow[] }>).then((d) => d.letters ?? []);
+      const [letters, appointmentLetters] = await Promise.all([
+        fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferRow[] }>).then((d) => d.letters ?? []),
+        fetch("/api/college/appointment-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>).then((d) => d.letters ?? []).catch(() => []),
+      ]);
       setLetters(letters);
+      setAppointmentLetterCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
     } catch {
       toast({ variant: "destructive", title: "Failed to load" });
     } finally {
@@ -62,23 +63,18 @@ export default function HodOffersPage() {
       .catch(() => {});
   }, []);
 
-  async function retryProvision(letter: OfferRow) {
-    setProvisioning(letter.id);
+  async function requestCredentials(letter: OfferRow) {
+    setRequestingId(letter.id);
     try {
-      const res = await fetch(`/api/college/offer-letters/${letter.id}/provision`, { method: "POST" });
-      const data = await res.json() as { ok?: boolean; alreadyExists?: boolean; employeeId?: string; generatedPassword?: string; error?: string };
+      const res = await fetch(`/api/college/offer-letters/${letter.id}/request-credentials`, { method: "POST" });
+      const data = await res.json() as { ok?: boolean; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
-      if (data.alreadyExists) {
-        toast({ title: "Faculty account already exists" });
-      } else if (data.generatedPassword) {
-        toast({ variant: "success", title: "Faculty account created", description: `Employee ID: ${data.employeeId ?? ""}` });
-        setRevealedPassword({ name: letter.candidateName ?? "the new faculty member", password: data.generatedPassword, employeeId: data.employeeId });
-      }
+      toast({ variant: "success", title: "Credentials requested", description: "The Webmaster has been notified." });
       void load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to create faculty account", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Failed to request credentials", description: err instanceof Error ? err.message : undefined });
     } finally {
-      setProvisioning(null);
+      setRequestingId(null);
     }
   }
 
@@ -144,40 +140,60 @@ export default function HodOffersPage() {
     }
   }
 
-  async function emailCandidate(letter: OfferRow) {
-    setEmailingId(letter.id);
+  // Opens a pre-filled Gmail draft the way the HOD's interview call letter does.
+  // Gmail's compose URL has no way to attach a file programmatically, so this
+  // downloads the PDF first (same file generatePdf() produces) and lands it in
+  // the browser's downloads - office just drags it into the draft before sending.
+  async function composeEmail(letter: OfferRow) {
+    setDownloadingId(letter.id);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) throw new Error("Not authenticated");
+      const [{ candidateAddress, candidateEmail, interviewDate }, ccRes] = await Promise.all([
+        fetchLetterExtras(letter),
+        // Recomputed live, not read off `letter` - covers letters sent before
+        // ccEmails was persisted, and stays correct if the roster changed since.
+        fetch(`/api/college/offer-letters/${letter.id}`).then((r) => r.json() as Promise<{ ccEmails?: string[] }>).catch((): { ccEmails?: string[] } => ({})),
+      ]);
+      if (!candidateEmail) {
+        toast({ variant: "destructive", title: "Candidate has no email on file" });
+        return;
+      }
 
-      const { candidateAddress, candidateEmail, interviewDate } = await fetchLetterExtras(letter);
-      if (!candidateEmail) throw new Error("Candidate has no email on file");
+      await downloadOfferLetterPdf(
+        {
+          candidateName: letter.candidateName ?? "",
+          candidateAddress,
+          designation: letter.designation,
+          department: letter.department,
+          collegeName: collegeInfo.name,
+          collegeAddress: collegeInfo.address,
+          interviewDate,
+          joiningDate: formatDate(letter.joiningDate as Parameters<typeof formatDate>[0]),
+          letterDate: formatDate(new Date()),
+        },
+        letter.candidateName ?? letter.id
+      );
 
-      const res = await fetch("/api/email/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          type: "OFFER_LETTER",
-          to: candidateEmail,
-          data: {
-            candidateName: letter.candidateName,
-            candidateAddress,
-            position: letter.designation,
-            department: letter.department,
-            collegeName: collegeInfo.name,
-            collegeAddress: collegeInfo.address,
-            interviewDate,
-            joiningDate: formatDate(letter.joiningDate as Parameters<typeof formatDate>[0]),
-            letterDate: formatDate(new Date()),
-          },
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to send email");
-      toast({ variant: "success", title: "Offer letter emailed", description: `Sent to ${candidateEmail}` });
+      const institution = collegeInfo.name || "the institution";
+      const subject = `Offer Letter – ${letter.designation} | ${institution}`;
+      const body = `Dear ${letter.candidateName ?? "Candidate"},
+
+Greetings from ${institution}.
+
+We are pleased to offer you the position of ${letter.designation} in the ${letter.department} department, effective from ${formatDate(letter.joiningDate as Parameters<typeof formatDate>[0])}.
+
+The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+
+Congratulations, and welcome aboard!
+
+Warm regards,
+${institution}`;
+      const cc = (ccRes.ccEmails ?? []).join(",");
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidateEmail)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(gmailUrl, "_blank");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to send email", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Failed to prepare email", description: err instanceof Error ? err.message : undefined });
     } finally {
-      setEmailingId(null);
+      setDownloadingId(null);
     }
   }
 
@@ -191,9 +207,9 @@ export default function HodOffersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Offer Letters"
-        description="Send offer letters and create faculty logins for candidates in the final decision stage"
+        description="Send offer letters and request candidate login credentials once the appointment letter is released"
         actions={
-          <Button onClick={() => router.push("/hod/offers/new")}>
+          <Button onClick={() => router.push("/college-office/offers/new")}>
             <Plus className="h-4 w-4 mr-1" />
             Send Offer Letter
           </Button>
@@ -285,21 +301,39 @@ export default function HodOffersPage() {
                         <Download className="h-3.5 w-3.5 mr-1" />
                         Download PDF
                       </Button>
-                      <Button size="sm" variant="outline" loading={emailingId === letter.id} onClick={() => void emailCandidate(letter)}>
-                        <Mail className="h-3.5 w-3.5 mr-1" />
-                        Email Candidate
+                      <Button size="sm" variant="outline" loading={downloadingId === letter.id} onClick={() => void composeEmail(letter)}>
+                        <PenLine className="h-3.5 w-3.5 mr-1" />
+                        Compose Email
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                        loading={provisioning === letter.id}
-                        onClick={() => void retryProvision(letter)}
-                        title="Retry faculty account creation if it failed when the offer was sent"
-                      >
-                        <UserPlus className="h-3.5 w-3.5 mr-1" />
-                        Retry Faculty Account
-                      </Button>
+                      {letter.status === "ACCEPTED" && (
+                        letter.credentialsFulfilledAt ? (
+                          <Badge variant="default" className="bg-green-600 hover:bg-green-600">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Account Created
+                          </Badge>
+                        ) : letter.credentialsRequestedAt ? (
+                          <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
+                            <Clock className="h-3 w-3 mr-1" />
+                            Requested — awaiting Webmaster
+                          </Badge>
+                        ) : appointmentLetterCandidateIds.has(letter.candidateId) ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                            loading={requestingId === letter.id}
+                            onClick={() => void requestCredentials(letter)}
+                            title="Ask the Webmaster to create the candidate's login"
+                          >
+                            <KeyRound className="h-3.5 w-3.5 mr-1" />
+                            Request Credentials
+                          </Button>
+                        ) : (
+                          <Badge variant="secondary" title="The Principal needs to generate the appointment letter first">
+                            Awaiting Appointment Letter
+                          </Badge>
+                        )
+                      )}
                       {letter.status === "SENT" && (
                         <>
                           <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setActionTarget({ id: letter.id, action: "ACCEPTED" })}>
@@ -331,24 +365,6 @@ export default function HodOffersPage() {
         onConfirm={handleAction}
         loading={isActing}
       />
-
-      <Dialog open={!!revealedPassword} onOpenChange={(o) => { if (!o) setRevealedPassword(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Faculty Account Created</DialogTitle>
-            <DialogDescription>
-              A login was created for <strong>{revealedPassword?.name}</strong>
-              {revealedPassword?.employeeId ? ` (${revealedPassword.employeeId})` : ""}. Share this temporary password with them securely - it will not be shown again.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border bg-muted/40 p-3 font-mono text-sm text-center select-all">
-            {revealedPassword?.password}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setRevealedPassword(null)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

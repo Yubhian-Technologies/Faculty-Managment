@@ -20,8 +20,6 @@ import type {
   HiringBatch,
   PanelFeedback,
   StudentFeedback,
-  HRFeedback,
-  HiringDocVerification,
   OfferLetter,
   AppointmentLetter,
   AuditLog,
@@ -279,59 +277,6 @@ export async function submitStudentFeedback(
     submittedAt: Timestamp.now(),
   });
   return docRef.id;
-}
-
-// ─── HR Feedback ──────────────────────────────────────────────────────────────
-
-export async function submitHRFeedback(
-  collegeId: string,
-  batchId: string,
-  data: Omit<HRFeedback, "id" | "submittedAt">
-): Promise<string> {
-  const ref = collection(db, "colleges", collegeId, "hiringBatches", batchId, "hrFeedback");
-  const docRef = await addDoc(ref, {
-    ...data,
-    collegeId,
-    submittedAt: Timestamp.now(),
-  });
-  return docRef.id;
-}
-
-// ─── Hiring Document Verification ────────────────────────────────────────────
-
-export async function getHiringDocVerification(
-  collegeId: string,
-  candidateId: string
-): Promise<HiringDocVerification | null> {
-  const ref = collection(db, "colleges", collegeId, "hiringDocVerifications");
-  const q = query(ref, where("candidateId", "==", candidateId));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { id: d.id, ...d.data() } as HiringDocVerification;
-}
-
-export async function createHiringDocVerification(
-  collegeId: string,
-  data: Omit<HiringDocVerification, "id" | "createdAt" | "updatedAt">
-): Promise<string> {
-  const ref = collection(db, "colleges", collegeId, "hiringDocVerifications");
-  const docRef = await addDoc(ref, {
-    ...data,
-    collegeId,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  });
-  return docRef.id;
-}
-
-export async function updateHiringDocVerification(
-  collegeId: string,
-  verificationId: string,
-  data: Partial<HiringDocVerification>
-): Promise<void> {
-  const ref = doc(db, "colleges", collegeId, "hiringDocVerifications", verificationId);
-  await updateDoc(ref, { ...data, updatedAt: Timestamp.now() });
 }
 
 // ─── Offer / Appointment Letters ─────────────────────────────────────────────
