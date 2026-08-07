@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
-import { todayISODate } from "@/lib/leave/dayCounter";
+import { AlertTriangle } from "lucide-react";
+import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import type { LeaveTypeCode } from "@/types/leave";
 
@@ -39,6 +40,17 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
+
+  // Live preview only - the server never blocks on this (see applications/route.ts),
+  // it just warns the requester before they submit that some days will exceed
+  // their balance and be treated as Loss of Pay (final split happens at approval).
+  const selectedType = types.find((t) => t.code === leaveTypeCode);
+  const previewTotalDays =
+    fromDate && toDate && toDate >= fromDate ? countLeaveDays(new Date(fromDate), new Date(toDate), isHalfDay) : 0;
+  const lopPreviewDays =
+    selectedType && !selectedType.unlimited && selectedType.remaining !== undefined && previewTotalDays > selectedType.remaining
+      ? previewTotalDays - selectedType.remaining
+      : 0;
 
   function handleLeaveTypeChange(value: string) {
     setLeaveTypeCode(value);
@@ -132,6 +144,16 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               <span className="text-xs text-muted-foreground">(not available for this leave type)</span>
             )}
           </label>
+
+          {lopPreviewDays > 0 && selectedType && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                You have {selectedType.remaining} {selectedType.label} remaining. This request is for {previewTotalDays} day(s) —{" "}
+                {lopPreviewDays} day(s) will exceed your balance and be treated as Loss of Pay (-{lopPreviewDays}x).
+              </span>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Reason</Label>

@@ -17,8 +17,11 @@ import type { Timestamp } from "firebase/firestore";
 // (vacation/non-vacation) takes over automatically.
 //
 // "Other" is not a balance-tracked leave type - it's a catch-all reason a
-// requester picks when none of the above fit; the approving HOD assigns the
-// actual leaveTypeCode to sanction it against (see LeaveRequest.isOtherRequest).
+// requester picks when none of the above fit. The HOD tags it paid/unpaid
+// (LeaveRequest.isPaidLeave) and forwards it to the Principal for the final
+// decision, instead of approving/rejecting it directly (see
+// LeaveRequest.isOtherRequest). Standard types (CL/SL/SCL/EL/OD), by
+// contrast, are decided by the HOD alone - approval there is final.
 //
 // Collections: root `leaveTypes`, colleges/{id}/employeeLeaveProfiles,
 //              colleges/{id}/leaveBalances, colleges/{id}/leaveRequests
@@ -97,6 +100,18 @@ export interface LeaveBalance {
 
 // ─── Leave Request ─────────────────────────────────────────────────────────────
 // doc path: colleges/{collegeId}/leaveRequests/{id}
+//
+// A PANEL_MEMBER's request always starts at PENDING_HOD. From there:
+//  - Standard types (CL/SL/SCL/EL/OD): the HOD's decision is final - APPROVE
+//    commits the balance and closes the request; REJECT releases it. Never
+//    reaches PENDING_PRINCIPAL. Insufficient balance never blocks approval -
+//    days beyond what's remaining are accepted and recorded as LeaveRequest.lopDays
+//    (Loss of Pay) instead of being committed to the balance.
+//  - "Other" requests (isOtherRequest): the HOD can REJECT outright, or tag
+//    isPaidLeave and forward to PENDING_PRINCIPAL, where the Principal/VP
+//    gives the final APPROVE/REJECT (balance-exempt either way).
+// Non-PANEL_MEMBER submitters (HOD/Principal/etc.'s own leave) skip the HOD
+// stage entirely and start at PENDING_PRINCIPAL, unchanged from before.
 
 export type LeaveRequestStatus =
   | "PENDING_HOD"
@@ -122,6 +137,9 @@ export interface LeaveActionRecord {
   // Set by the HOD when acting on an isOtherRequest - the leave type it's
   // actually sanctioned against (defaults leaveTypeCode on approval).
   assignedLeaveTypeCode?: LeaveTypeCode;
+  // Set by the HOD when forwarding an isOtherRequest to the Principal - not
+  // balance-tracked, just a record of how the HOD classified it.
+  isPaidLeave?: boolean;
 }
 
 export interface LeaveRequest {
@@ -140,6 +158,14 @@ export interface LeaveRequest {
   isHalfDay?: boolean;
   reason: string;
   status: LeaveRequestStatus;
+  // Set by the HOD when forwarding an isOtherRequest to the Principal - Other
+  // requests are never balance-tracked, this is purely informational.
+  isPaidLeave?: boolean;
+  // Set at approval time for a standard type (CL/SL/SCL/EL) whose totalDays
+  // exceeded the remaining balance - the excess is never blocked, it's
+  // accepted and tracked here as Loss of Pay days instead (no balance touch
+  // for these days). Undefined/0 when the whole request fit within balance.
+  lopDays?: number;
   hodAction?: LeaveActionRecord;
   principalAction?: LeaveActionRecord;
   createdAt: Timestamp;

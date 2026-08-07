@@ -7,7 +7,7 @@ export default function CollegeOfficeLeavePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="My Leave" description="Your leave balances and request history" />
-      <LeaveProfileView applyHref="/college-office/leave/apply" odHistoryHref="/college-office/leave/od-history" />
+      <LeaveProfileView applyHref="/college-office/leave/apply" historyBaseHref="/college-office/leave/history" />
     </div>
   );
 }

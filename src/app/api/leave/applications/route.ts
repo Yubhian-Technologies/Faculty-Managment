@@ -8,11 +8,23 @@ import { getOrCreateProfile } from "@/lib/leave/profile";
 import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
-import { REQUESTS_COL, loadBalances, reservePending, computeEntitlement } from "@/lib/leave/balanceEngine";
+import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
 import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
+
+// Sorts newest-first in memory instead of chaining .orderBy() onto a
+// .where() on a different field - that combination needs a Firestore
+// composite index (see resolveUserDepartment's comment in
+// lib/budget/departmentScope.ts for the same concern elsewhere).
+function sortByCreatedAtDesc(requests: LeaveRequest[]): LeaveRequest[] {
+  return [...requests].sort((a, b) => {
+    const at = (a.createdAt as unknown as { toMillis?(): number })?.toMillis?.() ?? 0;
+    const bt = (b.createdAt as unknown as { toMillis?(): number })?.toMillis?.() ?? 0;
+    return bt - at;
+  });
+}
 
 export async function GET(request: Request) {
   try {
@@ -28,18 +40,19 @@ export async function GET(request: Request) {
       if (session.role === "HOD") {
         const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
         const snap = await REQUESTS_COL(session.collegeId, db)
-          .where("department", "==", dept || "__NO_DEPARTMENT__")
           .where("status", "==", "PENDING_HOD")
-          .orderBy("createdAt", "desc")
           .get();
-        return NextResponse.json({ requests: snap.docs.map((d) => ({ id: d.id, ...d.data() })) });
+        const requests = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
+          .filter((r) => r.department === (dept || "__NO_DEPARTMENT__"));
+        return NextResponse.json({ requests: sortByCreatedAtDesc(requests) });
       }
       if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
         const snap = await REQUESTS_COL(session.collegeId, db)
           .where("status", "==", "PENDING_PRINCIPAL")
-          .orderBy("createdAt", "desc")
           .get();
-        return NextResponse.json({ requests: snap.docs.map((d) => ({ id: d.id, ...d.data() })) });
+        const requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest);
+        return NextResponse.json({ requests: sortByCreatedAtDesc(requests) });
       }
       return NextResponse.json({ requests: [] });
     }
@@ -51,10 +64,9 @@ export async function GET(request: Request) {
 
     const snap = await REQUESTS_COL(session.collegeId, db)
       .where("uid", "==", targetUid)
-      .orderBy("createdAt", "desc")
       .get();
 
-    const requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const requests = sortByCreatedAtDesc(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest));
     return NextResponse.json({ requests });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -119,17 +131,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Leave cannot be applied for a date before today" }, { status: 400 });
     }
     const totalDays = countLeaveDays(fromDate, toDate, body.isHalfDay);
-    const year = fromDate.getFullYear();
 
-    if (leaveType && !leaveType.rules.unlimited) {
-      const balances = await loadBalances(db, session.collegeId, session.uid, year);
-      const bal = balances.find((b) => b.leaveTypeCode === leaveType!.code);
-      const entitled = bal?.entitled ?? computeEntitlement(leaveType, effectiveCategory);
-      const remaining = entitled - (bal?.used ?? 0) - (bal?.pending ?? 0);
-      if (totalDays > remaining) {
-        return NextResponse.json({ error: `Insufficient ${leaveType.label} balance (${remaining} day(s) remaining)` }, { status: 400 });
-      }
-    }
+    // Insufficient balance never blocks submission - days beyond what's
+    // remaining are accepted and split into Loss of Pay at approval time
+    // (see splitLeaveDays in applications/[id]/route.ts). The Apply form
+    // warns the requester about this before they submit, but doesn't block it.
 
     const now = new Date();
     const initialStatus = session.role === "PANEL_MEMBER" ? "PENDING_HOD" : "PENDING_PRINCIPAL";
@@ -138,8 +144,8 @@ export async function POST(request: Request) {
       collegeId: session.collegeId,
       uid: session.uid,
       employeeName: identity.name,
-      department: identity.department,
-      leaveTypeCode: body.leaveTypeCode,
+      ...(identity.department ? { department: identity.department } : {}),
+      ...(body.leaveTypeCode ? { leaveTypeCode: body.leaveTypeCode } : {}),
       isOtherRequest: body.isOtherRequest || false,
       fromDate: fromDate as unknown as LeaveRequest["fromDate"],
       toDate: toDate as unknown as LeaveRequest["toDate"],
@@ -153,9 +159,8 @@ export async function POST(request: Request) {
 
     const ref = await REQUESTS_COL(session.collegeId, db).add(newRequest);
 
-    if (leaveType && !leaveType.rules.unlimited) {
-      await reservePending(db, session.collegeId, session.uid, leaveType.code, year, totalDays);
-    }
+    // Balance is only committed on final approval (see [id]/route.ts) - a
+    // pending/unapproved request never reduces the visible remaining count.
 
     await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
       collegeId: session.collegeId,

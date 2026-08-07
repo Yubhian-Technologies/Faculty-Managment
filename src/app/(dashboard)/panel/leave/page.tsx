@@ -7,7 +7,7 @@ export default function PanelLeavePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="My Leave" description="Your leave balances and request history" />
-      <LeaveProfileView applyHref="/panel/leave/apply" odHistoryHref="/panel/leave/od-history" />
+      <LeaveProfileView applyHref="/panel/leave/apply" historyBaseHref="/panel/leave/history" />
     </div>
   );
 }

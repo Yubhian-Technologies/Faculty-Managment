@@ -85,6 +85,13 @@ export async function loadBalances(
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveBalance));
 }
 
+// reservePending/commitApproval/releasePending use set(..., {merge: true})
+// rather than update() - the balance doc isn't guaranteed to exist yet (e.g.
+// initBalancesForYear hasn't run for this employee/type/year), and update()
+// throws NOT_FOUND on a missing doc. set-merge upserts identity fields plus
+// the new pending/used value either way; readers already fall back to a
+// computed default when `entitled` is absent from a doc created this way.
+
 export async function reservePending(
   db: Firestore,
   collegeId: string,
@@ -95,10 +102,10 @@ export async function reservePending(
 ): Promise<void> {
   const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
   const data = (await ref.get()).data() ?? {};
-  await ref.update({
-    pending: (data.pending ?? 0) + days,
-    updatedAt: new Date(),
-  });
+  await ref.set(
+    { collegeId, uid, leaveTypeCode, year, pending: (data.pending ?? 0) + days, updatedAt: new Date() },
+    { merge: true }
+  );
 }
 
 export async function commitApproval(
@@ -111,11 +118,15 @@ export async function commitApproval(
 ): Promise<void> {
   const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
   const data = (await ref.get()).data() ?? {};
-  await ref.update({
-    pending: Math.max(0, (data.pending ?? 0) - days),
-    used: (data.used ?? 0) + days,
-    updatedAt: new Date(),
-  });
+  await ref.set(
+    {
+      collegeId, uid, leaveTypeCode, year,
+      pending: Math.max(0, (data.pending ?? 0) - days),
+      used: (data.used ?? 0) + days,
+      updatedAt: new Date(),
+    },
+    { merge: true }
+  );
 }
 
 export async function releasePending(
@@ -128,8 +139,8 @@ export async function releasePending(
 ): Promise<void> {
   const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
   const data = (await ref.get()).data() ?? {};
-  await ref.update({
-    pending: Math.max(0, (data.pending ?? 0) - days),
-    updatedAt: new Date(),
-  });
+  await ref.set(
+    { collegeId, uid, leaveTypeCode, year, pending: Math.max(0, (data.pending ?? 0) - days), updatedAt: new Date() },
+    { merge: true }
+  );
 }
