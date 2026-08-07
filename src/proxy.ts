@@ -46,6 +46,7 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH],
   FINANCE: ["/finance"],
   PURCHASE_DEPT: ["/purchase"],
+  CLASS_LEADER: ["/class-leader"],
 };
 
 function isPublicPath(pathname: string): boolean {
