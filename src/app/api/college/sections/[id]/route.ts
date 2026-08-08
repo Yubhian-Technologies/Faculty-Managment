@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 
 // A parent department's HOD has full (not just view-only) access to their
 // own sub-departments' sections - same edit/delete rights as the sub-HOD who
@@ -116,7 +117,13 @@ export async function PATCH(
     if (body.year != null) updates.year = Number(body.year);
     if (body.batch != null) updates.batch = body.batch.trim();
     if (body.studentCount != null) updates.studentCount = Math.max(0, Number(body.studentCount));
-    if ("facultyInchargeUid" in body) updates.facultyInchargeUid = body.facultyInchargeUid ?? null;
+    if ("facultyInchargeUid" in body) {
+      // See sections/route.ts POST - the picker supplies a FacultyMember doc
+      // id, but this field is read by comparing against the login uid.
+      updates.facultyInchargeUid = body.facultyInchargeUid
+        ? await resolveLoginUidForFacultyMember(db, session.collegeId, body.facultyInchargeUid)
+        : null;
+    }
     if (body.facultyInchargeName != null) updates.facultyInchargeName = body.facultyInchargeName;
 
     const batch = new ChunkedBatch(db);

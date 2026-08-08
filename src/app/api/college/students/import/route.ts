@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { buildStudentDoc, type StudentImportRow } from "@/lib/students/importRow";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Section } from "@/types";
 
 export async function POST(request: Request) {
@@ -36,8 +37,11 @@ export async function POST(request: Request) {
     }
     const section = sectionSnap.data() as Section;
 
-    if (session.role === "PANEL_MEMBER" && section.facultyInchargeUid !== session.uid) {
-      return NextResponse.json({ error: "You are not in charge of this section" }, { status: 403 });
+    if (session.role === "PANEL_MEMBER") {
+      const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
+      if (!section.facultyInchargeUid || !candidateIds.includes(section.facultyInchargeUid)) {
+        return NextResponse.json({ error: "You are not in charge of this section" }, { status: 403 });
+      }
     }
     if (session.role === "HOD") {
       const hodSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
