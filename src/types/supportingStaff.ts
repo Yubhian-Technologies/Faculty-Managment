@@ -14,13 +14,12 @@ export const STAFF_CATEGORY_LABELS: Record<SupportingStaffCategory, string> = {
 };
 
 export type NonTechnicalStaffDesignation =
-  | "OFFICE_STAFF" | "ACCOUNTANT" | "LIBRARIAN" | "CLERK" | "ATTENDER" | "OFFICE_ASSISTANT" | "OTHER";
+  | "OFFICE_STAFF" | "ACCOUNTANT" | "CLERK" | "ATTENDER" | "OFFICE_ASSISTANT" | "OTHER";
 export type SupportingStaffDesignation = NonTechnicalStaffDesignation;
 
 export const NON_TECHNICAL_STAFF_DESIGNATION_LABELS: Record<NonTechnicalStaffDesignation, string> = {
   OFFICE_STAFF: "Office Staff",
   ACCOUNTANT: "Accountant",
-  LIBRARIAN: "Librarian",
   CLERK: "Clerk",
   ATTENDER: "Attender",
   OFFICE_ASSISTANT: "Office Assistant",

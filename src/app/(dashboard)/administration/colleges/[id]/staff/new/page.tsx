@@ -13,7 +13,6 @@ import type { College } from "@/types";
 
 const ROLE_OPTIONS = [
   { value: "PLACEMENT_DEPT", label: "Placement Department" },
-  { value: "LIBRARY", label: "Library" },
   { value: "EXAM_CELL", label: "Exam Cell" },
 ] as const;
 

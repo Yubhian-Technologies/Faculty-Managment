@@ -41,7 +41,6 @@ function buildDepartmentResolver(
 const NON_TECHNICAL_DESIGNATION_MAP: Record<string, SupportingStaffDesignation> = {
   "office staff": "OFFICE_STAFF",
   "accountant": "ACCOUNTANT",
-  "librarian": "LIBRARIAN",
   "clerk": "CLERK",
   "attender": "ATTENDER",
   "office assistant": "OFFICE_ASSISTANT",
