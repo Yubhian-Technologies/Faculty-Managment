@@ -68,6 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
+  { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
 
   // Location Dept Head
   { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
@@ -156,6 +157,7 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
   { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work" },
+  { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
   { label: "Internal Marks", href: "/panel/internal-marks", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
@@ -343,6 +345,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   EXAM_CELL: [
     { label: "Home", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
+    { label: "Configure", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
   ],
   LOCATION_DEPT_HEAD: [
     { label: "Home", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },

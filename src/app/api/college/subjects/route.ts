@@ -12,7 +12,7 @@ async function getHodDept(db: FirebaseFirestore.Firestore, collegeId: string, ui
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "EXAM_CELL");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
     const year = searchParams.get("year");
