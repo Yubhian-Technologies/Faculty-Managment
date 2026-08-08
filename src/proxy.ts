@@ -44,7 +44,6 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   WEBMASTER: ["/webmaster"],
   COLLEGE_STAFF: ["/college-staff"],
   PANEL_MEMBER: ["/panel", "/coordinator"],
-  ANNEXURE: ["/annexure"],
   ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH],
   FINANCE: ["/finance"],
   PURCHASE_DEPT: ["/purchase"],

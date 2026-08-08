@@ -14,7 +14,7 @@ const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", 
 // `department` - the sub-department itself, and this account's actual scope,
 // only becomes real once POST /api/college/departments links them via
 // hodUid, which is where the "only within your own department" check lives).
-const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "ANNEXURE"];
+const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD"];
 // College Office may only create Class Leader logins - one per Section, bound
 // via `sectionId` below (see college-office/sections/new and .../[id]/edit).
 const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
@@ -100,22 +100,18 @@ export async function POST(request: Request) {
       department?: string;
       staffType?: "teaching" | "supporting";
       designation?: string; // free-text title for COLLEGE_STAFF (e.g. "Dean - R&D")
-      annexure?: string; // HOD-entered reference number/label for ANNEXURE role (e.g. "1", "2")
       sectionId?: string; // required when role === "CLASS_LEADER" - the Section this login is bound to
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, annexure, sectionId } = body;
+    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, sectionId } = body;
 
     if (!email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     if (role !== "CLASS_LEADER" && !name) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
-    if (role === "ANNEXURE" && !annexure) {
-      return NextResponse.json({ error: "annexure is required" }, { status: 400 });
     }
     if (role === "CLASS_LEADER" && !sectionId) {
       return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -224,7 +220,6 @@ export async function POST(request: Request) {
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),
         ...(designation ? { designation } : {}),
-        ...(annexure ? { annexure } : {}),
         ...(role === "CLASS_LEADER" ? { sectionId, sectionName: sectionData?.name ?? "" } : {}),
         ...(academicProfile ? { academicProfile } : {}),
         ...(profilePhotoUrl ? { profilePhotoUrl } : {}),

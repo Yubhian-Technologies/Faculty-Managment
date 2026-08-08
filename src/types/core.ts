@@ -21,7 +21,6 @@ export type UserRole =
   | "LIBRARY"
   | "EXAM_CELL"
   | "PANEL_MEMBER"
-  | "ANNEXURE"
   | "WEBMASTER"
   | "ACCOUNTS"
   | "FINANCE"
@@ -45,7 +44,6 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
   PANEL_MEMBER: "Teaching Faculty",
-  ANNEXURE: "Annexure",
   WEBMASTER: "Webmaster",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
@@ -70,7 +68,6 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
   PANEL_MEMBER: "/panel",
-  ANNEXURE: "/annexure",
   WEBMASTER: "/webmaster",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
@@ -106,7 +103,6 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   EXAM_CELL: 4,
   WEBMASTER: 4,
   PANEL_MEMBER: 5,
-  ANNEXURE: 5,
   STUDENT: 6,
   CLASS_LEADER: 6,
 };
@@ -147,7 +143,6 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   EXAM_CELL: "COLLEGE",
   WEBMASTER: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
-  ANNEXURE: "COLLEGE",
   STUDENT: "COLLEGE",
   CLASS_LEADER: "COLLEGE",
 };
@@ -229,7 +224,6 @@ export interface FMSUser {
   role: UserRole;
   department?: string;      // for HOD / LOCATION_DEPT_HEAD
   locationDeptId?: string;  // for LOCATION_DEPT_HEAD
-  annexure?: string;        // HOD-entered reference number/label, for ANNEXURE role
   sectionId?: string;       // for CLASS_LEADER - the one Section this login is bound to
   sectionName?: string;     // for CLASS_LEADER - denormalized Section.name
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
