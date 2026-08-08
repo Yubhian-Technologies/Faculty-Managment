@@ -213,6 +213,21 @@ export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
 
 // ─── System User (login account) ─────────────────────────────────────────────
 
+// Religion/Caste - shared by every role's Personal Details (FMSUser and
+// FacultyMember both use these same coded values, not free text, so exports/
+// PDFs/CSV can render a consistent label regardless of which record type it
+// came from). "OTHER" is also what a legacy free-text value not matching any
+// code here falls back to until the record is next saved (see subCaste for
+// caste sub-classification, which stays free text since it isn't a fixed list).
+export type Religion = "HINDU" | "CHRISTIAN" | "MUSLIM" | "JAIN" | "SIKH" | "OTHER";
+export const RELIGION_LABELS: Record<Religion, string> = {
+  HINDU: "Hindu", CHRISTIAN: "Christian", MUSLIM: "Muslim", JAIN: "Jain", SIKH: "Sikh", OTHER: "Other",
+};
+export type Caste = "OC" | "BC" | "SC" | "ST" | "OTHER";
+export const CASTE_LABELS: Record<Caste, string> = {
+  OC: "OC", BC: "BC", SC: "SC", ST: "ST", OTHER: "Other",
+};
+
 export interface FMSUser {
   uid: string;
   collegeId: string;
@@ -236,8 +251,9 @@ export interface FMSUser {
   legalName?: string;          // name as per SSC certificates (CAPITAL LETTERS)
   fatherName?: string;         // father or husband name
   motherName?: string;
-  religion?: string;
-  caste?: string;
+  religion?: Religion;
+  caste?: Caste;
+  subCaste?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
@@ -542,8 +558,9 @@ export interface FacultyMember {
   legalName?: string;          // name as per SSC certificates (CAPITAL LETTERS)
   fatherName?: string;         // father or husband name
   motherName?: string;
-  religion?: string;
-  caste?: string;
+  religion?: Religion;
+  caste?: Caste;
+  subCaste?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
@@ -640,7 +657,8 @@ export interface TechnicalProfile {
 // dateOfBirth) live on the host doc itself, not here.
 
 export interface DegreeDetail {
-  degreeAndBranch: string;
+  degree: string;
+  branch: string;
   universityOrInstitute: string;
   percentageOrDivision: string;
   yearOfCompletion: number;
@@ -664,7 +682,8 @@ export interface TeachingAssignmentSummary {
 export interface PreviousInstitution {
   institutionName: string;
   designation?: string;
-  yearsWorked: number;
+  fromYear?: number;
+  toYear?: number;
   experienceCertificateUrl?: string;
 }
 
@@ -733,8 +752,13 @@ export const TRAINING_ENTRY_TYPE_LABELS: Record<TrainingEntryType, string> = {
   SKILL_DEVELOPMENT: "Skill Development", ADMINISTRATIVE: "Administrative Training",
   ERP: "ERP Training", OFFICE_AUTOMATION: "Office Automation Training", OTHER: "Other",
 };
+export type TrainingParticipationRole = "PARTICIPATED" | "CONDUCTED";
+export const TRAINING_PARTICIPATION_ROLE_LABELS: Record<TrainingParticipationRole, string> = {
+  PARTICIPATED: "Participated", CONDUCTED: "Conducted",
+};
 export interface TrainingEntry {
   type: TrainingEntryType;
+  role?: TrainingParticipationRole; // did they attend, or run it themselves - applies to any type, not just FDP
   title: string;
   organizer: string;
   year: number;

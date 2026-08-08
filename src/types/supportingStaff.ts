@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { DegreeDetail, EmploymentType, FacultyStatus, TrainingEntry, AwardEntry } from "./core";
+import type { DegreeDetail, EmploymentType, FacultyStatus, TrainingEntry, AwardEntry, Religion, Caste } from "./core";
 
 // ─── Supporting Staff (Non-Technical) ──────────────────────────────────────────
 // NBA/AICTE-compliant profile module for non-teaching, non-technical staff,
@@ -97,8 +97,9 @@ export interface SupportingStaffMember {
   legalName?: string;
   fatherName?: string;
   motherName?: string;
-  religion?: string;
-  caste?: string;
+  religion?: Religion;
+  caste?: Caste;
+  subCaste?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;

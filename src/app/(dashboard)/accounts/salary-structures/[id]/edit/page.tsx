@@ -10,12 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { salaryStructureSchema, type SalaryStructureFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import { formatCurrency } from "@/lib/utils";
-import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type Designation, type EmploymentType, type SalaryStructure } from "@/types";
+import { EMPLOYMENT_TYPE_LABELS, type EmploymentType, type SalaryStructure } from "@/types";
 
-const DESIGNATION_OPTIONS = Object.entries(DESIGNATION_LABELS) as [Designation, string][];
 const EMPLOYMENT_TYPE_OPTIONS = Object.entries(EMPLOYMENT_TYPE_LABELS) as [EmploymentType, string][];
 
 function toDateInputValue(val: unknown): string {
@@ -151,9 +151,7 @@ export default function EditSalaryStructurePage() {
                     <SelectValue placeholder="Select designation" />
                   </SelectTrigger>
                   <SelectContent>
-                    {DESIGNATION_OPTIONS.map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
+                    <DesignationOptions />
                   </SelectContent>
                 </Select>
                 {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}

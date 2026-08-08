@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus,
@@ -204,14 +205,18 @@ function mapList<T extends string>(
 
 function qualifications(row: ImportRow): StaffQualification[] {
   return [1, 2]
-    .map((i) => ({
-      level: row[`qualification${i}_level`]?.trim() ?? "",
-      degreeAndBranch: row[`qualification${i}_degreeAndBranch`]?.trim() ?? "",
-      universityOrInstitute: row[`qualification${i}_university`]?.trim() ?? "",
-      percentageOrDivision: row[`qualification${i}_percentage`]?.trim() ?? "",
-      yearOfCompletion: num(row[`qualification${i}_year`]) ?? 0,
-    }))
-    .filter((q) => q.level || q.degreeAndBranch || q.universityOrInstitute);
+    .map((i) => {
+      const combined = row[`qualification${i}_degreeAndBranch`]?.trim() ?? "";
+      const { degree, branch } = splitDegreeAndBranch(combined);
+      return {
+        level: row[`qualification${i}_level`]?.trim() ?? "",
+        degree, branch,
+        universityOrInstitute: row[`qualification${i}_university`]?.trim() ?? "",
+        percentageOrDivision: row[`qualification${i}_percentage`]?.trim() ?? "",
+        yearOfCompletion: num(row[`qualification${i}_year`]) ?? 0,
+      };
+    })
+    .filter((q) => q.level || q.degree || q.branch || q.universityOrInstitute);
 }
 
 function trainingEntries(row: ImportRow): TrainingEntry[] {

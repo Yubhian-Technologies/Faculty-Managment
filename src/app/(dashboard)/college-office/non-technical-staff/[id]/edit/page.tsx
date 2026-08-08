@@ -20,7 +20,7 @@ import {
 } from "@/types";
 import type {
   EmploymentType, FacultyStatus, SupportingStaffDesignation,
-  SupportingStaffProfileFields as ProfileFieldsType, Department,
+  SupportingStaffProfileFields as ProfileFieldsType, Department, Religion, Caste,
 } from "@/types";
 
 interface StaffForm {
@@ -95,8 +95,9 @@ export default function EditNonTechnicalStaffPage() {
           legalName: (m.legalName as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
           motherName: (m.motherName as string) ?? "",
-          religion: (m.religion as string) ?? "",
-          caste: (m.caste as string) ?? "",
+          religion: m.religion as Religion | undefined,
+          caste: m.caste as Caste | undefined,
+          subCaste: (m.subCaste as string) ?? "",
           aadharNo: (m.aadharNo as string) ?? "",
           panNo: (m.panNo as string) ?? "",
           passportNumber: (m.passportNumber as string) ?? "",

@@ -14,14 +14,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { TechnicalStaffProfileFields } from "@/components/faculty/TechnicalStaffProfileFields";
+import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { toast } from "@/hooks/useToast";
 import {
-  DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS,
-  TEACHING_DESIGNATIONS,
   TECHNICAL_STAFF_DESIGNATIONS,
 } from "@/types";
 import type { Designation, FacultyProfileFields, TechnicalProfile } from "@/types";
@@ -189,12 +188,7 @@ export default function NewFacultyPage() {
                     <SelectValue placeholder="Select designation" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TEACHING_DESIGNATIONS.map((v) => (
-                      <SelectItem key={v} value={v}>{DESIGNATION_LABELS[v]}</SelectItem>
-                    ))}
-                    {TECHNICAL_STAFF_DESIGNATIONS.filter((v) => v !== "LAB_ASSISTANT").map((v) => (
-                      <SelectItem key={v} value={v}>{DESIGNATION_LABELS[v]}</SelectItem>
-                    ))}
+                    <DesignationOptions />
                   </SelectContent>
                 </Select>
                 {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}

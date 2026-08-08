@@ -24,7 +24,7 @@ interface Props {
 }
 
 const EMPTY_QUALIFICATION: StaffQualification = {
-  level: "", degreeAndBranch: "", universityOrInstitute: "", percentageOrDivision: "",
+  level: "", degree: "", branch: "", universityOrInstitute: "", percentageOrDivision: "",
   yearOfCompletion: new Date().getFullYear(), certificateUrl: "",
 };
 const EMPTY_NON_TECHNICAL_PROFILE: NonTechnicalProfile = {
@@ -65,7 +65,8 @@ export function SupportingStaffProfileFields({ value, onChange }: Props) {
               onChange={(v) => update({ level: v })}
               placeholder="e.g. SSC, Intermediate, Degree, PG"
             />
-            <TextInput label="Degree & Branch" value={item.degreeAndBranch} onChange={(v) => update({ degreeAndBranch: v })} />
+            <TextInput label="Degree" value={item.degree} onChange={(v) => update({ degree: v })} />
+            <TextInput label="Branch" value={item.branch} onChange={(v) => update({ branch: v })} />
             <TextInput label="University / Institute" value={item.universityOrInstitute} onChange={(v) => update({ universityOrInstitute: v })} />
             <TextInput label="Percentage / Division" value={item.percentageOrDivision} onChange={(v) => update({ percentageOrDivision: v })} />
             <NumInput label="Year of Completion" value={item.yearOfCompletion} onChange={(v) => update({ yearOfCompletion: v })} />
