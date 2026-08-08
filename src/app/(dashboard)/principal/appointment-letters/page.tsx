@@ -10,8 +10,7 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { auth } from "@/lib/firebase/client";
-import { downloadAppointmentLetterPdf, getAppointmentLetterPdfBase64 } from "@/lib/pdf/downloadAppointmentLetter";
+import { downloadAppointmentLetterPdf } from "@/lib/pdf/downloadAppointmentLetter";
 import { ChevronDown, ChevronUp, FileText, Download, Mail, CheckCircle2 } from "lucide-react";
 import type { Candidate, OfferLetter } from "@/types";
 
@@ -99,33 +98,31 @@ export default function PrincipalAppointmentLettersPage() {
         letterDate: formatDate(new Date()),
       };
 
-      let emailed = false;
+      // Principal reviews and sends the mail themselves (Gmail compose draft) rather
+      // than the backend sending it directly — the PDF is downloaded for them to attach.
+      await downloadAppointmentLetterPdf(letterFields, candidate.name);
+
+      let composed = false;
       if (candidate.email) {
-        try {
-          const token = await auth.currentUser?.getIdToken();
-          if (token) {
-            const pdfBase64 = await getAppointmentLetterPdfBase64(letterFields);
-            const emailRes = await fetch("/api/email/send", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                type: "APPOINTMENT_LETTER",
-                to: candidate.email,
-                data: letterFields,
-                pdfBase64,
-              }),
-            });
-            emailed = emailRes.ok;
-          }
-        } catch {
-          // Letter is already generated - email failure is surfaced via the toast below, not a hard error.
-        }
+        const institution = collegeInfo.name || "the institution";
+        const subject = `Appointment Letter – ${form.designation} | ${institution}`;
+        const body = `Dear ${candidate.name},
+
+Congratulations! Please find attached your formal appointment letter for the position of ${form.designation} in the ${form.department} department, effective from ${formatDate(new Date(form.joiningDate))}.
+
+The appointment letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+
+Warm regards,
+${institution}`;
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.open(gmailUrl, "_blank");
+        composed = true;
       }
 
       toast({
         variant: "success",
-        title: "Appointment letter released",
-        description: emailed ? `Emailed to ${candidate.email}` : "Could not email automatically - download and send it manually.",
+        title: "Appointment letter generated",
+        description: composed ? `Gmail draft opened for ${candidate.email} — attach the downloaded PDF and send.` : "Candidate has no email on file - download and send it manually.",
       });
       setGeneratedIds((prev) => new Set(prev).add(candidate.id));
     } catch (err) {
@@ -228,7 +225,7 @@ export default function PrincipalAppointmentLettersPage() {
                       </Button>
                       <Button size="sm" loading={isGenerating} disabled={isDone} onClick={() => void generateAndRelease(candidate)}>
                         <Mail className="h-3.5 w-3.5 mr-1" />
-                        {isDone ? "Released" : "Generate & Release"}
+                        {isDone ? "Released" : "Generate & Compose Email"}
                       </Button>
                     </div>
                   </CardContent>

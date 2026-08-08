@@ -7,7 +7,7 @@ import { resolveOfferLetterCcEmails } from "@/lib/firestore/offerLetterCc";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "WEBMASTER");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "WEBMASTER", "HOD", "ACCOUNTS");
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get("batchId");
     const candidateId = searchParams.get("candidateId");

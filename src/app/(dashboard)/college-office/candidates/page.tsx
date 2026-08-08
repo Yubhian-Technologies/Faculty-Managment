@@ -36,7 +36,19 @@ export default function CollegeOfficeCandidatesPage() {
       .finally(() => setIsLoading(false));
   }
 
-  useEffect(() => { loadCandidates(); }, []);
+  useEffect(() => {
+    loadCandidates();
+    // Principal's decision (which moves a candidate into this list) happens
+    // server-side in a different session — refetch on refocus so office staff
+    // don't sit behind a stale snapshot from before the decision was made.
+    function onFocus() { loadCandidates(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, []);
 
   const columns: Column<CandidateRow>[] = [
     {

@@ -2,10 +2,10 @@
 
 import { use, useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -21,6 +21,7 @@ import {
   Star,
   Clock,
   Mail,
+  PenLine,
 } from "lucide-react";
 import type { HiringBatch, Candidate } from "@/types";
 
@@ -61,8 +62,6 @@ function avg(vals: number[]) {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-const emptyHireTerms = { expectedSalary: "", negotiatedSalary: "", dateOfJoining: "" };
-
 export default function PrincipalDecisionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
@@ -76,7 +75,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
   // Per-candidate decision state
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
-  const [hireTerms, setHireTerms] = useState<Record<string, { expectedSalary: string; negotiatedSalary: string; dateOfJoining: string }>>({});
   const [confirmFor, setConfirmFor] = useState<{ candidateId: string; action: "APPROVED" | "REJECTED" } | null>(null);
   const [isSaving, setIsSaving] = useState<string | null>(null);
 
@@ -158,19 +156,15 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
     try {
       const remark = remarks[candidateId] ?? "";
       const stage = action === "APPROVED" ? "DECISION" : undefined;
-      const terms = hireTerms[candidateId];
 
+      // Negotiated salary, date of joining, and terms & conditions are captured
+      // earlier on /principal/negotiate/[id] — this step only records the decision.
       const res = await fetch(`/api/college/candidates/${candidateId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: action,
           ...(stage ? { stage } : {}),
-          ...(action === "APPROVED" && terms ? {
-            negotiatedSalary: Number(terms.negotiatedSalary),
-            dateOfJoining: terms.dateOfJoining,
-            ...(terms.expectedSalary ? { expectedSalary: Number(terms.expectedSalary) } : {}),
-          } : {}),
         }),
       });
       if (!res.ok) throw new Error();
@@ -394,47 +388,26 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   </div>
                 ) : (
                   <div className="pt-3 border-t space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Expected Salary (₹/yr)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={hireTerms[candidate.id]?.expectedSalary ?? ""}
-                          onChange={(e) => setHireTerms((prev) => ({
-                            ...prev,
-                            [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], expectedSalary: e.target.value },
-                          }))}
-                          placeholder="e.g. 600000"
-                          className="text-sm"
-                        />
+                    <div className="flex items-start justify-between gap-3 rounded-lg border p-3 bg-muted/20">
+                      <div className="space-y-1 text-sm">
+                        {candidate.negotiatedSalary != null && candidate.dateOfJoining ? (
+                          <>
+                            <p><span className="text-muted-foreground">Negotiated Salary:</span> <strong>₹{candidate.negotiatedSalary.toLocaleString("en-IN")}/yr</strong></p>
+                            <p><span className="text-muted-foreground">Date of Joining:</span> <strong>{formatDate(new Date(candidate.dateOfJoining))}</strong></p>
+                            {candidate.termsAndConditions && candidate.termsAndConditions.length > 0 && (
+                              <p className="text-muted-foreground">{candidate.termsAndConditions.length} term{candidate.termsAndConditions.length !== 1 ? "s" : ""} & conditions attached</p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-amber-700">Negotiated salary and date of joining haven&apos;t been entered yet.</p>
+                        )}
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Negotiated Salary (₹/yr) *</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={hireTerms[candidate.id]?.negotiatedSalary ?? ""}
-                          onChange={(e) => setHireTerms((prev) => ({
-                            ...prev,
-                            [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], negotiatedSalary: e.target.value },
-                          }))}
-                          placeholder="e.g. 650000"
-                          className="text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Date of Joining *</Label>
-                        <Input
-                          type="date"
-                          value={hireTerms[candidate.id]?.dateOfJoining ?? ""}
-                          onChange={(e) => setHireTerms((prev) => ({
-                            ...prev,
-                            [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], dateOfJoining: e.target.value },
-                          }))}
-                          className="text-sm"
-                        />
-                      </div>
+                      <Button size="sm" variant="outline" asChild className="shrink-0">
+                        <Link href={`/principal/negotiate/${id}`}>
+                          <PenLine className="h-3.5 w-3.5 mr-1.5" />
+                          {candidate.negotiatedSalary != null ? "Edit Terms" : "Enter Terms"}
+                        </Link>
+                      </Button>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Remarks (optional)</Label>
@@ -450,8 +423,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                       <Button
                         className="flex-1"
                         onClick={() => {
-                          const terms = hireTerms[candidate.id];
-                          if (!terms?.negotiatedSalary || !terms.dateOfJoining) {
+                          if (candidate.negotiatedSalary == null || !candidate.dateOfJoining) {
                             toast({ variant: "destructive", title: "Enter negotiated salary and date of joining before approving" });
                             return;
                           }

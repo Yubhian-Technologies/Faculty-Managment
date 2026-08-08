@@ -14,8 +14,25 @@ import { FileUpload } from "@/components/shared/FileUpload";
 import { DocumentTypeCombobox } from "@/components/shared/DocumentTypeCombobox";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
+import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
 import { Trash2, Plus, CheckCircle2 } from "lucide-react";
 import type { CandidateBioData, AcademicQualification, WorkExperienceEntry, RelativeInSociety } from "@/types";
+
+const OTHER_DOCUMENTS_CATEGORY = "Other Documents";
+
+function categoryForDocument(label: string): string {
+  return DOCUMENT_TYPE_GROUPS.find((g) => g.items.includes(label))?.category ?? OTHER_DOCUMENTS_CATEGORY;
+}
+
+function groupRequiredDocuments(labels: string[]): Array<{ category: string; labels: string[] }> {
+  const byCategory = new Map<string, string[]>();
+  for (const label of labels) {
+    const category = categoryForDocument(label);
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category)!.push(label);
+  }
+  return Array.from(byCategory, ([category, labels]) => ({ category, labels }));
+}
 
 interface CandidateInfo {
   name: string;
@@ -57,6 +74,8 @@ export default function CandidateFormPage() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState<CandidateBioData>({});
+  const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
+  const [requiredFiles, setRequiredFiles] = useState<Record<string, File | null>>({});
   const [certRows, setCertRows] = useState<CertRow[]>([newCertRow()]);
   const [qualifications, setQualifications] = useState<QualificationRow[]>([newQualificationRow()]);
   const [experiences, setExperiences] = useState<WorkExperienceEntry[]>([newExperienceRow()]);
@@ -65,10 +84,13 @@ export default function CandidateFormPage() {
 
   useEffect(() => {
     fetch(`/api/public/candidate-form/${collegeId}/${candidateId}`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ candidate: CandidateInfo }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ candidate: CandidateInfo; requiredDocuments?: string[] }>) : null))
       .then((d) => {
         if (!d) return;
         setCandidate(d.candidate);
+        const required = d.requiredDocuments ?? [];
+        setRequiredDocuments(required);
+        setRequiredFiles(Object.fromEntries(required.map((label) => [label, null])));
         if (d.candidate.bioDataSubmitted) setSubmitted(true);
       })
       .catch(() => {})
@@ -77,6 +99,10 @@ export default function CandidateFormPage() {
 
   function updateForm(patch: Partial<CandidateBioData>) {
     setForm((f) => ({ ...f, ...patch }));
+  }
+
+  function updateRequiredFile(label: string, file: File | null) {
+    setRequiredFiles((prev) => ({ ...prev, [label]: file }));
   }
 
   function updateCertRow(key: string, patch: Partial<CertRow>) {
@@ -113,9 +139,29 @@ export default function CandidateFormPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const missing = requiredDocuments.filter((label) => !requiredFiles[label]);
+    if (missing.length > 0) {
+      toast({
+        variant: "destructive",
+        title: "Missing required documents",
+        description: `Please upload: ${missing.join(", ")}`,
+      });
+      return;
+    }
     setSaving(true);
     try {
       const certificates: Array<{ name: string; url: string }> = [];
+      for (const label of requiredDocuments) {
+        const file = requiredFiles[label];
+        if (!file) continue;
+        const fileRef = ref(
+          storage,
+          `colleges/${collegeId}/candidateCertificates/${candidateId}/${Date.now()}_${file.name}`
+        );
+        await uploadBytes(fileRef, file);
+        const url = await getDownloadURL(fileRef);
+        certificates.push({ name: label, url });
+      }
       for (const row of certRows) {
         if (!row.file) continue;
         const fileRef = ref(
@@ -486,8 +532,29 @@ export default function CandidateFormPage() {
             </CardContent>
           </Card>
 
+          {groupRequiredDocuments(requiredDocuments).map(({ category, labels }) => (
+            <Card key={category}>
+              <CardHeader className="pb-3"><CardTitle className="text-base">{category}</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {labels.map((label) => (
+                  <div key={label} className="rounded-lg border p-3 space-y-2">
+                    <p className="text-sm font-medium">
+                      {label} <span className="text-destructive">*</span>
+                    </p>
+                    <FileUpload
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      maxSizeMB={5}
+                      onFileSelect={(file) => updateRequiredFile(label, file)}
+                      label="Upload Document"
+                    />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Certificates</CardTitle></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Additional Documents (Optional)</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {certRows.map((row) => (
                 <div key={row.key} className="rounded-lg border p-3 space-y-2">
