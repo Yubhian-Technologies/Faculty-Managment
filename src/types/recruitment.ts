@@ -193,6 +193,7 @@ export interface Candidate {
     verifiedByName: string;
     verifiedAt: Timestamp;
     allVerified?: boolean; // server-computed: every HiringBatch.requiredDocuments entry checked
+    notifiedPrincipalAt?: Timestamp; // office told the Principal docs are ready for the appointment letter
   };
   // Office-uploaded scan of the manually-signed joining letter (post document verification).
   joiningLetterUrl?: string;
@@ -204,6 +205,9 @@ export interface Candidate {
   expectedSalary?: number;
   negotiatedSalary?: number;
   dateOfJoining?: string; // yyyy-mm-dd
+  // Terms the Principal ticked at decision time; flows into the offer letter's
+  // Terms & Conditions field as a starting point for the office (still editable there).
+  termsAndConditions?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

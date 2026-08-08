@@ -43,7 +43,7 @@ function getNextAction(entry: PipelineEntry): NextAction {
     return { label: "Review Interview Plan →", href: `/principal/interviews/${batch.id}` };
   }
   if (p === "PRINCIPAL_FINAL_REVIEW") {
-    return { label: "Make Decision →", href: `/principal/decisions/${batch.id}` };
+    return { label: "Make Decision →", href: `/principal/negotiate/${batch.id}` };
   }
   if (p === "COMPLETED") {
     return { label: "View Results", href: `/principal/decisions/${batch.id}`, variant: "outline" };

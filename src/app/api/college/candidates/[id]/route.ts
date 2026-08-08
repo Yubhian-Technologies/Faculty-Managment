@@ -66,6 +66,8 @@ export async function PATCH(
       expectedSalary?: number;
       negotiatedSalary?: number;
       dateOfJoining?: string;
+      termsAndConditions?: string[];
+      notifyPrincipalDocsReady?: boolean;
     };
 
     const db = getAdminDb();
@@ -84,7 +86,7 @@ export async function PATCH(
     }
 
     const updates: Record<string, unknown> = { updatedAt: now };
-    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining } = body;
+    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining, termsAndConditions, notifyPrincipalDocsReady } = body;
 
     if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
     if (hasArrived !== undefined) {
@@ -130,6 +132,8 @@ export async function PATCH(
     if (expectedSalary !== undefined) updates.expectedSalary = expectedSalary;
     if (negotiatedSalary !== undefined) updates.negotiatedSalary = negotiatedSalary;
     if (dateOfJoining !== undefined) updates.dateOfJoining = dateOfJoining;
+    if (termsAndConditions !== undefined) updates.termsAndConditions = termsAndConditions;
+    if (notifyPrincipalDocsReady) updates["documentVerification.notifiedPrincipalAt"] = now;
 
     await db
       .collection("colleges")
@@ -299,7 +303,29 @@ export async function PATCH(
           type: "GENERAL",
           title: "Candidate Ready for Offer Letter",
           message: `${candidateData.name ?? "A candidate"} has been approved. Please send the offer letter.`,
-          link: `/college-office/offers/new`,
+          link: `/college-office/documents`,
+          read: false,
+          createdAt: now,
+        });
+      }
+    }
+
+    // Office has verified documents → notify Principal the appointment letter can go out
+    if (notifyPrincipalDocsReady) {
+      const principalSnap = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("users")
+        .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
+        .get();
+      for (const principalDoc of principalSnap.docs) {
+        await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
+          collegeId: session.collegeId,
+          toUid: principalDoc.id,
+          type: "GENERAL",
+          title: "Documents Verified — Ready for Appointment Letter",
+          message: `${candidateData.name ?? "A candidate"}'s documents have been verified. You can now send the appointment letter.`,
+          link: `/principal/appointment-letters`,
           read: false,
           createdAt: now,
         });
