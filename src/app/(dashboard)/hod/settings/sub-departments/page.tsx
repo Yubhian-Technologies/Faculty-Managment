@@ -34,7 +34,7 @@ interface SubDeptSummary {
 
 export default function SubDepartmentsSettingsPage() {
   const user = useAuthStore((s) => s.user);
-  // A local primitive, not `user.department` inline in the closure below —
+  // A local primitive, not `user.department` inline in the closure below -
   // useAuth's onIdTokenChanged legitimately re-fires (producing a new `user`
   // object reference) shortly after initial sign-in even when nothing
   // relevant changed, which was retriggering the whole load a second time
@@ -182,7 +182,7 @@ export default function SubDepartmentsSettingsPage() {
     );
   }
 
-  // Sub-departments are one level deep only — a sub-department can never
+  // Sub-departments are one level deep only - a sub-department can never
   // have sub-departments of its own, so a Sub-HOD landing here (e.g. a stale
   // link, since the nav hides this for them) gets a message that actually
   // applies to them, not the "ask your Principal to enable it" one meant for
@@ -198,7 +198,7 @@ export default function SubDepartmentsSettingsPage() {
           <CardContent className="py-16">
             <EmptyState
               title="Not available for a sub-department"
-              description="Sub-departments are one level deep only — your department can't be split further."
+              description="Sub-departments are one level deep only - your department can't be split further."
               icon={<Network className="h-8 w-8" />}
             />
           </CardContent>
@@ -231,7 +231,7 @@ export default function SubDepartmentsSettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Sub-Departments"
-        description={`Add sub-departments under ${ownDept.name} and assign each one its own Sub-HOD — you keep view-only access to their students, sections, and assigned faculty.`}
+        description={`Add sub-departments under ${ownDept.name} and assign each one its own Sub-HOD - you keep view-only access to their students, sections, and assigned faculty.`}
         actions={
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
@@ -273,7 +273,7 @@ export default function SubDepartmentsSettingsPage() {
                         <SelectValue placeholder="Select Sub-HOD (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">— No Sub-HOD —</SelectItem>
+                        <SelectItem value="none">- No Sub-HOD -</SelectItem>
                         {hods.map((h) => (
                           <SelectItem key={h.uid} value={h.uid}>
                             {h.name} {h.department ? `(${h.department})` : ""}
@@ -283,7 +283,7 @@ export default function SubDepartmentsSettingsPage() {
                     </Select>
                   ) : (
                     <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                      No HODs yet — create one above
+                      No HODs yet - create one above
                     </p>
                   )}
                 </div>
@@ -317,7 +317,7 @@ export default function SubDepartmentsSettingsPage() {
                     );
                   })()}
                   <p className="text-xs text-muted-foreground">
-                    Optional — every section created under this sub-department will be cross-listed to all selected
+                    Optional - every section created under this sub-department will be cross-listed to all selected
                     departments, so each one&apos;s HOD gets automatic view-only access to its students, roster, and
                     assigned faculty (e.g. this sub-department feeds both CSE and ECE after 1st year).
                   </p>
@@ -363,7 +363,7 @@ export default function SubDepartmentsSettingsPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
                   {dept.hodName
-                    ? <span><strong>{dept.hodName}</strong> — Sub-HOD</span>
+                    ? <span><strong>{dept.hodName}</strong> - Sub-HOD</span>
                     : <span className="text-muted-foreground italic">No Sub-HOD assigned</span>}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -5,7 +5,7 @@ import type { FacultyRequirementResult } from "@/app/api/college/faculty-require
 
 interface Props {
   data: FacultyRequirementResult;
-  highlightDesignation?: string | null; // key like "PROFESSOR" — highlights that row
+  highlightDesignation?: string | null; // key like "PROFESSOR" - highlights that row
   compact?: boolean;
 }
 
@@ -31,7 +31,7 @@ export function FacultyRequirementPanel({ data, highlightDesignation, compact }:
       <div className="flex items-center justify-between gap-3 px-4 py-3 bg-muted/40 border-b">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-muted-foreground" />
-          <span className="font-semibold text-sm">Faculty Requirement — {data.department}</span>
+          <span className="font-semibold text-sm">Faculty Requirement - {data.department}</span>
         </div>
         <div className="flex gap-3 text-xs text-muted-foreground">
           <span className="font-medium">Ratio 1:{data.studentFacultyRatio}</span>

@@ -3,83 +3,38 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { EmployeeLeaveProfile, LeaveEmploymentType } from "@/types/leave";
-import type { FacultyMember } from "@/types/core";
+import { canAccessLeaveProfile } from "@/lib/leave/access";
+import { getOrCreateProfile } from "@/lib/leave/profile";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { PROFILES_COL, initBalancesForYear } from "@/lib/leave/balanceEngine";
-
-// A faculty member's employment type, gender, marital status, date of joining
-// and department are already set by HR/admin when the FacultyMember record was
-// created — the leave profile must mirror them, not let the faculty redefine
-// them during self-service setup.
-function facultyDefaults(faculty: FirebaseFirestore.DocumentData) {
-  const f = faculty as Partial<FacultyMember>;
-  const defaults: Partial<EmployeeLeaveProfile> = {};
-
-  if (f.employmentType) {
-    const employmentType: LeaveEmploymentType = f.employmentType === "PERMANENT" ? "permanent" : "probation";
-    defaults.employmentType = employmentType;
-  }
-  if (f.gender) {
-    defaults.gender = f.gender.toLowerCase() as EmployeeLeaveProfile["gender"];
-  }
-  if (f.maritalStatus) {
-    defaults.maritalStatus = f.maritalStatus === "Married" ? "married" : "unmarried";
-  }
-  if (f.joiningDate) {
-    defaults.dateOfJoining = f.joiningDate as EmployeeLeaveProfile["dateOfJoining"];
-  }
-  if (f.department) {
-    defaults.department = f.department;
-  }
-  return defaults;
-}
-
-async function loadFacultyDefaults(
-  db: ReturnType<typeof getAdminDb>,
-  collegeId: string,
-  uid: string
-): Promise<Partial<EmployeeLeaveProfile> | null> {
-  const snap = await db
-    .collection("colleges").doc(collegeId)
-    .collection("facultyMembers")
-    .where("userUid", "==", uid)
-    .limit(1)
-    .get();
-  if (snap.empty) return null;
-  return facultyDefaults(snap.docs[0].data());
-}
-
-// ─── GET — fetch profile (own, or specific uid for HOD/Principal) ─────────────
+import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
+import type { EmployeeLeaveProfile, StaffCategory } from "@/types/leave";
 
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "ACCOUNTS", "SUPER_ADMIN"
+      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF"
     );
-
-    const { searchParams } = new URL(request.url);
-    const targetUid = searchParams.get("uid");
-
-    // Only HOD, Principal and above can view another person's profile
-    const resolvedUid =
-      targetUid &&
-      ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "SUPER_ADMIN"].includes(session.role)
-        ? targetUid
-        : session.uid;
+    const targetUid = new URL(request.url).searchParams.get("uid") || session.uid;
 
     const db = getAdminDb();
-    const snap = await PROFILES_COL(session.collegeId, db).doc(resolvedUid).get();
+    if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, targetUid))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-    // Pre-fill (and let the client lock) the fields HR already set on the
-    // faculty record, for a faculty member setting up their own profile.
-    const facultyDefaultsForSelf =
-      resolvedUid === session.uid && session.role === "PANEL_MEMBER"
-        ? await loadFacultyDefaults(db, session.collegeId, resolvedUid)
-        : null;
+    const profile = await getOrCreateProfile(db, session.collegeId, targetUid);
+    if (!profile) {
+      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+    }
 
-    if (!snap.exists) return NextResponse.json({ profile: null, facultyDefaults: facultyDefaultsForSelf });
-    return NextResponse.json({ profile: { id: snap.id, ...snap.data() }, facultyDefaults: facultyDefaultsForSelf });
+    const settings = await loadCollegeSettings(db, session.collegeId);
+    const effectiveCategory = computeEffectiveCategory(profile, settings.newJoiningYears);
+
+    const year = new Date().getFullYear();
+    await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year);
+
+    return NextResponse.json({ profile, effectiveCategory, newJoiningYears: settings.newJoiningYears });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -89,65 +44,51 @@ export async function GET(request: Request) {
   }
 }
 
-// ─── PUT — create/update profile (own, or specific uid for HOD/Principal) ─────
-
+// HOD (own dept) / Principal / Vice Principal override an auto-derived
+// profile - e.g. correcting isTeachingStaff/dateOfJoining, or manually
+// re-categorizing vacation <-> non-vacation. Every profile already exists by
+// the time this is reachable (GET/the roster auto-create it) - this is a
+// pure edit, never a required setup step.
 export async function PUT(request: Request) {
   try {
-    const session = await requireCollegeMember(
-      "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "ACCOUNTS", "SUPER_ADMIN"
-    );
-
-    const { searchParams } = new URL(request.url);
-    const targetUid = searchParams.get("uid");
-
-    const canManageOthers = ["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "SUPER_ADMIN"].includes(session.role);
-    const resolvedUid = targetUid && canManageOthers ? targetUid : session.uid;
-
-    const body = (await request.json()) as Partial<EmployeeLeaveProfile>;
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const body = (await request.json()) as {
+      uid?: string;
+      staffCategory?: StaffCategory;
+      isTeachingStaff?: boolean;
+      dateOfJoining?: string;
+    };
+    if (!body.uid) {
+      return NextResponse.json({ error: "uid is required" }, { status: 400 });
+    }
 
     const db = getAdminDb();
-    const ref = PROFILES_COL(session.collegeId, db).doc(resolvedUid);
-    const existing = await ref.get();
-    const now = new Date();
-
-    const isNew = !existing.exists;
-
-    // A faculty member setting up their own profile cannot override the
-    // employment details HR already recorded — enforce it server-side
-    // regardless of what the client sends.
-    if (resolvedUid === session.uid && session.role === "PANEL_MEMBER") {
-      const locked = await loadFacultyDefaults(db, session.collegeId, resolvedUid);
-      if (locked) Object.assign(body, locked);
+    if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, body.uid))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (isNew) {
-      await ref.set({
-        ...body,
-        id: resolvedUid,
-        uid: resolvedUid,
-        collegeId: session.collegeId,
-        maternityLeaveUsedOnce: body.maternityLeaveUsedOnce ?? false,
-        livingChildrenCount: body.livingChildrenCount ?? 0,
-        isConfirmed: body.isConfirmed ?? false,
-        createdAt: now,
-        updatedAt: now,
-      });
-    } else {
-      await ref.update({ ...body, updatedAt: now });
+    // Auto-create if somehow not already present, rather than requiring a
+    // separate setup step before an override can be saved.
+    const existing = await getOrCreateProfile(db, session.collegeId, body.uid);
+    if (!existing) {
+      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
-    const updated = await ref.get();
-    const savedProfile = { id: updated.id, ...updated.data() } as EmployeeLeaveProfile;
+    const profileRef = PROFILES_COL(session.collegeId, db).doc(body.uid);
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.staffCategory) updates.staffCategory = body.staffCategory;
+    if (body.isTeachingStaff !== undefined) updates.isTeachingStaff = body.isTeachingStaff;
+    if (body.dateOfJoining) updates.dateOfJoining = new Date(body.dateOfJoining);
 
-    // Auto-initialize balances for the current year on new profile creation
-    if (isNew) {
-      try {
-        await initBalancesForYear(db, session.collegeId, resolvedUid, savedProfile, new Date().getFullYear());
-      } catch { /* non-fatal */ }
-    }
+    await profileRef.update(updates);
 
-    return NextResponse.json({ profile: savedProfile });
+    const updatedSnap = await profileRef.get();
+    const profile = { id: updatedSnap.id, ...updatedSnap.data() } as EmployeeLeaveProfile;
+    const settings = await loadCollegeSettings(db, session.collegeId);
+    const year = new Date().getFullYear();
+    await initBalancesForYear(db, session.collegeId, body.uid, profile, settings.newJoiningYears, year);
+
+    return NextResponse.json({ ok: true, profile });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

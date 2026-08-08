@@ -1,7 +1,7 @@
 // Thin wrapper around Playwright's APIRequestContext, pre-authenticated as a
 // given test role. Used by the API-level spec files (tests/e2e/api/**) to
 // drive the budget/indent state machines directly against the route
-// handlers — faster and far less flaky than clicking through the UI for
+// handlers - faster and far less flaky than clicking through the UI for
 // every one of the ~70 cases in the QA matrix, while still exercising real
 // Next.js route code (no mocking).
 
@@ -25,7 +25,7 @@ export class ApiClient {
   }
 
   // Appends ?collegeId= for GLOBAL roles (FINANCE/PURCHASE_DEPT/MANAGEMENT)
-  // whose session carries no collegeId — mirrors what the real college
+  // whose session carries no collegeId - mirrors what the real college
   // switcher does client-side (see requireCollegeContext in verifySession.ts).
   private withCollegeParam(path: string): string {
     if (!this.user.collegeId) return path;

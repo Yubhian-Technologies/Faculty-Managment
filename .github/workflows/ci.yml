@@ -15,7 +15,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # Build-time placeholders — src/lib/firebase/client.ts already falls back to
+      # Build-time placeholders - src/lib/firebase/client.ts already falls back to
       # placeholders when these are unset, but pin them explicitly so CI is deterministic
       # and independent of any real project secrets.
       NEXT_PUBLIC_FIREBASE_API_KEY: placeholder

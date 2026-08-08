@@ -229,7 +229,7 @@ export default function EditDepartmentPage() {
                     <SelectValue placeholder="Select HOD (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">— No HOD —</SelectItem>
+                    <SelectItem value="none">- No HOD -</SelectItem>
                     {hods.map((h) => (
                       <SelectItem key={h.uid} value={h.uid}>
                         {h.name} {h.department ? `(${h.department})` : ""}
@@ -239,7 +239,7 @@ export default function EditDepartmentPage() {
                 </Select>
               ) : (
                 <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No HODs yet — create one above
+                  No HODs yet - create one above
                 </p>
               )}
             </div>
@@ -253,7 +253,7 @@ export default function EditDepartmentPage() {
               </div>
               {openYears.length === 0 ? (
                 <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No academic years added yet for this college — use &quot;+ Add Year&quot; above.
+                  No academic years added yet for this college - use &quot;+ Add Year&quot; above.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
@@ -294,7 +294,7 @@ export default function EditDepartmentPage() {
                 );
               })()}
               <p className="text-xs text-muted-foreground">
-                Optional — every section College Office creates under this department will be cross-listed to all
+                Optional - every section College Office creates under this department will be cross-listed to all
                 selected departments, so each one&apos;s HOD gets automatic view-only access to its students,
                 roster, and assigned faculty (e.g. a shared first-year department feeding both CSE and ECE).
               </p>

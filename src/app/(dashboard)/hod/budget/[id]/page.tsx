@@ -18,7 +18,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground font-normal">{label}</Label>
-      <p className="text-sm font-medium">{value || "—"}</p>
+      <p className="text-sm font-medium">{value || "-"}</p>
     </div>
   );
 }
@@ -68,7 +68,7 @@ export default function HODBudgetDetailPage() {
 
       <PageHeader
         title={request.title}
-        description={`${request.department} — submitted ${formatDate(request.createdAt)}`}
+        description={`${request.department} - submitted ${formatDate(request.createdAt)}`}
         actions={<StatusBadge status={request.status} />}
       />
 

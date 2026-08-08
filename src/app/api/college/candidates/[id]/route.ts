@@ -61,6 +61,13 @@ export async function PATCH(
       name?: string;
       email?: string;
       phone?: string;
+      documentVerification?: { checkedDocs: Record<string, boolean> };
+      joiningLetterUrl?: string;
+      expectedSalary?: number;
+      negotiatedSalary?: number;
+      dateOfJoining?: string;
+      termsAndConditions?: string[];
+      notifyPrincipalDocsReady?: boolean;
     };
 
     const db = getAdminDb();
@@ -79,7 +86,7 @@ export async function PATCH(
     }
 
     const updates: Record<string, unknown> = { updatedAt: now };
-    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone } = body;
+    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining, termsAndConditions, notifyPrincipalDocsReady } = body;
 
     if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
     if (hasArrived !== undefined) {
@@ -100,6 +107,33 @@ export async function PATCH(
     if (name !== undefined) updates.name = name;
     if (email !== undefined) updates.email = email;
     if (phone !== undefined) updates.phone = phone;
+    if (documentVerification !== undefined) {
+      const candidateBatchId = (candidateSnap.data() as { batchId?: string }).batchId;
+      let allVerified = Object.keys(documentVerification.checkedDocs).length > 0
+        && Object.values(documentVerification.checkedDocs).every(Boolean);
+      if (candidateBatchId) {
+        const batchSnap = await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(candidateBatchId).get();
+        const requiredDocuments = (batchSnap.data() as { requiredDocuments?: string[] } | undefined)?.requiredDocuments ?? [];
+        allVerified = requiredDocuments.length === 0 || requiredDocuments.every((d) => documentVerification.checkedDocs[d] === true);
+      }
+      updates.documentVerification = {
+        checkedDocs: documentVerification.checkedDocs,
+        verifiedBy: session.uid,
+        verifiedByName: actorName,
+        verifiedAt: now,
+        allVerified,
+      };
+    }
+    if (joiningLetterUrl !== undefined) {
+      updates.joiningLetterUrl = joiningLetterUrl;
+      updates.joiningLetterUploadedAt = now;
+      updates.joiningLetterUploadedByName = actorName;
+    }
+    if (expectedSalary !== undefined) updates.expectedSalary = expectedSalary;
+    if (negotiatedSalary !== undefined) updates.negotiatedSalary = negotiatedSalary;
+    if (dateOfJoining !== undefined) updates.dateOfJoining = dateOfJoining;
+    if (termsAndConditions !== undefined) updates.termsAndConditions = termsAndConditions;
+    if (notifyPrincipalDocsReady) updates["documentVerification.notifiedPrincipalAt"] = now;
 
     await db
       .collection("colleges")
@@ -173,6 +207,31 @@ export async function PATCH(
       });
     }
 
+    if (documentVerification !== undefined) {
+      const checkedCount = Object.values(documentVerification.checkedDocs).filter(Boolean).length;
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "DOCUMENTS_VERIFIED",
+        performedBy: session.uid,
+        performedByName: actorName,
+        targetId: id,
+        details: { checkedCount, totalCount: Object.keys(documentVerification.checkedDocs).length },
+        timestamp: now,
+      });
+    }
+
+    if (joiningLetterUrl !== undefined) {
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: "JOINING_LETTER_UPLOADED",
+        performedBy: session.uid,
+        performedByName: actorName,
+        targetId: id,
+        details: {},
+        timestamp: now,
+      });
+    }
+
     const candidateData = candidateSnap.data() as { name?: string; batchId?: string };
 
     // Final Principal decision: notify the HOD, log it, and — if every other
@@ -202,28 +261,6 @@ export async function PATCH(
           });
         }
 
-        // Notify College Office staff to begin document verification
-        if (status === "APPROVED") {
-          const coSnap = await db
-            .collection("colleges")
-            .doc(session.collegeId)
-            .collection("users")
-            .where("role", "==", "COLLEGE_OFFICE")
-            .get();
-          for (const coDoc of coSnap.docs) {
-            await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
-              collegeId: session.collegeId,
-              toUid: coDoc.id,
-              type: "GENERAL",
-              title: "Candidate Approved — Document Verification Required",
-              message: `${candidateData.name ?? "A candidate"} for ${batch.position ?? "the position"} has been approved. Please verify their documents.`,
-              link: `/college-office/candidates`,
-              read: false,
-              createdAt: now,
-            });
-          }
-        }
-
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId,
           action: "HIRING_DECISION_MADE",
@@ -251,22 +288,44 @@ export async function PATCH(
       }
     }
 
-    // Documents verified → notify Accounts to send the offer letter
+    // Candidate approved → notify College Office to send the offer letter
     if (stage === "DECISION" && status !== "REJECTED") {
-      const accountsSnap = await db
+      const officeSnap = await db
         .collection("colleges")
         .doc(session.collegeId)
         .collection("users")
-        .where("role", "==", "ACCOUNTS")
+        .where("role", "==", "COLLEGE_OFFICE")
         .get();
-      for (const accDoc of accountsSnap.docs) {
+      for (const officeDoc of officeSnap.docs) {
         await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
           collegeId: session.collegeId,
-          toUid: accDoc.id,
+          toUid: officeDoc.id,
           type: "GENERAL",
           title: "Candidate Ready for Offer Letter",
-          message: `${candidateData.name ?? "A candidate"}'s documents are verified. Please send the offer letter.`,
-          link: `/accounts/hiring`,
+          message: `${candidateData.name ?? "A candidate"} has been approved. Please send the offer letter.`,
+          link: `/college-office/documents`,
+          read: false,
+          createdAt: now,
+        });
+      }
+    }
+
+    // Office has verified documents → notify Principal the appointment letter can go out
+    if (notifyPrincipalDocsReady) {
+      const principalSnap = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("users")
+        .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
+        .get();
+      for (const principalDoc of principalSnap.docs) {
+        await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
+          collegeId: session.collegeId,
+          toUid: principalDoc.id,
+          type: "GENERAL",
+          title: "Documents Verified — Ready for Appointment Letter",
+          message: `${candidateData.name ?? "A candidate"}'s documents have been verified. You can now send the appointment letter.`,
+          link: `/principal/appointment-letters`,
           read: false,
           createdAt: now,
         });

@@ -17,9 +17,9 @@ import { ROLE_LABELS } from "@/types";
 import { getNavItemsForRole, groupNavItemsByModule, getRolesWithNavModules } from "@/components/layout/navConfig";
 
 const REGULATORY_BODIES: { value: RegulatoryBody; label: string }[] = [
-  { value: "UGC", label: "UGC — University Grants Commission" },
-  { value: "AICTE", label: "AICTE — All India Council for Technical Education" },
-  { value: "NAAC", label: "NAAC — National Assessment and Accreditation Council" },
+  { value: "UGC", label: "UGC - University Grants Commission" },
+  { value: "AICTE", label: "AICTE - All India Council for Technical Education" },
+  { value: "NAAC", label: "NAAC - National Assessment and Accreditation Council" },
   { value: "STATE", label: "State Regulatory Body" },
 ];
 
@@ -47,6 +47,11 @@ export default function SuperAdminSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Faculty Norms are per-college (colleges/{id}/settings/general) - pick a
+  // college to view/edit, same pattern as the Navigation Visibility section below.
+  const [normsColleges, setNormsColleges] = useState<College[]>([]);
+  const [normsCollegeId, setNormsCollegeId] = useState<string>("");
+
   // Form state
   const [regulatoryBody, setRegulatoryBody] = useState<RegulatoryBody>("UGC");
   const [studentFacultyRatio, setStudentFacultyRatio] = useState("15");
@@ -58,9 +63,21 @@ export default function SuperAdminSettingsPage() {
   const [positionNorms, setPositionNorms] = useState<PositionNorm[]>([]);
 
   useEffect(() => {
-    fetch("/api/admin/settings/faculty-norms")
-      .then((r) => r.json() as Promise<{ norms: FacultyNorms }>)
-      .then(({ norms: n }) => {
+    fetch("/api/admin/colleges")
+      .then((r) => r.json() as Promise<{ colleges: College[] }>)
+      .then(({ colleges: c }) => {
+        setNormsColleges(c);
+        if (c.length > 0) setNormsCollegeId((prev) => prev || c[0].id);
+      })
+      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
+  }, []);
+
+  useEffect(() => {
+    if (!normsCollegeId) return;
+    setIsLoading(true);
+    fetch(`/api/college/settings/general?collegeId=${normsCollegeId}`)
+      .then((r) => r.json() as Promise<{ settings: FacultyNorms }>)
+      .then(({ settings: n }) => {
         setNorms(n);
         setRegulatoryBody(n.regulatoryBody);
         setStudentFacultyRatio(String(n.studentFacultyRatio));
@@ -73,7 +90,7 @@ export default function SuperAdminSettingsPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load settings" }))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [normsCollegeId]);
 
   function updatePosition(index: number, field: keyof PositionNorm, value: string | number) {
     setPositionNorms((prev) =>
@@ -99,12 +116,18 @@ export default function SuperAdminSettingsPage() {
       return;
     }
 
+    if (!normsCollegeId) {
+      toast({ variant: "destructive", title: "Select a college first" });
+      return;
+    }
+
     setIsSaving(true);
     try {
-      const res = await fetch("/api/admin/settings/faculty-norms", {
+      const res = await fetch("/api/college/settings/general", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          collegeId: normsCollegeId,
           regulatoryBody,
           studentFacultyRatio: sfr,
           teachingHoursPerWeek: thw,
@@ -115,7 +138,7 @@ export default function SuperAdminSettingsPage() {
             professor: minQualProf,
           },
           positionNorms,
-        } satisfies Partial<FacultyNorms>),
+        } satisfies Partial<FacultyNorms> & { collegeId: string }),
       });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Faculty norms saved", description: "Changes will be reflected across all vacancy requests." });
@@ -141,8 +164,22 @@ export default function SuperAdminSettingsPage() {
     <div className="max-w-3xl space-y-6">
       <PageHeader
         title="Faculty Norms Configuration"
-        description="Set government-mandated faculty requirements used to validate vacancy requests"
+        description="Set government-mandated faculty requirements used to validate vacancy requests - configured per college"
       />
+
+      <div className="max-w-sm space-y-2">
+        <Label>College</Label>
+        <Select value={normsCollegeId} onValueChange={setNormsCollegeId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select a college" />
+          </SelectTrigger>
+          <SelectContent>
+            {normsColleges.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Last updated banner */}
       {norms?.updatedAt && (
@@ -375,10 +412,10 @@ export default function SuperAdminSettingsPage() {
 // ─── Navigation Visibility ──────────────────────────────────────────────────
 // Per-college, per-role control over which sidebar modules (and individual
 // items within a module, e.g. HOD's "My Work") are visible. Backed by
-// colleges/{collegeId}/settings/navVisibility — see
+// colleges/{collegeId}/settings/navVisibility - see
 // src/app/api/admin/settings/nav-visibility/route.ts.
 
-// Computed once from NAV_ITEMS — any role with at least one `section`-grouped
+// Computed once from NAV_ITEMS - any role with at least one `section`-grouped
 // item shows up here automatically, no manual list to keep in sync.
 const NAV_VISIBILITY_ROLES: UserRole[] = getRolesWithNavModules();
 
@@ -448,7 +485,7 @@ function NavVisibilitySection() {
       <CardHeader>
         <CardTitle className="text-base">Navigation Visibility</CardTitle>
         <CardDescription>
-          Hide unfinished modules (or individual items within a module) from a role&apos;s sidebar — per college, without a code change.
+          Hide unfinished modules (or individual items within a module) from a role&apos;s sidebar - per college, without a code change.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">

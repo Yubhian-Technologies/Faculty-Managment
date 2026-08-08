@@ -7,7 +7,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
-// Sections a PANEL_MEMBER (faculty) is in charge of — students are only visible/
+// Sections a PANEL_MEMBER (faculty) is in charge of - students are only visible/
 // editable within these. Returns [] if the faculty isn't assigned to any section.
 async function getInchargeSections(
   db: FirebaseFirestore.Firestore,
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 
     let primaryQuery: FirebaseFirestore.Query = studentsColl;
     // Only HOD has a narrower-than-college scope with a meaningful "secondary"
-    // (view-only) counterpart — either a student pre-registered to this HOD's
+    // (view-only) counterpart - either a student pre-registered to this HOD's
     // department while primarily owned by another (e.g. Basic Science), or a
     // student who belongs to one of this HOD's own sub-departments (parent
     // HOD gets automatic view-only access). Every other role here already
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
       if (sections.length === 0) {
         return NextResponse.json({ students: [] });
       }
-      // Firestore `in` filters cap at 30 values — faculty are realistically in charge of a handful of sections.
+      // Firestore `in` filters cap at 30 values - faculty are realistically in charge of a handful of sections.
       primaryQuery = primaryQuery.where("section", "in", sections.map((s) => s.name).slice(0, 30));
     } else if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);

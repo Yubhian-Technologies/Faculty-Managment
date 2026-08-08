@@ -1,423 +1,181 @@
 import type { Timestamp } from "firebase/firestore";
 
-// ─── Leave Types ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Leave Module - from-scratch rebuild.
+//
+// Three leave profiles:
+//  - "vacation"      (teaching faculty)     -> CL, SL, SCL, EL, OD (+ Other)
+//  - "non-vacation"  (technical/non-technical supporting staff) -> CL, SL, EL, OD (+ Other)
+//  - "new-joining"   (anyone, regardless of teaching status, until they cross
+//                     the college's configured years-of-service threshold)
+//                     -> CL, OD only
+//
+// "new-joining" is never stored - it's computed live from
+// (years since EmployeeLeaveProfile.dateOfJoining) vs the college's
+// newJoiningYears setting (see computeEffectiveCategory in lib/leave/categoryEngine).
+// The moment the threshold is crossed, the profile's stored staffCategory
+// (vacation/non-vacation) takes over automatically.
+//
+// "Other" is not a balance-tracked leave type - it's a catch-all reason a
+// requester picks when none of the above fit. The HOD tags it paid/unpaid
+// (LeaveRequest.isPaidLeave) and forwards it to the Principal for the final
+// decision, instead of approving/rejecting it directly (see
+// LeaveRequest.isOtherRequest). Standard types (CL/SL/SCL/EL/OD), by
+// contrast, are decided by the HOD alone - approval there is final.
+//
+// Collections: root `leaveTypes`, colleges/{id}/employeeLeaveProfiles,
+//              colleges/{id}/leaveBalances, colleges/{id}/leaveRequests
+// ─────────────────────────────────────────────────────────────────────────────
 
-export type LeaveTypeCode =
-  | "CASUAL"
-  | "SICK"
-  | "EARNED"
-  | "MATERNITY"
-  | "PATERNITY"
-  | "COMPENSATORY"
-  | "LOSS_OF_PAY"
-  | "SPECIAL";
+export type LeaveTypeCode = "CL" | "SL" | "SCL" | "EL" | "OD";
 
 export const LEAVE_TYPE_LABELS: Record<LeaveTypeCode, string> = {
-  CASUAL: "Casual Leave",
-  SICK: "Sick Leave",
-  EARNED: "Earned Leave",
-  MATERNITY: "Maternity Leave",
-  PATERNITY: "Paternity Leave",
-  COMPENSATORY: "Compensatory Leave",
-  LOSS_OF_PAY: "Loss of Pay",
-  SPECIAL: "Special Leave",
+  CL: "Casual Leave",
+  SL: "Sick Leave",
+  SCL: "Special Casual Leave",
+  EL: "Earned Leave",
+  OD: "On Duty",
 };
 
-// Default annual entitlements per leave type
-export const DEFAULT_LEAVE_ENTITLEMENTS: Record<LeaveTypeCode, number> = {
-  CASUAL: 12,
-  SICK: 12,
-  EARNED: 15,
-  MATERNITY: 180,   // days
-  PATERNITY: 15,
-  COMPENSATORY: 0,  // earned through extra duty
-  LOSS_OF_PAY: 0,   // on-demand
-  SPECIAL: 0,       // on-demand
+export type StaffCategory = "vacation" | "non-vacation";
+export type EffectiveLeaveCategory = "new-joining" | StaffCategory;
+
+export const EFFECTIVE_CATEGORY_LABELS: Record<EffectiveLeaveCategory, string> = {
+  "new-joining": "New Joining",
+  vacation: "Vacation Staff (Teaching)",
+  "non-vacation": "Non-Vacation Staff (Supporting)",
 };
 
-// ─── Leave Application Status ─────────────────────────────────────────────────
-
-export type LeaveStatus =
-  | "PENDING"
-  | "HOD_APPROVED"
-  | "PRINCIPAL_APPROVED"
-  | "REJECTED"
-  | "CANCELLED";
-
-export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
-  PENDING: "Pending",
-  HOD_APPROVED: "HOD Approved",
-  PRINCIPAL_APPROVED: "Approved",
-  REJECTED: "Rejected",
-  CANCELLED: "Cancelled",
-};
-
-// ─── Leave Balance (one doc per faculty per year) ─────────────────────────────
-// doc id: `${facultyId}_${year}`
-
-export interface LeaveBalance {
-  id: string;
-  collegeId: string;
-  facultyId: string;
-  facultyName: string;
-  department: string;
-  year: number;
-  balances: Record<LeaveTypeCode, {
-    entitled: number;
-    used: number;
-    pending: number;
-    balance: number;
-  }>;
-  updatedAt: Timestamp;
-}
-
-// ─── Leave Application ────────────────────────────────────────────────────────
-
-export interface LeaveApplication {
-  id: string;
-  collegeId: string;
-  facultyId: string;
-  facultyName: string;
-  department: string;
-  leaveType: LeaveTypeCode;
-  fromDate: Timestamp;
-  toDate: Timestamp;
-  totalDays: number;
-  isHalfDay?: boolean;
-  halfDaySession?: "MORNING" | "AFTERNOON";
-  reason: string;
-  substituteArrangement?: string;   // who covers classes during absence
-  attachmentUrl?: string;           // medical certificate etc.
-  status: LeaveStatus;
-  hodAction?: {
-    action: "APPROVED" | "REJECTED";
-    by: string;
-    byName: string;
-    at: Timestamp;
-    remarks?: string;
-  };
-  principalAction?: {
-    action: "APPROVED" | "REJECTED";
-    by: string;
-    byName: string;
-    at: Timestamp;
-    remarks?: string;
-  };
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
-// ─── Permission Request (short absence within working hours) ──────────────────
-
-export type PermissionStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
-
-export interface PermissionRequest {
-  id: string;
-  collegeId: string;
-  facultyId: string;
-  facultyName: string;
-  department: string;
-  date: Timestamp;
-  fromTime: string;         // "HH:MM" 24h
-  toTime: string;           // "HH:MM" 24h
-  durationHours: number;
-  reason: string;
-  status: PermissionStatus;
-  hodAction?: {
-    action: "APPROVED" | "REJECTED";
-    by: string;
-    byName: string;
-    at: Timestamp;
-    remarks?: string;
-  };
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
-// ─── On Duty Request (official work outside campus) ───────────────────────────
-
-export type OnDutyPurpose =
-  | "EXAM_DUTY"
-  | "CONFERENCE"
-  | "WORKSHOP"
-  | "FDP"
-  | "OFFICIAL_WORK"
-  | "INSPECTION"
-  | "OTHER";
-
-export const ON_DUTY_PURPOSE_LABELS: Record<OnDutyPurpose, string> = {
-  EXAM_DUTY: "Exam Duty",
-  CONFERENCE: "Conference",
-  WORKSHOP: "Workshop / Seminar",
-  FDP: "Faculty Development Programme",
-  OFFICIAL_WORK: "Official Work",
-  INSPECTION: "Inspection / Accreditation",
-  OTHER: "Other",
-};
-
-export interface OnDutyRequest {
-  id: string;
-  collegeId: string;
-  facultyId: string;
-  facultyName: string;
-  department: string;
-  fromDate: Timestamp;
-  toDate: Timestamp;
-  totalDays: number;
-  purpose: OnDutyPurpose;
-  description: string;
-  venue?: string;
-  attachmentUrl?: string;
-  status: PermissionStatus;
-  hodAction?: {
-    action: "APPROVED" | "REJECTED";
-    by: string;
-    byName: string;
-    at: Timestamp;
-    remarks?: string;
-  };
-  principalAction?: {
-    action: "APPROVED" | "REJECTED";
-    by: string;
-    byName: string;
-    at: Timestamp;
-    remarks?: string;
-  };
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Leave Module V2 — comprehensive rule-engine-driven module
-// Collections: leaveTypes (root), colleges/{id}/leaveBalancesV2,
-//              colleges/{id}/leaveRequests, colleges/{id}/employeeLeaveProfiles
-// ─────────────────────────────────────────────────────────────────────────────
-
-export type LeaveTypeCodeV2 =
-  | "CL"    // Casual Leave
-  | "SCL"   // Special Casual Leave (teaching staff)
-  | "EL"    // Earned Leave
-  | "ML"    // Medical / Half-Pay Leave
-  | "MAT"   // Maternity Leave
-  | "FPL"   // Family Planning Leave
-  | "COMP"  // Compensatory Leave
-  | "LND"   // Leave Not Due (advance against EL)
-  | "QUAR"  // Quarantine Leave
-  | "EOL"   // Extraordinary Leave (without pay)
-  | "SAB"   // Sabbatical Leave
-  | "VAC";  // Vacation (vacation-staff entitlement)
-
-export type ApprovalChainV2 = "standard" | "management" | "medical_officer";
-export type AccrualBasis = "annual_fixed" | "per_completed_year" | "prorated" | "none";
-export type EncashPolicy = "never" | "retirement_only";
-
-export interface DurationTier {
-  label: string;
-  maxDays: number;
-  requiresCertificate: boolean;
-  minServiceYears?: number;
-  purpose?: string;
-}
-
-export interface GenderDayAllocation {
-  male: number;
-  female: number;
-  other: number;
-}
-
-export interface DepartmentLeaveOverride {
-  departmentName: string;
-  maxPerApplication?: number;
-  maxAccumulation?: number;
-  restrictedMonths?: number[]; // 1-12
-}
+// Display order for the category tab strip shared by the Leave History
+// register and the Leave Approvals queue.
+export const EFFECTIVE_CATEGORY_ORDER: EffectiveLeaveCategory[] = ["new-joining", "vacation", "non-vacation"];
 
 export interface LeaveTypeRules {
-  daysPerYear?: number;
-  accrualBasis?: AccrualBasis;
-  carryForwardCap?: number;          // 0 = lapses; undefined = unlimited
-  maxPerApplication?: number;
-  minPerApplication?: number;
-  advanceNoticeDays?: number;        // 0 = can apply same day / retroactive
-  retroactiveAllowed?: boolean;
-  excludeHolidaysAndSundays?: boolean;
-  eligibility?: {
-    employmentTypes?: ("permanent" | "probation" | "training")[];
-    staffCategories?: ("vacation" | "non-vacation")[];
-    isTeachingStaffOnly?: boolean;
-    genderAllowed?: ("male" | "female" | "other")[];
-    maritalStatus?: "married";
-    minServiceYears?: number;
-    isConfirmedRequired?: boolean;
-    maxLivingChildren?: number;
-    oneTimeOnly?: boolean;
-  };
-  certificateRequiredAfterDays?: number; // 0 = always; undefined = never
-  fitnessCertRequired?: boolean;
-  linkedHolidayWorkRequired?: boolean;
-  remuneratedDutyBlocked?: boolean;
-  encashPolicy?: EncashPolicy;
-  requiresHandoverAfterDays?: number;
-  approvalChain?: ApprovalChainV2;
-  durationTiers?: DurationTier[];
-  genderDayAllocation?: GenderDayAllocation;
-  departmentOverrides?: DepartmentLeaveOverride[];
-  requiresReturnToDutyAck?: boolean;
-  isLeaveWithoutPay?: boolean;
-  isVacationEntitlement?: boolean;
-  isLeaveNotDue?: boolean;           // advance against EL; to be offset on EL credit
+  daysPerYear?: number;   // undefined when unlimited is true
+  unlimited?: boolean;    // OD only - no balance is tracked, history is shown instead
+  eligibleCategories: EffectiveLeaveCategory[];
 }
 
 export interface LeaveTypeFull {
   id: string;
-  code: LeaveTypeCodeV2;
+  code: LeaveTypeCode;
   label: string;
   shortLabel: string;
-  description: string;
   color: string;
-  rules: LeaveTypeRules;
   isActive: boolean;
   sortOrder: number;
+  rules: LeaveTypeRules;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
 
 // ─── Employee Leave Profile ───────────────────────────────────────────────────
 // doc path: colleges/{collegeId}/employeeLeaveProfiles/{uid}
-
-export type LeaveEmploymentType = "permanent" | "probation" | "training";
-export type StaffCategory = "vacation" | "non-vacation";
+// Auto-created on first balance/profile lookup from FacultyMember defaults
+// (see /api/leave/profile) - HOD/Principal can override via the profile edit page.
 
 export interface EmployeeLeaveProfile {
-  id: string;
+  id: string; // == uid
   collegeId: string;
   uid: string;
-  employmentType: LeaveEmploymentType;
-  staffCategory: StaffCategory;
+  staffCategory: StaffCategory; // the category this person converts INTO once past new-joining
   isTeachingStaff: boolean;
-  gender: "male" | "female" | "other";
-  maritalStatus: "married" | "unmarried";
   dateOfJoining: Timestamp;
-  isConfirmed: boolean;
-  livingChildrenCount: number;
-  maternityLeaveUsedOnce: boolean;
-  retirementDate?: Timestamp;
   department?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
-// ─── Leave Balance V2 ─────────────────────────────────────────────────────────
-// doc path: colleges/{collegeId}/leaveBalancesV2/{uid}_{leaveTypeCode}_{year}
+// ─── Leave Balance ─────────────────────────────────────────────────────────────
+// doc path: colleges/{collegeId}/leaveBalances/{uid}_{leaveTypeCode}_{year}
+// Never created for OD (unlimited - no balance doc).
 
-export interface LeaveBalanceV2 {
+export interface LeaveBalance {
   id: string;
   collegeId: string;
   uid: string;
-  leaveTypeCode: LeaveTypeCodeV2;
+  leaveTypeCode: LeaveTypeCode;
   year: number;
-  opening: number;
-  credited: number;
+  entitled: number;
   used: number;
   pending: number;
-  carriedForward: number;
   updatedAt: Timestamp;
 }
 
-// ─── Leave Request V2 ─────────────────────────────────────────────────────────
+// ─── Leave Request ─────────────────────────────────────────────────────────────
 // doc path: colleges/{collegeId}/leaveRequests/{id}
+//
+// A PANEL_MEMBER's request always starts at PENDING_HOD. From there:
+//  - Standard types (CL/SL/SCL/EL/OD): the HOD's decision is final - APPROVE
+//    commits the balance and closes the request; REJECT releases it. Never
+//    reaches PENDING_PRINCIPAL. Insufficient balance never blocks approval -
+//    days beyond what's remaining are accepted and recorded as LeaveRequest.lopDays
+//    (Loss of Pay) instead of being committed to the balance.
+//  - "Other" requests (isOtherRequest): the HOD can REJECT outright, or tag
+//    isPaidLeave and forward to PENDING_PRINCIPAL, where the Principal/VP
+//    gives the final APPROVE/REJECT (balance-exempt either way).
+// Non-PANEL_MEMBER submitters (HOD/Principal/etc.'s own leave) skip the HOD
+// stage entirely and start at PENDING_PRINCIPAL, unchanged from before.
 
 export type LeaveRequestStatus =
-  | "DRAFT"
   | "PENDING_HOD"
-  | "PENDING_RATIFICATION"
-  | "PENDING_MANAGEMENT"
-  | "PENDING_MEDICAL_REVIEW"
+  | "PENDING_PRINCIPAL"
   | "APPROVED"
   | "REJECTED"
-  | "RECALLED"
   | "CANCELLED";
 
 export const LEAVE_REQUEST_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
-  DRAFT: "Draft",
   PENDING_HOD: "Pending HOD",
-  PENDING_RATIFICATION: "Pending Ratification",
-  PENDING_MANAGEMENT: "Pending Management",
-  PENDING_MEDICAL_REVIEW: "Pending Medical Review",
+  PENDING_PRINCIPAL: "Pending Principal",
   APPROVED: "Approved",
   REJECTED: "Rejected",
-  RECALLED: "Recalled",
   CANCELLED: "Cancelled",
 };
 
-export interface LeaveRequestV2 {
+export interface LeaveActionRecord {
+  action: "APPROVED" | "REJECTED";
+  by: string;
+  byName: string;
+  at: Timestamp;
+  remarks?: string;
+  // Set by the HOD when acting on an isOtherRequest - the leave type it's
+  // actually sanctioned against (defaults leaveTypeCode on approval).
+  assignedLeaveTypeCode?: LeaveTypeCode;
+  // Set by the HOD when forwarding an isOtherRequest to the Principal - not
+  // balance-tracked, just a record of how the HOD classified it.
+  isPaidLeave?: boolean;
+}
+
+export interface LeaveRequest {
   id: string;
   collegeId: string;
-  employeeId: string;
+  uid: string;
   employeeName: string;
-  department: string;
-  // Undefined only while isOtherRequest is true and the HOD has not yet picked
-  // the actual leave type to sanction it against.
-  leaveTypeCode?: LeaveTypeCodeV2;
-  // Employee applied via the "Others" option instead of picking a specific type;
-  // the HOD selects the real leaveTypeCode at approval time based on the reason
-  // and the employee's remaining balances. Faculty-facing UI always shows "Others"
-  // for these requests, regardless of which type the HOD ultimately sanctioned.
+  department?: string;
+  // Undefined only while isOtherRequest is true and no one has assigned the
+  // real type yet.
+  leaveTypeCode?: LeaveTypeCode;
   isOtherRequest?: boolean;
   fromDate: Timestamp;
   toDate: Timestamp;
-  computedDays: number;
+  totalDays: number;
   isHalfDay?: boolean;
-  halfDaySession?: "MORNING" | "AFTERNOON";
   reason: string;
-  leaveAddress: string;
-  contactNumber: string;
-  substituteArrangement?: string;
-  handoverToUserId?: string;
-  handoverNotes?: string;
-  medicalCertificateUrl?: string;
-  fitnessCertificateUrl?: string;
-  linkedHolidayWorkId?: string;
-  otherEmploymentAck: boolean;
   status: LeaveRequestStatus;
-  currentApproverRole?: string;
-  isExceptionFlag?: boolean;
-  exceptionComment?: string;
-  appliedOn: Timestamp;
+  // Set by the HOD when forwarding an isOtherRequest to the Principal - Other
+  // requests are never balance-tracked, this is purely informational.
+  isPaidLeave?: boolean;
+  // Set at approval time for a standard type (CL/SL/SCL/EL) whose totalDays
+  // exceeded the remaining balance - the excess is never blocked, it's
+  // accepted and tracked here as Loss of Pay days instead (no balance touch
+  // for these days). Undefined/0 when the whole request fit within balance.
+  lopDays?: number;
+  hodAction?: LeaveActionRecord;
+  principalAction?: LeaveActionRecord;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-}
-
-export interface LeaveApprovalStepV2 {
-  id: string;
-  collegeId: string;
-  applicationId: string;
-  approverRole: string;
-  approverId?: string;
-  approverName?: string;
-  sequence: number;
-  action?: "APPROVED" | "REJECTED" | "RECALLED";
-  comments?: string;
-  actedOn?: Timestamp;
-  createdAt: Timestamp;
-}
-
-export interface ValidationResult {
-  ok: boolean;
-  code?: string;
-  message?: string;
-  severity?: "error" | "warning";
-}
-
-export interface LeaveValidationContext {
-  fromDate: Date;
-  toDate: Date;
-  computedDays: number;
-  leaveTypeCode: LeaveTypeCodeV2;
-  leaveType: LeaveTypeFull;
-  profile: EmployeeLeaveProfile;
-  currentBalance: LeaveBalanceV2 | null;
-  holidayDates: Set<string>;
-  today: Date;
-  reason?: string;
+  // Not stored on the document - computed from the requester's leave profile
+  // at read time and attached only by the approvals-queue endpoint, for the
+  // New Joining / Vacation / Non-Vacation tab split.
+  category?: EffectiveLeaveCategory;
 }

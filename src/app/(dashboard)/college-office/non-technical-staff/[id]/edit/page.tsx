@@ -325,7 +325,7 @@ export default function EditNonTechnicalStaffPage() {
             <Card>
               <CardHeader><CardTitle className="text-base">Profile</CardTitle></CardHeader>
               <CardContent>
-                <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory="NON_TECHNICAL" />
+                <SupportingStaffProfileFields value={profile} onChange={setProfile} />
               </CardContent>
             </Card>
           </div>

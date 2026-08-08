@@ -8,7 +8,6 @@ import {
   ChevronUp,
   Clock,
   GitBranch,
-  CheckCircle2,
   XCircle,
   MapPin,
   Monitor,
@@ -18,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Step } from "@/components/shared/PipelineStep";
+import { getCurrentStage, stateForStage, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import type { VacancyRequest, Candidate, HiringBatch, OfferLetter } from "@/types";
@@ -31,25 +32,51 @@ type PipelineEntry = {
   batch: HiringBatch | null;
 };
 
-type StepState = "done" | "current" | "upcoming";
-type PipelineStage = 1 | 2 | 3 | 4;
-
 function isClosed(e: PipelineEntry): boolean {
   return e.vacancy.status === "REJECTED" || e.batch?.currentPhase === "COMPLETED";
 }
 
-// ─── Stage helpers ────────────────────────────────────────────────────────────
+type OfferStatus = "SENT" | "ACCEPTED" | "REJECTED";
 
-function getCurrentStage(vacancy: VacancyRequest, batch: HiringBatch | null): PipelineStage {
-  if (vacancy.status !== "APPROVED") return 1;
-  if (!batch) return 2;
-  if (batch.currentPhase === "COMPLETED" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW") return 4;
-  return 3;
+// Once the Principal decides, the candidate's hiring status keeps moving through
+// office/Principal-owned steps (offer → acceptance → appointment letter) that this
+// dashboard has no action for — but it should still show where each one stands.
+function candidateProgressLabel(
+  candidate: Candidate,
+  offerStatusByCandidate: Record<string, OfferStatus>,
+  appointmentCandidateIds: Set<string>
+): string {
+  if (appointmentCandidateIds.has(candidate.id)) return "Appointment Letter Sent";
+  const offerStatus = offerStatusByCandidate[candidate.id];
+  if (offerStatus === "ACCEPTED") return "Offer Accepted";
+  if (offerStatus === "SENT") return "Offer Sent";
+  return "Awaiting Offer Letter";
+}
+
+const PROGRESS_ORDER = ["Awaiting Offer Letter", "Offer Sent", "Offer Accepted", "Appointment Letter Sent"];
+
+function hiringResultsSummary(
+  candidates: Candidate[],
+  offerStatusByCandidate: Record<string, OfferStatus>,
+  appointmentCandidateIds: Set<string>
+): string {
+  const approved = candidates.filter((c) => c.status === "APPROVED" && c.currentStage === "DECISION");
+  if (approved.length === 0) return "Awaiting hiring results";
+  const labels = approved.map((c) => candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds));
+  const counts = PROGRESS_ORDER.map((label) => labels.filter((l) => l === label).length);
+  const leastAdvancedIdx = counts.findIndex((n) => n > 0);
+  const label = PROGRESS_ORDER[leastAdvancedIdx];
+  const count = counts[leastAdvancedIdx];
+  return approved.length > 1 ? `${label} (${count}/${approved.length})` : label;
 }
 
 type NextAction = { label: string; href: string; disabled?: boolean; variant?: "default" | "outline" };
 
-function getNextAction(entry: PipelineEntry, sentCandidateIds: Set<string>): NextAction {
+function getNextAction(
+  entry: PipelineEntry,
+  offerStatusByCandidate: Record<string, OfferStatus>,
+  appointmentCandidateIds: Set<string>
+): NextAction {
   const { vacancy, candidates, batch } = entry;
 
   if (vacancy.status === "PENDING") {
@@ -75,103 +102,36 @@ function getNextAction(entry: PipelineEntry, sentCandidateIds: Set<string>): Nex
     return { label: "Complete Interview Setup →", href: `/hod/batches/${batch.id}` };
   }
   if (p === "INTERVIEW_READY" || p === "IN_PROGRESS") {
+    const sessionCandidates = candidates.filter((c) => batch.candidateIds.includes(c.id));
+    const pendingBioData = sessionCandidates.filter((c) => !c.bioDataSubmitted);
+    if (pendingBioData.length > 0) {
+      return {
+        label: `Waiting on Bio Data (${pendingBioData.length} pending)`,
+        href: "#",
+        disabled: true,
+      };
+    }
     return { label: "Open Interview Session →", href: `/coordinator/${batch.id}` };
   }
   if (p === "PRINCIPAL_FINAL_REVIEW" || p === "COMPLETED") {
-    const pendingOffer = candidates.some(
-      (c) => c.currentStage === "DECISION" && !sentCandidateIds.has(c.id)
-    );
-    if (pendingOffer) {
-      return { label: "Send Offer Letter →", href: `/hod/offers/new?batchId=${batch.id}` };
-    }
-    if (candidates.some((c) => sentCandidateIds.has(c.id))) {
-      return { label: "View Offer Letter", href: "/hod/offers", variant: "outline" };
-    }
-    if (p === "PRINCIPAL_FINAL_REVIEW") {
-      return { label: "Awaiting Hiring Results", href: "#", disabled: true };
-    }
-    return { label: "View Results", href: `/hod/batches/${batch.id}`, variant: "outline" };
+    // Offer letters, acceptance, and the appointment letter are all handled by
+    // the office/Principal now — HOD has nothing left to do here but track status.
+    return { label: hiringResultsSummary(candidates, offerStatusByCandidate, appointmentCandidateIds), href: "#", disabled: true };
   }
   return { label: "View Details", href: `/hod/batches/${batch.id}`, variant: "outline" };
-}
-
-// ─── Step Component ───────────────────────────────────────────────────────────
-
-function Step({
-  step,
-  label,
-  sub,
-  state,
-  isLast,
-}: {
-  step: number;
-  label: string;
-  sub: string;
-  state: StepState;
-  isLast?: boolean;
-}) {
-  return (
-    <div className="flex flex-1 items-start min-w-0">
-      <div className="flex flex-col items-center shrink-0">
-        <div
-          className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-colors ${
-            state === "done"
-              ? "bg-green-500 border-green-500 text-white"
-              : state === "current"
-              ? "bg-primary border-primary text-white"
-              : "bg-background border-border text-muted-foreground"
-          }`}
-        >
-          {state === "done" ? <CheckCircle2 className="h-3.5 w-3.5" /> : step}
-        </div>
-        {!isLast && (
-          <div
-            className={`w-0.5 flex-1 min-h-[1rem] mt-1 ${
-              state === "done" ? "bg-green-300" : "bg-border"
-            }`}
-          />
-        )}
-      </div>
-      <div className="ml-2.5 pb-3 min-w-0 flex-1">
-        <p
-          className={`text-xs font-semibold leading-tight truncate ${
-            state === "done"
-              ? "text-green-700"
-              : state === "current"
-              ? "text-primary"
-              : "text-muted-foreground"
-          }`}
-        >
-          {label}
-        </p>
-        <p
-          className={`text-[11px] leading-snug mt-0.5 ${
-            state === "done"
-              ? "text-green-600"
-              : state === "current"
-              ? "text-primary/70"
-              : "text-muted-foreground/60"
-          }`}
-        >
-          {sub}
-        </p>
-      </div>
-      {!isLast && (
-        <div className={`hidden sm:block self-start mt-3 mx-1 h-0.5 w-4 shrink-0 ${state === "done" ? "bg-green-300" : "bg-border"}`} />
-      )}
-    </div>
-  );
 }
 
 // ─── Pipeline Card ────────────────────────────────────────────────────────────
 
 function PipelineCard({
   entry,
-  sentCandidateIds,
+  offerStatusByCandidate,
+  appointmentCandidateIds,
   onDeleted,
 }: {
   entry: PipelineEntry;
-  sentCandidateIds: Set<string>;
+  offerStatusByCandidate: Record<string, OfferStatus>;
+  appointmentCandidateIds: Set<string>;
   onDeleted: (vacancyId: string) => void;
 }) {
   const { vacancy, candidates, batch } = entry;
@@ -196,12 +156,10 @@ function PipelineCard({
 
   const currentStage = getCurrentStage(vacancy, batch);
   const shortlisted = candidates.filter((c) => c.isShortlisted).length;
-  const nextAction = getNextAction(entry, sentCandidateIds);
+  const nextAction = getNextAction(entry, offerStatusByCandidate, appointmentCandidateIds);
 
-  function stateFor(stage: PipelineStage): StepState {
-    if (stage < currentStage) return "done";
-    if (stage === currentStage) return "current";
-    return "upcoming";
+  function stateFor(stage: PipelineStage) {
+    return stateForStage(stage, currentStage);
   }
 
   const stage1Sub =
@@ -221,11 +179,9 @@ function PipelineCard({
     : "Not started";
 
   const stage4Sub =
-    batch?.currentPhase === "COMPLETED"
-      ? "Process complete"
-      : batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
-      ? "Awaiting hiring results"
-      : "—";
+    batch?.currentPhase === "COMPLETED" || batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
+      ? hiringResultsSummary(candidates, offerStatusByCandidate, appointmentCandidateIds)
+      : "-";
 
   const accentColor =
     vacancy.status === "REJECTED"
@@ -260,8 +216,8 @@ function PipelineCard({
               {" · "}
               Raised {formatDate(vacancy.createdAt)}
               {" · "}
-              {vacancy.availableCount ?? vacancy.requiredCount}{" "}
-              post{(vacancy.availableCount ?? vacancy.requiredCount) !== 1 ? "s" : ""} open
+              {vacancy.requiredCount}{" "}
+              post{vacancy.requiredCount !== 1 ? "s" : ""} open
             </p>
           </div>
           <span className="shrink-0 text-[11px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
@@ -270,7 +226,7 @@ function PipelineCard({
         </div>
       </div>
 
-      {/* 4-step pipeline — vertical on mobile, horizontal on sm+ */}
+      {/* 4-step pipeline - vertical on mobile, horizontal on sm+ */}
       <div className="px-5 py-3">
         <div className="flex flex-col sm:flex-row sm:items-start gap-0 sm:gap-0">
           <Step step={1} label="Request" sub={stage1Sub} state={stateFor(1)} />
@@ -361,6 +317,21 @@ function PipelineCard({
                       ) : (
                         <Badge variant="secondary" className="text-[10px] py-0 px-1.5">Added</Badge>
                       )}
+                      {batch?.candidateIds.includes(c.id) && !c.bioDataSubmitted && (
+                        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 text-amber-700 bg-amber-100">
+                          Bio Data Pending
+                        </Badge>
+                      )}
+                      {c.status === "APPROVED" && c.currentStage === "DECISION" && (
+                        <Badge variant="outline" className="text-[10px] py-0 px-1.5">
+                          {candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds)}
+                        </Badge>
+                      )}
+                      {c.status === "REJECTED" && (
+                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-red-700 border-red-300 bg-red-50">
+                          Rejected
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -381,15 +352,15 @@ function PipelineCard({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Venue</p>
-                  <p className="font-medium">{batch.interviewVenue ?? "—"}</p>
+                  <p className="font-medium">{batch.interviewVenue ?? "-"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Demo Room</p>
-                  <p className="font-medium">{batch.demoClassroom ?? "—"}</p>
+                  <p className="font-medium">{batch.demoClassroom ?? "-"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Coordinator</p>
-                  <p className="font-medium">{batch.coordinatorName ?? "—"}</p>
+                  <p className="font-medium">{batch.coordinatorName ?? "-"}</p>
                 </div>
               </div>
               <div className="mt-2">
@@ -420,7 +391,8 @@ function PipelineCard({
 
 export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
-  const [sentCandidateIds, setSentCandidateIds] = useState<Set<string>>(new Set());
+  const [offerStatusByCandidate, setOfferStatusByCandidate] = useState<Record<string, OfferStatus>>({});
+  const [appointmentCandidateIds, setAppointmentCandidateIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -437,13 +409,24 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
       fetch("/api/college/offer-letters")
         .then((r) => r.json() as Promise<{ letters: OfferLetter[] }>)
         .then((d) => d.letters ?? []),
+      fetch("/api/college/appointment-letters")
+        .then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>)
+        .then((d) => d.letters ?? [])
+        .catch(() => []),
     ])
-      .then(([vacancies, candidates, batches, letters]) => {
-        setSentCandidateIds(new Set(letters.map((l) => l.candidateId)));
+      .then(([vacancies, candidates, batches, letters, appointmentLetters]) => {
+        // Prefer a non-rejected offer per candidate — mirrors the office dashboard's logic.
+        const offerMap: Record<string, OfferStatus> = {};
+        for (const letter of letters) {
+          if (letter.status === "REJECTED") continue;
+          if (!offerMap[letter.candidateId]) offerMap[letter.candidateId] = letter.status as OfferStatus;
+        }
+        setOfferStatusByCandidate(offerMap);
+        setAppointmentCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
         // A candidate's batch (if any) is the authority on which vacancy they
         // actually belong to. Without this, a candidate lacking a vacancyId
-        // (legacy data) would loosely position/department-match — and get
-        // double-counted under — every other vacancy that happens to share
+        // (legacy data) would loosely position/department-match - and get
+        // double-counted under - every other vacancy that happens to share
         // the same position and department, even once they're already
         // committed to a specific one via a batch.
         const vacancyIdByBatchId = new Map(batches.map((b) => [b.id, b.vacancyId]));
@@ -455,7 +438,7 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
             return c.position === v.position && c.department === v.department;
           }),
           // A rejected proposal shouldn't block the HOD from starting a fresh
-          // interview session for the same vacancy — treat it as no batch yet.
+          // interview session for the same vacancy - treat it as no batch yet.
           batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
         }));
         built.sort(
@@ -506,7 +489,8 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         <PipelineCard
           key={e.vacancy.id}
           entry={e}
-          sentCandidateIds={sentCandidateIds}
+          offerStatusByCandidate={offerStatusByCandidate}
+          appointmentCandidateIds={appointmentCandidateIds}
           onDeleted={(vacancyId) => setEntries((prev) => prev.filter((entry) => entry.vacancy.id !== vacancyId))}
         />
       ))}

@@ -94,9 +94,9 @@ export default function ManagementDepartmentFacultyPage() {
                   <p className="text-sm font-semibold">Identity</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <div><p className="text-xs text-muted-foreground">Employee ID</p><p className="text-sm font-medium">{hod.employeeId || "—"}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{hod.designation || "—"}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{hod.department || "—"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Employee ID</p><p className="text-sm font-medium">{hod.employeeId || "-"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{hod.designation || "-"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{hod.department || "-"}</p></div>
                 </div>
               </div>
 

@@ -1,4 +1,4 @@
-// Shared faculty CSV column definitions — used by both the bulk-import template
+// Shared faculty CSV column definitions - used by both the bulk-import template
 // (src/app/(dashboard)/hod/faculty/import/page.tsx) and the full-detail export
 // (src/lib/faculty/exportFacultyCsv.ts), so the two stay in sync.
 
@@ -16,6 +16,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "name",               label: "Name",                         required: true,  sample: "Dr. A. Ravi Kumar", aliases: ["Faculty Name", "Full Name", "Employee Name"] },
   { key: "apaarFacultyId",     label: "APAAR Faculty ID",             required: false, sample: "", aliases: ["APAAR ID"] },
   { key: "email",              label: "Personal Email",               required: true,  sample: "ravi@gmail.com", aliases: ["Email", "Email ID", "Personal Email ID"] },
+  { key: "password",          label: "Login Password (min 8 characters, optional)", required: false, sample: "", aliases: ["Password", "Login Password"] },
   { key: "phone",              label: "Phone",                        required: false, sample: "9876543210", aliases: ["Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",        label: "Designation",                  required: true,  sample: "Asst. Prof." },
   { key: "qualification",      label: "Qualification",                required: true,  sample: "M.Tech" },
@@ -59,7 +60,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "permanentSameAsTemporary", label: "Permanent Same as Temporary (Yes/No)", required: false, sample: "Yes" },
   { key: "permanentAddress",  label: "Permanent Address",            required: false, sample: "" },
 
-  // ─── Academic Profile (Modules 1-5) — all optional ───────────────────────────
+  // ─── Academic Profile (Modules 1-5) - all optional ───────────────────────────
   { key: "highestQualification",   label: "Highest Qualification Earned",       required: false, sample: "Ph.D" },
   { key: "ug_degreeAndBranch",     label: "UG Degree & Branch",                 required: false, sample: "B.Tech CSE" },
   { key: "ug_university",          label: "UG University/Institute",            required: false, sample: "JNTU Kakinada" },
@@ -71,7 +72,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "pg_year",                label: "PG Year of Completion",              required: false, sample: "2011" },
   { key: "phd_degreeAndBranch",    label: "PhD Degree & Branch",                required: false, sample: "Ph.D CSE" },
   { key: "phd_university",         label: "PhD University/Institute",           required: false, sample: "IIT Hyderabad" },
-  { key: "phd_percentage",         label: "PhD Percentage/Division",            required: false, sample: "—" },
+  { key: "phd_percentage",         label: "PhD Percentage/Division",            required: false, sample: "-" },
   { key: "phd_year",               label: "PhD Year of Completion",             required: false, sample: "2017" },
   { key: "postdoc_degreeAndBranch", label: "Post-Doctoral Degree & Branch",     required: false, sample: "" },
   { key: "postdoc_university",     label: "Post-Doctoral University/Institute", required: false, sample: "" },
@@ -194,7 +195,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "lab3_details",           label: "New Lab 3 - Facility Details",       required: false, sample: "" },
   { key: "lab3_outcomes",          label: "New Lab 3 - Outcomes",               required: false, sample: "" },
 
-  // Structured entries matching the Add/Edit Faculty form's repeating groups —
+  // Structured entries matching the Add/Edit Faculty form's repeating groups -
   // the free-text fields below (administrativeResponsibilities, certificationsAndFdps,
   // professionalBodyMemberships, notableAwards) are legacy: the form only
   // displays them read-only now, it doesn't let you edit them, use these instead.
@@ -210,7 +211,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "adminResp3_description", label: "Admin Responsibility 3 - Description", required: false, sample: "" },
   { key: "adminResp3_fromYear",    label: "Admin Responsibility 3 - From Year", required: false, sample: "" },
   { key: "adminResp3_toYear",      label: "Admin Responsibility 3 - To Year (blank = ongoing)", required: false, sample: "" },
-  { key: "administrativeResponsibilities", label: "Administrative Responsibilities Held (+achievements) — legacy, read-only in the form", required: false, sample: "" },
+  { key: "administrativeResponsibilities", label: "Administrative Responsibilities Held (+achievements) - legacy, read-only in the form", required: false, sample: "" },
   { key: "training1_type",         label: "Training 1 - Type",                  required: false, sample: "" },
   { key: "training1_title",        label: "Training 1 - Title",                 required: false, sample: "" },
   { key: "training1_organizer",    label: "Training 1 - Organizer",             required: false, sample: "" },
@@ -226,7 +227,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "training3_organizer",    label: "Training 3 - Organizer",             required: false, sample: "" },
   { key: "training3_year",         label: "Training 3 - Year",                  required: false, sample: "" },
   { key: "training3_durationDays", label: "Training 3 - Duration (Days)",       required: false, sample: "" },
-  { key: "certificationsAndFdps",  label: "Certifications/FDPs (NPTEL/Coursera/AICTE) — legacy, read-only in the form", required: false, sample: "" },
+  { key: "certificationsAndFdps",  label: "Certifications/FDPs (NPTEL/Coursera/AICTE) - legacy, read-only in the form", required: false, sample: "" },
   { key: "membership1_body",         label: "Membership 1 - Body",              required: false, sample: "" },
   { key: "membership1_otherName",    label: "Membership 1 - Body Name (if Other)", required: false, sample: "" },
   { key: "membership1_membershipId", label: "Membership 1 - Membership ID",     required: false, sample: "" },
@@ -239,7 +240,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "membership3_otherName",    label: "Membership 3 - Body Name (if Other)", required: false, sample: "" },
   { key: "membership3_membershipId", label: "Membership 3 - Membership ID",     required: false, sample: "" },
   { key: "membership3_sinceYear",    label: "Membership 3 - Member Since (Year)", required: false, sample: "" },
-  { key: "professionalBodyMemberships", label: "Professional Body Memberships (IEEE/ACM/CSI) — legacy, read-only in the form", required: false, sample: "" },
+  { key: "professionalBodyMemberships", label: "Professional Body Memberships (IEEE/ACM/CSI) - legacy, read-only in the form", required: false, sample: "" },
   { key: "book1_title",            label: "Authored Book 1 - Title",            required: false, sample: "" },
   { key: "book1_publisher",        label: "Authored Book 1 - Publisher",        required: false, sample: "" },
   { key: "book1_year",             label: "Authored Book 1 - Year",             required: false, sample: "" },
@@ -261,7 +262,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "award3_title",        label: "Award 3 - Title",                       required: false, sample: "" },
   { key: "award3_awardingBody", label: "Award 3 - Awarding Body",               required: false, sample: "" },
   { key: "award3_year",         label: "Award 3 - Year",                        required: false, sample: "" },
-  { key: "notableAwards",          label: "Notable Awards — legacy, read-only in the form", required: false, sample: "" },
+  { key: "notableAwards",          label: "Notable Awards - legacy, read-only in the form", required: false, sample: "" },
 
   // ─── Financial Standing & Budgetary Impact (Module 6) ────────────────────────
   { key: "presentSalary",          label: "Present Salary (₹)",                 required: false, sample: "" },
@@ -283,15 +284,15 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "courseFile3_courseName", label: "Course File 3 - Course Name",        required: false, sample: "" },
   { key: "courseFile3_academicYear", label: "Course File 3 - Academic Year",    required: false, sample: "" },
 
-  // Resume/CV — Teaching Faculty only, no equivalent on the Supporting Staff
+  // Resume/CV - Teaching Faculty only, no equivalent on the Supporting Staff
   // templates (src/lib/supportingStaff/csvColumns.ts). A link to an
-  // already-hosted file (Drive/Storage) — this template can't upload files
+  // already-hosted file (Drive/Storage) - this template can't upload files
   // directly; use the faculty edit page's Documents section for that.
   { key: "resumeUrl",              label: "Resume/CV URL",                      required: false, sample: "" },
 ];
 
 export const HINTS = [
-  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty, Lab Assistant (teaching); Technical, Non-Technical, Other (supporting)",
+  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty (teaching); Lab Assistant, Programmer, System Administrator, Network Engineer, Other (technical)",
   "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",
   "Status: Active, On Leave, Resigned, Retired (defaults to Active if left blank)",
   "Gender: Male, Female, Other",
@@ -306,11 +307,12 @@ export const HINTS = [
   "Award Category: Best Teacher Award, Research Award, Appreciation Certificate, Other",
   "Dates must be in YYYY-MM-DD format (e.g. 2020-06-01)",
   "Department is auto-assigned from your HOD profile",
-  "Resume/CV URL: an already-hosted link (Drive/Storage) — this template doesn't upload files directly; use the faculty edit page's Documents section to upload one",
+  "Login Password (optional): fill this in to create the faculty member's login account (as a Panel Member) automatically during import, using their College Email (or Personal Email if no College Email is given) as the login ID - must be at least 8 characters. Leave it blank to skip login creation for that row; you can still set it up later from the Faculty list's \"Set Login\" button.",
+  "Resume/CV URL: an already-hosted link (Drive/Storage) - this template doesn't upload files directly; use the faculty edit page's Documents section to upload one",
 ];
 
 // A column present in the export but never accepted back on import
-// (Current Teaching is relational — sourced from the Teaching Assignments module).
+// (Current Teaching is relational - sourced from the Teaching Assignments module).
 export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
   key: "currentTeachingSummary",
   label: "Current Teaching (Course / Year / Section / Subject)",

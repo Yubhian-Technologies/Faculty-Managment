@@ -3,7 +3,7 @@ import { config as loadEnv } from "dotenv";
 import path from "path";
 
 // See tests/e2e/README.md for required environment variables (test users,
-// college/location ids) — this suite exercises the real API routes and
+// college/location ids) - this suite exercises the real API routes and
 // Firestore-backed state machine, so it needs a seeded non-production
 // environment to actually pass. It is not runnable against an empty DB.
 loadEnv({ path: path.resolve(__dirname, "tests/e2e/.env.test") });

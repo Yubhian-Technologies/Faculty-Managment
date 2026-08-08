@@ -3,19 +3,25 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { SUPPORTING_STAFF_ROLE_CATEGORY, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
+import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus,
   SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
-  TechnicalResponsibility, NonTechnicalResponsibility, ComputerSkill, VendorCertification, VendorCertificationEntry,
+  NonTechnicalResponsibility, ComputerSkill,
 } from "@/types";
 
+function designationLabel(designation: SupportingStaffDesignation): string {
+  return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
+}
+
 // Same resolver as faculty/students CSV imports (src/app/api/college/
-// students/import-excel/route.ts) — accepts a department's short Code (e.g.
+// students/import-excel/route.ts) - accepts a department's short Code (e.g.
 // "CSE", the template's own sample value) or its full name and normalizes to
 // the canonical `name`. Without this, a row typed with a code got stored
 // verbatim (e.g. department: "CSE"), which never matches the exact-string
-// department filter the HOD's own Supporting Staff list queries by — the
+// department filter the HOD's own Supporting Staff list queries by - the
 // record was created successfully but simply never appeared for them again.
 function buildDepartmentResolver(
   departmentsSnap: FirebaseFirestore.QuerySnapshot
@@ -31,22 +37,6 @@ function buildDepartmentResolver(
   }
   return (input: string) => byCodeOrName.get(input.trim().toLowerCase());
 }
-
-const CATEGORY_MAP: Record<string, SupportingStaffCategory> = {
-  "technical": "TECHNICAL",
-  "non-technical": "NON_TECHNICAL",
-  "non technical": "NON_TECHNICAL",
-  "nontechnical": "NON_TECHNICAL",
-};
-
-const TECHNICAL_DESIGNATION_MAP: Record<string, SupportingStaffDesignation> = {
-  "lab assistant": "LAB_ASSISTANT",
-  "programmer": "PROGRAMMER",
-  "system administrator": "SYSTEM_ADMINISTRATOR",
-  "sysadmin": "SYSTEM_ADMINISTRATOR",
-  "network engineer": "NETWORK_ENGINEER",
-  "other": "OTHER",
-};
 
 const NON_TECHNICAL_DESIGNATION_MAP: Record<string, SupportingStaffDesignation> = {
   "office staff": "OFFICE_STAFF",
@@ -98,19 +88,6 @@ const AWARD_CATEGORY_MAP: Record<string, AwardCategory> = {
   "other": "OTHER",
 };
 
-const TECHNICAL_RESPONSIBILITY_MAP: Record<string, TechnicalResponsibility> = {
-  "lab maintenance": "LAB_MAINTENANCE",
-  "equipment maintenance": "EQUIPMENT_MAINTENANCE",
-  "software installation": "SOFTWARE_INSTALLATION",
-  "network administration": "NETWORK_ADMINISTRATION",
-  "lab stock maintenance": "LAB_STOCK_MANAGEMENT",
-  "lab stock management": "LAB_STOCK_MANAGEMENT",
-  "student support": "STUDENT_SUPPORT",
-  "practical sessions": "PRACTICAL_SESSION_ASSISTANCE",
-  "practical session assistance": "PRACTICAL_SESSION_ASSISTANCE",
-  "other": "OTHER",
-};
-
 const NON_TECHNICAL_RESPONSIBILITY_MAP: Record<string, NonTechnicalResponsibility> = {
   "office administration": "OFFICE_ADMINISTRATION",
   "student records": "STUDENT_RECORDS",
@@ -132,24 +109,12 @@ const COMPUTER_SKILL_MAP: Record<string, ComputerSkill> = {
   "other": "OTHER",
 };
 
-const VENDOR_CERTIFICATION_MAP: Record<string, VendorCertification> = {
-  "cisco": "CISCO",
-  "microsoft": "MICROSOFT",
-  "aws": "AWS",
-  "redhat": "REDHAT",
-  "red hat": "REDHAT",
-  "oracle": "ORACLE",
-  "google": "GOOGLE",
-  "vmware": "VMWARE",
-  "other": "OTHER",
-};
-
 type ImportRow = {
   employeeId: string;
   name: string;
   email?: string;
+  password?: string;
   phone?: string;
-  staffCategory: string;
   designation: string;
   otherDesignationTitle?: string;
   department?: string;
@@ -186,7 +151,7 @@ type ImportRow = {
 };
 
 // See src/app/api/college/faculty/import/route.ts for why sane()/parseDate()
-// guard this way — same lenient-Excel-date and out-of-range-year footguns apply here.
+// guard this way - same lenient-Excel-date and out-of-range-year footguns apply here.
 function sane(d: Date): Date | undefined {
   const year = d.getFullYear();
   return Number.isFinite(d.getTime()) && year >= 1900 && year <= 2100 ? d : undefined;
@@ -218,7 +183,7 @@ function parseList(raw: string | undefined): string[] {
   return (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-// Comma-separated free text mapped against an enum's label vocabulary — items
+// Comma-separated free text mapped against an enum's label vocabulary - items
 // that don't match anything in `map` are dropped with a warning rather than
 // silently discarded, same as every other unrecognized-value case in this route.
 function mapList<T extends string>(
@@ -272,27 +237,11 @@ function achievementEntries(row: ImportRow): AwardEntry[] {
     .filter((a) => a.title || a.awardingBody);
 }
 
-function technicalCertifications(row: ImportRow, empId: string, dropped: (empId: string, label: string, raw: string | undefined) => void): VendorCertificationEntry[] {
-  return [1, 2]
-    .map((i): VendorCertificationEntry | undefined => {
-      const vendorRaw = row[`certification${i}_vendor`]?.trim();
-      const name = row[`certification${i}_name`]?.trim() ?? "";
-      const year = num(row[`certification${i}_year`]);
-      if (!vendorRaw && !name) return undefined;
-      const vendor = VENDOR_CERTIFICATION_MAP[(vendorRaw ?? "").toLowerCase()];
-      if (vendorRaw && !vendor) dropped(empId, `Certification ${i} Vendor`, vendorRaw);
-      return { vendor: vendor ?? "OTHER", ...(!vendor && vendorRaw ? { otherVendorName: vendorRaw } : {}), certificationName: name, ...(year !== undefined ? { year } : {}) };
-    })
-    .filter((c): c is VendorCertificationEntry => !!c);
-}
-
-// Builds the full SupportingStaffProfileFields object for a row — qualifications
-// are shared across both categories; technicalProfile/nonTechnicalProfile are
-// mutually exclusive, matching the manual "Add Staff" form's SupportingStaffProfileFields
-// shape (src/types/supportingStaff.ts) so import and manual entry stay compatible.
+// Builds the full SupportingStaffProfileFields object for a row - matches the
+// manual "Add Staff" form's SupportingStaffProfileFields shape
+// (src/types/supportingStaff.ts) so import and manual entry stay compatible.
 function buildSupportingStaffProfile(
   row: ImportRow,
-  category: SupportingStaffCategory,
   empId: string,
   dropped: (empId: string, label: string, raw: string | undefined) => void
 ): SupportingStaffProfileFields | undefined {
@@ -300,63 +249,33 @@ function buildSupportingStaffProfile(
     qualifications: qualifications(row),
   };
 
-  if (category === "TECHNICAL") {
-    const responsibilities = mapList(row.responsibilities, TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
-    const skills = {
-      programmingLanguages: parseList(row.programmingLanguages),
-      operatingSystems: parseList(row.operatingSystems),
-      networking: parseList(row.networking),
-      databases: parseList(row.databases),
-      cloud: parseList(row.cloud),
-      hardware: parseList(row.hardware),
-      softwareTools: parseList(row.softwareTools),
+  const responsibilities = mapList(row.responsibilities, NON_TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
+  const computerSkills = mapList(row.computerSkills, COMPUTER_SKILL_MAP, empId, "Computer Skills", dropped);
+  const typingSpeedWpm = num(row.typingSpeedWpm);
+  const training = trainingEntries(row);
+  const achievements = achievementEntries(row);
+  const hasContent = responsibilities.length || computerSkills.length || typingSpeedWpm !== undefined || training.length || achievements.length || row.otherResponsibility?.trim() || row.otherComputerSkill?.trim();
+  if (hasContent) {
+    profile.nonTechnicalProfile = {
+      responsibilities,
+      ...(row.otherResponsibility?.trim() ? { otherResponsibility: row.otherResponsibility.trim() } : {}),
+      computerSkills,
+      ...(row.otherComputerSkill?.trim() ? { otherComputerSkill: row.otherComputerSkill.trim() } : {}),
+      ...(typingSpeedWpm !== undefined ? { typingSpeedWpm } : {}),
+      training,
+      achievements,
     };
-    const certifications = technicalCertifications(row, empId, dropped);
-    const training = trainingEntries(row);
-    const achievements = achievementEntries(row);
-    const hasContent = responsibilities.length || Object.values(skills).some((s) => s.length) || certifications.length || training.length || achievements.length || row.innovationsAndAutomation?.trim() || row.otherResponsibility?.trim();
-    if (hasContent) {
-      profile.technicalProfile = {
-        skills,
-        responsibilities,
-        ...(row.otherResponsibility?.trim() ? { otherResponsibility: row.otherResponsibility.trim() } : {}),
-        certifications,
-        training,
-        ...(row.innovationsAndAutomation?.trim() ? { innovationsAndAutomation: row.innovationsAndAutomation.trim() } : {}),
-        achievements,
-      };
-    }
-  } else {
-    const responsibilities = mapList(row.responsibilities, NON_TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
-    const computerSkills = mapList(row.computerSkills, COMPUTER_SKILL_MAP, empId, "Computer Skills", dropped);
-    const typingSpeedWpm = num(row.typingSpeedWpm);
-    const training = trainingEntries(row);
-    const achievements = achievementEntries(row);
-    const hasContent = responsibilities.length || computerSkills.length || typingSpeedWpm !== undefined || training.length || achievements.length || row.otherResponsibility?.trim() || row.otherComputerSkill?.trim();
-    if (hasContent) {
-      profile.nonTechnicalProfile = {
-        responsibilities,
-        ...(row.otherResponsibility?.trim() ? { otherResponsibility: row.otherResponsibility.trim() } : {}),
-        computerSkills,
-        ...(row.otherComputerSkill?.trim() ? { otherComputerSkill: row.otherComputerSkill.trim() } : {}),
-        ...(typingSpeedWpm !== undefined ? { typingSpeedWpm } : {}),
-        training,
-        achievements,
-      };
-    }
   }
 
   if (row.otherInformation?.trim()) profile.otherInformation = row.otherInformation.trim();
 
   const hasQualifications = profile.qualifications.length > 0;
-  const hasCategoryProfile = !!profile.technicalProfile || !!profile.nonTechnicalProfile;
-  return hasQualifications || hasCategoryProfile || profile.otherInformation ? profile : undefined;
+  return hasQualifications || profile.nonTechnicalProfile || profile.otherInformation ? profile : undefined;
 }
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "COLLEGE_OFFICE");
-    const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
+    const session = await requireCollegeMember("COLLEGE_OFFICE");
     const body = (await request.json()) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
@@ -370,13 +289,6 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    // Resolve HOD's department (same auto-fill rule as the single "Add Staff" form).
-    let hodDept = "";
-    if (session.role === "HOD") {
-      const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();
-      hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-    }
-
     const existingSnap = await db.collection("colleges").doc(collegeId).collection("supportingStaff")
       .select("employeeId").get();
     const existingIds = new Set(existingSnap.docs.map((d) => (d.data() as { employeeId: string }).employeeId));
@@ -389,18 +301,24 @@ export async function POST(request: Request) {
     const failed: { row: number; employeeId: string; error: string }[] = [];
     const warnings: { row: number; employeeId: string; warning: string }[] = [];
 
-    const batch = db.batch();
-    let batchCount = 0;
+    // Firebase Auth accounts created mid-loop for rows with a Password column -
+    // tracked separately (see src/app/api/college/faculty/import/route.ts for
+    // the same pattern) so they can be torn back down if the batch commit
+    // below fails, rather than left stranded and blocking any retry with the
+    // same email ("email already exists").
+    const createdAuthUids: string[] = [];
+
+    const batch = new ChunkedBatch(db);
 
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
       const rowNum = i + 2;
 
       const dropped = (empId: string, label: string, raw: string | undefined) => {
-        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored — invalid value ("${raw?.trim()}")` });
+        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored - invalid value ("${raw?.trim()}")` });
       };
 
-      if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "—", error: "Employee ID is required" }); continue; }
+      if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Joining date is required" }); continue; }
 
@@ -410,20 +328,10 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const categoryKey = (row.staffCategory ?? "").trim().toLowerCase();
-      const staffCategory: SupportingStaffCategory = CATEGORY_MAP[categoryKey] ?? requiredCategory ?? "TECHNICAL";
-      if (row.staffCategory?.trim() && !CATEGORY_MAP[categoryKey]) dropped(empId, "Staff Category", row.staffCategory);
-
-      // Each role can only import into its own category — Technical (HOD, per
-      // department) and Non-Technical (College Office, college-wide) are kept separate.
-      if (requiredCategory && staffCategory !== requiredCategory) {
-        failed.push({ row: rowNum, employeeId: empId, error: `${session.role === "HOD" ? "HOD" : "College Office"} can only import ${supportingStaffCategoryLabel(requiredCategory)} staff` });
-        continue;
-      }
+      const staffCategory: SupportingStaffCategory = "NON_TECHNICAL";
 
       const designationKey = (row.designation ?? "").trim().toLowerCase();
-      const designationMap = staffCategory === "TECHNICAL" ? TECHNICAL_DESIGNATION_MAP : NON_TECHNICAL_DESIGNATION_MAP;
-      const designation: SupportingStaffDesignation = designationMap[designationKey] ?? "OTHER";
+      const designation: SupportingStaffDesignation = NON_TECHNICAL_DESIGNATION_MAP[designationKey] ?? "OTHER";
       if (designation === "OTHER" && designationKey && designationKey !== "other" && !row.otherDesignationTitle?.trim()) {
         dropped(empId, "Designation", row.designation);
       }
@@ -435,7 +343,7 @@ export async function POST(request: Request) {
       const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
 
       const joiningDate = parseDate(row.joiningDate);
-      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date — use YYYY-MM-DD" }); continue; }
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date - use YYYY-MM-DD" }); continue; }
       const dateOfBirth = parseDate(row.dateOfBirth);
       if (row.dateOfBirth?.trim() && !dateOfBirth) dropped(empId, "Date of birth", row.dateOfBirth);
       const ratificationDate = parseDate(row.ratificationDate);
@@ -455,15 +363,38 @@ export async function POST(request: Request) {
           department = resolved;
         } else {
           dropped(empId, "Department", department);
-          department = session.role === "HOD" ? hodDept : "";
+          department = "";
         }
-      } else {
-        department = session.role === "HOD" ? hodDept : "";
+      }
+
+      // Optional login creation - a CSV row with a Password fills in this
+      // staff member's login account right here during import, mirroring the
+      // faculty import's behavior (src/app/api/college/faculty/import/route.ts).
+      let userUid: string | undefined;
+      const passwordRaw = row.password?.trim();
+      const loginEmail = row.collegeEmail?.trim().toLowerCase() || row.email?.trim().toLowerCase();
+      if (passwordRaw) {
+        if (!loginEmail) {
+          warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - a Personal Email or College Email is required to create a login (staff record was still created)" });
+        } else if (passwordRaw.length < 8) {
+          warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - must be at least 8 characters (staff record was still created without a login)" });
+        } else {
+          try {
+            userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
+            createdAuthUids.push(userUid);
+          } catch (err) {
+            const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
+              ? "an account with this email already exists"
+              : err instanceof Error ? err.message : "unknown error";
+            warnings.push({ row: rowNum, employeeId: empId, warning: `Login not created - ${message} (staff record was still created)` });
+          }
+        }
       }
 
       const docRef = db.collection("colleges").doc(collegeId).collection("supportingStaff").doc();
 
       const payload: Record<string, unknown> = {
+        userUid,
         collegeId,
         department: department || undefined,
         employeeId: empId,
@@ -501,7 +432,7 @@ export async function POST(request: Request) {
         temporaryAddress: row.temporaryAddress?.trim() || undefined,
         permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
         permanentAddress: row.permanentAddress?.trim() || undefined,
-        supportingStaffProfile: buildSupportingStaffProfile(row, staffCategory, empId, dropped),
+        supportingStaffProfile: buildSupportingStaffProfile(row, empId, dropped),
         createdAt: now,
         updatedAt: now,
       };
@@ -511,14 +442,49 @@ export async function POST(request: Request) {
       }
 
       batch.set(docRef, payload);
+
+      if (userUid) {
+        const userRef = db.collection("colleges").doc(collegeId).collection("users").doc(userUid);
+        batch.set(userRef, {
+          uid: userUid,
+          collegeId,
+          name: row.name.trim(),
+          email: loginEmail,
+          role: "COLLEGE_STAFF",
+          designation: designationLabel(designation),
+          ...(department ? { department } : {}),
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const sysUserRef = db.collection("systemUsers").doc(userUid);
+        batch.set(sysUserRef, {
+          uid: userUid,
+          role: "COLLEGE_STAFF",
+          collegeId,
+          email: loginEmail,
+          name: row.name.trim(),
+        });
+      }
+
       existingIds.add(empId);
       created.push(empId);
-      batchCount++;
-
-      if (batchCount === 499) break;
     }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (commitErr) {
+      if (createdAuthUids.length > 0) {
+        const { getAdminAuth } = await import("@/lib/firebase/admin");
+        const auth = await getAdminAuth();
+        await Promise.all(createdAuthUids.map((uid) =>
+          auth.deleteUser(uid).catch((cleanupErr) =>
+            console.error(`[supporting-staff/import POST] Failed to roll back orphaned Auth user ${uid}:`, cleanupErr)
+          )
+        ));
+      }
+      throw commitErr;
+    }
 
     return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {

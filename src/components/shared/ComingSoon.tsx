@@ -10,7 +10,7 @@ interface Props {
 }
 
 // Placeholder for a page whose module isn't cleared for this production
-// launch yet — keeps the route resolving (no 404 for direct/bookmarked
+// launch yet - keeps the route resolving (no 404 for direct/bookmarked
 // links) while the real feature stays hidden from nav.
 export function ComingSoon({ icon: Icon, title, description, message = "This feature is coming soon" }: Props) {
   return (

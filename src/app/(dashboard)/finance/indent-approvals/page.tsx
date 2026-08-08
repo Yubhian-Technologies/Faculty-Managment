@@ -42,7 +42,7 @@ export default function FinanceIndentApprovalsPage() {
 
   // Actions mutate whichever college collegeFetch() currently targets
   // (selectedCollegeId), so only the "This College" scope is safe to act on
-  // inline — an aggregated Location/All list must stay read-only to avoid
+  // inline - an aggregated Location/All list must stay read-only to avoid
   // ever approving/rejecting an item against the wrong college.
   const actionable = scope === "COLLEGE";
 
@@ -147,7 +147,7 @@ export default function FinanceIndentApprovalsPage() {
         description={
           actionable
             ? "Review quotations sourced by Purchase Dept and disburse approved indents"
-            : "Read-only view across the selected scope — switch to a specific college to act on an indent"
+            : "Read-only view across the selected scope - switch to a specific college to act on an indent"
         }
       />
 

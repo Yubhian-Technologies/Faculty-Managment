@@ -78,10 +78,8 @@ export default function PrincipalStaffPage() {
     }
   }
 
-  // Group by role for a scannable layout — order roughly follows seniority/function.
+  // Group by role for a scannable layout - order roughly follows seniority/function.
   const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
-  // Must match the roles PRINCIPAL/VICE_PRINCIPAL can edit in /api/college/users/[uid] (loadTargetInScope).
-  const EDITABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"];
   const grouped = ROLE_ORDER
     .map((role) => ({ role, users: staff.filter((u) => u.role === role) }))
     .filter((g) => g.users.length > 0);
@@ -142,28 +140,24 @@ export default function PrincipalStaffPage() {
                             {g.role === "HOD" && (
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-1.5">
-                                  {u.department || "—"}
+                                  {u.department || "-"}
                                   {parentDeptName(u.department) && (
                                     <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName(u.department)}</Badge>
                                   )}
                                 </div>
                               </td>
                             )}
-                            {g.role === "COLLEGE_STAFF" && <td className="px-4 py-2.5">{u.designation || "—"}</td>}
+                            {g.role === "COLLEGE_STAFF" && <td className="px-4 py-2.5">{u.designation || "-"}</td>}
                             <td className="px-4 py-2.5">
                               <Badge variant={u.isActive === false ? "secondary" : "default"} className="text-xs">
                                 {u.isActive === false ? "Inactive" : "Active"}
                               </Badge>
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {EDITABLE_ROLES.includes(u.role) && (
-                                  <Button size="sm" variant="ghost" asChild>
-                                    <Link href={`/principal/staff/${u.uid}/edit`}>
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Link>
-                                  </Button>
-                                )}
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" asChild>
+                                  <Link href={`/principal/staff/${u.uid}/edit`}><Pencil className="h-3.5 w-3.5 mr-1" />Edit</Link>
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"

@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type {
   Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution,
   FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, PromotionRecord, AdminResponsibilityEntry,
@@ -24,9 +26,10 @@ const DESIGNATION_MAP: Record<string, Designation> = {
   "visiting faculty": "VISITING_FACULTY",
   "adjunct faculty": "ADJUNCT_FACULTY",
   "lab assistant": "LAB_ASSISTANT",
-  "technical": "TECHNICAL",
-  "non-technical": "NON_TECHNICAL",
-  "non technical": "NON_TECHNICAL",
+  "programmer": "PROGRAMMER",
+  "system administrator": "SYSTEM_ADMINISTRATOR",
+  "sysadmin": "SYSTEM_ADMINISTRATOR",
+  "network engineer": "NETWORK_ENGINEER",
   "other": "OTHER",
 };
 
@@ -107,6 +110,7 @@ type ImportRow = {
   employeeId: string;
   name: string;
   email: string;
+  password?: string;
   phone?: string;
   designation: string;
   qualification: string;
@@ -145,7 +149,7 @@ type ImportRow = {
   permanentSameAsTemporary?: string;
   permanentAddress?: string;
   bloodGroup?: string;
-  // Academic Profile (Modules 1-5) — flattened columns, all optional
+  // Academic Profile (Modules 1-5) - flattened columns, all optional
   [key: string]: string | undefined;
 };
 
@@ -155,16 +159,30 @@ function num(v: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+// Firestore rejects `undefined` inside array elements (unlike top-level
+// document fields, which the payload-building code strips manually below) -
+// so any repeating-group entry with an optional numeric/string field left
+// blank (e.g. an Admin Responsibility with no "To Year" because it's
+// ongoing) must have that field removed here, not just left `undefined`, or
+// batch.set() throws and fails the entire import.
+function omitUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const out = { ...obj };
+  for (const key of Object.keys(out)) {
+    if (out[key] === undefined) delete out[key];
+  }
+  return out;
+}
+
 // Accepts the template's YYYY-MM-DD format, and falls back to DD-MM-YYYY /
 // DD/MM/YYYY (what Excel re-saves a date cell as under an Indian locale, even
-// when the column was originally filled in as YYYY-MM-DD) — otherwise a
+// when the column was originally filled in as YYYY-MM-DD) - otherwise a
 // malformed string silently becomes a JS "Invalid Date" object that isn't
 // caught by any `undefined` check and throws when Firestore serializes it,
 // failing the entire batch instead of just this row.
 //
 // The final generic-parse fallback is dangerously lenient: V8 happily accepts
 // e.g. a typo'd 5-digit-year "20110-04-15" as a *valid* Date (year 20110)
-// rather than rejecting it, since it's not NaN — but that's far outside
+// rather than rejecting it, since it's not NaN - but that's far outside
 // Firestore Timestamp's max (year 9999), and blows up batch.commit() for the
 // whole import. sane() rejects anything outside a plausible human-date range.
 function sane(d: Date): Date | undefined {
@@ -238,7 +256,7 @@ function promotions(row: ImportRow): PromotionRecord[] {
 
 function adminResponsibilities(row: ImportRow): AdminResponsibilityEntry[] {
   return [1, 2, 3]
-    .map((i) => ({
+    .map((i) => omitUndefined({
       category: ADMIN_RESPONSIBILITY_CATEGORY_MAP[(row[`adminResp${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
       description: row[`adminResp${i}_description`]?.trim() ?? "",
       fromYear: num(row[`adminResp${i}_fromYear`]),
@@ -249,7 +267,7 @@ function adminResponsibilities(row: ImportRow): AdminResponsibilityEntry[] {
 
 function trainingEntries(row: ImportRow): TrainingEntry[] {
   return [1, 2, 3]
-    .map((i) => ({
+    .map((i) => omitUndefined({
       type: TRAINING_TYPE_MAP[(row[`training${i}_type`] ?? "").trim().toLowerCase()] ?? "OTHER",
       title: row[`training${i}_title`]?.trim() ?? "",
       organizer: row[`training${i}_organizer`]?.trim() ?? "",
@@ -264,12 +282,12 @@ function professionalMemberships(row: ImportRow): ProfessionalMembership[] {
     .map((i) => {
       const bodyRaw = row[`membership${i}_body`]?.trim();
       const body = PROFESSIONAL_BODY_MAP[(bodyRaw ?? "").toLowerCase()];
-      return {
+      return omitUndefined({
         body: body ?? "OTHER",
         ...(!body && bodyRaw ? { otherName: bodyRaw } : row[`membership${i}_otherName`]?.trim() ? { otherName: row[`membership${i}_otherName`]!.trim() } : {}),
         membershipId: row[`membership${i}_membershipId`]?.trim() || undefined,
         sinceYear: num(row[`membership${i}_sinceYear`]),
-      };
+      });
     })
     .filter((m) => m.membershipId || m.sinceYear !== undefined || m.otherName);
 }
@@ -402,21 +420,21 @@ export async function POST(request: Request) {
     const collegeId = session.collegeId;
 
     // Resolve HOD's department. This template has no Department column at
-    // all (see HINTS: "Department is auto-assigned from your HOD profile") —
+    // all (see HINTS: "Department is auto-assigned from your HOD profile") -
     // there's no per-row value to fall back on, so a caller this can't be
     // resolved for (a non-HOD role reaching this route via the L0-L6 role
     // inheritance that lets Principal/VP browse HOD pages, or an HOD whose
     // own profile has no department set) must be rejected up front. Silently
     // falling back to "" previously created faculty with no department at
-    // all — invisible on every department's Faculty list (including their
+    // all - invisible on every department's Faculty list (including their
     // own), since every list there is scoped by an exact department match.
     if (session.role !== "HOD") {
-      return NextResponse.json({ error: "Only an HOD can bulk-import faculty — sign in as the HOD of the target department" }, { status: 403 });
+      return NextResponse.json({ error: "Only an HOD can bulk-import faculty - sign in as the HOD of the target department" }, { status: 403 });
     }
     const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();
     const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
     if (!hodDept) {
-      return NextResponse.json({ error: "Your account has no department set — ask your Principal to assign one before importing faculty" }, { status: 400 });
+      return NextResponse.json({ error: "Your account has no department set - ask your Principal to assign one before importing faculty" }, { status: 400 });
     }
 
     // Load existing employeeIds to detect duplicates
@@ -428,23 +446,29 @@ export async function POST(request: Request) {
     const created: string[] = [];
     const failed: { row: number; employeeId: string; error: string }[] = [];
     const warnings: { row: number; employeeId: string; warning: string }[] = [];
+    // Firebase Auth accounts created mid-loop for rows with a Password
+    // column - tracked separately because they're created one row at a time
+    // (outside Firestore's batch/transaction model), so if the batch commit
+    // below fails for any reason, these must be torn back down by hand or
+    // they're stranded: visible to nothing in the app, yet permanently
+    // blocking any retry with the same email ("email already exists").
+    const createdAuthUids: string[] = [];
 
-    const batch = db.batch();
-    let batchCount = 0;
+    const batch = new ChunkedBatch(db);
 
     for (let i = 0; i < body.records.length; i++) {
       const row = body.records[i];
       const rowNum = i + 2; // 1-indexed + header row
 
-      // A value was provided but couldn't be parsed — record it was silently
+      // A value was provided but couldn't be parsed - record it was silently
       // dropped instead of just proceeding, so a typo (e.g. a mistyped year)
       // doesn't disappear without a trace the way it used to.
       const dropped = (empId: string, label: string, raw: string | undefined) => {
-        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored — invalid value ("${raw?.trim()}")` });
+        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored - invalid value ("${raw?.trim()}")` });
       };
 
       // Required field validation
-      if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "—", error: "Employee ID is required" }); continue; }
+      if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name is required" }); continue; }
       if (!row.email?.trim() || !row.email.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid email is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Joining date is required" }); continue; }
@@ -469,7 +493,7 @@ export async function POST(request: Request) {
 
       // Parse dates
       const joiningDate = parseDate(row.joiningDate);
-      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date — use YYYY-MM-DD" }); continue; }
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date - use YYYY-MM-DD" }); continue; }
       const dateOfBirth = parseDate(row.dateOfBirth);
       if (row.dateOfBirth?.trim() && !dateOfBirth) dropped(empId, "Date of birth", row.dateOfBirth);
       const ratificationDate = parseDate(row.ratificationDate);
@@ -486,9 +510,35 @@ export async function POST(request: Request) {
         return n;
       };
 
+      // Optional login creation - a CSV row with a Password fills in the
+      // faculty member's login account (role: Panel Member) right here during
+      // import, so there's no separate "Set Login" step needed afterward for
+      // rows that came in this way. Rows left blank still fall back to the
+      // per-faculty "Set Login" button on the Faculty list (its userUid check
+      // there is what keeps that button hidden once this has run).
+      let userUid: string | undefined;
+      const passwordRaw = row.password?.trim();
+      const loginEmail = row.collegeEmail?.trim().toLowerCase() || row.email.trim().toLowerCase();
+      if (passwordRaw) {
+        if (passwordRaw.length < 8) {
+          warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - must be at least 8 characters (faculty record was still created without a login)" });
+        } else {
+          try {
+            userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
+            createdAuthUids.push(userUid);
+          } catch (err) {
+            const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
+              ? "an account with this email already exists"
+              : err instanceof Error ? err.message : "unknown error";
+            warnings.push({ row: rowNum, employeeId: empId, warning: `Login not created - ${message} (faculty record was still created)` });
+          }
+        }
+      }
+
       const docRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
 
       const payload: Record<string, unknown> = {
+        userUid,
         collegeId,
         department: hodDept,
         employeeId: empId,
@@ -547,15 +597,53 @@ export async function POST(request: Request) {
       }
 
       batch.set(docRef, payload);
+
+      if (userUid) {
+        const userRef = db.collection("colleges").doc(collegeId).collection("users").doc(userUid);
+        batch.set(userRef, {
+          uid: userUid,
+          collegeId,
+          name: row.name.trim(),
+          email: loginEmail,
+          role: "PANEL_MEMBER",
+          department: hodDept,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const sysUserRef = db.collection("systemUsers").doc(userUid);
+        batch.set(sysUserRef, {
+          uid: userUid,
+          role: "PANEL_MEMBER",
+          collegeId,
+          email: loginEmail,
+          name: row.name.trim(),
+        });
+      }
+
       existingIds.add(empId); // prevent duplicates within the same batch
       created.push(empId);
-      batchCount++;
-
-      // Firestore batch limit is 500 writes
-      if (batchCount === 499) break;
     }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (commitErr) {
+      // Firestore rejected the whole batch - every Auth account created for
+      // a row above is now stranded (nothing in Firestore references it), so
+      // tear them back down before surfacing the error, or every retry with
+      // the same email(s) fails with "already exists" for accounts the user
+      // can't see or manage anywhere in the app.
+      if (createdAuthUids.length > 0) {
+        const { getAdminAuth } = await import("@/lib/firebase/admin");
+        const auth = await getAdminAuth();
+        await Promise.all(createdAuthUids.map((uid) =>
+          auth.deleteUser(uid).catch((cleanupErr) =>
+            console.error(`[faculty/import POST] Failed to roll back orphaned Auth user ${uid}:`, cleanupErr)
+          )
+        ));
+      }
+      throw commitErr;
+    }
 
     return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });
   } catch (err) {

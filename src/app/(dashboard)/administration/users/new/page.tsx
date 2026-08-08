@@ -141,7 +141,7 @@ export default function NewLocationUserPage() {
                         <SelectItem key={r.value} value={r.value} disabled={isFilled}>
                           <span className={isFilled ? "text-muted-foreground" : ""}>
                             {r.label}
-                            {isFilled && ` — assigned to ${filledSingletons[r.value]}`}
+                            {isFilled && ` - assigned to ${filledSingletons[r.value]}`}
                           </span>
                         </SelectItem>
                       );
@@ -172,7 +172,7 @@ export default function NewLocationUserPage() {
                       return (
                         <SelectItem key={d.id} value={d.id} disabled={hasDeptHead}>
                           <span className={hasDeptHead ? "text-muted-foreground" : ""}>
-                            {d.name}{hasDeptHead && " — head assigned"}
+                            {d.name}{hasDeptHead && " - head assigned"}
                           </span>
                         </SelectItem>
                       );

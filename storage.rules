@@ -42,10 +42,23 @@ service firebase.storage {
         request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
-    // Candidate resumes — college-scoped, public upload for careers page
+    function isValidCertificate() {
+      return request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('(application/pdf|image/(jpeg|png|webp))');
+    }
+
+    // Candidate resumes - college-scoped, public upload for careers page
     match /colleges/{collegeId}/resumes/{filename} {
       allow read: if isStaff(collegeId);
       allow create: if isValidResume();
+      allow delete: if isStaff(collegeId);
+    }
+
+    // Candidate certificates — college-scoped, public upload via the
+    // candidate-form link sent with the interview call letter
+    match /colleges/{collegeId}/candidateCertificates/{candidateId}/{filename} {
+      allow read: if isStaff(collegeId);
+      allow create: if isValidCertificate();
       allow delete: if isStaff(collegeId);
     }
 
@@ -67,13 +80,13 @@ service firebase.storage {
       allow write: if isStaff(collegeId);
     }
 
-    // Finance receipts — isolated to the Finance role
+    // Finance receipts - isolated to the Finance role
     match /colleges/{collegeId}/financeReceipts/{filename} {
       allow read: if isFinance(collegeId);
       allow write: if isFinance(collegeId);
     }
 
-    // Purchase Dept receipts/bills for completed indents — Finance reviews these too
+    // Purchase Dept receipts/bills for completed indents - Finance reviews these too
     match /colleges/{collegeId}/indentReceipts/{filename} {
       allow read: if isPurchaseDept(collegeId) || isFinance(collegeId);
       allow write: if isPurchaseDept(collegeId);

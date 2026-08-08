@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const db = getAdminDb();
 
     if (scope === "global") {
-      // System-wide users (e.g. MANAGEMENT) have no college/location scope — they live only in systemUsers.
+      // System-wide users (e.g. MANAGEMENT) have no college/location scope - they live only in systemUsers.
       const snap = await db.collection("systemUsers").where("role", "in", GLOBAL_ROLES).get();
       const users = snap.docs
         .map((d) => ({ uid: d.id, ...d.data() }))
@@ -38,9 +38,29 @@ export async function GET(request: Request) {
       .collection("users")
       .get();
 
-    const users = snap.docs
-      .map((d) => ({ uid: d.id, ...d.data() }))
-      .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
+    // PANEL_MEMBER (faculty) and COLLEGE_STAFF (supporting staff) login docs
+    // only ever store a thin subset (name/email/role/department/isActive) -
+    // their real details (designation, employeeId, phone, qualifications,
+    // joiningDate, ...) live on the linked facultyMembers/supportingStaff
+    // record (see src/app/api/college/faculty/[id]/login/route.ts and
+    // src/app/api/college/supporting-staff/route.ts). Merge that record in
+    // here so this list (and the "Download resume" button, which just sends
+    // the row as-is) has the full picture instead of only login-account fields.
+    const usersRaw = snap.docs.map((d) => ({ uid: d.id, ...d.data() })) as (Record<string, unknown> & { uid: string; role?: string })[];
+    const users = await Promise.all(
+      usersRaw.map(async (u) => {
+        let linkedCollection: string | null = null;
+        if (u.role === "PANEL_MEMBER") linkedCollection = "facultyMembers";
+        else if (u.role === "COLLEGE_STAFF") linkedCollection = "supportingStaff";
+        if (!linkedCollection) return u;
+
+        const linkedSnap = await db.collection("colleges").doc(collegeId).collection(linkedCollection)
+          .where("userUid", "==", u.uid).limit(1).get();
+        if (linkedSnap.empty) return u;
+        return { ...linkedSnap.docs[0].data(), ...u, recordId: linkedSnap.docs[0].id };
+      })
+    );
+    users.sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
     return NextResponse.json({ users });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
@@ -51,7 +71,7 @@ export async function GET(request: Request) {
   }
 }
 
-// Roles a Super Admin can create — the level L1–L3 set. Each role's write target
+// Roles a Super Admin can create - the level L1–L3 set. Each role's write target
 // (systemUsers / locationUsers / college users) is derived from ROLE_SCOPE, so the
 // single source of truth stays in core.ts. L4–L6 (HOD, Office, Faculty, Student) are
 // provisioned by Principals/HODs via their own routes, not here.
@@ -60,10 +80,10 @@ const SUPER_ADMIN_CREATABLE: UserRole[] = [
   "ADMINISTRATION", "ACCOUNTS",               // L2 · LOCATION
   "PRINCIPAL", "VICE_PRINCIPAL",              // L3 · COLLEGE
 ];
-// Global-scoped subset — used by the GET ?scope=global (System-Wide) listing.
+// Global-scoped subset - used by the GET ?scope=global (System-Wide) listing.
 const GLOBAL_ROLES: UserRole[] = SUPER_ADMIN_CREATABLE.filter((r) => ROLE_SCOPE[r] === "GLOBAL");
 
-// MANAGEMENT (L1) can appoint Administrators/Accounts to a location — the
+// MANAGEMENT (L1) can appoint Administrators/Accounts to a location - the
 // LOCATION-scoped slice of SUPER_ADMIN_CREATABLE.
 const MANAGEMENT_CREATABLE: UserRole[] = ["ADMINISTRATION", "ACCOUNTS"];
 
@@ -133,7 +153,7 @@ export async function POST(request: Request) {
     let uid: string;
 
     if (scope === "GLOBAL") {
-      // MANAGEMENT / FINANCE / PURCHASE_DEPT: no college/location scope — systemUsers only.
+      // MANAGEMENT / FINANCE / PURCHASE_DEPT: no college/location scope - systemUsers only.
       uid = await createFirebaseUser(email, password, name);
       await db.collection("systemUsers").doc(uid).set({
         uid, role, email, name, phone: phone ?? "", collegeId: "",

@@ -8,7 +8,7 @@ import type { College } from "@/types";
 export async function GET(request: Request) {
   try {
     // Super Admin sees all; Administration sees only their location's colleges;
-    // FINANCE/PURCHASE_DEPT (GLOBAL roles, no college of their own) also see all —
+    // FINANCE/PURCHASE_DEPT (GLOBAL roles, no college of their own) also see all -
     // this is how their CollegeSwitcher populates its options.
     const { verifySession } = await import("@/lib/auth/verifySession");
     const session = await verifySession();

@@ -51,20 +51,17 @@ export async function GET(request: Request) {
     }
 
     // ── Student strength ──────────────────────────────────────────────────────
-    // Sum studentCount across all sections owned by this department.
-    // HOD only creates sections for their own dept:
-    //   Basic Science → Year 1 sections
-    //   Core depts    → Year 2, 3, 4 sections
-    const sectionsSnap = await db
+    // Count actual enrolled students, not Section.studentCount — that field is
+    // a stale leftover (defaults to 0 at creation, nothing writes the real
+    // number back to it; see the on-the-fly recompute in sections/route.ts
+    // GET, which only surfaces it for display and never persists it).
+    const studentsSnap = await db
       .collection("colleges").doc(session.collegeId)
-      .collection("sections")
+      .collection("students")
       .where("department", "==", dept)
       .get();
 
-    const totalStudents = sectionsSnap.docs.reduce(
-      (sum, d) => sum + ((d.data() as { studentCount?: number }).studentCount ?? 0),
-      0
-    );
+    const totalStudents = studentsSnap.size;
 
     // ── Total faculty required (1:15) ─────────────────────────────────────────
     const totalRequired = requiredFacultyCount(totalStudents);
@@ -158,7 +155,7 @@ export async function GET(request: Request) {
       cadreRatio: "1:2:6",
       totalRequired,
       totalCurrent,
-      // Sum of per-cadre shortfalls, not (totalRequired - totalCurrent) — a
+      // Sum of per-cadre shortfalls, not (totalRequired - totalCurrent) - a
       // surplus in one cadre (e.g. Asst. Professors) cannot substitute for a
       // shortage in another (e.g. Associate Professor), per the cadre ratio rule.
       totalGap: cadre.reduce((sum, c) => sum + c.gap, 0),

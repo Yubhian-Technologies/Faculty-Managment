@@ -21,10 +21,12 @@ export type UserRole =
   | "LIBRARY"
   | "EXAM_CELL"
   | "PANEL_MEMBER"
+  | "WEBMASTER"
   | "ACCOUNTS"
   | "FINANCE"
   | "PURCHASE_DEPT"
-  | "STUDENT";
+  | "STUDENT"
+  | "CLASS_LEADER";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -42,10 +44,12 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
   PANEL_MEMBER: "Faculty",
+  WEBMASTER: "Webmaster",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
   PURCHASE_DEPT: "Purchase Department",
   STUDENT: "Student",
+  CLASS_LEADER: "Class Leader",
 };
 
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
@@ -64,10 +68,12 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
   PANEL_MEMBER: "/panel",
+  WEBMASTER: "/webmaster",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
   PURCHASE_DEPT: "/purchase",
   STUDENT: "/feedback",
+  CLASS_LEADER: "/class-leader",
 };
 
 // ─── Role Level & Scope hierarchy (L0–L6) ────────────────────────────────────
@@ -95,8 +101,10 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
+  WEBMASTER: 4,
   PANEL_MEMBER: 5,
   STUDENT: 6,
+  CLASS_LEADER: 6,
 };
 
 // Human-readable header for each level, used to group role pickers (Add User).
@@ -133,8 +141,10 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
+  WEBMASTER: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
   STUDENT: "COLLEGE",
+  CLASS_LEADER: "COLLEGE",
 };
 
 function scopeRank(scope: RoleScope): 0 | 1 | 2 {
@@ -214,6 +224,8 @@ export interface FMSUser {
   role: UserRole;
   department?: string;      // for HOD / LOCATION_DEPT_HEAD
   locationDeptId?: string;  // for LOCATION_DEPT_HEAD
+  sectionId?: string;       // for CLASS_LEADER - the one Section this login is bound to
+  sectionName?: string;     // for CLASS_LEADER - denormalized Section.name
   employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
@@ -404,6 +416,10 @@ export interface FacultyNorms {
     professor: string;
   };
   positionNorms: PositionNorm[];
+  // Years of service a "new joining" employee (leave profile: CL + OD only)
+  // must complete before converting into their vacation/non-vacation leave
+  // category - see src/lib/leave/categoryEngine.ts.
+  newJoiningYears: number;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -432,8 +448,9 @@ export type Designation =
   | "VISITING_FACULTY"
   | "ADJUNCT_FACULTY"
   | "LAB_ASSISTANT"
-  | "TECHNICAL"
-  | "NON_TECHNICAL"
+  | "PROGRAMMER"
+  | "SYSTEM_ADMINISTRATOR"
+  | "NETWORK_ENGINEER"
   | "OTHER";
 
 export const DESIGNATION_LABELS: Record<Designation, string> = {
@@ -444,16 +461,23 @@ export const DESIGNATION_LABELS: Record<Designation, string> = {
   VISITING_FACULTY: "Visiting Faculty",
   ADJUNCT_FACULTY: "Adjunct Faculty",
   LAB_ASSISTANT: "Lab Assistant",
-  TECHNICAL: "Technical",
-  NON_TECHNICAL: "Non-Technical",
+  PROGRAMMER: "Programmer",
+  SYSTEM_ADMINISTRATOR: "System Administrator",
+  NETWORK_ENGINEER: "Network Engineer",
   OTHER: "Other",
 };
 
-// Which Designation options the "Staff Type" picker (Teaching / Supporting) offers.
+// Which Designation options the Faculty "Add/Edit" designation picker offers,
+// split into two groups so the edit page can tell whether a record needs the
+// Academic Profile / Teaching Assignments treatment or the Technical Profile
+// treatment (see TechnicalProfile below) - Faculty covers both Teaching and
+// Technical staff under one role (PANEL_MEMBER).
 export const TEACHING_DESIGNATIONS: Designation[] = [
-  "PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY", "LAB_ASSISTANT",
+  "PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY",
 ];
-export const SUPPORTING_STAFF_DESIGNATIONS: Designation[] = ["TECHNICAL", "NON_TECHNICAL", "OTHER"];
+export const TECHNICAL_STAFF_DESIGNATIONS: Designation[] = [
+  "LAB_ASSISTANT", "PROGRAMMER", "SYSTEM_ADMINISTRATOR", "NETWORK_ENGINEER",
+];
 
 export type EmploymentType = "PERMANENT" | "CONTRACT" | "VISITING" | "PART_TIME";
 
@@ -543,7 +567,8 @@ export interface FacultyMember {
   inCampusExperience?: number; // years of on-campus experience
   industryExperience?: number; // years of industry experience
   researchExperience?: number; // years of research experience
-  academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile (Management dashboard / role-aware forms)
+  academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile - populated when designation is a TEACHING_DESIGNATIONS value
+  technicalProfile?: TechnicalProfile;    // populated when designation is a TECHNICAL_STAFF_DESIGNATIONS value - mutually exclusive with academicProfile
 
   joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
@@ -551,6 +576,61 @@ export interface FacultyMember {
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+// ─── Faculty Technical Profile (for TECHNICAL_STAFF_DESIGNATIONS designations) ──
+// Relocated from the old Supporting Staff "Technical" category (see AGENTS.md) -
+// Technical Staff (Lab Assistant/Programmer/System Administrator/Network
+// Engineer) are Faculty (PANEL_MEMBER) records now, distinguished from Teaching
+// designations by TECHNICAL_STAFF_DESIGNATIONS rather than a separate module.
+
+export interface TechnicalSkillsProfile {
+  programmingLanguages: string[];
+  operatingSystems: string[];
+  networking: string[];
+  databases: string[];
+  cloud: string[];
+  hardware: string[];
+  softwareTools: string[];
+}
+
+export type TechnicalResponsibility =
+  | "LAB_MAINTENANCE" | "EQUIPMENT_MAINTENANCE" | "SOFTWARE_INSTALLATION"
+  | "NETWORK_ADMINISTRATION" | "LAB_STOCK_MANAGEMENT" | "STUDENT_SUPPORT"
+  | "PRACTICAL_SESSION_ASSISTANCE" | "OTHER";
+export const TECHNICAL_RESPONSIBILITY_LABELS: Record<TechnicalResponsibility, string> = {
+  LAB_MAINTENANCE: "Lab Maintenance",
+  EQUIPMENT_MAINTENANCE: "Equipment Maintenance",
+  SOFTWARE_INSTALLATION: "Software Installation",
+  NETWORK_ADMINISTRATION: "Network Administration",
+  LAB_STOCK_MANAGEMENT: "Lab Stock Maintenance",
+  STUDENT_SUPPORT: "Student Support",
+  PRACTICAL_SESSION_ASSISTANCE: "Practical Sessions",
+  OTHER: "Other",
+};
+
+export type VendorCertification =
+  | "CISCO" | "MICROSOFT" | "AWS" | "REDHAT" | "ORACLE" | "GOOGLE" | "VMWARE" | "OTHER";
+export const VENDOR_CERTIFICATION_LABELS: Record<VendorCertification, string> = {
+  CISCO: "Cisco", MICROSOFT: "Microsoft", AWS: "AWS", REDHAT: "RedHat",
+  ORACLE: "Oracle", GOOGLE: "Google", VMWARE: "VMware", OTHER: "Other",
+};
+export interface VendorCertificationEntry {
+  vendor: VendorCertification;
+  otherVendorName?: string; // when vendor === "OTHER"
+  certificationName: string;
+  year?: number;
+  certificateUrl?: string;
+}
+
+export interface TechnicalProfile {
+  skills: TechnicalSkillsProfile;
+  responsibilities: TechnicalResponsibility[];
+  otherResponsibility?: string;
+  certifications: VendorCertificationEntry[];
+  training: TrainingEntry[];
+  innovationsAndAutomation?: string;
+  achievements: AwardEntry[];
 }
 
 // ─── Faculty Academic Profile (Management dashboard / role-aware profile forms) ──
@@ -832,6 +912,8 @@ export interface Section {
   batch: string;             // admission batch e.g. "2023-2027"
   facultyInchargeUid?: string;
   facultyInchargeName?: string;
+  classLeaderUid?: string;
+  classLeaderName?: string;
   studentCount: number;
   // Secondary — view-only access for one or more other departments' HODs,
   // e.g. a shared first-year section whose roster splits across several
@@ -913,11 +995,13 @@ export type NotificationType =
   | "HIRING_APPROVED"
   | "HIRING_REJECTED"
   | "OFFER_LETTER_GENERATED"
+  | "CREDENTIAL_REQUESTED"
   | "COORDINATOR_ASSIGNED"
-  // Leave & Attendance
+  // Leave
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
+  // Permission & On-Duty
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"
   | "ON_DUTY_APPROVED"
@@ -1007,10 +1091,15 @@ export type AuditAction =
   | "HIRING_DECISION_MADE"
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
+  | "DOCUMENTS_VERIFIED"
+  | "JOINING_LETTER_UPLOADED"
+  | "CREDENTIAL_REQUESTED"
+  | "CREDENTIAL_REQUEST_FULFILLED"
   // User management
   | "USER_CREATED"
   | "USER_UPDATED"
   | "USER_DEACTIVATED"
+  | "USER_PASSWORD_RESET"
   | "PROFILE_PHOTO_UPDATED"
   // Faculty module
   | "FACULTY_CREATED"
@@ -1024,9 +1113,11 @@ export type AuditAction =
   // Leave module
   | "LEAVE_APPLIED"
   | "LEAVE_HOD_APPROVED"
+  | "LEAVE_HOD_FORWARDED"
   | "LEAVE_PRINCIPAL_APPROVED"
   | "LEAVE_REJECTED"
   | "LEAVE_CANCELLED"
+  // Permission & On-Duty
   | "PERMISSION_APPLIED"
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"

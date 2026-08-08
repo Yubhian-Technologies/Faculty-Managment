@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Plus, GraduationCap, UserCog, Upload, Eye, Trash2, Pencil } from "lucide-react";
+import { Users, Plus, GraduationCap, UserCog, Eye, Trash2, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -100,7 +100,7 @@ export default function OfficeSectionsPage() {
     ? sections.filter((s) => s.department === activeDepartment.name)
     : sections;
   // Year tabs are data-driven (which years actually have sections), not
-  // derived from a course's duration — there's no "the" course once the
+  // derived from a course's duration - there's no "the" course once the
   // course filter tier is gone from this list.
   const yearsAvailable = Array.from(new Set(sectionsInActiveDepartment.map((s) => s.year))).sort((a, b) => a - b);
 
@@ -109,7 +109,7 @@ export default function OfficeSectionsPage() {
     return true;
   });
 
-  // Group by department, then by course + year within each department — kept
+  // Group by department, then by course + year within each department - kept
   // separate even when several departments share the same course, so a
   // shared first-year course doesn't clump every sub-department's sections
   // into one undifferentiated pile.
@@ -141,12 +141,14 @@ export default function OfficeSectionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Sections"
-        description="Class sections across every department — create sections and import student rosters"
+        description="Class sections across every department - create sections and manage student rosters"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" asChild>
+            {/* Import Students - temporarily hidden, not removed. Re-enable by
+                uncommenting this button. */}
+            {/* <Button variant="outline" asChild>
               <Link href="/college-office/students/import"><Upload className="h-4 w-4 mr-2" />Import Students</Link>
-            </Button>
+            </Button> */}
             <Button onClick={openCreate} disabled={courses.length === 0}>
               <Plus className="h-4 w-4 mr-2" />Add Section
             </Button>
@@ -210,7 +212,7 @@ export default function OfficeSectionsPage() {
         </div>
       )}
 
-      {/* Year filter tabs — data-driven from which years actually have sections */}
+      {/* Year filter tabs - data-driven from which years actually have sections */}
       {yearsAvailable.length > 0 && (
         <div className="flex gap-2 flex-wrap">
           {(["all", ...yearsAvailable] as const).map((y) => (

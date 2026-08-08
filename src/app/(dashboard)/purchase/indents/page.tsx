@@ -23,8 +23,8 @@ import {
 type OverviewIndent = IndentRequest & { collegeName: string; locationId: string; locationName: string };
 type ClearanceRow = FinancePurchaseClearance & { id: string; status: string; collegeName: string; locationId: string; locationName: string };
 
-// Purchase Dept reviews and acts on every stage of these requests here —
-// from initial quotation-sourcing through to purchase — instead of on a
+// Purchase Dept reviews and acts on every stage of these requests here -
+// from initial quotation-sourcing through to purchase - instead of on a
 // separate Purchase Requests page.
 const CLEARANCE_STATUS_STYLES: Record<string, string> = {
   PENDING_PURCHASE_REVIEW: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -94,7 +94,7 @@ export default function PurchaseIndentsPage() {
         description={
           hasScope
             ? "Indents raised by departments, grouped for sourcing quotations"
-            : "Org-wide — indents across every location and college, grouped by department"
+            : "Org-wide - indents across every location and college, grouped by department"
         }
       />
 

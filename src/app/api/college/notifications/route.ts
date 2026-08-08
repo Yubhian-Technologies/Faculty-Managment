@@ -7,8 +7,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 export async function GET(request: Request) {
   try {
     // requireCollegeContext (not requireCollegeMember) so GLOBAL roles like
-    // FINANCE/PURCHASE_DEPT/MANAGEMENT — whose collegeId comes from a query
-    // param, not the session — can fetch their own notifications too.
+    // FINANCE/PURCHASE_DEPT/MANAGEMENT - whose collegeId comes from a query
+    // param, not the session - can fetch their own notifications too.
     const session = await requireCollegeContext(
       request,
       "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE",

@@ -14,7 +14,7 @@ export interface StudentImportRow {
   guardianContact?: string;
   email?: string;
   // View-only department (e.g. a 1st-year's registered core branch while
-  // primarily enrolled under Basic Science) — only meaningfully populated by
+  // primarily enrolled under Basic Science) - only meaningfully populated by
   // the multi-department bulk import (students/import-excel); validated
   // there against real department names before reaching this helper.
   secondaryDepartment?: string;

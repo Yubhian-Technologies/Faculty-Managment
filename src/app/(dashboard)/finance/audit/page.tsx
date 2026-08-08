@@ -31,14 +31,14 @@ export default function FinanceAuditPage() {
       render: (row) => <Badge variant="secondary">{FINANCE_AUDIT_ACTION_LABELS[row.action] ?? row.action}</Badge>,
     },
     { key: "performedByName", header: "Performed By" },
-    { key: "targetId", header: "Target", hideOnMobile: true, render: (row) => row.targetId ?? "—" },
+    { key: "targetId", header: "Target", hideOnMobile: true, render: (row) => row.targetId ?? "-" },
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Audit & Compliance"
-        description="Financial audit trail — every budget, approval, payment, and clearance action"
+        description="Financial audit trail - every budget, approval, payment, and clearance action"
       />
 
       <DataTable

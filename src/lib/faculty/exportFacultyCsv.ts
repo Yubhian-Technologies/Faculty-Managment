@@ -1,4 +1,4 @@
-// Full-detail faculty CSV export — flattens a FacultyMember (+ academicProfile)
+// Full-detail faculty CSV export - flattens a FacultyMember (+ academicProfile)
 // into the same column set the bulk-import template accepts (src/lib/faculty/csvColumns.ts),
 // so import and export stay round-trippable for every field except the
 // relational "Current Teaching" summary (informational only, not re-importable).

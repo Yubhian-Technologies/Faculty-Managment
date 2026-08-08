@@ -83,7 +83,7 @@ export default function RejectOfferPage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Reject Offer Letter" description={offer ? `${offer.candidateName} — ${offer.department}` : undefined} />
+      <PageHeader title="Reject Offer Letter" description={offer ? `${offer.candidateName} - ${offer.department}` : undefined} />
 
       <Card>
         <CardHeader>

@@ -3,73 +3,88 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type {
-  LeaveTypeCodeV2,
-  EmployeeLeaveProfile,
-  LeaveTypeFull,
-  LeaveBalanceV2,
-} from "@/types/leave";
-import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
-import { countLeaveDays } from "@/lib/leave/dayCounter";
-import { runRuleEngine, buildValidationContext } from "@/lib/leave/ruleEngine";
-import {
-  PROFILES_COL,
-  REQUESTS_COL,
-  LEAVE_COL,
-  balanceDocId,
-} from "@/lib/leave/balanceEngine";
+import { canAccessLeaveProfile } from "@/lib/leave/access";
+import { getOrCreateProfile } from "@/lib/leave/profile";
+import { resolveEmployeeIdentity } from "@/lib/leave/identity";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
+import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
+import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
+import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
+import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 
-// ─── GET — list leave requests for current user ───────────────────────────────
+// Sorts newest-first in memory instead of chaining .orderBy() onto a
+// .where() on a different field - that combination needs a Firestore
+// composite index (see resolveUserDepartment's comment in
+// lib/budget/departmentScope.ts for the same concern elsewhere).
+function sortByCreatedAtDesc(requests: LeaveRequest[]): LeaveRequest[] {
+  return [...requests].sort((a, b) => {
+    const at = (a.createdAt as unknown as { toMillis?(): number })?.toMillis?.() ?? 0;
+    const bt = (b.createdAt as unknown as { toMillis?(): number })?.toMillis?.() ?? 0;
+    return bt - at;
+  });
+}
+
+// Attaches each requester's current effective category (New Joining /
+// Vacation / Non-Vacation) - not stored on the request itself, computed the
+// same way the Leave Profiles roster and Leave History register do - so the
+// approvals queue can offer the same three-way tab split.
+async function attachCategory(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  requests: LeaveRequest[]
+): Promise<LeaveRequest[]> {
+  const settings = await loadCollegeSettings(db, collegeId);
+  return Promise.all(
+    requests.map(async (r) => {
+      const profile = await getOrCreateProfile(db, collegeId, r.uid);
+      return { ...r, category: profile ? computeEffectiveCategory(profile, settings.newJoiningYears) : undefined };
+    })
+  );
+}
 
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "SUPER_ADMIN"
+      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF"
     );
-
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get("status");
-    const dept = searchParams.get("dept");
-
+    const url = new URL(request.url);
     const db = getAdminDb();
-    const col = REQUESTS_COL(session.collegeId, db);
 
-    let snap;
-    if (session.role === "HOD" && dept === "true") {
-      // HOD sees their dept's pending requests
-      const userSnap = await db
-        .collection("colleges").doc(session.collegeId)
-        .collection("users").doc(session.uid).get();
-      const hodDept = (userSnap.data() as { department?: string })?.department ?? "";
-      snap = await col
-        .where("department", "==", hodDept)
-        .where("status", "==", "PENDING_HOD")
-        .get();
-    } else if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
-      snap = status
-        ? await col.where("status", "==", status).get()
-        : await col.get();
-    } else {
-      // Employee sees own requests
-      snap = status
-        ? await col.where("employeeId", "==", session.uid).where("status", "==", status).get()
-        : await col.where("employeeId", "==", session.uid).get();
+    // Approval queue: pending requests awaiting this caller's action.
+    if (url.searchParams.get("scope") === "approvals") {
+      if (session.role === "HOD") {
+        const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
+        const snap = await REQUESTS_COL(session.collegeId, db)
+          .where("status", "==", "PENDING_HOD")
+          .get();
+        const requests = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
+          .filter((r) => r.department === (dept || "__NO_DEPARTMENT__"));
+        return NextResponse.json({ requests: sortByCreatedAtDesc(await attachCategory(db, session.collegeId, requests)) });
+      }
+      if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
+        const snap = await REQUESTS_COL(session.collegeId, db)
+          .where("status", "==", "PENDING_PRINCIPAL")
+          .get();
+        const requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest);
+        return NextResponse.json({ requests: sortByCreatedAtDesc(await attachCategory(db, session.collegeId, requests)) });
+      }
+      return NextResponse.json({ requests: [] });
     }
 
-    type LeaveReqDoc = Record<string, unknown> & { id: string };
-    const requests: LeaveReqDoc[] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveReqDoc));
+    const targetUid = url.searchParams.get("uid") || session.uid;
+    if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, targetUid))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-    requests.sort((a, b) => {
-      const getMs = (val: unknown) => {
-        if (val && typeof (val as { toMillis?: () => number }).toMillis === "function") {
-          return (val as { toMillis: () => number }).toMillis();
-        }
-        return val ? new Date(val as string).getTime() : 0;
-      };
-      return getMs(b.createdAt) - getMs(a.createdAt);
-    });
+    const snap = await REQUESTS_COL(session.collegeId, db)
+      .where("uid", "==", targetUid)
+      .get();
 
+    const requests = sortByCreatedAtDesc(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest));
     return NextResponse.json({ requests });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -80,180 +95,110 @@ export async function GET(request: Request) {
   }
 }
 
-// ─── POST — submit a new leave request ───────────────────────────────────────
-
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember(
-      "PANEL_MEMBER", "HOD", "VICE_PRINCIPAL", "PRINCIPAL", "SUPER_ADMIN"
+      "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
+      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF"
     );
-
     const body = (await request.json()) as {
-      leaveTypeCode?: LeaveTypeCodeV2;
+      leaveTypeCode?: LeaveTypeCode;
       isOtherRequest?: boolean;
-      fromDate: string;
-      toDate: string;
+      fromDate?: string;
+      toDate?: string;
       isHalfDay?: boolean;
-      halfDaySession?: "MORNING" | "AFTERNOON";
-      reason: string;
-      leaveAddress: string;
-      contactNumber: string;
-      substituteArrangement?: string;
-      otherEmploymentAck?: boolean;
-      medicalCertificateUrl?: string;
+      reason?: string;
     };
 
-    const { leaveTypeCode, isOtherRequest, fromDate, toDate, reason, leaveAddress, contactNumber } = body;
-
-    if ((!leaveTypeCode && !isOtherRequest) || !fromDate || !toDate || !reason || !leaveAddress || !contactNumber) {
-      return NextResponse.json(
-        { error: "leaveTypeCode (or isOtherRequest), fromDate, toDate, reason, leaveAddress, contactNumber are required" },
-        { status: 400 }
-      );
+    if (!body.fromDate || !body.toDate || !body.reason?.trim()) {
+      return NextResponse.json({ error: "fromDate, toDate and reason are required" }, { status: 400 });
+    }
+    if (!body.leaveTypeCode && !body.isOtherRequest) {
+      return NextResponse.json({ error: "leaveTypeCode or isOtherRequest is required" }, { status: 400 });
     }
 
     const db = getAdminDb();
+    const [profile, identity] = await Promise.all([
+      getOrCreateProfile(db, session.collegeId, session.uid),
+      resolveEmployeeIdentity(db, session.collegeId, session.uid),
+    ]);
+    if (!profile || !identity) {
+      return NextResponse.json({ error: "Employee record not found" }, { status: 404 });
+    }
 
-    // Load leave type config (from Firestore or seed fallback) — skipped for "Others" requests,
-    // where the HOD picks the actual type at approval time.
-    let leaveType: LeaveTypeFull | null = null;
-    if (!isOtherRequest) {
-      const ltSnap = await db.collection("leaveTypes").doc(leaveTypeCode as string).get();
-      leaveType = ltSnap.exists
-        ? ({ id: ltSnap.id, ...ltSnap.data() } as LeaveTypeFull)
-        : (LEAVE_TYPE_SEED.find((l) => l.code === leaveTypeCode) as LeaveTypeFull) ?? null;
+    const settings = await loadCollegeSettings(db, session.collegeId);
+    const effectiveCategory = computeEffectiveCategory(profile, settings.newJoiningYears);
 
-      if (!leaveType) {
-        return NextResponse.json({ error: "Unknown leave type" }, { status: 400 });
+    let leaveType = null;
+    if (body.leaveTypeCode) {
+      leaveType = LEAVE_TYPE_SEED.find((lt) => lt.code === body.leaveTypeCode && lt.isActive) ?? null;
+      if (!leaveType || !leaveType.rules.eligibleCategories.includes(effectiveCategory)) {
+        return NextResponse.json({ error: "This leave type isn't available for your leave profile" }, { status: 400 });
       }
     }
-
-    // Load employee profile
-    const profileSnap = await PROFILES_COL(session.collegeId, db).doc(session.uid).get();
-    if (!profileSnap.exists) {
-      return NextResponse.json(
-        { error: "Leave profile not set up. Please contact HR to initialize your leave profile." },
-        { status: 422 }
-      );
-    }
-    const profile = { id: profileSnap.id, ...profileSnap.data() } as EmployeeLeaveProfile;
-
-    const from = new Date(fromDate);
-    const to = new Date(toDate);
-
-    // Fetch holidays for the leave period from college's holiday calendar
-    const holidayDates = new Set<string>();
-    try {
-      const hSnap = await db
-        .collection("colleges").doc(session.collegeId)
-        .collection("holidays")
-        .get();
-      hSnap.docs.forEach((d) => {
-        const data = d.data() as { date?: { toDate?: () => Date } | string };
-        if (data.date) {
-          const dt = typeof data.date === "string"
-            ? new Date(data.date)
-            : data.date.toDate?.() ?? new Date();
-          const y = dt.getFullYear();
-          const m = String(dt.getMonth() + 1).padStart(2, "0");
-          const day = String(dt.getDate()).padStart(2, "0");
-          holidayDates.add(`${y}-${m}-${day}`);
-        }
-      });
-    } catch { /* non-fatal — proceed without holidays */ }
-
-    const computedDays = body.isHalfDay
-      ? 0.5
-      : countLeaveDays(from, to, {
-          excludeHolidaysAndSundays: leaveType?.rules.excludeHolidaysAndSundays ?? true,
-          holidayDates,
-        });
-
-    if (computedDays <= 0) {
-      return NextResponse.json(
-        { error: "Leave period results in zero working days (all days are holidays/Sundays)." },
-        { status: 400 }
-      );
+    if (body.isHalfDay && !(body.leaveTypeCode && HALF_DAY_ELIGIBLE_TYPES.includes(body.leaveTypeCode))) {
+      return NextResponse.json({ error: "Half day is only available for Sick Leave, Special Casual Leave, and On Duty" }, { status: 400 });
     }
 
-    const year = from.getFullYear();
-    let balSnap: FirebaseFirestore.DocumentSnapshot | null = null;
-
-    if (leaveType) {
-      // Load current balance
-      balSnap = await LEAVE_COL(session.collegeId, db)
-        .doc(balanceDocId(session.uid, leaveTypeCode as LeaveTypeCodeV2, year))
-        .get();
-      const currentBalance = balSnap.exists
-        ? ({ id: balSnap.id, ...balSnap.data() } as LeaveBalanceV2)
-        : null;
-
-      // Run rule engine
-      const ctx = buildValidationContext({
-        fromDate: from,
-        toDate: to,
-        computedDays,
-        leaveType,
-        profile,
-        currentBalance,
-        holidayDates,
-      });
-      const { errors, canSubmit } = runRuleEngine(ctx);
-
-      if (!canSubmit) {
-        return NextResponse.json({ error: errors[0]?.message ?? "Validation failed", errors }, { status: 422 });
-      }
+    const fromDate = new Date(body.fromDate);
+    const toDate = new Date(body.toDate);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || toDate < fromDate) {
+      return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
     }
+    if (body.fromDate < todayISODate() || body.toDate < todayISODate()) {
+      return NextResponse.json({ error: "Leave cannot be applied for a date before today" }, { status: 400 });
+    }
+    const totalDays = countLeaveDays(fromDate, toDate, body.isHalfDay);
 
-    // Look up employee name + department
-    const userSnap = await db
-      .collection("colleges").doc(session.collegeId)
-      .collection("users").doc(session.uid).get();
-    const userData = userSnap.data() as { name?: string; department?: string } | undefined;
+    // Insufficient balance never blocks submission - days beyond what's
+    // remaining are accepted and split into Loss of Pay at approval time
+    // (see splitLeaveDays in applications/[id]/route.ts). The Apply form
+    // warns the requester about this before they submit, but doesn't block it.
 
     const now = new Date();
+    // Faculty (PANEL_MEMBER - covers both Teaching and Technical designations)
+    // always report to their department's HOD. Supporting Staff (COLLEGE_STAFF,
+    // Non-Technical only) report to an HOD only if assigned to a department;
+    // label-only COLLEGE_STAFF logins (Dean/IQAC/T&P, Librarian, etc.) have no
+    // department and no HOD above them - those correctly skip straight to
+    // PENDING_PRINCIPAL, same as HOD/Principal/office-leadership roles applying
+    // for their own leave.
+    const reportsToHod = session.role === "PANEL_MEMBER" || (session.role === "COLLEGE_STAFF" && !!identity.department);
+    const initialStatus = reportsToHod ? "PENDING_HOD" : "PENDING_PRINCIPAL";
 
-    const ref = await REQUESTS_COL(session.collegeId, db).add({
+    const newRequest: Omit<LeaveRequest, "id"> = {
       collegeId: session.collegeId,
-      employeeId: session.uid,
-      employeeName: userData?.name ?? "Unknown",
-      department: userData?.department ?? profile.department ?? "",
-      ...(leaveTypeCode ? { leaveTypeCode } : {}),
-      isOtherRequest: !!isOtherRequest,
-      fromDate: from,
-      toDate: to,
-      computedDays,
-      isHalfDay: body.isHalfDay ?? false,
-      ...(body.halfDaySession ? { halfDaySession: body.halfDaySession } : {}),
-      reason,
-      leaveAddress,
-      contactNumber,
-      ...(body.substituteArrangement ? { substituteArrangement: body.substituteArrangement } : {}),
-      otherEmploymentAck: body.otherEmploymentAck ?? false,
-      ...(body.medicalCertificateUrl ? { medicalCertificateUrl: body.medicalCertificateUrl } : {}),
-      applicantRole: session.role,
-      // "Others" requests go to the Principal first for a general review;
-      // the HOD only sees them afterwards to pick the actual leave type.
-      // Everything else goes to the HOD first, as usual.
-      status: isOtherRequest ? "PENDING_RATIFICATION" : "PENDING_HOD",
-      currentApproverRole: isOtherRequest ? "PRINCIPAL" : "HOD",
-      appliedOn: now,
-      createdAt: now,
-      updatedAt: now,
+      uid: session.uid,
+      employeeName: identity.name,
+      ...(identity.department ? { department: identity.department } : {}),
+      ...(body.leaveTypeCode ? { leaveTypeCode: body.leaveTypeCode } : {}),
+      isOtherRequest: body.isOtherRequest || false,
+      fromDate: fromDate as unknown as LeaveRequest["fromDate"],
+      toDate: toDate as unknown as LeaveRequest["toDate"],
+      totalDays,
+      isHalfDay: body.isHalfDay || false,
+      reason: body.reason.trim(),
+      status: initialStatus,
+      createdAt: now as unknown as LeaveRequest["createdAt"],
+      updatedAt: now as unknown as LeaveRequest["updatedAt"],
+    };
+
+    const ref = await REQUESTS_COL(session.collegeId, db).add(newRequest);
+
+    // Balance is only committed on final approval (see [id]/route.ts) - a
+    // pending/unapproved request never reduces the visible remaining count.
+
+    await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+      collegeId: session.collegeId,
+      action: "LEAVE_APPLIED",
+      performedBy: session.uid,
+      performedByName: identity.name,
+      targetId: ref.id,
+      details: { leaveTypeCode: body.leaveTypeCode ?? "OTHER", totalDays },
+      timestamp: now,
     });
 
-    // Reserve pending days in balance (if balance exists) — not applicable for
-    // "Others" requests, which reserve balance once the HOD assigns a type.
-    if (balSnap?.exists) {
-      const balRef = LEAVE_COL(session.collegeId, db).doc(balanceDocId(session.uid, leaveTypeCode as LeaveTypeCodeV2, year));
-      const balData = balSnap.data() ?? {};
-      await balRef.update({
-        pending: (balData.pending ?? 0) + computedDays,
-        updatedAt: now,
-      });
-    }
-
-    return NextResponse.json({ id: ref.id, computedDays }, { status: 201 });
+    return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

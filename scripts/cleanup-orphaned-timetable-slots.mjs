@@ -11,7 +11,7 @@
  * doc, and deletes the ones that don't.
  *
  * Usage:
- *   node scripts/cleanup-orphaned-timetable-slots.mjs           # dry run — lists what would be deleted
+ *   node scripts/cleanup-orphaned-timetable-slots.mjs           # dry run - lists what would be deleted
  *   node scripts/cleanup-orphaned-timetable-slots.mjs --apply   # actually deletes
  */
 

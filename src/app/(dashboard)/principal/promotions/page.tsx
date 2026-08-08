@@ -12,12 +12,12 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { parseExcelFile, parseCSV, matchHeaders, readFileAsText } from "@/lib/utils/csv";
+import { parseExcelFile, parseCSV, matchHeaders, getUnmatchedHeaders, readFileAsText } from "@/lib/utils/csv";
 import type { AcademicYear, Section, StudentRecord } from "@/types";
 
 const GRADUATE = "GRADUATE" as const;
 
-// Allotment-file columns — a counseling/branch-allotment export can drive the
+// Allotment-file columns - a counseling/branch-allotment export can drive the
 // same per-student target selection the manual table below sets by hand.
 const ALLOTMENT_COLUMNS = [
   { key: "rollNumber", label: "Roll Number", required: true, aliases: ["Roll No", "Roll No.", "Roll Num"] },
@@ -106,7 +106,7 @@ export default function StudentPromotionsPage() {
   }, [sourceSectionId, isFinalYear]);
 
   // Auto-fill targets for students who pre-registered a core branch while
-  // sitting under a different (e.g. Basic Science) primary department —
+  // sitting under a different (e.g. Basic Science) primary department -
   // secondaryDepartment already names where they're headed, so there's no
   // need to make anyone pick it by hand or upload a file for these rows.
   // Only fills targets that are still empty, so it never overwrites a manual
@@ -124,7 +124,7 @@ export default function StudentPromotionsPage() {
       const matches = targetSections.filter(
         (t) => t.department.trim().toLowerCase() === s.secondaryDepartment!.trim().toLowerCase()
       );
-      // Only auto-fill when unambiguous — if the registered department has
+      // Only auto-fill when unambiguous - if the registered department has
       // multiple next-year sections, leave it for the manual dropdown or an
       // allotment file that names the specific section.
       if (matches.length === 1) {
@@ -158,7 +158,7 @@ export default function StudentPromotionsPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setAllotmentError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      setAllotmentError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -170,7 +170,12 @@ export default function StudentPromotionsPage() {
       const headers = parsed[0].map((h) => h.trim());
       const keyMap = matchHeaders(headers, ALLOTMENT_COLUMNS);
       if (Object.keys(keyMap).length < 2) {
-        setAllotmentError('Couldn\'t match the header row — make sure it has "Roll Number", "Department", and "Section" columns.');
+        setAllotmentError('Couldn\'t match the header row - make sure it has "Roll Number", "Department", and "Section" columns.');
+        return;
+      }
+      const unmatchedHeaders = getUnmatchedHeaders(headers, keyMap);
+      if (unmatchedHeaders.length > 0) {
+        setAllotmentError(`These column(s) don't match any template column, so nothing was imported: ${unmatchedHeaders.map((h) => `"${h}"`).join(", ")}. Rename them to match the template or remove them, then re-upload.`);
         return;
       }
 
@@ -208,7 +213,7 @@ export default function StudentPromotionsPage() {
         if (!target) {
           unmatched.push({
             rollNumber: roll,
-            reason: `No "${row.department || "?"} — Section ${row.section || "?"}" section found for ${nextYear != null ? yearOrdinalLabel(nextYear) : "next year"}`,
+            reason: `No "${row.department || "?"} - Section ${row.section || "?"}" section found for ${nextYear != null ? yearOrdinalLabel(nextYear) : "next year"}`,
           });
           continue;
         }
@@ -233,7 +238,7 @@ export default function StudentPromotionsPage() {
 
   function targetLabel(sectionId: string): string {
     const sec = targetSections.find((s) => s.id === sectionId);
-    return sec ? `${sec.department} — Section ${sec.name}` : sectionId;
+    return sec ? `${sec.department} - Section ${sec.name}` : sectionId;
   }
 
   const regularCount = roster.filter((s) => s.status === "REGULAR").length;
@@ -274,7 +279,7 @@ export default function StudentPromotionsPage() {
 
       const failed = results.filter((r) => !r.ok);
       if (failed.length > 0) {
-        toast({ variant: "destructive", title: `${failed.length} group(s) failed — check roster and retry` });
+        toast({ variant: "destructive", title: `${failed.length} group(s) failed - check roster and retry` });
       } else {
         toast({ variant: "success", title: `${toPromote.length} student(s) updated` });
       }
@@ -294,7 +299,7 @@ export default function StudentPromotionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Student Promotion"
-        description="Move a cohort to the next year — bulk by section, with per-student override for students splitting into different departments"
+        description="Move a cohort to the next year - bulk by section, with per-student override for students splitting into different departments"
       />
 
       <Card>
@@ -310,7 +315,7 @@ export default function StudentPromotionsPage() {
                 .sort((a, b) => a.year - b.year || a.department.localeCompare(b.department) || a.name.localeCompare(b.name))
                 .map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {s.department || "(no department)"} — Section {s.name} · {yearOrdinalLabel(s.year)} ({s.batch})
+                    {s.department || "(no department)"} - Section {s.name} · {yearOrdinalLabel(s.year)} ({s.batch})
                   </SelectItem>
                 ))}
             </SelectContent>
@@ -325,7 +330,7 @@ export default function StudentPromotionsPage() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <ArrowRight className="h-4 w-4" />
                 {isFinalYear ? (
-                  <span>This is the final year offered — students will be marked <strong>Graduated</strong>.</span>
+                  <span>This is the final year offered - students will be marked <strong>Graduated</strong>.</span>
                 ) : (
                   <span>Default target for {nextYear != null ? yearOrdinalLabel(nextYear) : ""}:</span>
                 )}
@@ -340,7 +345,7 @@ export default function StudentPromotionsPage() {
                       <div className="px-3 py-2 text-sm text-muted-foreground">No sections exist yet for {nextYear != null ? yearOrdinalLabel(nextYear) : ""}</div>
                     ) : (
                       targetSections.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.department || "(no department)"} — Section {s.name}</SelectItem>
+                        <SelectItem key={s.id} value={s.id}>{s.department || "(no department)"} - Section {s.name}</SelectItem>
                       ))
                     )}
                   </SelectContent>
@@ -357,7 +362,7 @@ export default function StudentPromotionsPage() {
                     <p className="text-sm font-medium">Or upload an allotment file</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       A file with Roll Number, Department, and Section columns (e.g. a counseling/branch-allotment
-                      export) fills in the per-student targets below automatically — for cohorts splitting into
+                      export) fills in the per-student targets below automatically - for cohorts splitting into
                       several departments at once, like 1st year Basic Sciences students moving into their allotted branch.
                     </p>
                   </div>

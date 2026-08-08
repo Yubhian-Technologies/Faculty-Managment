@@ -47,7 +47,7 @@ export function MobileCard({
             {fields.map((field, i) => (
               <div key={i} className={cn("min-w-0", field.className)}>
                 <p className="text-xs text-muted-foreground">{field.label}</p>
-                <p className="text-sm font-medium truncate">{field.value ?? "—"}</p>
+                <p className="text-sm font-medium truncate">{field.value ?? "-"}</p>
               </div>
             ))}
           </div>

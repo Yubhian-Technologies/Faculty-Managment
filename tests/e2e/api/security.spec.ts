@@ -5,7 +5,7 @@ import { ApiClient } from "../support/apiClient";
 import { testUsers } from "../support/testUsers";
 import { regularBudgetRequestBody } from "../support/builders";
 
-test.describe("Cross-cutting — session & tenancy", () => {
+test.describe("Cross-cutting - session & tenancy", () => {
   test("SEC-02 an expired session cookie is treated as unauthenticated", async ({ request, baseURL }) => {
     const expiredPayload = {
       uid: testUsers.hod.uid,

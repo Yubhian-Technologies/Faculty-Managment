@@ -24,7 +24,7 @@ export function ProfilePhotoUpload({ name, photoUrl, className }: ProfilePhotoUp
   const busy = uploading || deleting;
 
   const handleFileSelect = (file: File) => {
-    // FileUpload only enforces size — MIME type still needs checking (drag & drop bypasses `accept`).
+    // FileUpload only enforces size - MIME type still needs checking (drag & drop bypasses `accept`).
     if (!ACCEPTED_TYPES.includes(file.type)) {
       toast({ variant: "destructive", title: "Only PNG or JPEG images are allowed" });
       return;

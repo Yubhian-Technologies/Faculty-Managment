@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { toCSV, parseCSV, downloadCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { COLUMNS, HINTS } from "@/lib/faculty/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
@@ -43,7 +43,7 @@ export default function FacultyImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -53,11 +53,11 @@ export default function FacultyImportPage() {
       if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
 
       const headers = parsed[0].map((h) => h.trim());
-      // Map header labels to column keys — tolerant of case, punctuation, spacing,
+      // Map header labels to column keys - tolerant of case, punctuation, spacing,
       // and common alternate wording (e.g. "DOJ" for "Joining Date").
       const keyMap = matchHeaders(headers, COLUMNS);
 
-      // Check header matching BEFORE counting data rows — if nothing in the
+      // Check header matching BEFORE counting data rows - if nothing in the
       // header row matched, every row maps to an empty object and would
       // otherwise surface as the misleading "no data rows" error instead of
       // pointing at the real problem (wrong/missing header row).
@@ -70,6 +70,16 @@ export default function FacultyImportPage() {
         setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
         return;
       }
+      // Every header must map to a known template column - a column that
+      // doesn't match is far more likely a typo/wrong wording than data the
+      // uploader intended to drop, so reject the whole file and say exactly
+      // which column(s) are the problem instead of silently importing
+      // without them.
+      const unmatched = getUnmatchedHeaders(headers, keyMap);
+      if (unmatched.length > 0) {
+        setParseError(`These column(s) don't match any template column, so nothing was imported: ${unmatched.map((h) => `"${h}"`).join(", ")}. Rename them to match the template (see the hints above) or remove them, then re-upload.`);
+        return;
+      }
 
       const dataRows = parsed.slice(1).map((cells) => {
         const row: ParsedRow = {};
@@ -79,7 +89,7 @@ export default function FacultyImportPage() {
         return row;
       }).filter((r) => Object.values(r).some((v) => v.trim())); // skip fully-blank rows
 
-      if (dataRows.length === 0) { setParseError("No data rows found after the header — check that your data starts on the row right after the header, with no blank rows in between."); return; }
+      if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }
       if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
 
       setRows(dataRows);
@@ -108,7 +118,7 @@ export default function FacultyImportPage() {
         setRows([]);
       }
     } catch {
-      toast({ variant: "destructive", title: "Network error — import failed" });
+      toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
     }
@@ -160,7 +170,7 @@ export default function FacultyImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported — headers matched loosely (e.g. "DOJ" for Joining Date)</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. "DOJ" for Joining Date)</p>
             </div>
           </button>
           {parseError && (
@@ -212,7 +222,9 @@ export default function FacultyImportPage() {
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
                         {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
-                            {row[c.key] || <span className="text-muted-foreground/40">—</span>}
+                            {row[c.key]
+                              ? (c.key === "password" ? "•".repeat(Math.min(row[c.key].length, 10)) : row[c.key])
+                              : <span className="text-muted-foreground/40">-</span>}
                           </td>
                         ))}
                       </tr>

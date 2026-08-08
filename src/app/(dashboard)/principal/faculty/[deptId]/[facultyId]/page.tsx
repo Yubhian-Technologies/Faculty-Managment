@@ -75,7 +75,7 @@ export default function PrincipalFacultyProfilePage() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div><p className="text-xs text-muted-foreground">Employee ID</p><p className="text-sm font-medium">{faculty.employeeId}</p></div>
               <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium">{faculty.email}</p></div>
-              <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{faculty.phone || "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{faculty.phone || "-"}</p></div>
               <div>
                 <p className="text-xs text-muted-foreground">Department</p>
                 <p className="text-sm font-medium flex items-center gap-1.5">
@@ -84,12 +84,12 @@ export default function PrincipalFacultyProfilePage() {
                 </p>
               </div>
               <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{DESIGNATION_LABELS[faculty.designation]}</p></div>
-              <div><p className="text-xs text-muted-foreground">{faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}</p><p className="text-sm font-medium">{faculty.joiningDate ? formatDate(faculty.joiningDate) : "—"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Qualification</p><p className="text-sm font-medium">{faculty.qualification || "—"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Specialization</p><p className="text-sm font-medium">{faculty.specialization || "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">{faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}</p><p className="text-sm font-medium">{faculty.joiningDate ? formatDate(faculty.joiningDate) : "-"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Qualification</p><p className="text-sm font-medium">{faculty.qualification || "-"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Specialization</p><p className="text-sm font-medium">{faculty.specialization || "-"}</p></div>
               <div><p className="text-xs text-muted-foreground">Experience (yrs)</p><p className="text-sm font-medium">{faculty.experienceYears}</p></div>
-              <div><p className="text-xs text-muted-foreground">APAAR Faculty ID</p><p className="text-sm font-medium">{faculty.apaarFacultyId || "—"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Date of Joining Department</p><p className="text-sm font-medium">{faculty.dateOfJoiningDepartment ? formatDate(faculty.dateOfJoiningDepartment) : "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">APAAR Faculty ID</p><p className="text-sm font-medium">{faculty.apaarFacultyId || "-"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Date of Joining Department</p><p className="text-sm font-medium">{faculty.dateOfJoiningDepartment ? formatDate(faculty.dateOfJoiningDepartment) : "-"}</p></div>
               <div><p className="text-xs text-muted-foreground">AICTE Eligible</p><p className="text-sm font-medium">{faculty.aicteEligible ? "Yes" : "No"}</p></div>
             </div>
           </SectionCard>

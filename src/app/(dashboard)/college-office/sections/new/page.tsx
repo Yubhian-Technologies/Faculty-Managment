@@ -20,7 +20,7 @@ function ordinalYear(year: number) {
 
 // Derives the admission batch (e.g. "2023-2027") from the college's current
 // academic session (e.g. "2025-26"), the section's year-of-study, and the
-// course's total duration — a Year-2 section in a 4-year course during the
+// course's total duration - a Year-2 section in a 4-year course during the
 // 2025-26 session was admitted in 2024 and passes out in 2028.
 function computeBatch(currentSessionLabel: string, durationYears: number, sectionYear: number): string {
   const startYear = parseInt(currentSessionLabel.slice(0, 4), 10);
@@ -39,6 +39,13 @@ type SectionForm = {
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
+
+type ClassLeaderForm = {
+  email: string;
+  password: string;
+};
+
+const EMPTY_CLASS_LEADER: ClassLeaderForm = { email: "", password: "" };
 
 export default function NewSectionOfficePage() {
   const router = useRouter();
@@ -60,6 +67,7 @@ export default function NewSectionOfficePage() {
     facultyInchargeUid: "",
     facultyInchargeName: "",
   });
+  const [classLeader, setClassLeader] = useState<ClassLeaderForm>(EMPTY_CLASS_LEADER);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -76,12 +84,12 @@ export default function NewSectionOfficePage() {
     fetch("/api/college/academic-sessions")
       .then((r) => r.json() as Promise<{ academicSessions: AcademicSession[] }>)
       .then((d) => setCurrentSession((d.academicSessions ?? []).find((s) => s.isCurrent) ?? null))
-      .catch(() => { /* non-critical — batch just won't auto-fill */ });
+      .catch(() => { /* non-critical - batch just won't auto-fill */ });
   }, []);
 
   // Pre-filling department from either a course link (e.g. "Add Section" from
   // a course's page) or a department-filtered link (e.g. "Add Section" from
-  // the Sections list with a department tab active) — a single effect so the
+  // the Sections list with a department tab active) - a single effect so the
   // two sources can never race and set `form.departmentId` to two different
   // values in the same tick. An explicit departmentId wins over one inferred
   // from a course, since it reflects the more specific filter the user was
@@ -150,7 +158,7 @@ export default function NewSectionOfficePage() {
   }
 
   // A sub-department (secondary department, e.g. "BS - Physics") never has
-  // courses of its own — it's a specialization within its parent's program —
+  // courses of its own - it's a specialization within its parent's program -
   // so fall back to the parent's courses too, otherwise the dropdown is
   // empty and a section can never be created for it.
   const coursesInDepartment = useMemo(() => {
@@ -181,8 +189,19 @@ export default function NewSectionOfficePage() {
     if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
     if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
     if (secondaryDepartmentOptions.length > 0 && !form.secondaryDepartment) {
-      toast({ variant: "destructive", title: "Secondary Department is required — pick which branch this section promotes into" });
+      toast({ variant: "destructive", title: "Secondary Department is required - pick which branch this section promotes into" });
       return;
+    }
+    const wantsClassLeader = classLeader.email.trim() || classLeader.password;
+    if (wantsClassLeader) {
+      if (!classLeader.email.trim() || !classLeader.password) {
+        toast({ variant: "destructive", title: "Fill in both Class Leader fields, or leave them both blank" });
+        return;
+      }
+      if (classLeader.password.length < 6) {
+        toast({ variant: "destructive", title: "Class Leader password must be at least 6 characters" });
+        return;
+      }
     }
 
     setSaving(true);
@@ -206,7 +225,28 @@ export default function NewSectionOfficePage() {
         toast({ variant: "destructive", title: json.error ?? "Failed to save" });
         return;
       }
-      toast({ variant: "success", title: "Section created" });
+      const { id: newSectionId } = await res.json() as { id: string };
+
+      if (wantsClassLeader) {
+        const clRes = await fetch("/api/college/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: classLeader.email.trim(),
+            password: classLeader.password,
+            role: "CLASS_LEADER",
+            sectionId: newSectionId,
+          }),
+        });
+        if (!clRes.ok) {
+          const clJson = await clRes.json() as { error?: string };
+          toast({ variant: "destructive", title: "Section created, but Class Leader login failed", description: clJson.error ?? "You can add it later from the section's Edit page." });
+          router.push("/college-office/sections");
+          return;
+        }
+      }
+
+      toast({ variant: "success", title: "Section created", description: wantsClassLeader ? "Class Leader login created too." : undefined });
       router.push("/college-office/sections");
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
@@ -252,12 +292,12 @@ export default function NewSectionOfficePage() {
                 >
                   <SelectTrigger><SelectValue placeholder="Select secondary department" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">— None —</SelectItem>
+                    <SelectItem value="none">- None -</SelectItem>
                     {secondaryDepartmentOptions.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Which branch this section&apos;s whole cohort promotes into next year — that branch&apos;s HOD gets
+                  Which branch this section&apos;s whole cohort promotes into next year - that branch&apos;s HOD gets
                   automatic view-only access to this section&apos;s students, roster, and assigned faculty.
                 </p>
               </div>
@@ -316,8 +356,8 @@ export default function NewSectionOfficePage() {
               />
               <p className="text-xs text-muted-foreground">
                 {currentSession
-                  ? `Admission year to passout year — auto-filled from the current academic session (${currentSession.label}); adjust if needed.`
-                  : "Admission year to passout year — set a current Academic Session to auto-fill this."}
+                  ? `Admission year to passout year - auto-filled from the current academic session (${currentSession.label}); adjust if needed.`
+                  : "Admission year to passout year - set a current Academic Session to auto-fill this."}
               </p>
             </div>
 
@@ -331,12 +371,43 @@ export default function NewSectionOfficePage() {
                   <SelectValue placeholder="Select faculty incharge" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">— Not assigned —</SelectItem>
+                  <SelectItem value="none">- Not assigned -</SelectItem>
                   {facultyList.map((f) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div key="class-leader" className="space-y-4 pt-4 border-t">
+              <div>
+                <Label className="text-sm font-semibold">Class Leader Login (optional)</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Create a login for this section&apos;s class leader now, or leave blank and add one later from Edit.
+                  Just an email and password - the login isn&apos;t tied to a specific student&apos;s name, since who holds
+                  the role can change per your college&apos;s rules.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  autoComplete="off"
+                  value={classLeader.email}
+                  onChange={(e) => setClassLeader((c) => ({ ...c, email: e.target.value }))}
+                  placeholder="classleader@college.edu"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Temporary Password</Label>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={classLeader.password}
+                  onChange={(e) => setClassLeader((c) => ({ ...c, password: e.target.value }))}
+                  placeholder="Min 6 characters"
+                />
+              </div>
             </div>
 
             <div key="actions" className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

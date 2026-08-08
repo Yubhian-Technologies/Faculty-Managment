@@ -69,7 +69,7 @@ export default function NewDeptVacancyPage() {
 
             <div className="space-y-2">
               <Label>Department</Label>
-              <Input value={department || "—"} disabled className="bg-muted text-muted-foreground" />
+              <Input value={department || "-"} disabled className="bg-muted text-muted-foreground" />
               <p className="text-xs text-muted-foreground">Vacancy requests are for your own department only.</p>
             </div>
 

@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +20,8 @@ import {
   Users,
   Star,
   Clock,
+  Mail,
+  PenLine,
 } from "lucide-react";
 import type { HiringBatch, Candidate } from "@/types";
 
@@ -32,17 +35,6 @@ type PanelFeedbackItem = {
   noticePeriod?: string;
   strengths?: string;
   weaknesses?: string;
-  comments?: string;
-};
-
-type HRFeedbackItem = {
-  id: string;
-  candidateId: string;
-  hrName: string;
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
-  ratings: { attitude: number; teamwork: number; adaptability: number; communication: number; overallFit: number };
-  salaryExpectation?: number;
-  noticePeriod?: string;
   comments?: string;
 };
 
@@ -76,8 +68,8 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
-  const [hrFeedback, setHRFeedback] = useState<HRFeedbackItem[]>([]);
   const [studentFeedback, setStudentFeedback] = useState<StudentFeedbackSummary[]>([]);
+  const [offerLetterCandidateIds, setOfferLetterCandidateIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
 
   // Per-candidate decision state
@@ -97,19 +89,20 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
       const cands = candidatesRes.candidates ?? [];
       setCandidates(cands);
 
-      const [pfRes, hrRes, sfRes] = await Promise.all([
+      const [pfRes, sfRes, olRes] = await Promise.all([
         fetch(`/api/college/panel-feedback?batchId=${id}`)
           .then((r) => r.json() as Promise<{ feedback: PanelFeedbackItem[] }>)
-          .then((d) => d.feedback ?? []),
-        fetch(`/api/college/hr-feedback?batchId=${id}`)
-          .then((r) => r.json() as Promise<{ feedback: HRFeedbackItem[] }>)
           .then((d) => d.feedback ?? []),
         fetch(`/api/college/student-feedback?batchId=${id}`)
           .then((r) => r.json() as Promise<{ feedback: { candidateId: string; ratings: Record<string, number> }[] }>)
           .then((d) => d.feedback ?? []),
+        fetch(`/api/college/offer-letters?batchId=${id}`)
+          .then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>)
+          .then((d) => d.letters ?? [])
+          .catch(() => []),
       ]);
       setPanelFeedback(pfRes);
-      setHRFeedback(hrRes);
+      setOfferLetterCandidateIds(new Set(olRes.map((l) => l.candidateId)));
 
       // Aggregate student feedback by candidate
       const summaryMap: Record<string, { count: number; sums: Record<string, number> }> = {};
@@ -162,8 +155,10 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
     setIsSaving(candidateId);
     try {
       const remark = remarks[candidateId] ?? "";
-      const stage = action === "APPROVED" ? "DOCUMENT_VERIFICATION" : undefined;
+      const stage = action === "APPROVED" ? "DECISION" : undefined;
 
+      // Negotiated salary, date of joining, and terms & conditions are captured
+      // earlier on /principal/negotiate/[id] — this step only records the decision.
       const res = await fetch(`/api/college/candidates/${candidateId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -178,7 +173,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
       toast({
         variant: "success",
         title: action === "APPROVED" ? "Candidate approved" : "Candidate rejected",
-        description: action === "APPROVED" ? "Moved to Document Verification." : "Candidate has been rejected.",
+        description: action === "APPROVED" ? "You can now send the offer letter." : "Candidate has been rejected.",
       });
       setConfirmFor(null);
 
@@ -231,7 +226,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
       <div className="space-y-4">
         {candidates.map((candidate) => {
           const pf = panelFeedback.filter((f) => f.candidateId === candidate.id);
-          const hr = hrFeedback.find((f) => f.candidateId === candidate.id);
           const sf = studentFeedback.find((f) => f.candidateId === candidate.id);
           const decision = decisions[candidate.id];
 
@@ -260,18 +254,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   <div>
                     <CardTitle className="text-base">{candidate.name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{candidate.email} · {candidate.phone}</p>
-                    {(() => {
-                      const pfSalary = pf.find((f) => f.salaryNegotiated != null);
-                      const salary = pfSalary?.salaryNegotiated ?? hr?.salaryExpectation;
-                      const notice = pfSalary?.noticePeriod || hr?.noticePeriod;
-                      if (!salary) return null;
-                      return (
-                        <p className="text-sm font-medium text-primary mt-1">
-                          Salary negotiated: ₹{salary.toLocaleString("en-IN")}/month
-                          {notice ? ` · Notice: ${notice}` : ""}
-                        </p>
-                      );
-                    })()}
                   </div>
                   {decision ? (
                     <Badge
@@ -294,7 +276,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
 
               <CardContent className="space-y-4">
                 {/* Panel feedback summary */}
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                       <Users className="h-3 w-3" />Panel Evaluation ({pf.length} member{pf.length !== 1 ? "s" : ""})
@@ -364,43 +346,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                       </div>
                     )}
                   </div>
-
-                  {/* HR feedback summary */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">HR Assessment</p>
-                    {!hr ? (
-                      <p className="text-sm text-muted-foreground">No HR assessment yet</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {(
-                          [
-                            ["attitude", "Attitude"],
-                            ["teamwork", "Teamwork"],
-                            ["adaptability", "Adaptability"],
-                            ["communication", "Communication"],
-                            ["overallFit", "Overall Fit"],
-                          ] as [keyof typeof hr.ratings, string][]
-                        ).map(([key, label]) => (
-                          <div key={key} className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">{label}</span>
-                            <ScoreDots value={hr.ratings[key]} />
-                          </div>
-                        ))}
-                        <div className="pt-1 border-t flex items-center gap-3">
-                          <span className={`text-xs font-medium ${
-                            hr.recommendation === "ACCEPT" ? "text-green-600"
-                            : hr.recommendation === "REJECT" ? "text-red-600"
-                            : "text-amber-600"
-                          }`}>
-                            HR: {hr.recommendation}
-                          </span>
-                          {hr.noticePeriod && (
-                            <span className="text-xs text-muted-foreground">Notice: {hr.noticePeriod}</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* Panel member comments */}
@@ -420,11 +365,22 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
 
                 {/* Decision area */}
                 {decision ? (
-                  <div className="pt-3 border-t text-sm text-muted-foreground">
-                    {decision.action === "APPROVED"
-                      ? "Candidate approved — moved to Document Verification."
-                      : "Candidate rejected."}
-                  </div>
+                  decision.action === "APPROVED" ? (
+                    <div className="pt-3 border-t flex items-center justify-between gap-3">
+                      {offerLetterCandidateIds.has(candidate.id) ? (
+                        <span className="text-sm text-green-600 font-medium flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4" />Offer letter sent
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5 shrink-0" />
+                          Candidate approved — awaiting the office to send the offer letter.
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="pt-3 border-t text-sm text-muted-foreground">Candidate rejected.</div>
+                  )
                 ) : batch.currentPhase !== "PRINCIPAL_FINAL_REVIEW" ? (
                   <div className="pt-3 border-t text-sm text-muted-foreground flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -432,6 +388,27 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   </div>
                 ) : (
                   <div className="pt-3 border-t space-y-3">
+                    <div className="flex items-start justify-between gap-3 rounded-lg border p-3 bg-muted/20">
+                      <div className="space-y-1 text-sm">
+                        {candidate.negotiatedSalary != null && candidate.dateOfJoining ? (
+                          <>
+                            <p><span className="text-muted-foreground">Negotiated Salary:</span> <strong>₹{candidate.negotiatedSalary.toLocaleString("en-IN")}/yr</strong></p>
+                            <p><span className="text-muted-foreground">Date of Joining:</span> <strong>{formatDate(new Date(candidate.dateOfJoining))}</strong></p>
+                            {candidate.termsAndConditions && candidate.termsAndConditions.length > 0 && (
+                              <p className="text-muted-foreground">{candidate.termsAndConditions.length} term{candidate.termsAndConditions.length !== 1 ? "s" : ""} & conditions attached</p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-amber-700">Negotiated salary and date of joining haven&apos;t been entered yet.</p>
+                        )}
+                      </div>
+                      <Button size="sm" variant="outline" asChild className="shrink-0">
+                        <Link href={`/principal/negotiate/${id}`}>
+                          <PenLine className="h-3.5 w-3.5 mr-1.5" />
+                          {candidate.negotiatedSalary != null ? "Edit Terms" : "Enter Terms"}
+                        </Link>
+                      </Button>
+                    </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Remarks (optional)</Label>
                       <Textarea
@@ -445,7 +422,13 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                     <div className="flex gap-2">
                       <Button
                         className="flex-1"
-                        onClick={() => setConfirmFor({ candidateId: candidate.id, action: "APPROVED" })}
+                        onClick={() => {
+                          if (candidate.negotiatedSalary == null || !candidate.dateOfJoining) {
+                            toast({ variant: "destructive", title: "Enter negotiated salary and date of joining before approving" });
+                            return;
+                          }
+                          setConfirmFor({ candidateId: candidate.id, action: "APPROVED" });
+                        }}
                         disabled={!!isSaving}
                       >
                         <CheckCircle2 className="h-4 w-4 mr-1.5" />
@@ -475,7 +458,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
         title={confirmFor?.action === "APPROVED" ? "Approve this candidate?" : "Reject this candidate?"}
         description={
           confirmFor?.action === "APPROVED"
-            ? "The candidate will be moved to Document Verification. The college office will be notified."
+            ? "You'll be able to send the offer letter right after approving."
             : "This candidate will be marked as rejected. This action is final."
         }
         confirmLabel={confirmFor?.action === "APPROVED" ? "Yes, Approve" : "Yes, Reject"}

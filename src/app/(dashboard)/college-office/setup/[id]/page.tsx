@@ -91,7 +91,7 @@ export default function SetupDetailPage({ params }: { params: Promise<{ id: stri
     <div className="max-w-xl space-y-6">
       <PageHeader
         title="Interview Setup"
-        description={`${batch.position} — ${batch.department}`}
+        description={`${batch.position} - ${batch.department}`}
       />
 
       {/* Batch Info */}
