@@ -29,20 +29,40 @@ interface TypeSummary {
   clb?: number;
 }
 
-export interface LeaveHistoryReportRow {
+interface PeriodSummary {
+  types: Partial<Record<LeaveTypeCode, TypeSummary>>;
+  lopDays: number;
+  otherDays: number;
+}
+
+export interface LeaveHistoryReportRow extends PeriodSummary {
   uid: string;
   employeeId: string;
   name: string;
   role: "HOD" | "PANEL_MEMBER";
   category: EffectiveLeaveCategory | null;
-  types: Partial<Record<LeaveTypeCode, TypeSummary>>;
-  lopDays: number;
+}
+
+interface YearlyMonthSummary extends PeriodSummary {
+  month: number; // 1-12
+}
+
+interface LeaveYearlyReportRow {
+  uid: string;
+  employeeId: string;
+  name: string;
+  role: "HOD" | "PANEL_MEMBER";
+  category: EffectiveLeaveCategory | null;
+  months: YearlyMonthSummary[];
+  totals: PeriodSummary;
 }
 
 interface LeaveHistoryReportProps {
   // Full API URL (minus year/month, which this component appends and manages
   // itself) - e.g. "/api/college/leave-history-report?departmentId=abc" or
   // "/api/college/leave-history-report" (HOD - self-resolves department).
+  // The yearly view hits the same path with "/yearly" inserted before the
+  // query string (see toYearlyApiUrl below) - that route mirrors this one.
   apiUrl: string;
   queryKey: unknown[];
   // Base path an employee row links to - e.g. "/hod/leave-history" or
@@ -51,42 +71,128 @@ interface LeaveHistoryReportProps {
   emptyTitle?: string;
 }
 
+function toYearlyApiUrl(apiUrl: string): string {
+  const [base, query] = apiUrl.split("?");
+  return query ? `${base}/yearly?${query}` : `${base}/yearly`;
+}
+
+const th = "border border-blue-900 bg-[#0a0a7a] text-white px-3 py-2 text-xs font-semibold text-center whitespace-nowrap";
+const td = "border px-3 py-2 text-sm text-center whitespace-nowrap";
+
+// The Attendance/CL/SL/SCL/EL/OD/Others cells - identical structure for a
+// month row in either view, so both the monthly table and each month/total
+// row of the yearly table render through this.
+function PeriodCells({ period }: { period: PeriodSummary }) {
+  return (
+    <>
+      <td className={td}>-</td>
+      <td className={td}>-</td>
+      <td className={td}>-</td>
+      <td className={td}>{period.lopDays || "-"}</td>
+      {BALANCE_TYPES.map((code) => {
+        const t = period.types[code];
+        return (
+          <Fragment key={code}>
+            <td className={td}>{t ? t.taken : "-"}</td>
+            <td className={td}>{t?.opb ?? "-"}</td>
+            <td className={td}>{t?.clb ?? "-"}</td>
+          </Fragment>
+        );
+      })}
+      <td className={td}>{period.types.OD ? period.types.OD.taken : "-"}</td>
+      <td className={td}>{period.otherDays || "-"}</td>
+    </>
+  );
+}
+
+function ReportTableHead({ monthColumn }: { monthColumn: boolean }) {
+  return (
+    <thead>
+      <tr>
+        <th rowSpan={2} className={th}>Sno</th>
+        <th rowSpan={2} className={th}>Employee Code</th>
+        <th rowSpan={2} className={th}>Employee Name</th>
+        <th rowSpan={2} className={th}>Category</th>
+        {monthColumn && <th rowSpan={2} className={th}>Month</th>}
+        <th colSpan={4} className={th}>Attendance</th>
+        {BALANCE_TYPES.map((code) => (
+          <th key={code} colSpan={3} className={th}>{code}</th>
+        ))}
+        <th className={th}>OD</th>
+        <th className={th}>Others</th>
+      </tr>
+      <tr>
+        <th className={th}>Days Attended</th>
+        <th className={th}>Weekly Offs</th>
+        <th className={th}>Holidays</th>
+        <th className={th}>LOP</th>
+        {BALANCE_TYPES.map((code) => (
+          <Fragment key={code}>
+            <th className={th}>Taken</th>
+            <th className={th}>OPB</th>
+            <th className={th}>CLB</th>
+          </Fragment>
+        ))}
+        <th className={th}>Taken</th>
+        <th className={th}>Taken</th>
+      </tr>
+    </thead>
+  );
+}
+
+const MODE_TABS = [
+  { key: "month", label: "Monthly" },
+  { key: "year", label: "Full Year" },
+];
+
 // Monthly leave register table: month/year picker + the two-tier-header
 // register itself. Shared by Principal (per department, HOD row included)
 // and HOD (own department only, HOD row excluded - see the API route).
 export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTitle }: LeaveHistoryReportProps) {
   const now = new Date();
+  const [mode, setMode] = useState<"month" | "year">("month");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [category, setCategory] = useState<EffectiveLeaveCategory>("vacation");
 
-  const { data, isLoading } = useQuery({
-    queryKey: [...queryKey, year, month],
+  const monthlyQuery = useQuery({
+    queryKey: [...queryKey, "month", year, month],
     queryFn: () =>
       fetch(`${apiUrl}${apiUrl.includes("?") ? "&" : "?"}year=${year}&month=${month}`)
         .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[] }>),
+    enabled: mode === "month",
   });
 
-  const rows = (data?.rows ?? []).filter((row) => row.category === category);
+  const yearlyApiUrl = toYearlyApiUrl(apiUrl);
+  const yearlyQuery = useQuery({
+    queryKey: [...queryKey, "year", year],
+    queryFn: () =>
+      fetch(`${yearlyApiUrl}${yearlyApiUrl.includes("?") ? "&" : "?"}year=${year}`)
+        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveYearlyReportRow[] }>),
+    enabled: mode === "year",
+  });
 
-  const th = "border border-blue-900 bg-[#0a0a7a] text-white px-3 py-2 text-xs font-semibold text-center whitespace-nowrap";
-  const td = "border px-3 py-2 text-sm text-center whitespace-nowrap";
+  const { data, isLoading } = mode === "month" ? monthlyQuery : yearlyQuery;
+  const rows = (data?.rows ?? []).filter((row) => row.category === category);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <SegmentedTabs value={category} onChange={(key) => setCategory(key as EffectiveLeaveCategory)} options={CATEGORY_TABS} />
         <div className="flex flex-wrap items-center gap-3">
-          <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Month" />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTH_NAMES.map((name, idx) => (
-                <SelectItem key={idx + 1} value={String(idx + 1)}>{name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SegmentedTabs value={mode} onChange={(key) => setMode(key as "month" | "year")} options={MODE_TABS} />
+          {mode === "month" && (
+            <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_NAMES.map((name, idx) => (
+                  <SelectItem key={idx + 1} value={String(idx + 1)}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
             <SelectTrigger className="w-28">
               <SelectValue placeholder="Year" />
@@ -118,62 +224,50 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead>
-                  <tr>
-                    <th rowSpan={2} className={th}>Sno</th>
-                    <th rowSpan={2} className={th}>Employee Code</th>
-                    <th rowSpan={2} className={th}>Employee Name</th>
-                    <th rowSpan={2} className={th}>Category</th>
-                    <th colSpan={4} className={th}>Attendance</th>
-                    {BALANCE_TYPES.map((code) => (
-                      <th key={code} colSpan={3} className={th}>{code}</th>
-                    ))}
-                    <th className={th}>OD</th>
-                  </tr>
-                  <tr>
-                    <th className={th}>Days Attended</th>
-                    <th className={th}>Weekly Offs</th>
-                    <th className={th}>Holidays</th>
-                    <th className={th}>LOP</th>
-                    {BALANCE_TYPES.map((code) => (
-                      <Fragment key={code}>
-                        <th className={th}>Taken</th>
-                        <th className={th}>OPB</th>
-                        <th className={th}>CLB</th>
-                      </Fragment>
-                    ))}
-                    <th className={th}>Taken</th>
-                  </tr>
-                </thead>
+                <ReportTableHead monthColumn={mode === "year"} />
                 <tbody>
-                  {rows.map((row, i) => (
-                    <tr key={row.uid} className="hover:bg-muted/40">
-                      <td className={td}>{i + 1}</td>
-                      <td className={td}>{row.employeeId}</td>
-                      <td className={`${td} text-left`}>
-                        <Link href={`${employeeHrefBase}/${row.uid}`} className="text-primary hover:underline font-medium">
-                          {row.name}
-                        </Link>
-                        {row.role === "HOD" && <span className="text-xs text-muted-foreground"> (HOD)</span>}
-                      </td>
-                      <td className={td}>{row.category ? EFFECTIVE_CATEGORY_LABELS[row.category] : "-"}</td>
-                      <td className={td}>-</td>
-                      <td className={td}>-</td>
-                      <td className={td}>-</td>
-                      <td className={td}>{row.lopDays || "-"}</td>
-                      {BALANCE_TYPES.map((code) => {
-                        const t = row.types[code];
-                        return (
-                          <Fragment key={code}>
-                            <td className={td}>{t ? t.taken : "-"}</td>
-                            <td className={td}>{t?.opb ?? "-"}</td>
-                            <td className={td}>{t?.clb ?? "-"}</td>
-                          </Fragment>
-                        );
-                      })}
-                      <td className={td}>{row.types.OD ? row.types.OD.taken : "-"}</td>
-                    </tr>
-                  ))}
+                  {mode === "month"
+                    ? (rows as LeaveHistoryReportRow[]).map((row, i) => (
+                        <tr key={row.uid} className="hover:bg-muted/40">
+                          <td className={td}>{i + 1}</td>
+                          <td className={td}>{row.employeeId}</td>
+                          <td className={`${td} text-left`}>
+                            <Link href={`${employeeHrefBase}/${row.uid}`} className="text-primary hover:underline font-medium">
+                              {row.name}
+                            </Link>
+                            {row.role === "HOD" && <span className="text-xs text-muted-foreground"> (HOD)</span>}
+                          </td>
+                          <td className={td}>{row.category ? EFFECTIVE_CATEGORY_LABELS[row.category] : "-"}</td>
+                          <PeriodCells period={row} />
+                        </tr>
+                      ))
+                    : (rows as LeaveYearlyReportRow[]).map((row, i) => (
+                        <Fragment key={row.uid}>
+                          {row.months.map((m, mi) => (
+                            <tr key={m.month} className="hover:bg-muted/40">
+                              {mi === 0 && (
+                                <>
+                                  <td rowSpan={13} className={td}>{i + 1}</td>
+                                  <td rowSpan={13} className={td}>{row.employeeId}</td>
+                                  <td rowSpan={13} className={`${td} text-left`}>
+                                    <Link href={`${employeeHrefBase}/${row.uid}`} className="text-primary hover:underline font-medium">
+                                      {row.name}
+                                    </Link>
+                                    {row.role === "HOD" && <span className="text-xs text-muted-foreground"> (HOD)</span>}
+                                  </td>
+                                  <td rowSpan={13} className={td}>{row.category ? EFFECTIVE_CATEGORY_LABELS[row.category] : "-"}</td>
+                                </>
+                              )}
+                              <td className={td}>{MONTH_NAMES[m.month - 1]}</td>
+                              <PeriodCells period={m} />
+                            </tr>
+                          ))}
+                          <tr className="bg-muted/60 font-semibold">
+                            <td className={td}>Total</td>
+                            <PeriodCells period={row.totals} />
+                          </tr>
+                        </Fragment>
+                      ))}
                 </tbody>
               </table>
             </div>
