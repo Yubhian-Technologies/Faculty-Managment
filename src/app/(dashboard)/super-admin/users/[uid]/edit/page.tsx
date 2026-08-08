@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS, ROLE_SCOPE } from "@/types";
-import type { FacultyProfileFields, UserRole } from "@/types";
+import type { FacultyProfileFields, UserRole, Religion, Caste } from "@/types";
 
 // The 6 roles Super Admin directly administers. Scope (COLLEGE/LOCATION/GLOBAL) is
 // read from ROLE_SCOPE - a role's tenancy tier, not something re-declared here -
@@ -87,8 +87,9 @@ export default function EditUserPage() {
             legalName: (u.legalName as string) ?? "",
             fatherName: (u.fatherName as string) ?? "",
             motherName: (u.motherName as string) ?? "",
-            religion: (u.religion as string) ?? "",
-            caste: (u.caste as string) ?? "",
+            religion: u.religion as Religion | undefined,
+            caste: u.caste as Caste | undefined,
+            subCaste: (u.subCaste as string) ?? "",
             aadharNo: (u.aadharNo as string) ?? "",
             panNo: (u.panNo as string) ?? "",
             passportNumber: (u.passportNumber as string) ?? "",

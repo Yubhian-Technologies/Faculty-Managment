@@ -7,54 +7,70 @@ import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { getOrCreateProfile } from "@/lib/leave/profile";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
+import { TECHNICAL_STAFF_DESIGNATIONS } from "@/types/core";
 
-// Roster of department (HOD) or college-wide (Principal/VP) faculty
-// (teaching AND technical designations - see TECHNICAL_STAFF_DESIGNATIONS in
-// core.ts) plus supporting staff - Principal/VP see every supportingStaff
-// record college-wide (Technical and Non-Technical); an HOD sees their own
-// department's faculty plus any leftover Technical supportingStaff records
-// still scoped to their department (pre-existing records not yet migrated
-// into facultyMembers via scripts/migrate-technical-staff-to-faculty.mjs -
-// they stay visible/editable here until that migration runs). Non-Technical
-// stays Principal/VP-only since it's college-wide, not HOD-owned. Every
-// entry's leave profile is auto-created here if it doesn't already exist yet
-// (from their FacultyMember/SupportingStaff designation), so there is never
-// a "not set up" state to show - only ever an existing, editable profile.
-// staffType tags each entry "faculty" vs "supportingStaff" for the roster/
-// report UI's tabs.
+// Roster of department (HOD) or college-wide (Principal/VP) staff, split
+// into the two tabs the UI shows: "Faculty" (Teaching designations only)
+// and "Supporting Staff" (Technical designations - Lab Assistant/Programmer/
+// System Administrator/Network Engineer, see TECHNICAL_STAFF_DESIGNATIONS in
+// core.ts - these are FacultyMember records, dept-scoped for HOD and
+// college-wide for Principal/VP - PLUS, for HOD, any leftover Technical
+// supportingStaff records still scoped to their department (pre-existing
+// records not yet migrated into facultyMembers via
+// scripts/migrate-technical-staff-to-faculty.mjs - they stay visible/
+// editable here until that migration runs) - plus, for Principal/VP only,
+// Non-Technical staff from the separate college-wide supportingStaff
+// collection). Every entry's leave profile is auto-created here if it
+// doesn't already exist yet (from their FacultyMember/SupportingStaff
+// designation), so there is never a "not set up" state to show - only ever
+// an existing, editable profile. staffType tags each entry "faculty" vs
+// "supportingStaff" for the roster/report UI's tabs.
 export async function GET() {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    let facultyQuery: FirebaseFirestore.Query = collegeRef.collection("facultyMembers");
-    let staffQuery: FirebaseFirestore.Query = collegeRef.collection("supportingStaff");
+    let facultyMembersQuery: FirebaseFirestore.Query = collegeRef.collection("facultyMembers");
+    let legacyTechnicalStaffQuery: FirebaseFirestore.Query | null = null;
     if (session.role === "HOD") {
       const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
-      facultyQuery = facultyQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
-      staffQuery = staffQuery
+      facultyMembersQuery = facultyMembersQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
+      legacyTechnicalStaffQuery = collegeRef.collection("supportingStaff")
         .where("staffCategory", "==", "TECHNICAL")
         .where("department", "==", dept || "__NO_DEPARTMENT__");
     }
+    const nonTechnicalStaffQuery: FirebaseFirestore.Query | null =
+      session.role === "HOD" ? null : collegeRef.collection("supportingStaff");
 
-    const [facultySnap, staffSnap, settings] = await Promise.all([
-      facultyQuery.get(),
-      staffQuery.get(),
+    const [facultyMembersSnap, legacyTechnicalStaffSnap, nonTechnicalStaffSnap, settings] = await Promise.all([
+      facultyMembersQuery.get(),
+      legacyTechnicalStaffQuery?.get(),
+      nonTechnicalStaffQuery?.get(),
       loadCollegeSettings(db, session.collegeId),
     ]);
 
-    const facultyList = facultySnap.docs
+    const technicalDesignations: string[] = TECHNICAL_STAFF_DESIGNATIONS;
+    const facultyMembers = facultyMembersSnap.docs
+      .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
+      .filter((f) => !!f.userUid);
+    const facultyList = facultyMembers
+      .filter((f) => !technicalDesignations.includes(f.designation))
+      .map((f) => ({ ...f, staffType: "faculty" as const }));
+    const technicalStaffList = facultyMembers
+      .filter((f) => technicalDesignations.includes(f.designation))
+      .map((f) => ({ ...f, staffType: "supportingStaff" as const }));
+    const legacyTechnicalStaffList = (legacyTechnicalStaffSnap?.docs ?? [])
       .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
       .filter((f) => !!f.userUid)
-      .map((f) => ({ ...f, staffType: "faculty" as const }));
-    const staffList = staffSnap.docs
+      .map((f) => ({ ...f, staffType: "supportingStaff" as const }));
+    const nonTechnicalStaffList = (nonTechnicalStaffSnap?.docs ?? [])
       .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
       .filter((f) => !!f.userUid)
       .map((f) => ({ ...f, staffType: "supportingStaff" as const }));
 
     const roster = await Promise.all(
-      [...facultyList, ...staffList].map(async (f) => {
+      [...facultyList, ...technicalStaffList, ...legacyTechnicalStaffList, ...nonTechnicalStaffList].map(async (f) => {
         const profile = await getOrCreateProfile(db, session.collegeId, f.userUid!);
         return {
           uid: f.userUid!,

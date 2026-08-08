@@ -25,6 +25,7 @@ export const STAFF_COLUMNS: StaffCsvColumn[] = [
   { key: "motherName",                     label: "Mother Name" },
   { key: "religion",                        label: "Religion" },
   { key: "caste",                            label: "Caste" },
+  { key: "subCaste",                        label: "Sub Caste" },
   { key: "aadharNo",                          label: "Aadhar No" },
   { key: "panNo",                              label: "PAN No" },
   { key: "passportNumber",                      label: "Passport No" },

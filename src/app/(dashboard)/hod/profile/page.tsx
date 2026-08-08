@@ -9,7 +9,7 @@ import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MyProfileDetails } from "@/components/faculty/MyProfileDetails";
+import { MyProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABELS } from "@/types";
 import type { Department } from "@/types";
@@ -76,7 +76,7 @@ export default function HodProfilePage() {
         </CardContent>
       </Card>
 
-      <MyProfileDetails />
+      <MyProfileModuleTiles basePath="/hod/profile" />
     </div>
   );
 }

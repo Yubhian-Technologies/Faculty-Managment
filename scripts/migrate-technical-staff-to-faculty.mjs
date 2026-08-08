@@ -61,7 +61,8 @@ function buildFacultyPayload(staff, now) {
   // No structured-qualifications equivalent on FacultyMember (single string
   // field) - synthesize from the first structured entry, if any.
   const q = staff.supportingStaffProfile?.qualifications?.[0];
-  payload.qualification = q ? [q.level, q.degreeAndBranch].filter(Boolean).join(" - ") : "";
+  const qDegreeAndBranch = q ? [q.degree, q.branch].filter(Boolean).join(" ") || q.degreeAndBranch : undefined;
+  payload.qualification = q ? [q.level, qDegreeAndBranch].filter(Boolean).join(" - ") : "";
 
   // FacultyMember has no otherDesignationTitle equivalent - fold it into
   // specialization (closest semantic fit) rather than lose it.

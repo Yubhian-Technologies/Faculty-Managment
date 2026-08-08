@@ -15,7 +15,7 @@ import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS } from "@/types";
-import type { Department, FacultyProfileFields, UserRole } from "@/types";
+import type { Department, FacultyProfileFields, UserRole, Religion, Caste } from "@/types";
 
 type StaffUser = {
   uid: string;
@@ -85,8 +85,9 @@ export default function EditStaffPage() {
           legalName: (user.legalName as string) ?? "",
           fatherName: (user.fatherName as string) ?? "",
           motherName: (user.motherName as string) ?? "",
-          religion: (user.religion as string) ?? "",
-          caste: (user.caste as string) ?? "",
+          religion: user.religion as Religion | undefined,
+          caste: user.caste as Caste | undefined,
+          subCaste: (user.subCaste as string) ?? "",
           aadharNo: (user.aadharNo as string) ?? "",
           panNo: (user.panNo as string) ?? "",
           passportNumber: (user.passportNumber as string) ?? "",

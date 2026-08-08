@@ -71,6 +71,7 @@ export async function PATCH(
       motherName: string;
       religion: string;
       caste: string;
+      subCaste: string;
       aadharNo: string;
       panNo: string;
       passportNumber: string;
@@ -145,7 +146,7 @@ export async function PATCH(
     const stringFields = [
       "name", "email", "phone", "collegeEmail", "apaarFacultyId", "designation", "qualification",
       "specialization", "employmentType", "status", "gender", "legalName",
-      "fatherName", "motherName", "religion", "caste", "aadharNo", "passportNumber",
+      "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
       "emergencyContactName", "emergencyContactPhone", "ratificationStatus", "userUid",
       "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
     ] as const;

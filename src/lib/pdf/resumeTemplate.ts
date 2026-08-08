@@ -1,15 +1,23 @@
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS } from "@/types";
+import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
+import type { Religion, Caste } from "@/types";
 import { buildTeachingLoadRows, formatClassColumn, type TeachingLoadRow } from "@/lib/teaching/buildTeachingLoadRows";
 
 type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number } | string | null | undefined;
 
 interface DegreeDetail {
-  degreeAndBranch?: string;
+  degree?: string;
+  branch?: string;
+  degreeAndBranch?: string; // legacy - pre-split records that haven't been re-saved yet
   universityOrInstitute?: string;
   percentageOrDivision?: string;
   yearOfCompletion?: number;
   certificateUrl?: string;
+}
+
+function degreeAndBranchLabel(d: DegreeDetail): string {
+  const combined = [d.degree, d.branch].filter(Boolean).join(" ");
+  return combined || d.degreeAndBranch || "";
 }
 
 interface CourseAssignment {
@@ -163,6 +171,7 @@ export interface ResumeData {
   motherName?: string;
   religion?: string;
   caste?: string;
+  subCaste?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
@@ -285,7 +294,7 @@ function renderSection(title: string, body: string): string {
 }
 
 function degreeEntry(label: string, d?: DegreeDetail): string {
-  if (!d || (!d.degreeAndBranch && !d.universityOrInstitute)) return "";
+  if (!d || (!degreeAndBranchLabel(d) && !d.universityOrInstitute)) return "";
   const certLink = d.certificateUrl
     ? `<div class="doc-link"><a href="${esc(d.certificateUrl)}" target="_blank">View Certificate ↗</a></div>`
     : "";
@@ -293,7 +302,7 @@ function degreeEntry(label: string, d?: DegreeDetail): string {
     entry(
       d.universityOrInstitute || label,
       d.yearOfCompletion ? String(d.yearOfCompletion) : "",
-      `${label}${d.degreeAndBranch ? ` - ${d.degreeAndBranch}` : ""}`,
+      `${label}${degreeAndBranchLabel(d) ? ` - ${degreeAndBranchLabel(d)}` : ""}`,
       d.percentageOrDivision || ""
     ) + certLink
   );
@@ -491,8 +500,9 @@ export function getResumeHTML(data: ResumeData): string {
     detail("Mother", data.motherName) +
     detail("Spouse", data.spouseName) +
     detail("Children", data.numberOfChildren) +
-    detail("Religion", data.religion) +
-    detail("Caste", data.caste) +
+    detail("Religion", data.religion ? (RELIGION_LABELS[data.religion as Religion] ?? data.religion) : undefined) +
+    detail("Caste", data.caste ? (CASTE_LABELS[data.caste as Caste] ?? data.caste) : undefined) +
+    detail("Sub Caste", data.subCaste) +
     detail("Native Place", data.nativePlace) +
     detail("Aadhar No.", data.aadharNo) +
     detail("PAN No.", data.panNo) +
