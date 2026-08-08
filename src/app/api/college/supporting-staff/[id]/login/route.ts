@@ -5,14 +5,11 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { SUPPORTING_STAFF_ROLE_CATEGORY } from "@/lib/supportingStaff/roleCategory";
-import {
-  TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
-} from "@/types";
+import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type { SupportingStaffCategory, SupportingStaffDesignation } from "@/types";
 
-function designationLabel(category: SupportingStaffCategory, designation: SupportingStaffDesignation): string {
-  const labels = category === "TECHNICAL" ? TECHNICAL_STAFF_DESIGNATION_LABELS : NON_TECHNICAL_STAFF_DESIGNATION_LABELS;
-  return (labels as Record<string, string>)[designation] ?? designation;
+function designationLabel(designation: SupportingStaffDesignation): string {
+  return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
 }
 
 // Same "create the login after the record already exists" flow as
@@ -25,7 +22,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("COLLEGE_OFFICE");
     const { id } = await params;
 
     const body = (await request.json()) as { email?: string; password?: string };
@@ -74,7 +71,7 @@ export async function POST(
     const designation =
       data.designation === "OTHER" && data.otherDesignationTitle
         ? data.otherDesignationTitle
-        : designationLabel(data.staffCategory ?? "TECHNICAL", data.designation ?? "OTHER");
+        : designationLabel(data.designation ?? "OTHER");
 
     const uid = await createFirebaseUser(email, password, name);
 

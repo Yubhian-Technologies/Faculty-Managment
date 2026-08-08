@@ -1,29 +1,22 @@
 import type { Timestamp } from "firebase/firestore";
 import type { DegreeDetail, EmploymentType, FacultyStatus, TrainingEntry, AwardEntry } from "./core";
 
-// ─── Supporting Staff (Technical + Non-Technical) ──────────────────────────────
-// NBA/AICTE-compliant profile module for non-teaching staff, parallel to the
-// Teaching Faculty module (FacultyMember/FacultyProfileFields in core.ts).
+// ─── Supporting Staff (Non-Technical) ──────────────────────────────────────────
+// NBA/AICTE-compliant profile module for non-teaching, non-technical staff,
+// parallel to the Teaching Faculty module (FacultyMember/FacultyProfileFields
+// in core.ts). Technical staff (Lab Assistant/Programmer/System Administrator/
+// Network Engineer) moved to the Faculty module (see TechnicalProfile in
+// core.ts) - this module only ever covers Non-Technical staff now.
 
-export type SupportingStaffCategory = "TECHNICAL" | "NON_TECHNICAL";
+export type SupportingStaffCategory = "NON_TECHNICAL";
 export const STAFF_CATEGORY_LABELS: Record<SupportingStaffCategory, string> = {
-  TECHNICAL: "Technical Staff",
   NON_TECHNICAL: "Non-Technical Staff",
 };
 
-export type TechnicalStaffDesignation =
-  | "LAB_ASSISTANT" | "PROGRAMMER" | "SYSTEM_ADMINISTRATOR" | "NETWORK_ENGINEER" | "OTHER";
 export type NonTechnicalStaffDesignation =
   | "OFFICE_STAFF" | "ACCOUNTANT" | "LIBRARIAN" | "CLERK" | "ATTENDER" | "OFFICE_ASSISTANT" | "OTHER";
-export type SupportingStaffDesignation = TechnicalStaffDesignation | NonTechnicalStaffDesignation;
+export type SupportingStaffDesignation = NonTechnicalStaffDesignation;
 
-export const TECHNICAL_STAFF_DESIGNATION_LABELS: Record<TechnicalStaffDesignation, string> = {
-  LAB_ASSISTANT: "Lab Assistant",
-  PROGRAMMER: "Programmer",
-  SYSTEM_ADMINISTRATOR: "System Administrator",
-  NETWORK_ENGINEER: "Network Engineer",
-  OTHER: "Other",
-};
 export const NON_TECHNICAL_STAFF_DESIGNATION_LABELS: Record<NonTechnicalStaffDesignation, string> = {
   OFFICE_STAFF: "Office Staff",
   ACCOUNTANT: "Accountant",
@@ -40,55 +33,6 @@ export const NON_TECHNICAL_STAFF_DESIGNATION_LABELS: Record<NonTechnicalStaffDes
 // (Technical) within one repeating list.
 export interface StaffQualification extends DegreeDetail {
   level: string;
-}
-
-export interface TechnicalSkillsProfile {
-  programmingLanguages: string[];
-  operatingSystems: string[];
-  networking: string[];
-  databases: string[];
-  cloud: string[];
-  hardware: string[];
-  softwareTools: string[];
-}
-
-export type TechnicalResponsibility =
-  | "LAB_MAINTENANCE" | "EQUIPMENT_MAINTENANCE" | "SOFTWARE_INSTALLATION"
-  | "NETWORK_ADMINISTRATION" | "LAB_STOCK_MANAGEMENT" | "STUDENT_SUPPORT"
-  | "PRACTICAL_SESSION_ASSISTANCE" | "OTHER";
-export const TECHNICAL_RESPONSIBILITY_LABELS: Record<TechnicalResponsibility, string> = {
-  LAB_MAINTENANCE: "Lab Maintenance",
-  EQUIPMENT_MAINTENANCE: "Equipment Maintenance",
-  SOFTWARE_INSTALLATION: "Software Installation",
-  NETWORK_ADMINISTRATION: "Network Administration",
-  LAB_STOCK_MANAGEMENT: "Lab Stock Maintenance",
-  STUDENT_SUPPORT: "Student Support",
-  PRACTICAL_SESSION_ASSISTANCE: "Practical Sessions",
-  OTHER: "Other",
-};
-
-export type VendorCertification =
-  | "CISCO" | "MICROSOFT" | "AWS" | "REDHAT" | "ORACLE" | "GOOGLE" | "VMWARE" | "OTHER";
-export const VENDOR_CERTIFICATION_LABELS: Record<VendorCertification, string> = {
-  CISCO: "Cisco", MICROSOFT: "Microsoft", AWS: "AWS", REDHAT: "RedHat",
-  ORACLE: "Oracle", GOOGLE: "Google", VMWARE: "VMware", OTHER: "Other",
-};
-export interface VendorCertificationEntry {
-  vendor: VendorCertification;
-  otherVendorName?: string; // when vendor === "OTHER"
-  certificationName: string;
-  year?: number;
-  certificateUrl?: string;
-}
-
-export interface TechnicalProfile {
-  skills: TechnicalSkillsProfile;
-  responsibilities: TechnicalResponsibility[];
-  otherResponsibility?: string;
-  certifications: VendorCertificationEntry[];
-  training: TrainingEntry[]; // reused from core.ts
-  innovationsAndAutomation?: string;
-  achievements: AwardEntry[]; // reused from core.ts
 }
 
 export type NonTechnicalResponsibility =
@@ -122,16 +66,9 @@ export interface NonTechnicalProfile {
   achievements: AwardEntry[];
 }
 
-// One collection, staffCategory discriminant, two mutually-exclusive optional
-// sub-profiles gated by staffCategory. Technical and Non-Technical share
-// Personal/Qualification/Employment/Training/Awards/Documents scaffolding but
-// have entirely disjoint skills/responsibilities/certification vocabularies -
-// two optional sub-objects avoids duplicating the shared scaffolding across
-// two full parallel collections while keeping irrelevant fields off any record.
 export interface SupportingStaffProfileFields {
   qualifications: StaffQualification[];
-  technicalProfile?: TechnicalProfile;       // present iff staffCategory === "TECHNICAL"
-  nonTechnicalProfile?: NonTechnicalProfile; // present iff staffCategory === "NON_TECHNICAL"
+  nonTechnicalProfile?: NonTechnicalProfile;
   otherInformation?: string;
 }
 

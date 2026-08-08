@@ -39,7 +39,7 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
     isActive: true,
     sortOrder: 3,
     rules: {
-      daysPerYear: 10,
+      daysPerYear: 7,
       eligibleCategories: ["vacation"],
     },
   },

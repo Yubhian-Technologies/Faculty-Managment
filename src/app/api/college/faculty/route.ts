@@ -95,6 +95,7 @@ export async function POST(request: Request) {
       aicteEligible?: boolean;
       department?: string;
       academicProfile?: Record<string, unknown>;
+      technicalProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
     } & PersonalDetailsInput;
 
@@ -200,6 +201,7 @@ export async function POST(request: Request) {
       status: "ACTIVE" as FacultyStatus,
       userUid: uid,
       ...(body.academicProfile ? { academicProfile: body.academicProfile } : {}),
+      ...(body.technicalProfile ? { technicalProfile: body.technicalProfile } : {}),
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
       ...buildPersonalDetailsUpdate(body),
       createdAt: now,

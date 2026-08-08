@@ -28,7 +28,7 @@ export default function SupportingStaffCredentialsPage() {
       .then((data) => {
         if (!data.staff) {
           toast({ variant: "destructive", title: "Staff record not found" });
-          router.push("/hod/supporting-staff");
+          router.push("/college-office/non-technical-staff");
           return;
         }
         const s = data.staff;
@@ -62,7 +62,7 @@ export default function SupportingStaffCredentialsPage() {
         return;
       }
       toast({ variant: "success", title: `Login created for ${staffName}` });
-      router.push("/hod/supporting-staff");
+      router.push("/college-office/non-technical-staff");
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
     } finally {
@@ -82,7 +82,7 @@ export default function SupportingStaffCredentialsPage() {
     <div className="max-w-xl">
       <PageHeader
         title={`Create Login - ${staffName}`}
-        description="This will create a system login account for this staff member. They can sign in as Technical Staff."
+        description="This will create a system login account for this staff member. They can sign in as Supporting Staff."
       />
 
       <Card>

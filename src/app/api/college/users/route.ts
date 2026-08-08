@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { syncDepartmentHod } from "@/lib/departments/scope";
 import type { UserRole } from "@/types";
 
 const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
@@ -234,6 +235,8 @@ export async function POST(request: Request) {
       uid, role, collegeId, email, name: resolvedName,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
+
+    await syncDepartmentHod(db, collegeId, { uid, role, name: resolvedName, department: resolvedDepartment });
 
     // Link the login back onto its Section so office/HOD timetable-adjacent
     // views can show who the class leader is without a reverse lookup.

@@ -43,7 +43,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
-  PANEL_MEMBER: "Teaching Faculty",
+  PANEL_MEMBER: "Faculty",
   WEBMASTER: "Webmaster",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
@@ -448,8 +448,9 @@ export type Designation =
   | "VISITING_FACULTY"
   | "ADJUNCT_FACULTY"
   | "LAB_ASSISTANT"
-  | "TECHNICAL"
-  | "NON_TECHNICAL"
+  | "PROGRAMMER"
+  | "SYSTEM_ADMINISTRATOR"
+  | "NETWORK_ENGINEER"
   | "OTHER";
 
 export const DESIGNATION_LABELS: Record<Designation, string> = {
@@ -460,16 +461,23 @@ export const DESIGNATION_LABELS: Record<Designation, string> = {
   VISITING_FACULTY: "Visiting Faculty",
   ADJUNCT_FACULTY: "Adjunct Faculty",
   LAB_ASSISTANT: "Lab Assistant",
-  TECHNICAL: "Technical",
-  NON_TECHNICAL: "Non-Technical",
+  PROGRAMMER: "Programmer",
+  SYSTEM_ADMINISTRATOR: "System Administrator",
+  NETWORK_ENGINEER: "Network Engineer",
   OTHER: "Other",
 };
 
-// Which Designation options the "Staff Type" picker (Teaching / Supporting) offers.
+// Which Designation options the Faculty "Add/Edit" designation picker offers,
+// split into two groups so the edit page can tell whether a record needs the
+// Academic Profile / Teaching Assignments treatment or the Technical Profile
+// treatment (see TechnicalProfile below) - Faculty covers both Teaching and
+// Technical staff under one role (PANEL_MEMBER).
 export const TEACHING_DESIGNATIONS: Designation[] = [
-  "PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY", "LAB_ASSISTANT",
+  "PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY",
 ];
-export const SUPPORTING_STAFF_DESIGNATIONS: Designation[] = ["TECHNICAL", "NON_TECHNICAL", "OTHER"];
+export const TECHNICAL_STAFF_DESIGNATIONS: Designation[] = [
+  "LAB_ASSISTANT", "PROGRAMMER", "SYSTEM_ADMINISTRATOR", "NETWORK_ENGINEER",
+];
 
 export type EmploymentType = "PERMANENT" | "CONTRACT" | "VISITING" | "PART_TIME";
 
@@ -559,7 +567,8 @@ export interface FacultyMember {
   inCampusExperience?: number; // years of on-campus experience
   industryExperience?: number; // years of industry experience
   researchExperience?: number; // years of research experience
-  academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile (Management dashboard / role-aware forms)
+  academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile - populated when designation is a TEACHING_DESIGNATIONS value
+  technicalProfile?: TechnicalProfile;    // populated when designation is a TECHNICAL_STAFF_DESIGNATIONS value - mutually exclusive with academicProfile
 
   joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
@@ -567,6 +576,61 @@ export interface FacultyMember {
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+// ─── Faculty Technical Profile (for TECHNICAL_STAFF_DESIGNATIONS designations) ──
+// Relocated from the old Supporting Staff "Technical" category (see AGENTS.md) -
+// Technical Staff (Lab Assistant/Programmer/System Administrator/Network
+// Engineer) are Faculty (PANEL_MEMBER) records now, distinguished from Teaching
+// designations by TECHNICAL_STAFF_DESIGNATIONS rather than a separate module.
+
+export interface TechnicalSkillsProfile {
+  programmingLanguages: string[];
+  operatingSystems: string[];
+  networking: string[];
+  databases: string[];
+  cloud: string[];
+  hardware: string[];
+  softwareTools: string[];
+}
+
+export type TechnicalResponsibility =
+  | "LAB_MAINTENANCE" | "EQUIPMENT_MAINTENANCE" | "SOFTWARE_INSTALLATION"
+  | "NETWORK_ADMINISTRATION" | "LAB_STOCK_MANAGEMENT" | "STUDENT_SUPPORT"
+  | "PRACTICAL_SESSION_ASSISTANCE" | "OTHER";
+export const TECHNICAL_RESPONSIBILITY_LABELS: Record<TechnicalResponsibility, string> = {
+  LAB_MAINTENANCE: "Lab Maintenance",
+  EQUIPMENT_MAINTENANCE: "Equipment Maintenance",
+  SOFTWARE_INSTALLATION: "Software Installation",
+  NETWORK_ADMINISTRATION: "Network Administration",
+  LAB_STOCK_MANAGEMENT: "Lab Stock Maintenance",
+  STUDENT_SUPPORT: "Student Support",
+  PRACTICAL_SESSION_ASSISTANCE: "Practical Sessions",
+  OTHER: "Other",
+};
+
+export type VendorCertification =
+  | "CISCO" | "MICROSOFT" | "AWS" | "REDHAT" | "ORACLE" | "GOOGLE" | "VMWARE" | "OTHER";
+export const VENDOR_CERTIFICATION_LABELS: Record<VendorCertification, string> = {
+  CISCO: "Cisco", MICROSOFT: "Microsoft", AWS: "AWS", REDHAT: "RedHat",
+  ORACLE: "Oracle", GOOGLE: "Google", VMWARE: "VMware", OTHER: "Other",
+};
+export interface VendorCertificationEntry {
+  vendor: VendorCertification;
+  otherVendorName?: string; // when vendor === "OTHER"
+  certificationName: string;
+  year?: number;
+  certificateUrl?: string;
+}
+
+export interface TechnicalProfile {
+  skills: TechnicalSkillsProfile;
+  responsibilities: TechnicalResponsibility[];
+  otherResponsibility?: string;
+  certifications: VendorCertificationEntry[];
+  training: TrainingEntry[];
+  innovationsAndAutomation?: string;
+  achievements: AwardEntry[];
 }
 
 // ─── Faculty Academic Profile (Management dashboard / role-aware profile forms) ──

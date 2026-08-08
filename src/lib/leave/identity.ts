@@ -19,8 +19,8 @@ export interface ResolvedIdentity {
 
 // Three account shapes, checked in order:
 //  - PANEL_MEMBER has a richer FacultyMember record (designation, joiningDate)
-//  - COLLEGE_STAFF backed by a SupportingStaffMember record (technical/non-
-//    technical staff) - always non-teaching, uses its own joiningDate.
+//  - COLLEGE_STAFF backed by a SupportingStaffMember record (Non-Technical
+//    staff) - always non-teaching, uses its own joiningDate.
 //  - Everyone else (HOD/PRINCIPAL/VICE_PRINCIPAL, ACCOUNTS/FINANCE/
 //    COLLEGE_OFFICE, and label-only COLLEGE_STAFF logins like Dean/IQAC/T&P)
 //    has no FacultyMember/SupportingStaff record - only a thin users/{uid}

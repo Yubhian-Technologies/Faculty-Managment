@@ -104,7 +104,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Reports", href: "/principal/reports", iconName: "BarChart2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Documents & Reporting" },
   { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
   { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Apply for Leave", href: "/principal/leave/apply", iconName: "CalendarPlus", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
 
   // HOD
@@ -131,7 +130,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Past Hirings", href: "/hod/past-hirings", iconName: "History", roles: ["HOD"] },
   { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "My Work" },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
-  { label: "Apply for Leave", href: "/hod/leave/apply", iconName: "CalendarPlus", roles: ["HOD"] },
   { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"] },
   { label: "My Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"], section: "Personal" },
 
@@ -143,7 +141,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
   { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
   { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], section: "Personal" },
-  { label: "Apply for Leave", href: "/college-office/leave/apply", iconName: "CalendarPlus", roles: ["COLLEGE_OFFICE"] },
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
@@ -153,7 +150,6 @@ export const NAV_ITEMS: NavItem[] = [
   // College Staff (dynamic-title roles: Dean, IQAC Coordinator, T&P, etc.)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"], section: "Personal" },
-  { label: "Apply for Leave", href: "/college-staff/leave/apply", iconName: "CalendarPlus", roles: ["COLLEGE_STAFF"] },
 
   // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
@@ -164,7 +160,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Internal Marks", href: "/panel/internal-marks", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
-  { label: "Apply for Leave", href: "/panel/leave/apply", iconName: "CalendarPlus", roles: ["PANEL_MEMBER"] },
   { label: "Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Profile", href: "/panel/profile", iconName: "UserCircle", roles: ["PANEL_MEMBER"], section: "Personal" },
 
@@ -173,7 +168,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Hiring — Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
   { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
   { label: "My Leave", href: "/accounts/leave", iconName: "CalendarClock", roles: ["ACCOUNTS"], section: "Personal" },
-  { label: "Apply for Leave", href: "/accounts/leave/apply", iconName: "CalendarPlus", roles: ["ACCOUNTS"] },
 
   // Finance
   { label: "Dashboard", href: "/finance", iconName: "LayoutDashboard", roles: ["FINANCE"] },
@@ -191,7 +185,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Audit & Compliance", href: "/finance/audit", iconName: "ScrollText", roles: ["FINANCE"] },
   { label: "Browse by Location", href: "/finance/browse", iconName: "MapPin", roles: ["FINANCE"], section: "Organization" },
   { label: "My Leave", href: "/finance/leave", iconName: "CalendarClock", roles: ["FINANCE"], section: "Personal" },
-  { label: "Apply for Leave", href: "/finance/leave/apply", iconName: "CalendarPlus", roles: ["FINANCE"] },
 
   // Class Leader
   { label: "Dashboard", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },

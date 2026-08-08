@@ -5,19 +5,15 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
-import { SUPPORTING_STAFF_ROLE_CATEGORY, supportingStaffCategoryLabel } from "@/lib/supportingStaff/roleCategory";
-import {
-  TECHNICAL_STAFF_DESIGNATION_LABELS, NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
-} from "@/types";
+import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus,
   SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
-  TechnicalResponsibility, NonTechnicalResponsibility, ComputerSkill, VendorCertification, VendorCertificationEntry,
+  NonTechnicalResponsibility, ComputerSkill,
 } from "@/types";
 
-function designationLabel(category: SupportingStaffCategory, designation: SupportingStaffDesignation): string {
-  const labels = category === "TECHNICAL" ? TECHNICAL_STAFF_DESIGNATION_LABELS : NON_TECHNICAL_STAFF_DESIGNATION_LABELS;
-  return (labels as Record<string, string>)[designation] ?? designation;
+function designationLabel(designation: SupportingStaffDesignation): string {
+  return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
 }
 
 // Same resolver as faculty/students CSV imports (src/app/api/college/
@@ -41,22 +37,6 @@ function buildDepartmentResolver(
   }
   return (input: string) => byCodeOrName.get(input.trim().toLowerCase());
 }
-
-const CATEGORY_MAP: Record<string, SupportingStaffCategory> = {
-  "technical": "TECHNICAL",
-  "non-technical": "NON_TECHNICAL",
-  "non technical": "NON_TECHNICAL",
-  "nontechnical": "NON_TECHNICAL",
-};
-
-const TECHNICAL_DESIGNATION_MAP: Record<string, SupportingStaffDesignation> = {
-  "lab assistant": "LAB_ASSISTANT",
-  "programmer": "PROGRAMMER",
-  "system administrator": "SYSTEM_ADMINISTRATOR",
-  "sysadmin": "SYSTEM_ADMINISTRATOR",
-  "network engineer": "NETWORK_ENGINEER",
-  "other": "OTHER",
-};
 
 const NON_TECHNICAL_DESIGNATION_MAP: Record<string, SupportingStaffDesignation> = {
   "office staff": "OFFICE_STAFF",
@@ -108,19 +88,6 @@ const AWARD_CATEGORY_MAP: Record<string, AwardCategory> = {
   "other": "OTHER",
 };
 
-const TECHNICAL_RESPONSIBILITY_MAP: Record<string, TechnicalResponsibility> = {
-  "lab maintenance": "LAB_MAINTENANCE",
-  "equipment maintenance": "EQUIPMENT_MAINTENANCE",
-  "software installation": "SOFTWARE_INSTALLATION",
-  "network administration": "NETWORK_ADMINISTRATION",
-  "lab stock maintenance": "LAB_STOCK_MANAGEMENT",
-  "lab stock management": "LAB_STOCK_MANAGEMENT",
-  "student support": "STUDENT_SUPPORT",
-  "practical sessions": "PRACTICAL_SESSION_ASSISTANCE",
-  "practical session assistance": "PRACTICAL_SESSION_ASSISTANCE",
-  "other": "OTHER",
-};
-
 const NON_TECHNICAL_RESPONSIBILITY_MAP: Record<string, NonTechnicalResponsibility> = {
   "office administration": "OFFICE_ADMINISTRATION",
   "student records": "STUDENT_RECORDS",
@@ -142,25 +109,12 @@ const COMPUTER_SKILL_MAP: Record<string, ComputerSkill> = {
   "other": "OTHER",
 };
 
-const VENDOR_CERTIFICATION_MAP: Record<string, VendorCertification> = {
-  "cisco": "CISCO",
-  "microsoft": "MICROSOFT",
-  "aws": "AWS",
-  "redhat": "REDHAT",
-  "red hat": "REDHAT",
-  "oracle": "ORACLE",
-  "google": "GOOGLE",
-  "vmware": "VMWARE",
-  "other": "OTHER",
-};
-
 type ImportRow = {
   employeeId: string;
   name: string;
   email?: string;
   password?: string;
   phone?: string;
-  staffCategory: string;
   designation: string;
   otherDesignationTitle?: string;
   department?: string;
@@ -283,27 +237,11 @@ function achievementEntries(row: ImportRow): AwardEntry[] {
     .filter((a) => a.title || a.awardingBody);
 }
 
-function technicalCertifications(row: ImportRow, empId: string, dropped: (empId: string, label: string, raw: string | undefined) => void): VendorCertificationEntry[] {
-  return [1, 2]
-    .map((i): VendorCertificationEntry | undefined => {
-      const vendorRaw = row[`certification${i}_vendor`]?.trim();
-      const name = row[`certification${i}_name`]?.trim() ?? "";
-      const year = num(row[`certification${i}_year`]);
-      if (!vendorRaw && !name) return undefined;
-      const vendor = VENDOR_CERTIFICATION_MAP[(vendorRaw ?? "").toLowerCase()];
-      if (vendorRaw && !vendor) dropped(empId, `Certification ${i} Vendor`, vendorRaw);
-      return { vendor: vendor ?? "OTHER", ...(!vendor && vendorRaw ? { otherVendorName: vendorRaw } : {}), certificationName: name, ...(year !== undefined ? { year } : {}) };
-    })
-    .filter((c): c is VendorCertificationEntry => !!c);
-}
-
-// Builds the full SupportingStaffProfileFields object for a row - qualifications
-// are shared across both categories; technicalProfile/nonTechnicalProfile are
-// mutually exclusive, matching the manual "Add Staff" form's SupportingStaffProfileFields
-// shape (src/types/supportingStaff.ts) so import and manual entry stay compatible.
+// Builds the full SupportingStaffProfileFields object for a row - matches the
+// manual "Add Staff" form's SupportingStaffProfileFields shape
+// (src/types/supportingStaff.ts) so import and manual entry stay compatible.
 function buildSupportingStaffProfile(
   row: ImportRow,
-  category: SupportingStaffCategory,
   empId: string,
   dropped: (empId: string, label: string, raw: string | undefined) => void
 ): SupportingStaffProfileFields | undefined {
@@ -311,63 +249,33 @@ function buildSupportingStaffProfile(
     qualifications: qualifications(row),
   };
 
-  if (category === "TECHNICAL") {
-    const responsibilities = mapList(row.responsibilities, TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
-    const skills = {
-      programmingLanguages: parseList(row.programmingLanguages),
-      operatingSystems: parseList(row.operatingSystems),
-      networking: parseList(row.networking),
-      databases: parseList(row.databases),
-      cloud: parseList(row.cloud),
-      hardware: parseList(row.hardware),
-      softwareTools: parseList(row.softwareTools),
+  const responsibilities = mapList(row.responsibilities, NON_TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
+  const computerSkills = mapList(row.computerSkills, COMPUTER_SKILL_MAP, empId, "Computer Skills", dropped);
+  const typingSpeedWpm = num(row.typingSpeedWpm);
+  const training = trainingEntries(row);
+  const achievements = achievementEntries(row);
+  const hasContent = responsibilities.length || computerSkills.length || typingSpeedWpm !== undefined || training.length || achievements.length || row.otherResponsibility?.trim() || row.otherComputerSkill?.trim();
+  if (hasContent) {
+    profile.nonTechnicalProfile = {
+      responsibilities,
+      ...(row.otherResponsibility?.trim() ? { otherResponsibility: row.otherResponsibility.trim() } : {}),
+      computerSkills,
+      ...(row.otherComputerSkill?.trim() ? { otherComputerSkill: row.otherComputerSkill.trim() } : {}),
+      ...(typingSpeedWpm !== undefined ? { typingSpeedWpm } : {}),
+      training,
+      achievements,
     };
-    const certifications = technicalCertifications(row, empId, dropped);
-    const training = trainingEntries(row);
-    const achievements = achievementEntries(row);
-    const hasContent = responsibilities.length || Object.values(skills).some((s) => s.length) || certifications.length || training.length || achievements.length || row.innovationsAndAutomation?.trim() || row.otherResponsibility?.trim();
-    if (hasContent) {
-      profile.technicalProfile = {
-        skills,
-        responsibilities,
-        ...(row.otherResponsibility?.trim() ? { otherResponsibility: row.otherResponsibility.trim() } : {}),
-        certifications,
-        training,
-        ...(row.innovationsAndAutomation?.trim() ? { innovationsAndAutomation: row.innovationsAndAutomation.trim() } : {}),
-        achievements,
-      };
-    }
-  } else {
-    const responsibilities = mapList(row.responsibilities, NON_TECHNICAL_RESPONSIBILITY_MAP, empId, "Responsibilities", dropped);
-    const computerSkills = mapList(row.computerSkills, COMPUTER_SKILL_MAP, empId, "Computer Skills", dropped);
-    const typingSpeedWpm = num(row.typingSpeedWpm);
-    const training = trainingEntries(row);
-    const achievements = achievementEntries(row);
-    const hasContent = responsibilities.length || computerSkills.length || typingSpeedWpm !== undefined || training.length || achievements.length || row.otherResponsibility?.trim() || row.otherComputerSkill?.trim();
-    if (hasContent) {
-      profile.nonTechnicalProfile = {
-        responsibilities,
-        ...(row.otherResponsibility?.trim() ? { otherResponsibility: row.otherResponsibility.trim() } : {}),
-        computerSkills,
-        ...(row.otherComputerSkill?.trim() ? { otherComputerSkill: row.otherComputerSkill.trim() } : {}),
-        ...(typingSpeedWpm !== undefined ? { typingSpeedWpm } : {}),
-        training,
-        achievements,
-      };
-    }
   }
 
   if (row.otherInformation?.trim()) profile.otherInformation = row.otherInformation.trim();
 
   const hasQualifications = profile.qualifications.length > 0;
-  const hasCategoryProfile = !!profile.technicalProfile || !!profile.nonTechnicalProfile;
-  return hasQualifications || hasCategoryProfile || profile.otherInformation ? profile : undefined;
+  return hasQualifications || profile.nonTechnicalProfile || profile.otherInformation ? profile : undefined;
 }
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "COLLEGE_OFFICE");
-    const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
+    const session = await requireCollegeMember("COLLEGE_OFFICE");
     const body = (await request.json()) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
@@ -380,13 +288,6 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeId = session.collegeId;
-
-    // Resolve HOD's department (same auto-fill rule as the single "Add Staff" form).
-    let hodDept = "";
-    if (session.role === "HOD") {
-      const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();
-      hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-    }
 
     const existingSnap = await db.collection("colleges").doc(collegeId).collection("supportingStaff")
       .select("employeeId").get();
@@ -427,20 +328,10 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const categoryKey = (row.staffCategory ?? "").trim().toLowerCase();
-      const staffCategory: SupportingStaffCategory = CATEGORY_MAP[categoryKey] ?? requiredCategory ?? "TECHNICAL";
-      if (row.staffCategory?.trim() && !CATEGORY_MAP[categoryKey]) dropped(empId, "Staff Category", row.staffCategory);
-
-      // Each role can only import into its own category - Technical (HOD, per
-      // department) and Non-Technical (College Office, college-wide) are kept separate.
-      if (requiredCategory && staffCategory !== requiredCategory) {
-        failed.push({ row: rowNum, employeeId: empId, error: `${session.role === "HOD" ? "HOD" : "College Office"} can only import ${supportingStaffCategoryLabel(requiredCategory)} staff` });
-        continue;
-      }
+      const staffCategory: SupportingStaffCategory = "NON_TECHNICAL";
 
       const designationKey = (row.designation ?? "").trim().toLowerCase();
-      const designationMap = staffCategory === "TECHNICAL" ? TECHNICAL_DESIGNATION_MAP : NON_TECHNICAL_DESIGNATION_MAP;
-      const designation: SupportingStaffDesignation = designationMap[designationKey] ?? "OTHER";
+      const designation: SupportingStaffDesignation = NON_TECHNICAL_DESIGNATION_MAP[designationKey] ?? "OTHER";
       if (designation === "OTHER" && designationKey && designationKey !== "other" && !row.otherDesignationTitle?.trim()) {
         dropped(empId, "Designation", row.designation);
       }
@@ -472,10 +363,8 @@ export async function POST(request: Request) {
           department = resolved;
         } else {
           dropped(empId, "Department", department);
-          department = session.role === "HOD" ? hodDept : "";
+          department = "";
         }
-      } else {
-        department = session.role === "HOD" ? hodDept : "";
       }
 
       // Optional login creation - a CSV row with a Password fills in this
@@ -543,7 +432,7 @@ export async function POST(request: Request) {
         temporaryAddress: row.temporaryAddress?.trim() || undefined,
         permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
         permanentAddress: row.permanentAddress?.trim() || undefined,
-        supportingStaffProfile: buildSupportingStaffProfile(row, staffCategory, empId, dropped),
+        supportingStaffProfile: buildSupportingStaffProfile(row, empId, dropped),
         createdAt: now,
         updatedAt: now,
       };
@@ -562,7 +451,7 @@ export async function POST(request: Request) {
           name: row.name.trim(),
           email: loginEmail,
           role: "COLLEGE_STAFF",
-          designation: designationLabel(staffCategory, designation),
+          designation: designationLabel(designation),
           ...(department ? { department } : {}),
           isActive: true,
           createdAt: now,

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
+import { TechnicalStaffProfileFields } from "@/components/faculty/TechnicalStaffProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
@@ -22,8 +23,9 @@ import {
   DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS,
   FACULTY_STATUS_LABELS,
+  TECHNICAL_STAFF_DESIGNATIONS,
 } from "@/types";
-import type { Designation, EmploymentType, FacultyStatus, FacultyProfileFields, Subject } from "@/types";
+import type { Designation, EmploymentType, FacultyStatus, FacultyProfileFields, TechnicalProfile, Subject } from "@/types";
 
 interface PendingTeachingPreference {
   courseId: string;
@@ -84,6 +86,7 @@ export default function EditFacultyPage() {
   const [form, setForm] = useState<EmploymentForm>(EMPTY_FORM);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
+  const [technicalProfile, setTechnicalProfile] = useState<Partial<TechnicalProfile>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [joiningLetterUrl, setJoiningLetterUrl] = useState<string>("");
   const [appointmentLetterUrl, setAppointmentLetterUrl] = useState<string>("");
@@ -153,6 +156,7 @@ export default function EditFacultyPage() {
           bloodGroup: (m.bloodGroup as string) ?? "",
         });
         setAcademicProfile((m.academicProfile as Partial<FacultyProfileFields>) ?? {});
+        setTechnicalProfile((m.technicalProfile as Partial<TechnicalProfile>) ?? {});
         setPendingPreference((m.pendingTeachingPreference as PendingTeachingPreference | undefined) ?? null);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
         setJoiningLetterUrl((m.joiningLetterUrl as string) ?? "");
@@ -230,6 +234,8 @@ export default function EditFacultyPage() {
       .catch(() => { /* non-critical */ });
   }, [teachingLoaded, pendingPreference, teachingRows.length]);
 
+  const isTechnical = TECHNICAL_STAFF_DESIGNATIONS.includes(form.designation);
+
   function set(patch: Partial<EmploymentForm>) {
     setForm((f) => ({ ...f, ...patch }));
   }
@@ -254,7 +260,7 @@ export default function EditFacultyPage() {
           email,
           employeeId,
           ...personalDetails,
-          academicProfile,
+          ...(isTechnical ? { technicalProfile } : { academicProfile }),
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
           joiningLetterUrl,
           appointmentLetterUrl,
@@ -348,7 +354,7 @@ export default function EditFacultyPage() {
                     <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(DESIGNATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        {Object.entries(DESIGNATION_LABELS).filter(([v]) => v !== "LAB_ASSISTANT").map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -465,6 +471,15 @@ export default function EditFacultyPage() {
 
           {/* Right column */}
           <div className="space-y-6">
+            {isTechnical ? (
+              <Card>
+                <CardHeader><CardTitle className="text-base">Technical Profile</CardTitle></CardHeader>
+                <CardContent>
+                  <TechnicalStaffProfileFields value={technicalProfile} onChange={setTechnicalProfile} />
+                </CardContent>
+              </Card>
+            ) : (
+            <>
             <Card>
               <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
               <CardContent>
@@ -507,6 +522,8 @@ export default function EditFacultyPage() {
                 />
               </CardContent>
             </Card>
+            </>
+            )}
           </div>
         </div>
 

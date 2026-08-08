@@ -18,8 +18,8 @@ type ImportResult = {
   warnings: { row: number; employeeId: string; warning: string }[];
 };
 
-const COLUMNS = getSupportingStaffColumns("NON_TECHNICAL");
-const HINTS = getSupportingStaffHints("NON_TECHNICAL");
+const COLUMNS = getSupportingStaffColumns();
+const HINTS = getSupportingStaffHints();
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 

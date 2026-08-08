@@ -30,7 +30,6 @@ const TEACHING_ROLES = [
 ] as const;
 
 const SUPPORTING_ROLES = [
-  "Technical",
   "Non-Technical",
 ] as const;
 

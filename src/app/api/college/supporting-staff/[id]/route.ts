@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE");
     const { id } = await params;
 
     const db = getAdminDb();
@@ -40,7 +40,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("COLLEGE_OFFICE");
     const { id } = await params;
 
     const body = (await request.json()) as Partial<{
@@ -200,7 +200,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("COLLEGE_OFFICE");
     const { id } = await params;
 
     const db = getAdminDb();

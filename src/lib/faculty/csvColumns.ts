@@ -292,7 +292,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
 ];
 
 export const HINTS = [
-  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty, Lab Assistant (teaching); Technical, Non-Technical, Other (supporting)",
+  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty (teaching); Lab Assistant, Programmer, System Administrator, Network Engineer, Other (technical)",
   "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",
   "Status: Active, On Leave, Resigned, Retired (defaults to Active if left blank)",
   "Gender: Male, Female, Other",
