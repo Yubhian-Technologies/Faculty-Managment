@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Candidate, CandidateBioData } from "@/types";
+import type { Candidate, CandidateBioData, HiringBatch } from "@/types";
 
 export async function GET(
   _request: Request,
@@ -23,6 +23,18 @@ export async function GET(
     }
 
     const data = snap.data() as Candidate;
+
+    let requiredDocuments: string[] = [];
+    if (data.batchId) {
+      const batchSnap = await db
+        .collection("colleges")
+        .doc(collegeId)
+        .collection("hiringBatches")
+        .doc(data.batchId)
+        .get();
+      requiredDocuments = (batchSnap.data() as HiringBatch | undefined)?.requiredDocuments ?? [];
+    }
+
     return NextResponse.json({
       candidate: {
         name: data.name,
@@ -30,6 +42,7 @@ export async function GET(
         department: data.department,
         bioDataSubmitted: data.bioDataSubmitted ?? false,
       },
+      requiredDocuments,
     });
   } catch (err) {
     console.error("[public/candidate-form GET]", err);

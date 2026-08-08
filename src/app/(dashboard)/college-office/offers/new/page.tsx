@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { auth } from "@/lib/firebase/client";
-import { getOfferLetterPdfBase64 } from "@/lib/pdf/downloadOfferLetter";
+import { formatDate } from "@/lib/utils";
+import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
 import type { HiringBatch, Candidate } from "@/types";
 
 type CreateForm = {
@@ -46,17 +46,38 @@ export default function NewCollegeOfficeOfferLetterPage() {
   const [sentConfirm, setSentConfirm] = useState<{ name: string; emailedTo?: string } | null>(null);
   const [collegeInfo, setCollegeInfo] = useState<{ name: string; address: string }>({ name: "", address: "" });
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>).then((d) => d.letters ?? []),
+  function loadBatchesAndLetters() {
+    return Promise.all([
+      fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string; status?: string }[] }>).then((d) => d.letters ?? []),
       fetch("/api/college/hiring-batches").then((r) => r.json() as Promise<{ batches: HiringBatch[] }>).then((d) => (d.batches ?? []).filter((b) => b.currentPhase === "COMPLETED" || b.currentPhase === "PRINCIPAL_FINAL_REVIEW")),
     ])
       .then(([lettersRes, batchRes]) => {
-        setExistingLetterCandidateIds(new Set(lettersRes.map((l) => l.candidateId)));
+        // A REJECTED offer shouldn't block a fresh one — the office dashboard
+        // explicitly lets a candidate be re-offered after a rejected offer.
+        setExistingLetterCandidateIds(new Set(lettersRes.filter((l) => l.status !== "REJECTED").map((l) => l.candidateId)));
         setBatches(batchRes);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load" }));
-  }, []);
+  }
+
+  useEffect(() => { void loadBatchesAndLetters(); }, []);
+
+  // Principal's decision (which makes a batch/candidate eligible here) happens
+  // server-side in a different session — refetch on refocus so office staff
+  // don't sit behind a stale snapshot from before the decision was made.
+  useEffect(() => {
+    function onFocus() {
+      void loadBatchesAndLetters();
+      if (form.batchId) void loadCandidatesForBatch(form.batchId);
+    }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.batchId]);
 
   useEffect(() => {
     collegeFetch("/api/college/info")
@@ -118,6 +139,8 @@ export default function NewCollegeOfficeOfferLetterPage() {
       // decision time — auto-fill here rather than re-asking for them.
       ctcAnnual: candidate?.negotiatedSalary != null ? String(candidate.negotiatedSalary) : f.ctcAnnual,
       joiningDate: candidate?.dateOfJoining ?? f.joiningDate,
+      // Terms the Principal ticked at decision time — still editable here before sending.
+      termsAndConditions: candidate?.termsAndConditions?.length ? candidate.termsAndConditions.join("\n") : f.termsAndConditions,
     }));
   }
 
@@ -148,44 +171,47 @@ export default function NewCollegeOfficeOfferLetterPage() {
       const data = await res.json() as { error?: string; ccEmails?: string[] };
       if (!res.ok) throw new Error(data.error ?? "Failed to send offer");
 
-      let emailed = false;
+      const batch = batches.find((b) => b.id === batchId);
+      const letterFields = {
+        candidateName: selectedCandidate?.name ?? "",
+        candidateAddress: selectedCandidate?.permanentAddress || selectedCandidate?.residenceAddress,
+        designation,
+        department,
+        collegeName: collegeInfo.name,
+        collegeAddress: collegeInfo.address,
+        interviewDate: batch?.interviewDate ? formatDate(batch.interviewDate) : undefined,
+        joiningDate,
+        letterDate: new Date().toLocaleDateString("en-IN"),
+        termsAndConditions: form.termsAndConditions,
+      };
+
+      // Office reviews and sends the mail themselves (Gmail compose draft) rather
+      // than the backend sending it directly — the PDF is downloaded for them to attach.
+      await downloadOfferLetterPdf(letterFields, selectedCandidate?.name ?? candidateId);
+
       if (selectedCandidate?.email) {
-        try {
-          const token = await auth.currentUser?.getIdToken();
-          if (token) {
-            const letterFields = {
-              candidateName: selectedCandidate.name,
-              candidateAddress: selectedCandidate.permanentAddress || selectedCandidate.residenceAddress,
-              designation,
-              department,
-              collegeName: collegeInfo.name,
-              collegeAddress: collegeInfo.address,
-              joiningDate,
-              letterDate: new Date().toLocaleDateString("en-IN"),
-              termsAndConditions: form.termsAndConditions,
-            };
-            const pdfBase64 = await getOfferLetterPdfBase64(letterFields);
-            const emailRes = await fetch("/api/email/send", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                type: "OFFER_LETTER",
-                to: selectedCandidate.email,
-                cc: data.ccEmails ?? [],
-                data: { ...letterFields, position: designation },
-                pdfBase64,
-              }),
-            });
-            emailed = emailRes.ok;
-          }
-        } catch {
-          // Letter + faculty account are already created — email failure is surfaced via the dialog copy below, not a hard error.
-        }
+        const institution = collegeInfo.name || "the institution";
+        const subject = `Offer Letter – ${designation} | ${institution}`;
+        const body = `Dear ${selectedCandidate.name},
+
+Greetings from ${institution}.
+
+We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${new Date(joiningDate).toLocaleDateString("en-IN")}.
+
+The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+
+Congratulations, and welcome aboard!
+
+Warm regards,
+${institution}`;
+        const cc = (data.ccEmails ?? []).join(",");
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(selectedCandidate.email)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.open(gmailUrl, "_blank");
       }
 
       setSentConfirm({
         name: selectedCandidate?.name ?? "the candidate",
-        emailedTo: emailed ? selectedCandidate?.email : undefined,
+        emailedTo: selectedCandidate?.email,
       });
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
@@ -198,7 +224,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Send Offer Letter"
-        description="Generate and email an offer letter to the candidate"
+        description="Generate the offer letter and open a composed email draft to review before sending"
       />
 
       <Card>
@@ -290,7 +316,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSaving}>Cancel</Button>
-              <Button onClick={handleSend} loading={isSaving}>Send Offer Letter</Button>
+              <Button onClick={handleSend} loading={isSaving}>Generate &amp; Compose Email</Button>
             </div>
           </div>
         </CardContent>
@@ -299,12 +325,12 @@ export default function NewCollegeOfficeOfferLetterPage() {
       <Dialog open={!!sentConfirm} onOpenChange={(o) => { if (!o) { setSentConfirm(null); router.push("/college-office/offers"); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Offer Letter Sent</DialogTitle>
+            <DialogTitle>Offer Letter Generated</DialogTitle>
             <DialogDescription>
               {sentConfirm?.emailedTo
-                ? <>The offer letter was emailed to <strong>{sentConfirm?.name}</strong> at <strong>{sentConfirm.emailedTo}</strong>, with the Principal, Vice Principal, panel members, HOD, and Accounts in CC.</>
-                : <>The offer letter for <strong>{sentConfirm?.name}</strong> could not be emailed automatically — you can resend it from the Offer Letters list.</>}
-              {" "}Once they accept, create their faculty account from the Offer Letters list.
+                ? <>The offer letter PDF has been downloaded, and a Gmail draft to <strong>{sentConfirm?.name}</strong> at <strong>{sentConfirm.emailedTo}</strong> (CC: Principal, Vice Principal, panel members, HOD, and Accounts) has opened in a new tab — attach the PDF and review before sending.</>
+                : <>The offer letter PDF has been downloaded. <strong>{sentConfirm?.name}</strong> has no email on file, so you&apos;ll need to send it manually.</>}
+              {" "}Once they accept, mark it from this list, then Request Credentials — the Webmaster will provision their account.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

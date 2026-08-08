@@ -97,6 +97,31 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
     );
   }
 
+  const pendingBioData = candidates.filter((c) => !c.bioDataSubmitted);
+  if (pendingBioData.length > 0) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Demo QR Display"
+          description={`${batch.position} · ${batch.department}`}
+        />
+        <Card>
+          <CardContent className="p-8 text-center space-y-3">
+            <p className="font-medium">Interview session isn&apos;t open yet</p>
+            <p className="text-sm text-muted-foreground">
+              Waiting on the bio-data form from {pendingBioData.length} candidate{pendingBioData.length !== 1 ? "s" : ""}:
+            </p>
+            <ul className="text-sm inline-block text-left">
+              {pendingBioData.map((c) => (
+                <li key={c.id}>• {c.name}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Fullscreen QR mode - for projecting to class
   if (isFullscreen) {
     return (

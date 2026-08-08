@@ -138,7 +138,8 @@ export async function provisionFacultyFromOffer(
     joiningDate,
     employmentType: "FULL_TIME",
     // Account creation is normally deferred until after the candidate accepts
-    // (see "Create Faculty Account" on hod/offers), so the accept-time flip in
+    // (see Request Credentials on college-office/offers, fulfilled via
+    // webmaster/credential-requests), so the accept-time flip in
     // offer-letters/[id]/route.ts PATCH will already have run and found no
     // faculty doc yet — go straight to ACTIVE here instead of relying on it.
     // Falls back to INTERVIEW_DONE for the rarer case of provisioning before

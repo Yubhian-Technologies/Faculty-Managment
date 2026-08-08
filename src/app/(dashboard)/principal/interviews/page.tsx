@@ -159,7 +159,7 @@ export default function PrincipalInterviewsPage() {
                       </div>
                     </div>
                     <Button asChild variant={isDone || isScoring ? "outline" : "default"} size="sm">
-                      <Link href={`/principal/decisions/${b.id}`}>
+                      <Link href={isDone || isScoring ? `/principal/decisions/${b.id}` : `/principal/negotiate/${b.id}`}>
                         {isDone ? "Review" : isScoring ? "Monitor" : "Decide"}
                         <ChevronRight className="h-4 w-4 ml-1" />
                       </Link>
