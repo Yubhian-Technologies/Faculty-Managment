@@ -10,13 +10,18 @@ import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 
 // Roster of department (HOD) or college-wide (Principal/VP) faculty
 // (teaching AND technical designations - see TECHNICAL_STAFF_DESIGNATIONS in
-// core.ts) plus, for Principal/VP only, Non-Technical supporting staff -
-// every entry's leave profile is auto-created here if it doesn't already
-// exist yet (from their FacultyMember/SupportingStaff designation), so there
-// is never a "not set up" state to show - only ever an existing, editable
-// profile. An HOD's roster is just their department's faculty; Supporting
-// Staff (Non-Technical, college-wide) is Principal/VP-only. staffType tags
-// each entry "faculty" vs "supportingStaff" for the roster/report UI's tabs.
+// core.ts) plus supporting staff - Principal/VP see every supportingStaff
+// record college-wide (Technical and Non-Technical); an HOD sees their own
+// department's faculty plus any leftover Technical supportingStaff records
+// still scoped to their department (pre-existing records not yet migrated
+// into facultyMembers via scripts/migrate-technical-staff-to-faculty.mjs -
+// they stay visible/editable here until that migration runs). Non-Technical
+// stays Principal/VP-only since it's college-wide, not HOD-owned. Every
+// entry's leave profile is auto-created here if it doesn't already exist yet
+// (from their FacultyMember/SupportingStaff designation), so there is never
+// a "not set up" state to show - only ever an existing, editable profile.
+// staffType tags each entry "faculty" vs "supportingStaff" for the roster/
+// report UI's tabs.
 export async function GET() {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
@@ -24,15 +29,18 @@ export async function GET() {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     let facultyQuery: FirebaseFirestore.Query = collegeRef.collection("facultyMembers");
+    let staffQuery: FirebaseFirestore.Query = collegeRef.collection("supportingStaff");
     if (session.role === "HOD") {
       const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
       facultyQuery = facultyQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
+      staffQuery = staffQuery
+        .where("staffCategory", "==", "TECHNICAL")
+        .where("department", "==", dept || "__NO_DEPARTMENT__");
     }
-    const staffQuery: FirebaseFirestore.Query | null = session.role === "HOD" ? null : collegeRef.collection("supportingStaff");
 
     const [facultySnap, staffSnap, settings] = await Promise.all([
       facultyQuery.get(),
-      staffQuery?.get(),
+      staffQuery.get(),
       loadCollegeSettings(db, session.collegeId),
     ]);
 
@@ -40,7 +48,7 @@ export async function GET() {
       .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
       .filter((f) => !!f.userUid)
       .map((f) => ({ ...f, staffType: "faculty" as const }));
-    const staffList = (staffSnap?.docs ?? [])
+    const staffList = staffSnap.docs
       .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
       .filter((f) => !!f.userUid)
       .map((f) => ({ ...f, staffType: "supportingStaff" as const }));
