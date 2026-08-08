@@ -69,7 +69,7 @@ export async function getOrCreateProfile(
     staffCategory: identity.isTeachingStaff ? "vacation" : "non-vacation",
     isTeachingStaff: identity.isTeachingStaff,
     dateOfJoining: identity.dateOfJoining as unknown as EmployeeLeaveProfile["dateOfJoining"],
-    department: identity.department,
+    ...(identity.department ? { department: identity.department } : {}),
     createdAt: now as unknown as EmployeeLeaveProfile["createdAt"],
     updatedAt: now as unknown as EmployeeLeaveProfile["updatedAt"],
   };

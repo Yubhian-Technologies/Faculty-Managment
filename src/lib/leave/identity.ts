@@ -25,7 +25,11 @@ export interface ResolvedIdentity {
 //    COLLEGE_OFFICE, and label-only COLLEGE_STAFF logins like Dean/IQAC/T&P)
 //    has no FacultyMember/SupportingStaff record - only a thin users/{uid}
 //    doc. isTeachingStaff is derived from that doc's stored role: true only
-//    for academic leadership (HOD/PRINCIPAL/VICE_PRINCIPAL). dateOfJoining
+//    for HOD (a working faculty member holding administrative charge, same
+//    vacation entitlement as any other teaching designation). PRINCIPAL and
+//    VICE_PRINCIPAL are full-time academic administrators, not classroom
+//    faculty, so they get non-vacation entitlement (EL 30 instead of 6, no
+//    SCL) just like Accounts/Finance/College Office/Dean. dateOfJoining
 //    falls back to when their login was created.
 export async function resolveEmployeeIdentity(
   db: Firestore,
@@ -88,7 +92,7 @@ export async function resolveEmployeeIdentity(
   return {
     name: u.name ?? "Unknown",
     department: u.department,
-    isTeachingStaff: isAcademicLeadership,
+    isTeachingStaff: u.role === "HOD",
     // HOD/Principal/Vice Principal login accounts have no FacultyMember
     // record to source a real joining date from - falling back to this
     // login's own createdAt (as every other role here does) would wrongly
