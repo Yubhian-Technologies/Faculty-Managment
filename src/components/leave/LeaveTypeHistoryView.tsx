@@ -14,7 +14,9 @@ import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 
 // "OTHER" isn't a real LeaveTypeCode (see types/leave.ts) - it's the catch-all
 // bucket for isOtherRequest submissions, which never get a leaveTypeCode.
-export type LeaveHistoryFilter = LeaveTypeCode | "OTHER";
+// "ALL" isn't a leave type either - it's the unfiltered, every-type view
+// reached from the "View Full Leave History" entry on LeaveProfileView.
+export type LeaveHistoryFilter = LeaveTypeCode | "OTHER" | "ALL";
 
 const DESCRIPTIONS: Record<LeaveHistoryFilter, string> = {
   CL: "All Casual Leave requests",
@@ -23,11 +25,12 @@ const DESCRIPTIONS: Record<LeaveHistoryFilter, string> = {
   EL: "All Earned Leave requests",
   OD: "All On Duty requests - no annual limit",
   OTHER: 'All "Other" leave requests',
+  ALL: "Every leave request you've made, across all types - latest first",
 };
 
 export function parseLeaveHistoryFilter(raw: string): LeaveHistoryFilter | null {
   const upper = raw.toUpperCase();
-  if (upper === "OTHER") return "OTHER";
+  if (upper === "OTHER" || upper === "ALL") return upper;
   return (["CL", "SL", "SCL", "EL", "OD"] as const).includes(upper as LeaveTypeCode)
     ? (upper as LeaveTypeCode)
     : null;
@@ -46,17 +49,22 @@ export function LeaveTypeHistoryView({ uid, backHref, type }: LeaveTypeHistoryVi
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const label = type === "OTHER" ? "Other" : LEAVE_TYPE_LABELS[type];
+  const label = type === "ALL" ? "Full" : type === "OTHER" ? "Other" : LEAVE_TYPE_LABELS[type];
 
   useEffect(() => {
     const qs = uid ? `?uid=${uid}` : "";
     fetch(`/api/leave/applications${qs}`)
       .then((r) => r.json() as Promise<{ requests: LeaveRequest[] }>)
       .then((data) => {
+        // Already sorted newest-first by the API (sortByCreatedAtDesc) - the
+        // "ALL" view relies on that ordering as-is, latest request on top.
         const all = data.requests ?? [];
-        const filtered = type === "OTHER"
-          ? all.filter((r) => r.isOtherRequest)
-          : all.filter((r) => r.leaveTypeCode === type);
+        const filtered =
+          type === "ALL"
+            ? all
+            : type === "OTHER"
+              ? all.filter((r) => r.isOtherRequest)
+              : all.filter((r) => r.leaveTypeCode === type);
         setRequests(filtered);
       })
       .catch(() => toast({ variant: "destructive", title: `Failed to load ${label} history` }))
@@ -66,7 +74,7 @@ export function LeaveTypeHistoryView({ uid, backHref, type }: LeaveTypeHistoryVi
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`${label} History`}
+        title={type === "ALL" ? "Full Leave History" : `${label} History`}
         description={DESCRIPTIONS[type]}
         actions={
           <Button asChild variant="outline" size="sm">
@@ -88,7 +96,10 @@ export function LeaveTypeHistoryView({ uid, backHref, type }: LeaveTypeHistoryVi
           ) : requests.length === 0 ? (
             <EmptyState icon={<History className="h-6 w-6" />} title={`No ${label} requests yet`} />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            // The "ALL" view stays single-column so the newest-first order
+            // reads unambiguously top-to-bottom; per-type lists are short
+            // enough that a 2-up grid stays readable.
+            <div className={type === "ALL" ? "flex flex-col gap-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
               {requests.map((r) => (
                 <LeaveHistoryRow key={r.id} request={r} />
               ))}
