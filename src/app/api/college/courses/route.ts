@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER");
+    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "EXAM_CELL");
     const { searchParams } = new URL(request.url);
     let departmentId = searchParams.get("departmentId");
 
