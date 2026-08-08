@@ -6,10 +6,13 @@ import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EFFECTIVE_CATEGORY_LABELS } from "@/types/leave";
+import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveTypeCode } from "@/types/leave";
 import type { Department } from "@/types";
+
+const CATEGORY_TABS = EFFECTIVE_CATEGORY_ORDER.map((key) => ({ key, label: EFFECTIVE_CATEGORY_LABELS[key] }));
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -55,6 +58,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  const [category, setCategory] = useState<EffectiveLeaveCategory>("vacation");
 
   const { data, isLoading } = useQuery({
     queryKey: [...queryKey, year, month],
@@ -63,32 +67,37 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
         .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[] }>),
   });
 
+  const rows = (data?.rows ?? []).filter((row) => row.category === category);
+
   const th = "border border-blue-900 bg-[#0a0a7a] text-white px-3 py-2 text-xs font-semibold text-center whitespace-nowrap";
   const td = "border px-3 py-2 text-sm text-center whitespace-nowrap";
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Month" />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTH_NAMES.map((name, idx) => (
-              <SelectItem key={idx + 1} value={String(idx + 1)}>{name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-          <SelectTrigger className="w-28">
-            <SelectValue placeholder="Year" />
-          </SelectTrigger>
-          <SelectContent>
-            {YEARS.map((y) => (
-              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap items-center gap-3 justify-between">
+        <SegmentedTabs value={category} onChange={(key) => setCategory(key as EffectiveLeaveCategory)} options={CATEGORY_TABS} />
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Month" />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_NAMES.map((name, idx) => (
+                <SelectItem key={idx + 1} value={String(idx + 1)}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+            <SelectTrigger className="w-28">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {YEARS.map((y) => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card>
@@ -99,9 +108,12 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                 <div key={i} className="h-10 bg-muted animate-pulse rounded-lg" />
               ))}
             </div>
-          ) : !data || data.rows.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="p-4">
-              <EmptyState icon={<History className="h-6 w-6" />} title={emptyTitle ?? "No faculty with a login here yet"} />
+              <EmptyState
+                icon={<History className="h-6 w-6" />}
+                title={!data || data.rows.length === 0 ? (emptyTitle ?? "No faculty with a login here yet") : `No ${EFFECTIVE_CATEGORY_LABELS[category]} found`}
+              />
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -134,7 +146,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rows.map((row, i) => (
+                  {rows.map((row, i) => (
                     <tr key={row.uid} className="hover:bg-muted/40">
                       <td className={td}>{i + 1}</td>
                       <td className={td}>{row.employeeId}</td>

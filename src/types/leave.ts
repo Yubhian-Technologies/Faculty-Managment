@@ -46,6 +46,10 @@ export const EFFECTIVE_CATEGORY_LABELS: Record<EffectiveLeaveCategory, string> =
   "non-vacation": "Non-Vacation Staff (Supporting)",
 };
 
+// Display order for the category tab strip shared by the Leave History
+// register and the Leave Approvals queue.
+export const EFFECTIVE_CATEGORY_ORDER: EffectiveLeaveCategory[] = ["new-joining", "vacation", "non-vacation"];
+
 export interface LeaveTypeRules {
   daysPerYear?: number;   // undefined when unlimited is true
   unlimited?: boolean;    // OD only - no balance is tracked, history is shown instead
@@ -170,4 +174,8 @@ export interface LeaveRequest {
   principalAction?: LeaveActionRecord;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  // Not stored on the document - computed from the requester's leave profile
+  // at read time and attached only by the approvals-queue endpoint, for the
+  // New Joining / Vacation / Non-Vacation tab split.
+  category?: EffectiveLeaveCategory;
 }

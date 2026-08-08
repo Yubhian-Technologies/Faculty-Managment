@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 
 // Technical Staff lives under the Faculty module now - no separate sidebar
 // entry (see navConfig.ts) - this tab strip is how HOD moves between the two
@@ -16,26 +16,13 @@ export function FacultyModuleTabs({ facultyHref, supportingStaffHref }: FacultyM
   const pathname = usePathname();
   const isSupportingStaff = pathname?.startsWith(supportingStaffHref) ?? false;
 
-  const tabs = [
-    { href: facultyHref, label: "Teaching Faculty", active: !isSupportingStaff },
-    { href: supportingStaffHref, label: "Technical Staff", active: isSupportingStaff },
-  ];
-
   return (
-    <div className="flex gap-2 flex-wrap">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.href}
-          href={tab.href}
-          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-            tab.active
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-background border-border hover:bg-muted"
-          }`}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </div>
+    <SegmentedTabs
+      value={isSupportingStaff ? "supporting" : "faculty"}
+      options={[
+        { key: "faculty", label: "Teaching Faculty", href: facultyHref },
+        { key: "supporting", label: "Technical Staff", href: supportingStaffHref },
+      ]}
+    />
   );
 }
