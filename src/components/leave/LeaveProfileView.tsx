@@ -2,16 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { CalendarClock, Plus, ChevronRight } from "lucide-react";
-import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
+import { Plus, ChevronRight } from "lucide-react";
+import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode } from "@/types/leave";
-import type { LeaveHistoryFilter } from "./LeaveTypeHistoryView";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -31,7 +29,9 @@ interface LeaveProfileViewProps {
   // Principal browsing a faculty member's history) - no Apply button then.
   applyHref?: string;
   // Base path for per-type history pages - e.g. "/panel/leave/history" links
-  // to "/panel/leave/history/cl", "/panel/leave/history/od", etc.
+  // to "/panel/leave/history/cl", "/panel/leave/history/od", etc. Every
+  // balance card below is just an entry point into that page - there is no
+  // inline history list here anymore, only the OD-style "View history" link.
   historyBaseHref: string;
 }
 
@@ -43,27 +43,9 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, "pending" | "approved" | "rejec
   CANCELLED: "modified",
 };
 
-// Groups requests by leave type for the "Leave History" section, in a fixed,
-// sensible display order - skips types with no requests.
-const GROUP_ORDER: LeaveHistoryFilter[] = ["CL", "SL", "SCL", "EL", "OD", "OTHER"];
-
-function groupByType(requests: LeaveRequest[]): { key: LeaveHistoryFilter; label: string; items: LeaveRequest[] }[] {
-  const groups = new Map<LeaveHistoryFilter, LeaveRequest[]>();
-  for (const r of requests) {
-    const key: LeaveHistoryFilter | undefined = r.isOtherRequest ? "OTHER" : r.leaveTypeCode;
-    if (!key) continue;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(r);
-  }
-  return GROUP_ORDER
-    .filter((key) => groups.has(key))
-    .map((key) => ({ key, label: key === "OTHER" ? "Other" : LEAVE_TYPE_LABELS[key], items: groups.get(key)! }));
-}
-
 export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfileViewProps) {
   const [effectiveCategory, setEffectiveCategory] = useState<EffectiveLeaveCategory | null>(null);
   const [balances, setBalances] = useState<BalanceEntry[]>([]);
-  const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const qs = uid ? `?uid=${uid}` : "";
@@ -71,18 +53,11 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [balRes, reqRes] = await Promise.all([
-        fetch(`/api/leave/balances${qs}`),
-        fetch(`/api/leave/applications${qs}`),
-      ]);
+      const balRes = await fetch(`/api/leave/balances${qs}`);
       if (balRes.ok) {
         const data = (await balRes.json()) as { effectiveCategory: EffectiveLeaveCategory; leaveTypes: BalanceEntry[] };
         setEffectiveCategory(data.effectiveCategory);
         setBalances(data.leaveTypes);
-      }
-      if (reqRes.ok) {
-        const data = (await reqRes.json()) as { requests: LeaveRequest[] };
-        setRequests(data.requests);
       }
     } catch {
       toast({ variant: "destructive", title: "Failed to load leave profile" });
@@ -126,12 +101,17 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
         {trackedBalances.map((b) => (
           <Link key={b.code} href={`${historyBaseHref}/${b.code.toLowerCase()}`}>
             <Card className="h-full hover:border-primary transition-colors">
-              <CardContent className="p-4">
-                <p className="text-sm text-muted-foreground">{b.label}</p>
-                <p className="text-3xl font-bold mt-1">{b.remaining}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  of {b.entitled}
-                  {b.used ? ` · ${b.used} used` : ""}
+              <CardContent className="p-4 flex flex-col justify-between h-full">
+                <div>
+                  <p className="text-sm text-muted-foreground">{b.label}</p>
+                  <p className="text-3xl font-bold mt-1">{b.remaining}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    of {b.entitled}
+                    {b.used ? ` · ${b.used} used` : ""}
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                  View history <ChevronRight className="h-3.5 w-3.5" />
                 </p>
               </CardContent>
             </Card>
@@ -151,37 +131,6 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
           </Link>
         )}
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Leave History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {requests.length === 0 ? (
-            <EmptyState icon={<CalendarClock className="h-6 w-6" />} title="No leave requests yet" />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
-              {groupByType(requests).map((group) => (
-                <div key={group.key}>
-                  <Link
-                    href={`${historyBaseHref}/${group.key.toLowerCase()}`}
-                    className="flex items-center gap-2 text-sm font-medium mb-2 hover:text-primary w-fit"
-                  >
-                    {group.label}
-                    <span className="text-xs text-muted-foreground font-normal">({group.items.length})</span>
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
-                  <div className="space-y-2">
-                    {group.items.map((r) => (
-                      <LeaveHistoryRow key={r.id} request={r} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

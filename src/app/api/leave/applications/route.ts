@@ -26,6 +26,24 @@ function sortByCreatedAtDesc(requests: LeaveRequest[]): LeaveRequest[] {
   });
 }
 
+// Attaches each requester's current effective category (New Joining /
+// Vacation / Non-Vacation) - not stored on the request itself, computed the
+// same way the Leave Profiles roster and Leave History register do - so the
+// approvals queue can offer the same three-way tab split.
+async function attachCategory(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  requests: LeaveRequest[]
+): Promise<LeaveRequest[]> {
+  const settings = await loadCollegeSettings(db, collegeId);
+  return Promise.all(
+    requests.map(async (r) => {
+      const profile = await getOrCreateProfile(db, collegeId, r.uid);
+      return { ...r, category: profile ? computeEffectiveCategory(profile, settings.newJoiningYears) : undefined };
+    })
+  );
+}
+
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
@@ -45,14 +63,14 @@ export async function GET(request: Request) {
         const requests = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
           .filter((r) => r.department === (dept || "__NO_DEPARTMENT__"));
-        return NextResponse.json({ requests: sortByCreatedAtDesc(requests) });
+        return NextResponse.json({ requests: sortByCreatedAtDesc(await attachCategory(db, session.collegeId, requests)) });
       }
       if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
         const snap = await REQUESTS_COL(session.collegeId, db)
           .where("status", "==", "PENDING_PRINCIPAL")
           .get();
         const requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest);
-        return NextResponse.json({ requests: sortByCreatedAtDesc(requests) });
+        return NextResponse.json({ requests: sortByCreatedAtDesc(await attachCategory(db, session.collegeId, requests)) });
       }
       return NextResponse.json({ requests: [] });
     }
@@ -138,7 +156,14 @@ export async function POST(request: Request) {
     // warns the requester about this before they submit, but doesn't block it.
 
     const now = new Date();
-    const initialStatus = session.role === "PANEL_MEMBER" ? "PENDING_HOD" : "PENDING_PRINCIPAL";
+    // Technical Staff (COLLEGE_STAFF backed by a departmental SupportingStaff
+    // record) report to an HOD just like PANEL_MEMBER faculty, so their
+    // requests start at PENDING_HOD too. Non-Technical/label-only COLLEGE_STAFF
+    // logins (Dean/IQAC/T&P, Librarian, etc.) have no department and no HOD
+    // above them - those correctly skip straight to PENDING_PRINCIPAL, same as
+    // HOD/Principal/office-leadership roles applying for their own leave.
+    const reportsToHod = session.role === "PANEL_MEMBER" || (session.role === "COLLEGE_STAFF" && !!identity.department);
+    const initialStatus = reportsToHod ? "PENDING_HOD" : "PENDING_PRINCIPAL";
 
     const newRequest: Omit<LeaveRequest, "id"> = {
       collegeId: session.collegeId,

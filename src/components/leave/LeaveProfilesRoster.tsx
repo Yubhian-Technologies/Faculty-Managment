@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,11 +13,14 @@ import { Users, Pencil } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory } from "@/types/leave";
 
+type StaffType = "teaching" | "technical";
+
 interface RosterEntry {
   uid: string;
   name: string;
   department?: string;
   designation: string;
+  staffType: StaffType;
   staffCategory?: string;
   effectiveCategory?: EffectiveLeaveCategory;
 }
@@ -25,12 +29,18 @@ interface LeaveProfilesRosterProps {
   editHrefBase: string; // e.g. "/hod/leave/profiles" -> links to "{base}/{uid}/edit"
 }
 
-// Every entry here is auto-set-up already (from FacultyMember designation) by
-// the time it's fetched - there is no "not set up" state, only ever an
-// existing, editable profile.
+const STAFF_TYPE_TABS: { key: StaffType; label: string }[] = [
+  { key: "teaching", label: "Teaching Faculty" },
+  { key: "technical", label: "Technical Staff" },
+];
+
+// Every entry here is auto-set-up already (from FacultyMember/SupportingStaff
+// designation) by the time it's fetched - there is no "not set up" state,
+// only ever an existing, editable profile.
 export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [staffType, setStaffType] = useState<StaffType>("teaching");
 
   useEffect(() => {
     fetch("/api/leave/profiles")
@@ -40,23 +50,35 @@ export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) 
       .finally(() => setIsLoading(false));
   }, []);
 
+  const visibleRoster = roster.filter((f) => f.staffType === staffType);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Leave Profiles"
-        description="Auto-set up from each person's faculty details - edit only to correct a category"
+        description="Auto-set up from each person's staff details - edit only to correct a category"
       />
+
+      <SegmentedTabs
+        value={staffType}
+        onChange={(key) => setStaffType(key as StaffType)}
+        options={STAFF_TYPE_TABS}
+      />
+
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />
           ))}
         </div>
-      ) : roster.length === 0 ? (
-        <EmptyState icon={<Users className="h-6 w-6" />} title="No faculty found" />
+      ) : visibleRoster.length === 0 ? (
+        <EmptyState
+          icon={<Users className="h-6 w-6" />}
+          title={staffType === "teaching" ? "No faculty found" : "No technical staff found"}
+        />
       ) : (
         <div className="space-y-2">
-          {roster.map((f) => (
+          {visibleRoster.map((f) => (
             <Card key={f.uid}>
               <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
                 <div>
