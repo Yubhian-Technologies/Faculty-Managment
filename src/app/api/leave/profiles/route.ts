@@ -8,10 +8,12 @@ import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { getOrCreateProfile } from "@/lib/leave/profile";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 
-// Roster of department (HOD) or college-wide (Principal/VP) faculty - every
+// Roster of department (HOD) or college-wide (Principal/VP) faculty, plus
+// Technical Supporting Staff (same HOD-owns-per-department / Principal-owns-
+// college-wide split used on /hod/faculty vs /hod/supporting-staff) - every
 // entry's leave profile is auto-created here if it doesn't already exist yet
-// (from their FacultyMember designation), so there is never a "not set up"
-// state to show - only ever an existing, editable profile.
+// (from their FacultyMember/SupportingStaff record), so there is never a "not
+// set up" state to show - only ever an existing, editable profile.
 export async function GET() {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
@@ -19,28 +21,40 @@ export async function GET() {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     let facultyQuery: FirebaseFirestore.Query = collegeRef.collection("facultyMembers");
+    let supportingStaffQuery: FirebaseFirestore.Query = collegeRef
+      .collection("supportingStaff")
+      .where("staffCategory", "==", "TECHNICAL");
     if (session.role === "HOD") {
       const dept = await resolveUserDepartment(db, session.collegeId, session.uid);
       facultyQuery = facultyQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
+      supportingStaffQuery = supportingStaffQuery.where("department", "==", dept || "__NO_DEPARTMENT__");
     }
 
-    const [facultySnap, settings] = await Promise.all([
+    const [facultySnap, supportingStaffSnap, settings] = await Promise.all([
       facultyQuery.get(),
+      supportingStaffQuery.get(),
       loadCollegeSettings(db, session.collegeId),
     ]);
 
     const facultyList = facultySnap.docs
       .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
-      .filter((f) => !!f.userUid);
+      .filter((f) => !!f.userUid)
+      .map((f) => ({ ...f, staffType: "teaching" as const }));
+
+    const supportingStaffList = supportingStaffSnap.docs
+      .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
+      .filter((f) => !!f.userUid)
+      .map((f) => ({ ...f, staffType: "technical" as const }));
 
     const roster = await Promise.all(
-      facultyList.map(async (f) => {
+      [...facultyList, ...supportingStaffList].map(async (f) => {
         const profile = await getOrCreateProfile(db, session.collegeId, f.userUid!);
         return {
           uid: f.userUid!,
           name: f.name,
           department: f.department,
           designation: f.designation,
+          staffType: f.staffType,
           staffCategory: profile?.staffCategory,
           effectiveCategory: profile ? computeEffectiveCategory(profile, settings.newJoiningYears) : undefined,
         };
