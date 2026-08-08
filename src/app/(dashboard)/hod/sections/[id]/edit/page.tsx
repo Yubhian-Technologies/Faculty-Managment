@@ -12,7 +12,13 @@ import { toast } from "@/hooks/useToast";
 import type { Course, Section, Subject, TeachingAssignment } from "@/types";
 
 type SectionRow = Section & { id: string };
-type FacultyOption = { id: string; name: string; designation: string; department?: string; accessLevel?: "primary" | "secondary" };
+// `id` is the facultyMembers doc id — used for teachingAssignments.facultyId
+// (per-subject "Subjects & Faculty" assignment below), which is keyed off
+// the facultyMembers doc, not the login uid. `userUid` is the faculty
+// member's actual Firebase Auth uid (set once HOD creates their login via
+// "Set Login") — used only for Section.facultyInchargeUid, which sections
+// queries match directly against session.uid.
+type FacultyOption = { id: string; name: string; designation: string; department?: string; accessLevel?: "primary" | "secondary"; userUid?: string };
 type SubjectRow = Subject & { id: string };
 
 function ordinalYear(year: number) {
@@ -73,7 +79,7 @@ export default function EditSectionPage() {
       .then((r) => r.json())
       .then((d: { faculty?: FacultyOption[] }) => {
         setFacultyList((d.faculty ?? []).map((f) => ({
-          id: f.id, name: f.name, designation: f.designation, department: f.department, accessLevel: f.accessLevel,
+          id: f.id, name: f.name, designation: f.designation, department: f.department, accessLevel: f.accessLevel, userUid: f.userUid,
         })));
       })
       .catch(() => { /* non-critical */ });
@@ -168,13 +174,17 @@ export default function EditSectionPage() {
     return errors;
   }
 
-  function handleFacultySelect(facultyId: string) {
-    if (!facultyId) {
+  function handleFacultySelect(userUid: string) {
+    if (!userUid) {
       setF({ facultyInchargeUid: "", facultyInchargeName: "" });
       return;
     }
-    const f = facultyList.find((x) => x.id === facultyId);
-    setF({ facultyInchargeUid: facultyId, facultyInchargeName: f?.name ?? "" });
+    const f = facultyList.find((x) => x.userUid === userUid);
+    if (!f) {
+      toast({ variant: "destructive", title: "This faculty member has no login account yet — set one up first (Faculty → Set Login)." });
+      return;
+    }
+    setF({ facultyInchargeUid: userUid, facultyInchargeName: f.name });
   }
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
@@ -320,8 +330,8 @@ export default function EditSectionPage() {
                 <SelectContent>
                   <SelectItem value="none">- Not assigned -</SelectItem>
                   {facultyList.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
+                    <SelectItem key={f.id} value={f.userUid || f.id} disabled={!f.userUid}>
+                      {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}{!f.userUid ? " (no login yet)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
