@@ -1,4 +1,4 @@
-// Flow A — Regular Budget Request (HOD -> Principal/VP -> Finance).
+// Flow A - Regular Budget Request (HOD -> Principal/VP -> Finance).
 // Cases reference the IDs in the published QA test plan (BUD-A-*).
 // See tests/e2e/README.md for required env vars.
 
@@ -7,7 +7,7 @@ import { ApiClient } from "../support/apiClient";
 import { testUsers } from "../support/testUsers";
 import { regularBudgetRequestBody } from "../support/builders";
 
-test.describe("Flow A — Regular Budget Request", () => {
+test.describe("Flow A - Regular Budget Request", () => {
   let hod: ApiClient;
   let principal: ApiClient;
   let finance: ApiClient;

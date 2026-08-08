@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
+import { TechnicalStaffProfileFields } from "@/components/faculty/TechnicalStaffProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
@@ -21,8 +22,9 @@ import {
   DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS,
   TEACHING_DESIGNATIONS,
+  TECHNICAL_STAFF_DESIGNATIONS,
 } from "@/types";
-import type { FacultyProfileFields } from "@/types";
+import type { Designation, FacultyProfileFields, TechnicalProfile } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -47,6 +49,7 @@ type FormData = z.infer<typeof schema>;
 export default function NewFacultyPage() {
   const router = useRouter();
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
+  const [technicalProfile, setTechnicalProfile] = useState<Partial<TechnicalProfile>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
@@ -67,6 +70,7 @@ export default function NewFacultyPage() {
   const employmentType = watch("employmentType");
   const aicteEligible = watch("aicteEligible");
   const name = watch("name");
+  const isTechnical = TECHNICAL_STAFF_DESIGNATIONS.includes(designation as Designation);
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -75,7 +79,7 @@ export default function NewFacultyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
-          academicProfile,
+          ...(isTechnical ? { technicalProfile } : { academicProfile }),
           ...personalDetails,
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
@@ -169,9 +173,9 @@ export default function NewFacultyPage() {
               </p>
             </div>
 
-            {/* Academic profile */}
+            {/* Role details */}
             <div className="pt-2 pb-1 border-t">
-              <p className="text-sm font-medium text-muted-foreground">Academic Profile</p>
+              <p className="text-sm font-medium text-muted-foreground">Role Details</p>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -186,6 +190,9 @@ export default function NewFacultyPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {TEACHING_DESIGNATIONS.map((v) => (
+                      <SelectItem key={v} value={v}>{DESIGNATION_LABELS[v]}</SelectItem>
+                    ))}
+                    {TECHNICAL_STAFF_DESIGNATIONS.filter((v) => v !== "LAB_ASSISTANT").map((v) => (
                       <SelectItem key={v} value={v}>{DESIGNATION_LABELS[v]}</SelectItem>
                     ))}
                   </SelectContent>
@@ -299,19 +306,30 @@ export default function NewFacultyPage() {
         </CardContent>
       </Card>
 
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-        <CardContent>
-          <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment />
-        </CardContent>
-      </Card>
+      {isTechnical ? (
+        <Card className="mt-6">
+          <CardHeader><CardTitle className="text-base">Technical Profile</CardTitle></CardHeader>
+          <CardContent>
+            <TechnicalStaffProfileFields value={technicalProfile} onChange={setTechnicalProfile} />
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
+            <CardContent>
+              <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment />
+            </CardContent>
+          </Card>
 
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Current Teaching Assignments</CardTitle></CardHeader>
-        <CardContent>
-          <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />
-        </CardContent>
-      </Card>
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">Current Teaching Assignments</CardTitle></CardHeader>
+            <CardContent>
+              <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

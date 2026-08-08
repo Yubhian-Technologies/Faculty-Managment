@@ -11,13 +11,12 @@ const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsA
 // "this person's own details" depending on how their account was provisioned:
 //  - PANEL_MEMBER (hired through the Faculty Register) gets a THIN login doc at
 //    colleges/{id}/users/{uid} plus a separate, richer FacultyMember record
-//    (colleges/{id}/facultyMembers/{facultyId}) linked back via userUid — see
-//    loadFacultyDefaults in leave/profile's route for the same lookup pattern.
+//    (colleges/{id}/facultyMembers/{facultyId}) linked back via userUid.
 //  - HOD/PRINCIPAL/VICE_PRINCIPAL (provisioned via POST /api/college/users) have
-//    no separate FacultyMember record at all — their academicProfile and personal
+//    no separate FacultyMember record at all - their academicProfile and personal
 //    details live directly ON their own colleges/{id}/users/{uid} doc.
 // So: try the FacultyMember link first, and only fall back to the caller's own
-// user doc if that comes up empty — that fallback is what makes HOD/Principal
+// user doc if that comes up empty - that fallback is what makes HOD/Principal
 // "My Profile" show anything beyond name/email/role.
 export async function GET() {
   try {
@@ -63,10 +62,10 @@ export async function GET() {
   }
 }
 
-// Self-service PATCH for PANEL_MEMBER — updates the facultyMembers doc (and syncs
+// Self-service PATCH for PANEL_MEMBER - updates the facultyMembers doc (and syncs
 // basic fields back to the thin users/{uid} doc so name/photo stay consistent).
 // Employment fields (designation, department, joiningDate, employmentType, status,
-// employeeId, collegeEmail) are never overwritten here — those belong to HR/admin.
+// employeeId, collegeEmail) are never overwritten here - those belong to HR/admin.
 export async function PATCH(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER");

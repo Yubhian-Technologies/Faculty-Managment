@@ -18,7 +18,7 @@ const ALLOWED_TYPES = [
 
 export async function POST(request: Request) {
   try {
-    // FINANCE is a GLOBAL role with no session.collegeId — requireCollegeContext
+    // FINANCE is a GLOBAL role with no session.collegeId - requireCollegeContext
     // (not requireCollegeMember) so it resolves from the ?collegeId= query param.
     const session = await requireCollegeContext(request, "FINANCE", "SUPER_ADMIN");
 

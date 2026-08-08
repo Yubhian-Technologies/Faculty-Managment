@@ -39,7 +39,7 @@ export default function ManagementDashboardPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{stat.label}</p>
-                <p className="text-xl font-bold">{stat.value ?? "—"}</p>
+                <p className="text-xl font-bold">{stat.value ?? "-"}</p>
               </div>
             </CardContent>
           </Card>

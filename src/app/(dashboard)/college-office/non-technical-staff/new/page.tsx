@@ -193,7 +193,7 @@ export default function NewNonTechnicalStaffPage() {
                   {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Optional — leave unassigned for centrally-managed roles like Librarian or Accountant.</p>
+              <p className="text-xs text-muted-foreground">Optional - leave unassigned for centrally-managed roles like Librarian or Accountant.</p>
             </div>
 
             {/* Employment */}
@@ -239,7 +239,7 @@ export default function NewNonTechnicalStaffPage() {
       <Card className="mt-6">
         <CardHeader><CardTitle className="text-base">Profile</CardTitle></CardHeader>
         <CardContent>
-          <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory="NON_TECHNICAL" />
+          <SupportingStaffProfileFields value={profile} onChange={setProfile} />
         </CardContent>
       </Card>
     </div>

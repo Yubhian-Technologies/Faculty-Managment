@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// MANAGEMENT is read-only — this route only implements GET.
+// MANAGEMENT is read-only - this route only implements GET.
 // Returns the first matching college-scoped user for a role (PRINCIPAL / VICE_PRINCIPAL / HOD),
-// optionally filtered by department — mirrors the dedup convention used in college/users GET.
+// optionally filtered by department - mirrors the dedup convention used in college/users GET.
 export async function GET(request: Request, { params }: { params: Promise<{ collegeId: string }> }) {
   try {
     await requireManagement();

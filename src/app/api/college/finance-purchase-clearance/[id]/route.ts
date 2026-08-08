@@ -53,7 +53,7 @@ export async function PATCH(
     const existing = { id: snap.id, ...snap.data() } as FinancePurchaseClearance;
     const now = new Date();
     // Emergency (GOODS) requests route the owner-facing steps to the Principal/
-    // VP who raised the underlying budget request instead of an HOD — see
+    // VP who raised the underlying budget request instead of an HOD - see
     // isEmergency on FinancePurchaseClearance.
     const ownerLink = existing.isEmergency ? "/principal/purchase-clearance" : "/hod/purchase-clearance";
 
@@ -302,7 +302,7 @@ export async function PATCH(
         });
 
         const notifMessage = `${purchaseName} purchased the goods for "${existing.items}" (${existing.department}).`;
-        await notify(db, session.collegeId, existing.hodUid, "PURCHASE_CLEARANCE_GOODS_PURCHASED", "Goods Purchased — Upload GRN", `${notifMessage} Upload the GRN to confirm receipt.`, ownerLink);
+        await notify(db, session.collegeId, existing.hodUid, "PURCHASE_CLEARANCE_GOODS_PURCHASED", "Goods Purchased - Upload GRN", `${notifMessage} Upload the GRN to confirm receipt.`, ownerLink);
         await notifyRole(db, session.collegeId, "FINANCE", "PURCHASE_CLEARANCE_GOODS_PURCHASED", "Goods Purchased", notifMessage, "/finance/purchase-clearance");
 
         return NextResponse.json({ success: true });

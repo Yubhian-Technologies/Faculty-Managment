@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, UsersRound } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Pencil, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -120,17 +121,22 @@ export default function PrincipalDepartmentFacultyPage() {
       />
 
       {department && (
-        <div className="rounded-lg border p-4 flex items-center gap-3">
+        <div className="rounded-lg border p-4 flex items-center justify-between gap-3">
           {hod ? (
             <>
-              <Avatar name={hod.name} photoUrl={hod.profilePhotoUrl} size="sm" />
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium leading-tight">{hod.name}</p>
-                  <Badge variant="secondary">Head of Department</Badge>
+              <div className="flex items-center gap-3">
+                <Avatar name={hod.name} photoUrl={hod.profilePhotoUrl} size="sm" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium leading-tight">{hod.name}</p>
+                    <Badge variant="secondary">Head of Department</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{hod.email}{hod.phone ? ` · ${hod.phone}` : ""}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">{hod.email}{hod.phone ? ` · ${hod.phone}` : ""}</p>
               </div>
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/principal/staff/${hod.uid}/edit`}><Pencil className="h-3.5 w-3.5 mr-1" />Edit HOD</Link>
+              </Button>
             </>
           ) : (
             <p className="text-sm text-orange-500">No HOD assigned to this department yet</p>

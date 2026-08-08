@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 import type { Section } from "@/types";
-import { matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 
 const COLUMNS = [
   { key: "sno", label: "S.No", required: false, sample: "1" },
@@ -93,7 +93,7 @@ export default function StudentImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported — please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -106,12 +106,17 @@ export default function StudentImportPage() {
       // Tolerant of case, punctuation, spacing, and alternate wording (e.g. "Roll No" for Roll Number).
       const keyMap = matchHeaders(headers, COLUMNS);
 
-      // Check header matching BEFORE counting data rows — if nothing in the
+      // Check header matching BEFORE counting data rows - if nothing in the
       // header row matched, every row maps to an empty object and would
       // otherwise surface as the misleading "no data rows" error instead of
       // pointing at the real problem (wrong/missing header row).
       if (Object.keys(keyMap).length === 0) {
         setParseError("None of the columns in this file matched the template. Make sure the header row is the first row, and its wording is close to the template.");
+        return;
+      }
+      const unmatched = getUnmatchedHeaders(headers, keyMap);
+      if (unmatched.length > 0) {
+        setParseError(`These column(s) don't match any template column, so nothing was imported: ${unmatched.map((h) => `"${h}"`).join(", ")}. Rename them to match the template or remove them, then re-upload.`);
         return;
       }
 
@@ -121,7 +126,7 @@ export default function StudentImportPage() {
         return row;
       }).filter((r) => Object.values(r).some((v) => v.trim()));
 
-      if (dataRows.length === 0) { setParseError("No data rows found after the header — check that your data starts on the row right after the header, with no blank rows in between."); return; }
+      if (dataRows.length === 0) { setParseError("No data rows found after the header - check that your data starts on the row right after the header, with no blank rows in between."); return; }
       if (dataRows.length > 500) { setParseError("Maximum 500 rows allowed per import."); return; }
 
       setRows(dataRows);
@@ -150,7 +155,7 @@ export default function StudentImportPage() {
         setRows([]);
       }
     } catch {
-      toast({ variant: "destructive", title: "Network error — import failed" });
+      toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
     }

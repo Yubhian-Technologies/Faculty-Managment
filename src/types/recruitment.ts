@@ -50,26 +50,22 @@ export type CandidateStage =
   | "DEMO"
   | "INTERVIEW"
   | "SALARY_NEGOTIATION"
-  | "DOCUMENT_VERIFICATION"
   | "DECISION";
 
 export const CANDIDATE_STAGE_LABELS: Record<CandidateStage, string> = {
   DEMO: "Demo Class",
-  INTERVIEW: "Panel & HR Interview",
+  INTERVIEW: "Panel Interview",
   SALARY_NEGOTIATION: "Salary Negotiation",
-  DOCUMENT_VERIFICATION: "Document Verification",
   DECISION: "Final Decision",
 };
 
 // Sub-stages within INTERVIEW stage
 export type InterviewSubStage =
   | "PANEL_IN_PROGRESS"
-  | "HR_IN_PROGRESS"
   | "INTERVIEW_DONE";
 
 export const INTERVIEW_SUB_STAGE_LABELS: Record<InterviewSubStage, string> = {
   PANEL_IN_PROGRESS: "Panel Interview",
-  HR_IN_PROGRESS: "HR Interview",
   INTERVIEW_DONE: "Interview Complete",
 };
 
@@ -93,6 +89,64 @@ export const CANDIDATE_STATUS_LABELS: Record<CandidateStatus, string> = {
 };
 
 export type InterviewMode = "ONLINE" | "OFFLINE";
+
+// Self-reported by the candidate via the public /candidate-form link sent with
+// the interview call letter. Field names match FacultyMember/PersonalDetailsFields
+// (src/types/core.ts) where they overlap, so this could later prefill
+// hod/faculty/[id]/edit post-hire (not wired up yet).
+export interface AcademicQualification {
+  id: string;
+  degree: string;
+  institution: string;
+  yearOfPassing: string;
+  percentageOrCGPA: string;
+  certificateUrl?: string;
+  certificateName?: string;
+}
+
+export interface WorkExperienceEntry {
+  id: string;
+  organization: string;
+  designation: string;
+  fromDate: string; // yyyy-mm
+  toDate: string;   // yyyy-mm, or "Present"
+  responsibilities?: string;
+}
+
+export interface RelativeInSociety {
+  id: string;
+  name: string;
+  relationship: string;
+  workingLocation: string;
+  profession: string;
+  experience: string;
+}
+
+export interface CandidateBioData {
+  fatherName?: string;
+  motherName?: string;
+  dateOfBirth?: string;   // yyyy-mm-dd string from <input type="date">, not a Timestamp
+  gender?: string;
+  maritalStatus?: "Single" | "Married";
+  spouseName?: string;
+  aadharNo?: string;
+  panNo?: string;
+  bloodGroup?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  // Hiring-specific, self-reported — not on FacultyMember
+  currentEmployer?: string;
+  totalExperienceYears?: string;
+  currentCTC?: string;
+  expectedCTC?: string;
+  noticePeriod?: string;
+  references?: string;
+  additionalInfo?: string;
+  qualifications?: AcademicQualification[];
+  experiences?: WorkExperienceEntry[];
+  hasRelativesInSociety?: boolean;
+  relatives?: RelativeInSociety[];
+}
 
 export interface Candidate {
   id: string;
@@ -129,6 +183,27 @@ export interface Candidate {
   residenceAddress?: string;
   permanentAddress?: string;
   sameAddress?: boolean;
+  bioData?: CandidateBioData;
+  certificates?: Array<{ name: string; url: string }>;
+  bioDataSubmitted?: boolean;
+  bioDataSubmittedAt?: Timestamp;
+  documentVerification?: {
+    checkedDocs: Record<string, boolean>; // document label -> verified
+    verifiedBy: string;
+    verifiedByName: string;
+    verifiedAt: Timestamp;
+    allVerified?: boolean; // server-computed: every HiringBatch.requiredDocuments entry checked
+  };
+  // Office-uploaded scan of the manually-signed joining letter (post document verification).
+  joiningLetterUrl?: string;
+  joiningLetterUploadedAt?: Timestamp;
+  joiningLetterUploadedByName?: string;
+  // Captured by the Principal at final-decision time (see principal/decisions/[id]).
+  // negotiatedSalary/dateOfJoining flow automatically into the generated OfferLetter;
+  // expectedSalary is retained only for internal reference/comparison.
+  expectedSalary?: number;
+  negotiatedSalary?: number;
+  dateOfJoining?: string; // yyyy-mm-dd
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -237,50 +312,6 @@ export interface StudentFeedback {
   submittedAt: Timestamp;
 }
 
-// ─── HR Feedback (subcollection: hiringBatches/{batchId}/hrFeedback) ──────────
-
-export interface HRFeedback {
-  id: string;
-  collegeId: string;
-  batchId: string;
-  candidateId: string;
-  hrUid: string;
-  hrName: string;
-  ratings: {
-    attitude: number;            // 1–5
-    teamwork: number;            // 1–5
-    adaptability: number;        // 1–5
-    communication: number;       // 1–5
-    overallFit: number;          // 1–5
-  };
-  salaryExpectation?: number;
-  noticePeriod?: string;
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
-  comments?: string;
-  submittedAt: Timestamp;
-}
-
-// ─── Hiring Document Verification (collection: hiringDocVerifications) ─────────
-
-export interface HiringDocVerification {
-  id: string;
-  collegeId: string;
-  candidateId: string;
-  batchId: string;
-  documents: Array<{
-    name: string;
-    required: boolean;
-    verified: boolean;
-    verifiedAt?: Timestamp;
-    notes?: string;
-  }>;
-  verifiedBy: string;
-  verifiedByUid: string;
-  completedAt?: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
 // ─── Offer & Appointment Letters ──────────────────────────────────────────────
 
 export interface OfferLetter {
@@ -295,16 +326,25 @@ export interface OfferLetter {
   joiningDate: Timestamp;
   ctcAnnual: number;
   subjects?: string[];
+  termsAndConditions?: string;
   generatedAt: Timestamp;
   status: "DRAFT" | "GENERATED" | "SENT" | "ACCEPTED" | "REJECTED";
   generatedBy: string;
   generatedByUid?: string;
+  ccEmails?: string[]; // Principal/VP/panel/HOD/Accounts - resolved once at send time
+  // Office → Webmaster credential handoff (see /college-office/offers and /webmaster).
+  credentialsRequestedAt?: Timestamp;
+  credentialsRequestedBy?: string;
+  credentialsRequestedByName?: string;
+  credentialsFulfilledAt?: Timestamp;
+  credentialsFulfilledBy?: string;
 }
 
 export interface AppointmentLetter {
   id: string;
   collegeId: string;
   candidateId: string;
+  candidateName?: string;
   batchId: string;
   facultyId?: string;           // set when faculty record is created post-hire
   pdfUrl?: string;
@@ -314,4 +354,5 @@ export interface AppointmentLetter {
   generatedAt: Timestamp;
   status: "DRAFT" | "GENERATED" | "SENT";
   generatedBy: string;
+  generatedByUid?: string;
 }

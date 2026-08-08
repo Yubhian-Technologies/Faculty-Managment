@@ -72,7 +72,7 @@ export default function AuditLogsPage() {
       hideOnMobile: true,
       render: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.details ? JSON.stringify(row.details).slice(0, 80) : "—"}
+          {row.details ? JSON.stringify(row.details).slice(0, 80) : "-"}
         </span>
       ),
     },
@@ -82,7 +82,7 @@ export default function AuditLogsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Audit Logs"
-        description="System-wide action trail — last 100 events per college"
+        description="System-wide action trail - last 100 events per college"
       />
 
       {colleges.length > 0 && (

@@ -170,7 +170,7 @@ export default function NewInterviewPlanPage() {
                 <SelectContent>
                   {vacancies.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
-                      {v.position} — {v.department}
+                      {v.position} - {v.department}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -202,7 +202,7 @@ export default function NewInterviewPlanPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Interview Title <span className="text-destructive">*</span></Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Faculty Interview — Electrical Dept 2026" />
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Faculty Interview - Electrical Dept 2026" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -221,7 +221,7 @@ export default function NewInterviewPlanPage() {
           </CardContent>
         </Card>
 
-        {/* Candidates — filtered by selected vacancy's department */}
+        {/* Candidates - filtered by selected vacancy's department */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -264,7 +264,7 @@ export default function NewInterviewPlanPage() {
           </CardContent>
         </Card>
 
-        {/* Panel members — dept head auto-selected based on vacancy */}
+        {/* Panel members - dept head auto-selected based on vacancy */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">

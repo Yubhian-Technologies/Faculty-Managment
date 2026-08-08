@@ -1,97 +1,66 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { LeaveRequestV2, LeaveTypeCodeV2, LeaveTypeFull, ApprovalChainV2 } from "@/types/leave";
+import { canAccessLeaveProfile } from "@/lib/leave/access";
+import { resolveUserDepartment } from "@/lib/budget/departmentScope";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
+import { REQUESTS_COL, PROFILES_COL, commitApproval, releasePending, loadBalances, computeEntitlement } from "@/lib/leave/balanceEngine";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
-import {
-  REQUESTS_COL,
-  LEAVE_COL,
-  balanceDocId,
-} from "@/lib/leave/balanceEngine";
+import { notify } from "@/lib/notify";
+import { emitWorkflowNotification, resolveWorkflowNotifications } from "@/lib/notifications/workflowNotifications";
+import type { LeaveRequest, LeaveActionRecord, LeaveTypeFull, EmployeeLeaveProfile } from "@/types/leave";
 
-const LT_SHORT: Partial<Record<LeaveTypeCodeV2, string>> = {
-  CL: "Casual", SCL: "Special Casual", EL: "Earned", ML: "Sick",
-  MAT: "Maternity", FPL: "Family Planning", COMP: "Compensatory",
-  LND: "Leave Not Due", QUAR: "Quarantine", EOL: "Extraordinary",
-  SAB: "Sabbatical", VAC: "Vacation",
-};
-
-function labelFor(code?: LeaveTypeCodeV2) {
-  if (!code) return "Other";
-  return LT_SHORT[code] ?? code;
-}
-
-// Looks up the leave type's approval chain — "standard" types are fully
-// decided by the HOD; "management"/"medical_officer" types still require
-// Principal/VP ratification after HOD sign-off.
-async function resolveApprovalChain(
-  db: ReturnType<typeof getAdminDb>,
-  code: LeaveTypeCodeV2
-): Promise<ApprovalChainV2> {
-  const snap = await db.collection("leaveTypes").doc(code).get();
-  const leaveType = snap.exists
-    ? (snap.data() as LeaveTypeFull)
-    : LEAVE_TYPE_SEED.find((l) => l.code === code);
-  return leaveType?.rules.approvalChain ?? "standard";
-}
-
-async function notify(
-  db: ReturnType<typeof getAdminDb>,
+// Balance is never reserved at submission (see applications/route.ts), and
+// insufficient balance never blocks approval either - days beyond what's
+// remaining are accepted and split off as Loss of Pay instead. If no balance
+// doc exists yet (e.g. first request of this type, or balances were reset),
+// entitled falls back to the profile's computed default - NOT zero, which
+// was an earlier bug: a missing doc isn't the same as zero balance.
+async function splitLeaveDays(
+  db: FirebaseFirestore.Firestore,
   collegeId: string,
-  toUid: string,
-  type: string,
-  title: string,
-  message: string,
-  link?: string
-) {
-  try {
-    await db.collection("colleges").doc(collegeId).collection("notifications").add({
-      collegeId, toUid, type, title, message,
-      read: false, link: link ?? null, createdAt: new Date(),
-    });
-  } catch { /* non-fatal */ }
+  uid: string,
+  lt: LeaveTypeFull,
+  year: number,
+  days: number
+): Promise<{ withinBalance: number; lopDays: number }> {
+  const balances = await loadBalances(db, collegeId, uid, year);
+  const bal = balances.find((b) => b.leaveTypeCode === lt.code);
+  let entitled = bal?.entitled;
+  if (entitled === undefined) {
+    const [profileSnap, settings] = await Promise.all([
+      PROFILES_COL(collegeId, db).doc(uid).get(),
+      loadCollegeSettings(db, collegeId),
+    ]);
+    const profile = { id: profileSnap.id, ...profileSnap.data() } as EmployeeLeaveProfile;
+    entitled = computeEntitlement(lt, computeEffectiveCategory(profile, settings.newJoiningYears));
+  }
+  const remaining = Math.max(0, entitled - (bal?.used ?? 0));
+  const withinBalance = Math.min(days, remaining);
+  return { withinBalance, lopDays: days - withinBalance };
 }
 
-// ─── GET — fetch a single leave request ──────────────────────────────────────
-
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "SUPER_ADMIN"
+      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF"
     );
-
     const db = getAdminDb();
+
     const snap = await REQUESTS_COL(session.collegeId, db).doc(id).get();
+    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const req = { id: snap.id, ...snap.data() } as LeaveRequest;
 
-    if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    const req = { id: snap.id, ...snap.data() } as LeaveRequestV2;
-
-    if (session.role === "PANEL_MEMBER" && req.employeeId !== session.uid) {
+    if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, req.uid))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const stepsSnap = await db
-      .collection("colleges").doc(session.collegeId)
-      .collection("leaveApprovalSteps")
-      .where("applicationId", "==", id)
-      .get();
-    type StepDoc = { id: string; sequence?: number };
-    const steps = (stepsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() })) as StepDoc[])
-      .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-
-    return NextResponse.json({ request: req, steps });
+    return NextResponse.json({ request: req });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -101,406 +70,209 @@ export async function GET(
   }
 }
 
-// ─── PATCH — cancel / HOD approve-reject / Principal approve-reject ───────────
-
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const session = await requireCollegeMember(
-      "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"
+      "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
+      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF"
     );
-
     const body = (await request.json()) as {
-      action: "CANCEL" | "APPROVE" | "REJECT" | "RECALL";
-      comments?: string;
-      // Required when the HOD is approving an "Others" request — the type they
-      // decide is the most suitable to sanction the leave against.
-      leaveTypeCode?: LeaveTypeCodeV2;
+      action?: "APPROVE" | "REJECT" | "CANCEL";
+      remarks?: string;
+      isPaidLeave?: boolean;
     };
-
-    const db = getAdminDb();
-    const reqRef = REQUESTS_COL(session.collegeId, db).doc(id);
-    const snap = await reqRef.get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!body.action) {
+      return NextResponse.json({ error: "action is required" }, { status: 400 });
     }
 
-    const req = { id: snap.id, ...snap.data() } as LeaveRequestV2 & { applicantRole?: string };
+    const db = getAdminDb();
+    const ref = REQUESTS_COL(session.collegeId, db).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const req = { id: snap.id, ...snap.data() } as LeaveRequest;
+
     const now = new Date();
-    const leaveBase = req.applicantRole === "HOD" ? "/hod/leave" : "/panel/leave";
+    const year = (req.fromDate as unknown as { toDate(): Date }).toDate().getFullYear();
 
-    // ── Employee cancels ─────────────────────────────────────────────────────
-
+    // ─── Cancel (requester only, while still pending) ───────────────────────
     if (body.action === "CANCEL") {
-      if (req.employeeId !== session.uid) {
+      if (req.uid !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      // Cancellable while awaiting the first reviewer's decision — the HOD for
-      // normal requests, or the Principal for "Others" requests (which are
-      // reviewed by the Principal before the HOD).
-      const awaitingFirstReview =
-        req.status === "PENDING_HOD" ||
-        (req.status === "PENDING_RATIFICATION" && req.isOtherRequest && !req.leaveTypeCode);
-      if (!awaitingFirstReview) {
-        return NextResponse.json(
-          { error: "Only applications awaiting the first reviewer's decision can be cancelled." },
-          { status: 409 }
-        );
+      if (req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL") {
+        return NextResponse.json({ error: "Only pending requests can be cancelled" }, { status: 400 });
       }
-
-      await reqRef.update({ status: "CANCELLED", updatedAt: now });
-
       if (req.leaveTypeCode) {
-        const year = resolveYear(req.fromDate);
-        await releasePendingBalance(db, session.collegeId, session.uid, req.leaveTypeCode, year, req.computedDays);
+        const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
+        if (lt && !lt.rules.unlimited) {
+          await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
+        }
       }
-
+      await ref.update({ status: "CANCELLED", updatedAt: now });
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_CANCELLED", performedBy: session.uid,
+        performedByName: req.employeeName, targetId: id, details: {}, timestamp: now,
+      });
       return NextResponse.json({ ok: true });
     }
 
-    // ── HOD approve / reject ─────────────────────────────────────────────────
+    // ─── HOD stage ────────────────────────────────────────────────────────────
+    // Standard types (CL/SL/SCL/EL/OD): the HOD's decision is final - APPROVE
+    // commits the balance and closes the request out; REJECT releases it.
+    // "Other" requests: the HOD can REJECT outright, or tag isPaidLeave and
+    // forward to the Principal for the real decision (Other is never
+    // balance-tracked, so nothing is reserved/committed for it here).
+    if (req.status === "PENDING_HOD") {
+      if (session.role !== "HOD") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
+      if (!hodDept || req.department !== hodDept) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
 
-    if (body.action === "APPROVE" || body.action === "REJECT") {
-      if (session.role === "HOD" && req.status === "PENDING_HOD") {
-        const userSnap = await db
-          .collection("colleges").doc(session.collegeId)
-          .collection("users").doc(session.uid).get();
-        const hodDept = (userSnap.data() as { department?: string })?.department ?? "";
-        const hodName = (userSnap.data() as { name?: string })?.name ?? "HOD";
+      const actionRecord: LeaveActionRecord = {
+        action: body.action === "APPROVE" ? "APPROVED" : "REJECTED",
+        by: session.uid, byName: session.email || "HOD", at: now as unknown as LeaveActionRecord["at"],
+        ...(body.remarks ? { remarks: body.remarks } : {}),
+      };
 
-        if (req.department !== hodDept) {
-          return NextResponse.json({ error: "This application belongs to a different department." }, { status: 403 });
-        }
-
-        // "Others" requests reach the HOD only after the Principal has already
-        // given a general go-ahead; the HOD's job here is just to pick the
-        // concrete leave type and finalize — no further ratification needed.
-        const isOtherFinalStage = !!req.isOtherRequest && !req.leaveTypeCode;
-
-        let effectiveCode = req.leaveTypeCode;
-        if (body.action === "APPROVE" && isOtherFinalStage) {
-          if (!body.leaveTypeCode) {
-            return NextResponse.json(
-              { error: "Select which leave type to sanction this request as." },
-              { status: 400 }
-            );
+      if (body.action === "REJECT") {
+        if (req.leaveTypeCode) {
+          const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
+          if (lt && !lt.rules.unlimited) {
+            await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
           }
-          effectiveCode = body.leaveTypeCode;
         }
-        const ltLabel = labelFor(effectiveCode);
-        const sequence = isOtherFinalStage ? 2 : 1; // Others: Principal acted first (sequence 1)
+        await ref.update({ status: "REJECTED", hodAction: actionRecord, updatedAt: now });
+        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+          collegeId: session.collegeId, action: "LEAVE_REJECTED", performedBy: session.uid,
+          performedByName: session.email || "HOD", targetId: id, details: {}, timestamp: now,
+        });
+        await notify(db, session.collegeId, req.uid, "LEAVE_REJECTED", "Leave Request Rejected",
+          `Your leave request for ${req.totalDays} day(s) was rejected by your HOD.`, "/panel/leave");
+        return NextResponse.json({ ok: true });
+      }
 
-        if (body.action === "REJECT") {
-          await reqRef.update({ status: "REJECTED", currentApproverRole: FieldValue.delete(), updatedAt: now });
-
-          await db.collection("colleges").doc(session.collegeId)
-            .collection("leaveApprovalSteps").add({
-              collegeId: session.collegeId,
-              applicationId: id,
-              approverRole: "HOD",
-              approverId: session.uid,
-              approverName: hodName,
-              sequence,
-              action: "REJECTED",
-              comments: body.comments ?? "",
-              actedOn: now,
-              createdAt: now,
-            });
-
-          if (req.leaveTypeCode) {
-            const year = resolveYear(req.fromDate);
-            await releasePendingBalance(db, session.collegeId, req.employeeId, req.leaveTypeCode, year, req.computedDays);
-          }
-          await notify(
-            db, session.collegeId, req.employeeId,
-            "LEAVE_REJECTED",
-            `${ltLabel} Leave Rejected`,
-            `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was rejected by ${hodName}.${body.comments ? " Remarks: " + body.comments : ""}`,
-            `${leaveBase}/${id}`
-          );
-          return NextResponse.json({ ok: true });
+      // APPROVE
+      if (req.isOtherRequest) {
+        if (typeof body.isPaidLeave !== "boolean") {
+          return NextResponse.json({ error: "isPaidLeave is required to forward an Other request" }, { status: 400 });
         }
-
-        const year = resolveYear(req.fromDate);
-
-        if (isOtherFinalStage) {
-          // Principal already approved the general request — HOD's type pick is final.
-          await reqRef.update({
-            status: "APPROVED",
-            currentApproverRole: FieldValue.delete(),
-            leaveTypeCode: effectiveCode,
-            updatedAt: now,
-          });
-
-          await db.collection("colleges").doc(session.collegeId)
-            .collection("leaveApprovalSteps").add({
-              collegeId: session.collegeId,
-              applicationId: id,
-              approverRole: "HOD",
-              approverId: session.uid,
-              approverName: hodName,
-              sequence: 2,
-              action: "APPROVED",
-              comments: body.comments ?? "",
-              actedOn: now,
-              createdAt: now,
-            });
-
-          const balRef = LEAVE_COL(session.collegeId, db).doc(
-            balanceDocId(req.employeeId, effectiveCode as LeaveTypeCodeV2, year)
-          );
-          const balSnap2 = await balRef.get();
-          if (balSnap2.exists) {
-            const balData = balSnap2.data() ?? {};
-            await balRef.update({ used: (balData.used ?? 0) + req.computedDays, updatedAt: now });
-          }
-
-          await notify(
-            db, session.collegeId, req.employeeId,
-            "LEAVE_APPROVED",
-            `${ltLabel} Leave Approved`,
-            `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) has been approved by ${hodName}.`,
-            `${leaveBase}/${id}`
-          );
-          return NextResponse.json({ ok: true });
-        }
-
-        // Normal (non-Other) request — decide whether this type still needs
-        // Principal/Management ratification, or whether HOD approval is final.
-        const approvalChain = await resolveApprovalChain(db, effectiveCode as LeaveTypeCodeV2);
-        const needsRatification = approvalChain === "management" || approvalChain === "medical_officer";
-
-        await reqRef.update({
-          status: needsRatification ? "PENDING_RATIFICATION" : "APPROVED",
-          currentApproverRole: needsRatification ? "PRINCIPAL" : FieldValue.delete(),
-          leaveTypeCode: effectiveCode,
-          updatedAt: now,
+        actionRecord.isPaidLeave = body.isPaidLeave;
+        await ref.update({ status: "PENDING_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now });
+        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+          collegeId: session.collegeId, action: "LEAVE_HOD_FORWARDED", performedBy: session.uid,
+          performedByName: session.email || "HOD", targetId: id, details: { isPaidLeave: body.isPaidLeave }, timestamp: now,
         });
 
-        await db.collection("colleges").doc(session.collegeId)
-          .collection("leaveApprovalSteps").add({
-            collegeId: session.collegeId,
-            applicationId: id,
-            approverRole: "HOD",
-            approverId: session.uid,
-            approverName: hodName,
-            sequence: 1,
-            action: "APPROVED",
-            comments: body.comments ?? "",
-            actedOn: now,
-            createdAt: now,
-          });
-
-        // A normal request already reserved `pending` at submission time, so
-        // it only needs to move pending → used (or stay pending if still
-        // awaiting ratification).
-        const balRef = LEAVE_COL(session.collegeId, db).doc(
-          balanceDocId(req.employeeId, effectiveCode as LeaveTypeCodeV2, year)
-        );
-        const balSnap2 = await balRef.get();
-        if (balSnap2.exists && !needsRatification) {
-          const balData = balSnap2.data() ?? {};
-          await balRef.update({
-            pending: Math.max(0, (balData.pending ?? 0) - req.computedDays),
-            used: (balData.used ?? 0) + req.computedDays,
-            updatedAt: now,
-          });
-        }
-        // else: stays reserved in `pending` until Principal/VP ratifies.
-
-        if (needsRatification) {
-          await notify(
-            db, session.collegeId, req.employeeId,
-            "GENERAL",
-            `${ltLabel} Leave — Pending Principal Approval`,
-            `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was approved by ${hodName} and is now awaiting Principal's approval.`,
-            `${leaveBase}/${id}`
-          );
-        } else {
-          await notify(
-            db, session.collegeId, req.employeeId,
-            "LEAVE_APPROVED",
-            `${ltLabel} Leave Approved`,
-            `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) has been approved by ${hodName}.`,
-            `${leaveBase}/${id}`
-          );
-        }
-
-        return NextResponse.json({ ok: true });
-      }
-
-      // ── Principal / VP approve / reject ──────────────────────────────────
-
-      if (
-        (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") &&
-        (req.status === "PENDING_RATIFICATION" || req.status === "PENDING_MANAGEMENT")
-      ) {
-        const principalSnap = await db
+        const principalsSnap = await db
           .collection("colleges").doc(session.collegeId)
-          .collection("users").doc(session.uid).get();
-        const principalName = (principalSnap.data() as { name?: string })?.name
-          ?? (session.role === "VICE_PRINCIPAL" ? "Vice Principal" : "Principal");
-
-        // "Others" requests land here first, before the HOD has picked a type —
-        // the Principal is only giving a general go-ahead; the HOD finalizes
-        // (and picks the actual leave type) afterwards.
-        const isOtherFirstStage = !!req.isOtherRequest && !req.leaveTypeCode;
-
-        if (isOtherFirstStage) {
-          const ltLabel = "Other";
-
-          if (body.action === "REJECT") {
-            await reqRef.update({ status: "REJECTED", currentApproverRole: FieldValue.delete(), updatedAt: now });
-            await db.collection("colleges").doc(session.collegeId)
-              .collection("leaveApprovalSteps").add({
-                collegeId: session.collegeId,
-                applicationId: id,
-                approverRole: session.role,
-                approverId: session.uid,
-                approverName: principalName,
-                sequence: 1,
-                action: "REJECTED",
-                comments: body.comments ?? "",
-                actedOn: now,
-                createdAt: now,
-              });
-            await notify(
-              db, session.collegeId, req.employeeId,
-              "LEAVE_REJECTED",
-              `${ltLabel} Leave Rejected`,
-              `Your leave request (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was rejected by ${principalName}.${body.comments ? " Remarks: " + body.comments : ""}`,
-              `${leaveBase}/${id}`
-            );
-            return NextResponse.json({ ok: true });
-          }
-
-          // APPROVE — forward to the HOD to pick the actual leave type.
-          await reqRef.update({ status: "PENDING_HOD", currentApproverRole: "HOD", updatedAt: now });
-          await db.collection("colleges").doc(session.collegeId)
-            .collection("leaveApprovalSteps").add({
-              collegeId: session.collegeId,
-              applicationId: id,
-              approverRole: session.role,
-              approverId: session.uid,
-              approverName: principalName,
-              sequence: 1,
-              action: "APPROVED",
-              comments: body.comments ?? "",
-              actedOn: now,
-              createdAt: now,
-            });
-          await notify(
-            db, session.collegeId, req.employeeId,
-            "GENERAL",
-            "Leave — Pending HOD Review",
-            `Your leave request (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was approved by ${principalName} and is now with your HOD to finalize the leave type.`,
-            `${leaveBase}/${id}`
-          );
-          return NextResponse.json({ ok: true });
-        }
-
-        const ltLabel = labelFor(req.leaveTypeCode);
-
-        const newStatus = body.action === "APPROVE" ? "APPROVED" : "REJECTED";
-        await reqRef.update({ status: newStatus, currentApproverRole: FieldValue.delete(), updatedAt: now });
-
-        await db.collection("colleges").doc(session.collegeId)
-          .collection("leaveApprovalSteps").add({
-            collegeId: session.collegeId,
-            applicationId: id,
-            approverRole: session.role,
-            approverId: session.uid,
-            approverName: principalName,
-            sequence: 2,
-            action: body.action === "APPROVE" ? "APPROVED" : "REJECTED",
-            comments: body.comments ?? "",
-            actedOn: now,
-            createdAt: now,
+          .collection("users").where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"]).get();
+        for (const p of principalsSnap.docs) {
+          await emitWorkflowNotification({
+            db, collegeId: session.collegeId, toUid: p.id,
+            type: "LEAVE_PENDING_APPROVAL",
+            title: "Leave Request Awaiting Approval",
+            message: `${req.employeeName}'s "Other" leave request (${body.isPaidLeave ? "paid" : "unpaid"}) was forwarded by their HOD and needs your decision.`,
+            link: "/principal/leave-approvals",
+            entityType: "leaveRequest", entityId: id,
+            dedupeKey: `leave-request-review:${id}:${p.id}`,
           });
-
-        const year = resolveYear(req.fromDate);
-        const balRef = LEAVE_COL(session.collegeId, db).doc(
-          balanceDocId(req.employeeId, req.leaveTypeCode as LeaveTypeCodeV2, year)
-        );
-        const balSnap = await balRef.get();
-        if (balSnap.exists) {
-          const balData = balSnap.data() ?? {};
-          if (body.action === "APPROVE") {
-            await balRef.update({
-              pending: Math.max(0, (balData.pending ?? 0) - req.computedDays),
-              used: (balData.used ?? 0) + req.computedDays,
-              updatedAt: now,
-            });
-          } else {
-            await balRef.update({
-              pending: Math.max(0, (balData.pending ?? 0) - req.computedDays),
-              updatedAt: now,
-            });
-          }
         }
-
-        if (body.action === "APPROVE") {
-          await notify(
-            db, session.collegeId, req.employeeId,
-            "LEAVE_APPROVED",
-            `${ltLabel} Leave Approved`,
-            `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) has been approved by ${principalName}.`,
-            `${leaveBase}/${id}`
-          );
-        } else {
-          await notify(
-            db, session.collegeId, req.employeeId,
-            "LEAVE_REJECTED",
-            `${ltLabel} Leave Rejected`,
-            `Your ${ltLabel} leave (${req.computedDays} day${req.computedDays !== 1 ? "s" : ""}) was rejected by ${principalName}.${body.comments ? " Remarks: " + body.comments : ""}`,
-            `${leaveBase}/${id}`
-          );
-        }
-
         return NextResponse.json({ ok: true });
       }
 
-      return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+      // Standard type - HOD approval is final. Insufficient balance never
+      // blocks this - the excess becomes Loss of Pay instead.
+      let lopDays = 0;
+      if (req.leaveTypeCode) {
+        const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
+        if (lt && !lt.rules.unlimited) {
+          const split = await splitLeaveDays(db, session.collegeId, req.uid, lt, year, req.totalDays);
+          lopDays = split.lopDays;
+          if (split.withinBalance > 0) {
+            await commitApproval(db, session.collegeId, req.uid, req.leaveTypeCode, year, split.withinBalance);
+          }
+        }
+      }
+      await ref.update({ status: "APPROVED", hodAction: actionRecord, lopDays, updatedAt: now });
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId, action: "LEAVE_HOD_APPROVED", performedBy: session.uid,
+        performedByName: session.email || "HOD", targetId: id, details: { lopDays }, timestamp: now,
+      });
+      await notify(db, session.collegeId, req.uid, "LEAVE_APPROVED", "Leave Request Approved",
+        `Your leave request for ${req.totalDays} day(s) was approved by your HOD` +
+          (lopDays > 0 ? ` — ${lopDays} day(s) exceed your balance and will be treated as Loss of Pay.` : "."),
+        "/panel/leave");
+      return NextResponse.json({ ok: true });
     }
 
-    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    // ─── Principal / Vice Principal stage (final) ────────────────────────────
+    // Reached either by a non-PANEL_MEMBER's own leave request (any type,
+    // unchanged from before - commits/releases its balance as always) or by
+    // an HOD-forwarded "Other" request (isPaidLeave already set, never
+    // balance-tracked). Either way this is the final decision.
+    if (req.status === "PENDING_PRINCIPAL") {
+      if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const actionRecord: LeaveActionRecord = {
+        action: body.action === "APPROVE" ? "APPROVED" : "REJECTED",
+        by: session.uid, byName: session.email || "Principal", at: now as unknown as LeaveActionRecord["at"],
+        ...(body.remarks ? { remarks: body.remarks } : {}),
+      };
+
+      let lopDays = 0;
+      if (body.action === "REJECT") {
+        if (req.leaveTypeCode) {
+          const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
+          if (lt && !lt.rules.unlimited) {
+            await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
+          }
+        }
+        await ref.update({ status: "REJECTED", principalAction: actionRecord, updatedAt: now });
+      } else {
+        // Insufficient balance never blocks this - the excess becomes Loss of Pay.
+        if (req.leaveTypeCode) {
+          const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
+          if (lt && !lt.rules.unlimited) {
+            const split = await splitLeaveDays(db, session.collegeId, req.uid, lt, year, req.totalDays);
+            lopDays = split.lopDays;
+            if (split.withinBalance > 0) {
+              await commitApproval(db, session.collegeId, req.uid, req.leaveTypeCode, year, split.withinBalance);
+            }
+          }
+        }
+        await ref.update({ status: "APPROVED", principalAction: actionRecord, lopDays, updatedAt: now });
+      }
+
+      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
+        collegeId: session.collegeId,
+        action: body.action === "APPROVE" ? "LEAVE_PRINCIPAL_APPROVED" : "LEAVE_REJECTED",
+        performedBy: session.uid, performedByName: session.email || "Principal", targetId: id, details: { lopDays }, timestamp: now,
+      });
+
+      await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "leaveRequest", entityId: id });
+      await notify(
+        db, session.collegeId, req.uid,
+        body.action === "APPROVE" ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
+        body.action === "APPROVE" ? "Leave Request Approved" : "Leave Request Rejected",
+        `Your leave request for ${req.totalDays} day(s) was ${body.action === "APPROVE" ? "approved" : "rejected"} by the Principal` +
+          (body.action === "APPROVE" && lopDays > 0 ? ` — ${lopDays} day(s) exceed your balance and will be treated as Loss of Pay.` : "."),
+        "/panel/leave"
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ error: "This request is no longer pending" }, { status: 400 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("[leave/applications/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function resolveYear(fromDate: unknown): number {
-  if (fromDate && typeof (fromDate as { toDate?: () => Date }).toDate === "function") {
-    return (fromDate as { toDate: () => Date }).toDate().getFullYear();
-  }
-  return new Date(fromDate as string).getFullYear();
-}
-
-async function releasePendingBalance(
-  db: ReturnType<typeof getAdminDb>,
-  collegeId: string,
-  uid: string,
-  leaveTypeCode: LeaveTypeCodeV2,
-  year: number,
-  days: number
-) {
-  const balRef = LEAVE_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
-  const balSnap = await balRef.get();
-  if (balSnap.exists) {
-    const balData = balSnap.data() ?? {};
-    await balRef.update({
-      pending: Math.max(0, (balData.pending ?? 0) - days),
-      updatedAt: new Date(),
-    });
   }
 }

@@ -61,7 +61,7 @@ export default function PurchaseByCategoryPage() {
         description={
           collegeId || locationId
             ? "Indent requests grouped by the budget category they were raised against"
-            : "Org-wide — indent requests across every location and college, grouped by budget category"
+            : "Org-wide - indent requests across every location and college, grouped by budget category"
         }
       />
 

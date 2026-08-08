@@ -88,7 +88,7 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
 
-    // Singleton role check — only one person may hold HR_ADMIN / ADMIN_OFFICE / ACCOUNTS per location
+    // Singleton role check - only one person may hold HR_ADMIN / ADMIN_OFFICE / ACCOUNTS per location
     if (SINGLETON_ROLES.includes(role)) {
       const existing = await db
         .collection("locations")

@@ -13,7 +13,7 @@ import { toast } from "@/hooks/useToast";
 import type { College, Location } from "@/types";
 
 // Shared Location → College drill-down shell used by both Purchase Dept
-// (/purchase/browse) and Finance (/finance/browse) — both are GLOBAL roles
+// (/purchase/browse) and Finance (/finance/browse) - both are GLOBAL roles
 // serving every college across every location, so both need the same
 // "pick a location, then a college" entry point before landing on a
 // role-specific college-level view (department/category/type breakdown,

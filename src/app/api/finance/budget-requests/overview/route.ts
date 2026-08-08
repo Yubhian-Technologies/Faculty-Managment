@@ -12,12 +12,12 @@ function toMillis(value: unknown): number {
   return value ? new Date(value as string).getTime() : 0;
 }
 
-// Cross-college view for FINANCE — a GLOBAL role serving every college across
+// Cross-college view for FINANCE - a GLOBAL role serving every college across
 // every location, so its "all budget requests" view needs to fan out over
 // every college's budgetRequests subcollection instead of the single-collegeId
 // scope /api/college/budget-requests uses.
 //
-// Deliberately NOT a collectionGroup(...) query — see the identical precedent/
+// Deliberately NOT a collectionGroup(...) query - see the identical precedent/
 // rationale in src/app/api/management/emergency-budget-requests/route.ts:
 // collection-group scope needs an explicitly deployed index per queried field,
 // which budgetRequests never had, so that query would throw FAILED_PRECONDITION

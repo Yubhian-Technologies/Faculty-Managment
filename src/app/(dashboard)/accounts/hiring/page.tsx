@@ -118,8 +118,8 @@ export default function AccountsHiringPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Hiring — Offer Letters"
-        description="Send offer letters to document-verified candidates and create their faculty accounts"
+        title="Hiring - Offer Letters"
+        description="Send offer letters to Principal-approved candidates and create their faculty accounts"
       />
 
       {isLoading ? (
@@ -129,7 +129,7 @@ export default function AccountsHiringPage() {
           <CardContent className="p-12 text-center text-muted-foreground">
             <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
             <p className="font-medium">No candidates pending offer letters</p>
-            <p className="text-sm mt-1">Candidates appear here after College Office verifies their documents.</p>
+            <p className="text-sm mt-1">Candidates appear here after the Principal approves their hiring decision.</p>
           </CardContent>
         </Card>
       ) : (
@@ -186,7 +186,7 @@ export default function AccountsHiringPage() {
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) { setSelected(null); setForm(emptyForm()); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Send Offer Letter — {selected?.name}</DialogTitle>
+            <DialogTitle>Send Offer Letter - {selected?.name}</DialogTitle>
             <DialogDescription>Fill in employment details. A faculty login account will be created automatically.</DialogDescription>
           </DialogHeader>
 
@@ -223,7 +223,7 @@ export default function AccountsHiringPage() {
               <div className="space-y-1.5">
                 <Label>College Email *</Label>
                 <Input type="email" value={form.collegeEmail} onChange={(e) => setForm((f) => ({ ...f, collegeEmail: e.target.value }))} placeholder="name@vishnu.edu.in" />
-                <p className="text-xs text-muted-foreground">This becomes their login — not the candidate's personal email.</p>
+                <p className="text-xs text-muted-foreground">This becomes their login - not the candidate's personal email.</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Password *</Label>

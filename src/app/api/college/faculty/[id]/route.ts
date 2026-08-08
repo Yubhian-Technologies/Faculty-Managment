@@ -90,6 +90,7 @@ export async function PATCH(
       hasPHD: boolean;
       userUid: string;
       academicProfile: Record<string, unknown>;
+      technicalProfile: Record<string, unknown>;
       profilePhotoUrl: string;
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
@@ -108,7 +109,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Empty string clears the photo — everything else must be a real upload of ours.
+    // Empty string clears the photo - everything else must be a real upload of ours.
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&
@@ -120,7 +121,7 @@ export async function PATCH(
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
-    // Employee ID must stay unique within the college — checked separately from
+    // Employee ID must stay unique within the college - checked separately from
     // the other string fields since it needs a duplicate lookup (mirrors the
     // check on creation in POST /api/college/faculty).
     if (body.employeeId !== undefined && body.employeeId.trim()) {
@@ -170,8 +171,9 @@ export async function PATCH(
     if (body.aicteEligible !== undefined) updates.aicteEligible = body.aicteEligible;
     if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
 
-    // Academic profile (Modules 1-5)
+    // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
+    if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
@@ -181,7 +183,7 @@ export async function PATCH(
 
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;
 
-    // Letter/resume URL fields — validate they are Firebase Storage URLs or empty (clear)
+    // Letter/resume URL fields - validate they are Firebase Storage URLs or empty (clear)
     for (const field of ["joiningLetterUrl", "appointmentLetterUrl", "resumeUrl"] as const) {
       if (body[field] !== undefined) {
         if (body[field] !== "" && !body[field].startsWith("https://firebasestorage.googleapis.com/")) {
@@ -194,7 +196,7 @@ export async function PATCH(
     await ref.update(updates);
 
     // Best-effort: if this faculty record has a linked system login, keep their
-    // name/photo in sync there too — the login doc (colleges/{id}/users) is what
+    // name/photo in sync there too - the login doc (colleges/{id}/users) is what
     // panel-member pickers, notifications, and the nav/avatar read from, so edits
     // made here on the faculty details page must propagate or those surfaces show
     // stale data from account creation time.
@@ -246,7 +248,7 @@ export async function DELETE(
 
     await ref.delete();
 
-    // Also remove the linked login account — otherwise it lingers in
+    // Also remove the linked login account - otherwise it lingers in
     // colleges/{id}/users forever and keeps showing up in panel-member
     // pickers, staff lists, etc. even though the faculty record is gone.
     const linkedUid = facultyData.userUid;

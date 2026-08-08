@@ -3,11 +3,11 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { provisionFacultyFromOffer } from "@/lib/firestore/facultyProvisioning";
+import { resolveOfferLetterCcEmails } from "@/lib/firestore/offerLetterCc";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "WEBMASTER");
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get("batchId");
     const candidateId = searchParams.get("candidateId");
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACCOUNTS");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACCOUNTS");
     const body = (await request.json()) as {
       candidateId: string;
       batchId: string;
@@ -52,15 +52,11 @@ export async function POST(request: Request) {
       joiningDate: string;
       ctcAnnual: number;
       subjects?: string[];
-      collegeEmail: string;
-      facultyPassword: string;
+      termsAndConditions?: string;
     };
 
-    const {
-      candidateId, batchId, candidateName, designation, department, joiningDate, ctcAnnual,
-      collegeEmail, facultyPassword,
-    } = body;
-    if (!candidateId || !batchId || !designation || !department || !joiningDate || !ctcAnnual || !collegeEmail || !facultyPassword) {
+    const { candidateId, batchId, candidateName, designation, department, joiningDate, ctcAnnual } = body;
+    if (!candidateId || !batchId || !designation || !department || !joiningDate || !ctcAnnual) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -70,6 +66,8 @@ export async function POST(request: Request) {
     // Fetch actor name
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
+
+    const { ccEmails: uniqueCcEmails, hodUid, position } = await resolveOfferLetterCcEmails(db, session.collegeId, batchId);
 
     const docRef = db.collection("colleges").doc(session.collegeId).collection("offerLetters").doc();
     const letter = {
@@ -83,42 +81,40 @@ export async function POST(request: Request) {
       joiningDate: new Date(joiningDate),
       ctcAnnual,
       subjects: body.subjects ?? [],
-      // No separate draft/review step — HOD sends the offer in the same action.
+      ...(body.termsAndConditions?.trim() ? { termsAndConditions: body.termsAndConditions.trim() } : {}),
+      // No separate draft/review step - HOD sends the offer in the same action.
       status: "SENT",
       generatedBy: actorName,
       generatedByUid: session.uid,
       generatedAt: now,
       createdAt: now,
       updatedAt: now,
+      // Persisted (not just returned) so later actions - e.g. Compose Email on the
+      // Offer Letters list - can CC the same people without recomputing this lookup.
+      ccEmails: uniqueCcEmails,
     };
 
     await docRef.set(letter);
 
-    const provisioning = await provisionFacultyFromOffer(db, session.collegeId, docRef.id, {
-      collegeEmail,
-      password: facultyPassword,
-    });
+    // Faculty account creation is deferred until the offer is accepted — see
+    // "Create Faculty Account" on the Offer Letters list.
 
-    // Notify candidate's HOD (e.g. Principal/VP sending on the HOD's behalf)
-    const batchSnap = await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(batchId).get();
-    if (batchSnap.exists) {
-      const batch = batchSnap.data() as { hodUid?: string; position?: string };
-      if (batch.hodUid && batch.hodUid !== session.uid) {
-        const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-        await notifRef.set({
-          collegeId: session.collegeId,
-          toUid: batch.hodUid,
-          type: "OFFER_LETTER_CREATED",
-          title: "Offer Letter Sent",
-          message: `An offer letter has been sent to ${candidateName} (${batch.position ?? designation}).`,
-          link: `/hod/offers`,
-          read: false,
-          createdAt: now,
-        });
-      }
+    // Notify candidate's HOD (the office is sending on the HOD's behalf)
+    if (hodUid && hodUid !== session.uid) {
+      const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
+      await notifRef.set({
+        collegeId: session.collegeId,
+        toUid: hodUid,
+        type: "OFFER_LETTER_GENERATED",
+        title: "Offer Letter Sent",
+        message: `An offer letter has been sent to ${candidateName} (${position ?? designation}).`,
+        link: `/hod/batches/${batchId}`,
+        read: false,
+        createdAt: now,
+      });
     }
 
-    return NextResponse.json({ id: docRef.id, ok: true, provisioning });
+    return NextResponse.json({ id: docRef.id, ok: true, ccEmails: uniqueCcEmails });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

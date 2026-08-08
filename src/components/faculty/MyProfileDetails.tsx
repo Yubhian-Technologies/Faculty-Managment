@@ -23,7 +23,7 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
 // Two different shapes can come back from /api/college/faculty/me depending on how
 // the account was provisioned: a full FacultyMember record (PANEL_MEMBER, hired
 // through the Faculty Register) or the caller's own colleges/{id}/users/{uid} doc
-// (HOD/PRINCIPAL/VICE_PRINCIPAL, who have no separate FacultyMember record) — the
+// (HOD/PRINCIPAL/VICE_PRINCIPAL, who have no separate FacultyMember record) - the
 // latter is missing employment fields like designation/qualification/status
 // entirely, so every field below is optional and rendered only when present.
 type MyProfile = Partial<FacultyMember> & { id: string; isActive?: boolean };
@@ -38,7 +38,7 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-// Self-service counterpart to PrincipalFacultyProfilePage/StaffProfileView — shows
+// Self-service counterpart to PrincipalFacultyProfilePage/StaffProfileView - shows
 // the SAME academic profile + teaching load a manager sees when looking someone
 // else up, but sourced from /api/college/faculty/me (the caller's own record).
 // Renders nothing only if the account has no record of any kind (shouldn't

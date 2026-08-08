@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   try {
     // Covers self-service uploads (own dashboard) as well as admin-driven uploads
     // (Principal/HOD/Administration/Super Admin uploading on behalf of someone they
-    // manage) — who may write the resulting URL to which document is enforced
+    // manage) - who may write the resulting URL to which document is enforced
     // separately by the PATCH route that persists it. No collegeId requirement here
     // since Super Admin sessions have none.
     const session = await requireRole(
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     // `targetId` lets Principal/HOD upload a photo on behalf of a HOD, Vice Principal, or
-    // faculty record they manage — the write itself is authorized separately when the
+    // faculty record they manage - the write itself is authorized separately when the
     // returned URL is persisted via the college/users or college/faculty PATCH routes.
     const rawTargetId = formData.get("targetId");
     const targetId = typeof rawTargetId === "string" ? rawTargetId.replace(/[^a-zA-Z0-9_-]/g, "") : "";
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     const path = `profile-photos/${id}_${Date.now()}.${ext}`;
 
-    // Generate a download token — this is how Firebase Storage client SDK creates
+    // Generate a download token - this is how Firebase Storage client SDK creates
     // permanent public-readable URLs without requiring any ACL changes or UBLA workarounds.
     const downloadToken = randomUUID();
 

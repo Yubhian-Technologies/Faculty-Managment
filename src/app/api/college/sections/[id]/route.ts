@@ -8,7 +8,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 
 // A parent department's HOD has full (not just view-only) access to their
-// own sub-departments' sections — same edit/delete rights as the sub-HOD who
+// own sub-departments' sections - same edit/delete rights as the sub-HOD who
 // owns that sub-department day to day. Only a section belonging to a
 // genuinely unrelated department (reached solely via `secondaryDepartments`
 // cross-listing) stays out of reach here. Firestore security rules aren't in
@@ -50,7 +50,7 @@ export async function PATCH(
     const oldSection = snap.data() as { department?: string; name?: string; year?: number };
     const sectionDept = oldSection.department ?? "";
 
-    // Computed once and reused below for the reassignment check — avoids a
+    // Computed once and reused below for the reassignment check - avoids a
     // second getHodDepartmentScope round-trip for HOD callers moving a section.
     let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
     if (session.role === "HOD") {
@@ -81,7 +81,7 @@ export async function PATCH(
       }
     }
 
-    // Reassigning an existing section to a different (sub-)department — e.g.
+    // Reassigning an existing section to a different (sub-)department - e.g.
     // a parent HOD handing a section over to a Sub-HOD to run day to day, or
     // pulling one back. Only within the caller's own department tree for an
     // HOD; Principal/VP/College Office may target any department in the college.
@@ -123,7 +123,7 @@ export async function PATCH(
     batch.update(ref, updates);
 
     // Students are keyed by (department, section name, year), not by this
-    // section's document id — so reassigning the section's department (or
+    // section's document id - so reassigning the section's department (or
     // renaming it / moving it to a different year) would otherwise strand
     // its already-enrolled students under the *old* identity: invisible on
     // the new roster (department mismatch), yet still blocking re-import as

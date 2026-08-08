@@ -1,9 +1,11 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { syncDepartmentHod } from "@/lib/departments/scope";
 
 async function loadTargetInScope(
   db: FirebaseFirestore.Firestore,
@@ -22,7 +24,9 @@ async function loadTargetInScope(
   const target = targetSnap.data() as { role: string; department?: string };
 
   if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
-    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"].includes(target.role)) {
+    // Matches CREATABLE_ROLES in principal/staff/new/page.tsx - every role a
+    // Principal/VP can create here, they can also view/edit/deactivate.
+    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER"].includes(target.role)) {
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
   } else if (session.role === "HOD") {
@@ -39,6 +43,10 @@ async function loadTargetInScope(
     if (hodDept && target.department !== hodDept) {
       return { targetSnap: null, error: "Can only manage faculty in your department", status: 403 };
     }
+  } else if (session.role === "COLLEGE_OFFICE") {
+    if (target.role !== "CLASS_LEADER") {
+      return { targetSnap: null, error: "College Office can only manage Class Leaders", status: 403 };
+    }
   }
 
   return { targetSnap, error: null, status: 200 };
@@ -49,7 +57,7 @@ export async function GET(
   { params }: { params: Promise<{ uid: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
     const { uid } = await params;
     const db = getAdminDb();
 
@@ -71,7 +79,7 @@ export async function PATCH(
   { params }: { params: Promise<{ uid: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE");
     const { uid } = await params;
     const body = (await request.json()) as Partial<{
       isActive: boolean;
@@ -83,15 +91,26 @@ export async function PATCH(
       phone: string;
       academicProfile: Record<string, unknown>;
       profilePhotoUrl: string;
+      newPassword: string;
     }> & PersonalDetailsInput;
+
+    if (body.newPassword !== undefined && body.newPassword.length < 6) {
+      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+    }
 
     const db = getAdminDb();
 
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
-    const target = targetSnap.data() as { role: string };
+    const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string };
 
-    // Empty string clears the photo — everything else must be a real upload of ours.
+    if (body.newPassword !== undefined) {
+      const { getAdminAuth } = await import("@/lib/firebase/admin");
+      const auth = await getAdminAuth();
+      await auth.updateUser(uid, { password: body.newPassword });
+    }
+
+    // Empty string clears the photo - everything else must be a real upload of ours.
     if (
       body.profilePhotoUrl !== undefined &&
       body.profilePhotoUrl !== "" &&
@@ -121,6 +140,15 @@ export async function PATCH(
       .doc(uid)
       .update(updates);
 
+    if (body.department !== undefined) {
+      await syncDepartmentHod(db, session.collegeId, {
+        uid,
+        role: target.role,
+        name: (updates.name as string | undefined) ?? target.name ?? "",
+        department: body.department,
+      });
+    }
+
     // Keep systemUsers in sync (name/photo are the only fields mirrored there)
     if ((body.name !== undefined && body.name.trim()) || body.profilePhotoUrl !== undefined) {
       await db.collection("systemUsers").doc(uid).set(
@@ -130,6 +158,16 @@ export async function PATCH(
         },
         { merge: true }
       );
+    }
+
+    // Deactivating a Class Leader frees up its Section for a new one.
+    if (body.isActive === false && target.role === "CLASS_LEADER" && target.sectionId) {
+      await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("sections")
+        .doc(target.sectionId)
+        .update({ classLeaderUid: FieldValue.delete(), classLeaderName: FieldValue.delete(), updatedAt: now });
     }
 
     const action = body.isActive === false ? "USER_DEACTIVATED" : body.isActive === true ? "USER_REACTIVATED" : "USER_UPDATED";

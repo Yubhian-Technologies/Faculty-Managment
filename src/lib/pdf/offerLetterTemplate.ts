@@ -8,6 +8,7 @@ export interface OfferLetterData {
   interviewDate?: string;
   joiningDate: string;
   letterDate: string;
+  termsAndConditions?: string;
 }
 
 export function getOfferLetterHTML({
@@ -20,6 +21,7 @@ export function getOfferLetterHTML({
   interviewDate,
   joiningDate,
   letterDate,
+  termsAndConditions,
 }: OfferLetterData): string {
   const collegeFull = collegeAddress ? `${collegeName}, ${collegeAddress}` : collegeName;
   const interviewClause = interviewDate
@@ -51,6 +53,15 @@ export function getOfferLetterHTML({
   </p>
 
   <p>Appointment letter will be issued at the time of reporting to duty.</p>
+
+  ${
+    termsAndConditions?.trim()
+      ? `<p>Your appointment is subject to the following terms and conditions:</p>
+  <ol style="font-size:14px;line-height:1.8;">
+    ${termsAndConditions.trim().split("\n").map((line) => line.trim()).filter(Boolean).map((line) => `<li>${line}</li>`).join("")}
+  </ol>`
+      : ""
+  }
 
   <p>You are requested to join on or before <strong>${joiningDate}</strong>.</p>
 

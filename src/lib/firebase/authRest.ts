@@ -1,4 +1,4 @@
-// Firebase Auth REST API helpers — no firebase-admin/auth required.
+// Firebase Auth REST API helpers - no firebase-admin/auth required.
 // Uses the Identity Toolkit REST endpoint so Vercel Lambdas never need
 // to import the firebase-admin/auth subpackage.
 

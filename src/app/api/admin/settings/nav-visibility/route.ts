@@ -7,7 +7,15 @@ import type { NavVisibilitySettings, UserRole } from "@/types";
 
 const DEFAULT_SETTINGS: NavVisibilitySettings = {
   hiddenModules: {},
-  hiddenItems: {},
+  hiddenItems: {
+    // These pages are still placeholder ("coming soon") screens across every
+    // role that has one — keep them hidden by default until each is actually
+    // built out, per college.
+    HOD: ["/hod/payslips", "/hod/appraisal", "/hod/training", "/hod/grievance", "/hod/documents"],
+    PRINCIPAL: ["/principal/attendance", "/principal/training", "/principal/grievance", "/principal/payslips"],
+    VICE_PRINCIPAL: ["/principal/attendance", "/principal/training", "/principal/grievance", "/principal/payslips"],
+    PANEL_MEMBER: ["/panel/attendance", "/panel/payslips", "/panel/appraisal", "/panel/training", "/panel/grievance", "/panel/documents"],
+  },
 };
 
 export async function GET(request: Request) {

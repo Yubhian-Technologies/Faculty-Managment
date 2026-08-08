@@ -5,7 +5,7 @@
 // parseCSV produces, so uploaders can feed either format into one pipeline
 // (matchHeaders, blank-row filtering, etc.) without knowing which was used.
 // Parsing happens server-side (POST /api/college/parse-excel, real Node
-// exceljs) rather than in the browser — exceljs ships a separate browser
+// exceljs) rather than in the browser - exceljs ships a separate browser
 // bundle for client use that has proven unreliable at reading files (it's
 // fine for the exports elsewhere in the app, which only ever write).
 export async function parseExcelFile(file: File): Promise<string[][]> {
@@ -34,7 +34,7 @@ export function toCSV(rows: string[][]): string {
 
 export function parseCSV(text: string): string[][] {
   const result: string[][] = [];
-  // Strip a leading UTF-8 BOM — Excel prepends one when a CSV is re-saved as
+  // Strip a leading UTF-8 BOM - Excel prepends one when a CSV is re-saved as
   // "CSV UTF-8", which otherwise corrupts the first header cell and breaks
   // column matching (e.g. "﻿Employee ID" no longer equals "Employee ID").
   const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
@@ -98,6 +98,19 @@ export function matchHeaders(
     if (key) keyMap[i] = key;
   });
   return keyMap;
+}
+
+/**
+ * Headers from the uploaded file that `matchHeaders` couldn't map to any
+ * template column. Callers that want a strict import (reject the file rather
+ * than silently drop unrecognized columns) should check this list is empty
+ * before accepting the parsed rows - see e.g. the faculty/supporting-staff/
+ * students/departments import pages.
+ */
+export function getUnmatchedHeaders(headers: string[], keyMap: Record<number, string>): string[] {
+  return headers
+    .map((h, i) => (h.trim() && !keyMap[i] ? h.trim() : null))
+    .filter((h): h is string => h !== null);
 }
 
 export function downloadCSV(csv: string, filename: string): void {

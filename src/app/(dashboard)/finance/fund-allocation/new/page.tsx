@@ -77,7 +77,7 @@ export default function NewFundAllocationPage() {
                 <SelectContent>
                   {budgets.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
-                      {b.department} — {formatCurrency(b.allocatedAmount - b.utilizedAmount)} available
+                      {b.department} - {formatCurrency(b.allocatedAmount - b.utilizedAmount)} available
                     </SelectItem>
                   ))}
                 </SelectContent>

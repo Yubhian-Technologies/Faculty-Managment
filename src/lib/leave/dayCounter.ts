@@ -1,52 +1,30 @@
-/**
- * Counts leave days between fromDate and toDate (inclusive).
- *
- * For leave types with excludeHolidaysAndSundays=true (e.g. CL):
- *   - Sundays are not counted
- *   - Dates in holidayDates set are not counted
- *
- * For leave types with excludeHolidaysAndSundays=false (e.g. EL, ML):
- *   - All calendar days are counted
- */
-export function countLeaveDays(
-  fromDate: Date,
-  toDate: Date,
-  options: {
-    excludeHolidaysAndSundays: boolean;
-    holidayDates: Set<string>; // "YYYY-MM-DD"
-  }
-): number {
-  if (toDate < fromDate) return 0;
-
-  let count = 0;
-  const cursor = new Date(fromDate);
-  cursor.setHours(0, 0, 0, 0);
-  const end = new Date(toDate);
-  end.setHours(23, 59, 59, 999);
-
-  while (cursor <= end) {
-    if (options.excludeHolidaysAndSundays) {
-      const isSunday = cursor.getDay() === 0;
-      const dateStr = toDateString(cursor);
-      const isHoliday = options.holidayDates.has(dateStr);
-      if (!isSunday && !isHoliday) count++;
-    } else {
-      count++;
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return count;
+// Inclusive calendar-day count between two dates (half-day requests are
+// always a single day, counted as 0.5 by the caller).
+export function countLeaveDays(from: Date, to: Date, isHalfDay?: boolean): number {
+  if (isHalfDay) return 0.5;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const fromUTC = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const toUTC = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.max(1, Math.round((toUTC - fromUTC) / msPerDay) + 1);
 }
 
-export function toDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+// Today as a local YYYY-MM-DD string - matches what a <input type="date">
+// shows and what the API compares fromDate/toDate against, so leave can't be
+// backdated.
+export function todayISODate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
-export function yearsOfService(dateOfJoining: Date, today: Date): number {
-  const ms = today.getTime() - dateOfJoining.getTime();
-  return Math.floor(ms / (365.25 * 24 * 3600 * 1000));
+// Full completed years between two dates (used to gate new-joining conversion).
+export function yearsOfService(dateOfJoining: Date, asOf: Date): number {
+  let years = asOf.getFullYear() - dateOfJoining.getFullYear();
+  const anniversaryPassed =
+    asOf.getMonth() > dateOfJoining.getMonth() ||
+    (asOf.getMonth() === dateOfJoining.getMonth() && asOf.getDate() >= dateOfJoining.getDate());
+  if (!anniversaryPassed) years -= 1;
+  return Math.max(0, years);
 }

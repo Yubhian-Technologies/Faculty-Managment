@@ -26,7 +26,7 @@ export function useNotifications() {
       setNotifications(notifs);
       setUnreadCount(notifs.filter((n) => !n.read).length);
     } catch {
-      // non-fatal — notifications are a nice-to-have
+      // non-fatal - notifications are a nice-to-have
     } finally {
       setLoading(false);
     }

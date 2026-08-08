@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 
 // A parent department's HOD only has view-only (secondary) access to a child
-// sub-department's assignments — only the assignment's own (primary) HOD may
+// sub-department's assignments - only the assignment's own (primary) HOD may
 // edit or remove it.
 async function assertHodOwnsAssignment(
   db: FirebaseFirestore.Firestore,

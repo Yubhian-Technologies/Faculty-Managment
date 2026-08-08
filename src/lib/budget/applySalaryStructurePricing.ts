@@ -9,10 +9,10 @@ interface StructureInfo {
 
 // Staff Salaries items whose HOD picked a designation (extras.salaryStructureId)
 // must use that structure's server-recorded grossSalary, not whatever price the
-// client submitted — closes the gap where a tampered payload could otherwise
+// client submitted - closes the gap where a tampered payload could otherwise
 // set an arbitrary salary that later feeds Finance's allocatedAmount. The
 // headcount (how many active faculty hold that designation in the department)
-// is re-derived the same way, for the same reason — a tampered headcount would
+// is re-derived the same way, for the same reason - a tampered headcount would
 // silently inflate the annual total just as much as a tampered price would.
 export async function applySalaryStructurePricing(
   db: Firestore,
@@ -70,7 +70,7 @@ export async function applySalaryStructurePricing(
         const info = id ? structureById.get(id) : undefined;
         if (!info) {
           // No verified structure match (Custom pricing, or a stale/inactive
-          // structure id) — never trust a client-supplied headcount multiplier
+          // structure id) - never trust a client-supplied headcount multiplier
           // without server verification; it collapses to the default of 1.
           return { ...item, extras: { ...item.extras, headcount: "" } };
         }

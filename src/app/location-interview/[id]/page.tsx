@@ -113,7 +113,7 @@ export default function CandidateBioDataPage() {
     <div className="min-h-screen bg-muted/30 py-8 px-4">
       <div className="max-w-2xl mx-auto space-y-5">
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold">Faculty Interview — Bio Data Form</h1>
+          <h1 className="text-xl font-bold">Faculty Interview - Bio Data Form</h1>
           <p className="text-sm text-muted-foreground">Please fill all details before your interview</p>
         </div>
 
@@ -153,7 +153,7 @@ export default function CandidateBioDataPage() {
               </div>
               <div className="space-y-2">
                 <Label>Current Address <span className="text-destructive">*</span></Label>
-                <Textarea value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} rows={2} placeholder="Door No, Street, City, State — PIN" required />
+                <Textarea value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} rows={2} placeholder="Door No, Street, City, State - PIN" required />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">

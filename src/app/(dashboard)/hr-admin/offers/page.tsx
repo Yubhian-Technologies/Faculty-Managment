@@ -63,7 +63,7 @@ export default function HROffersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Offer Letters"
-        description="Prepare offer letters for selected candidates — Administration approval required"
+        description="Prepare offer letters for selected candidates - Administration approval required"
         actions={
           <Button onClick={() => router.push("/hr-admin/offers/new")} disabled={selectedCandidates.length === 0}>
             + Create Offer Letter

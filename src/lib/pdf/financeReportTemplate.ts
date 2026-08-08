@@ -55,7 +55,7 @@ export function getFinanceReportHTML({
   <div class="header">
     <p class="college-name">${collegeName}</p>
   </div>
-  <div class="title">FINANCIAL REPORT — ${periodLabel}</div>
+  <div class="title">FINANCIAL REPORT - ${periodLabel}</div>
   <div class="meta">Generated: ${new Date(generatedAt).toLocaleString("en-IN")}</div>
 
   <div class="stat-grid">

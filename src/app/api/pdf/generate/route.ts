@@ -5,6 +5,7 @@ import { verifyFirebaseToken } from "@/lib/auth/verifyFirebaseToken";
 import { getOfferLetterHTML, getAppointmentLetterHTML } from "@/lib/pdf/offerLetterTemplate";
 import { getFinanceReportHTML, getFinanceReceiptHTML } from "@/lib/pdf/financeReportTemplate";
 import { getResumeHTML } from "@/lib/pdf/resumeTemplate";
+import { getDocumentAcknowledgementHTML } from "@/lib/pdf/documentAcknowledgementTemplate";
 
 async function verifyToken(request: Request): Promise<string | null> {
   const auth = request.headers.get("Authorization");
@@ -22,8 +23,9 @@ async function verifyToken(request: Request): Promise<string | null> {
 // serverless host with zero native binaries, cold-start cost, or version pinning.
 // Offer/appointment letters and finance reports are downloaded as this HTML directly
 // (the browser can print it to a real PDF — Ctrl/Cmd+P → Save as PDF — with the exact
-// same layout). The resume is the one exception: its client (downloadResumePdf /
-// src/lib/pdf/htmlToPdf.ts) converts this same HTML into a real .pdf file in the
+// same layout). Resume and document-acknowledgement are the exceptions: their clients
+// (downloadResumePdf / downloadDocumentAcknowledgementPdf, both using
+// src/lib/pdf/htmlToPdf.ts) convert this same HTML into a real .pdf file in the
 // browser via html2canvas + jsPDF before downloading it.
 export async function POST(request: Request) {
   const uid = await verifyToken(request);
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as {
-      type: "OFFER_LETTER" | "APPOINTMENT_LETTER" | "FINANCE_REPORT" | "FINANCE_RECEIPT" | "RESUME";
+      type: "OFFER_LETTER" | "APPOINTMENT_LETTER" | "FINANCE_REPORT" | "FINANCE_RECEIPT" | "RESUME" | "DOCUMENT_ACKNOWLEDGEMENT";
       data: Record<string, unknown>;
     };
 
@@ -42,6 +44,7 @@ export async function POST(request: Request) {
       FINANCE_REPORT: "financial-report.html",
       FINANCE_RECEIPT: "finance-receipt.html",
       RESUME: "resume.html",
+      DOCUMENT_ACKNOWLEDGEMENT: "document-acknowledgement.html",
     };
     const filename = filenames[body.type];
 
@@ -55,6 +58,8 @@ export async function POST(request: Request) {
       html = getFinanceReportHTML(body.data as Parameters<typeof getFinanceReportHTML>[0]);
     } else if (body.type === "FINANCE_RECEIPT") {
       html = getFinanceReceiptHTML(body.data as Parameters<typeof getFinanceReceiptHTML>[0]);
+    } else if (body.type === "DOCUMENT_ACKNOWLEDGEMENT") {
+      html = getDocumentAcknowledgementHTML(body.data as Parameters<typeof getDocumentAcknowledgementHTML>[0]);
     } else {
       html = getResumeHTML(body.data as unknown as Parameters<typeof getResumeHTML>[0]);
     }

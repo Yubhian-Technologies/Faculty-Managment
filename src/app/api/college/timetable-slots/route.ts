@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // A faculty member can't teach two classes at once — block regardless of section/year/course.
+    // A faculty member can't teach two classes at once - block regardless of section/year/course.
     const facultyConflict = await collegeRef.collection("timetableSlots")
       .where("facultyId", "==", assignment.facultyId)
       .where("day", "==", day)

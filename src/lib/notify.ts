@@ -7,7 +7,7 @@ import { ROLE_SCOPE } from "@/types";
 // college/finance-purchase-clearance). Previously each route file carried
 // its own copy-pasted notify()/notifyRole() pair; notifyRole's college-users
 // query silently found zero recipients for FINANCE/PURCHASE_DEPT (GLOBAL
-// roles whose profiles live in systemUsers, not colleges/{id}/users — see
+// roles whose profiles live in systemUsers, not colleges/{id}/users - see
 // ROLE_SCOPE in src/types/core.ts), so those roles never got notified by
 // three of the four call sites. Centralizing here fixes that once instead
 // of per-file.

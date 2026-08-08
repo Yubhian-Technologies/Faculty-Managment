@@ -36,7 +36,7 @@ export async function requireSuperAdmin(): Promise<SessionPayload> {
   return session;
 }
 
-// MANAGEMENT is a global, read-only role — routes using this must only implement GET handlers,
+// MANAGEMENT is a global, read-only role - routes using this must only implement GET handlers,
 // with one deliberate exception: src/app/api/management/emergency-budget-requests/[id]/route.ts's
 // PATCH, which lets Management approve/reject/return emergency budget requests. Don't add more
 // write routes under this role without the same justification.
@@ -58,7 +58,7 @@ export async function requireRole(...roles: string[]): Promise<SessionPayload> {
 
 // Passes if the caller's role IS one of `targetRoles` OR inherits it via the
 // L0–L6 level hierarchy (higher level, same-or-broader scope). Opt-in helper for
-// routes that want inherited access — existing explicit guards are left untouched.
+// routes that want inherited access - existing explicit guards are left untouched.
 // Callers that read college/location-scoped data must still validate the tenant
 // context (collegeId/locationId) themselves, since a higher role may carry none.
 export async function requireRoleOrHigher(
@@ -96,7 +96,7 @@ export async function requireCollegeContext(
   return { ...session, collegeId };
 }
 
-// For college-scoped roles (existing behavior — unchanged)
+// For college-scoped roles (existing behavior - unchanged)
 export async function requireCollegeMember(
   ...roles: string[]
 ): Promise<SessionPayload & { collegeId: string }> {

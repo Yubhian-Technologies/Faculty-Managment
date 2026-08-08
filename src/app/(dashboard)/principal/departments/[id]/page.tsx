@@ -160,7 +160,7 @@ export default function DepartmentDetailPage() {
                                     {t.collegeStartTime}–{t.collegeEndTime} · {t.numberOfPeriods} periods
                                   </span>
                                 ) : (
-                                  <span className="text-muted-foreground">Not configured — tap to add</span>
+                                  <span className="text-muted-foreground">Not configured - tap to add</span>
                                 )}
                               </div>
                               <span
@@ -172,9 +172,9 @@ export default function DepartmentDetailPage() {
                               >
                                 <CalendarClock className="h-3 w-3 shrink-0" />
                                 {ay ? (
-                                  <span className="text-emerald-600 font-medium">{ay.label} — tap to advance</span>
+                                  <span className="text-emerald-600 font-medium">{ay.label} - tap to advance</span>
                                 ) : (
-                                  <span className="text-orange-500 font-medium">Academic year required — tap to set</span>
+                                  <span className="text-orange-500 font-medium">Academic year required - tap to set</span>
                                 )}
                               </span>
                             </div>
