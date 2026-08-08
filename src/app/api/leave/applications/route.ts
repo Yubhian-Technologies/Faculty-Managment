@@ -156,12 +156,13 @@ export async function POST(request: Request) {
     // warns the requester about this before they submit, but doesn't block it.
 
     const now = new Date();
-    // Technical Staff (COLLEGE_STAFF backed by a departmental SupportingStaff
-    // record) report to an HOD just like PANEL_MEMBER faculty, so their
-    // requests start at PENDING_HOD too. Non-Technical/label-only COLLEGE_STAFF
-    // logins (Dean/IQAC/T&P, Librarian, etc.) have no department and no HOD
-    // above them - those correctly skip straight to PENDING_PRINCIPAL, same as
-    // HOD/Principal/office-leadership roles applying for their own leave.
+    // Faculty (PANEL_MEMBER - covers both Teaching and Technical designations)
+    // always report to their department's HOD. Supporting Staff (COLLEGE_STAFF,
+    // Non-Technical only) report to an HOD only if assigned to a department;
+    // label-only COLLEGE_STAFF logins (Dean/IQAC/T&P, Librarian, etc.) have no
+    // department and no HOD above them - those correctly skip straight to
+    // PENDING_PRINCIPAL, same as HOD/Principal/office-leadership roles applying
+    // for their own leave.
     const reportsToHod = session.role === "PANEL_MEMBER" || (session.role === "COLLEGE_STAFF" && !!identity.department);
     const initialStatus = reportsToHod ? "PENDING_HOD" : "PENDING_PRINCIPAL";
 

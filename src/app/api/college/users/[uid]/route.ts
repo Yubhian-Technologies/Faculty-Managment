@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { syncDepartmentHod } from "@/lib/departments/scope";
 
 async function loadTargetInScope(
   db: FirebaseFirestore.Firestore,
@@ -101,7 +102,7 @@ export async function PATCH(
 
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
-    const target = targetSnap.data() as { role: string; sectionId?: string };
+    const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string };
 
     if (body.newPassword !== undefined) {
       const { getAdminAuth } = await import("@/lib/firebase/admin");
@@ -138,6 +139,15 @@ export async function PATCH(
       .collection("users")
       .doc(uid)
       .update(updates);
+
+    if (body.department !== undefined) {
+      await syncDepartmentHod(db, session.collegeId, {
+        uid,
+        role: target.role,
+        name: (updates.name as string | undefined) ?? target.name ?? "",
+        department: body.department,
+      });
+    }
 
     // Keep systemUsers in sync (name/photo are the only fields mirrored there)
     if ((body.name !== undefined && body.name.trim()) || body.profilePhotoUrl !== undefined) {

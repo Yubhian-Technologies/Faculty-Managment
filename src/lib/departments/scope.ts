@@ -52,6 +52,31 @@ export async function getHodDepartmentScope(
   return { departmentName, departmentId: deptDoc.id, childDepartmentNames, childDepartmentIds };
 }
 
+// Keeps a department's `hodUid`/`hodName` pointer in sync with an HOD-role
+// login's own `department` field - the field that actually drives their
+// dashboard access (see getHodDepartmentScope above). The "Assign HOD"
+// dropdown on the Departments page already keeps both sides in sync when
+// used (college/departments POST/PATCH); this covers every *other* place an
+// HOD-role login's `department` can be set (account creation, profile edits)
+// so the department doc's hodUid can't drift from who is actually working as
+// that department's HOD - which otherwise shows as "No HOD assigned" even
+// though the HOD's own dashboard works fine, and misroutes anything that
+// notifies/approves via departments.hodUid (budget, recruitment, indents).
+// No-ops if the role isn't HOD, there's no department, or nothing's out of sync.
+export async function syncDepartmentHod(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  hod: { uid: string; role: string; name: string; department?: string }
+): Promise<void> {
+  if (hod.role !== "HOD" || !hod.department) return;
+  const deptSnap = await db.collection("colleges").doc(collegeId).collection("departments")
+    .where("name", "==", hod.department).limit(1).get();
+  if (deptSnap.empty) return;
+  const deptDoc = deptSnap.docs[0];
+  if ((deptDoc.data() as { hodUid?: string }).hodUid === hod.uid) return;
+  await deptDoc.ref.update({ hodUid: hod.uid, hodName: hod.name, updatedAt: new Date() }).catch(() => {});
+}
+
 // For a caller who names one specific department explicitly (Office/Principal/
 // VP picking a department for a section, faculty filter, etc.) rather than
 // resolving their own - returns that department plus its parent (if it's a

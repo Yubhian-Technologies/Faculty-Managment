@@ -239,7 +239,7 @@ export default function NewNonTechnicalStaffPage() {
       <Card className="mt-6">
         <CardHeader><CardTitle className="text-base">Profile</CardTitle></CardHeader>
         <CardContent>
-          <SupportingStaffProfileFields value={profile} onChange={setProfile} staffCategory="NON_TECHNICAL" />
+          <SupportingStaffProfileFields value={profile} onChange={setProfile} />
         </CardContent>
       </Card>
     </div>

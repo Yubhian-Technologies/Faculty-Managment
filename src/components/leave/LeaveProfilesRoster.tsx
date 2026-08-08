@@ -13,7 +13,7 @@ import { Users, Pencil } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory } from "@/types/leave";
 
-type StaffType = "teaching" | "technical";
+type StaffType = "faculty" | "supportingStaff";
 
 interface RosterEntry {
   uid: string;
@@ -30,8 +30,8 @@ interface LeaveProfilesRosterProps {
 }
 
 const STAFF_TYPE_TABS: { key: StaffType; label: string }[] = [
-  { key: "teaching", label: "Teaching Faculty" },
-  { key: "technical", label: "Technical Staff" },
+  { key: "faculty", label: "Faculty" },
+  { key: "supportingStaff", label: "Supporting Staff" },
 ];
 
 // Every entry here is auto-set-up already (from FacultyMember/SupportingStaff
@@ -40,7 +40,7 @@ const STAFF_TYPE_TABS: { key: StaffType; label: string }[] = [
 export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [staffType, setStaffType] = useState<StaffType>("teaching");
+  const [staffType, setStaffType] = useState<StaffType>("faculty");
 
   useEffect(() => {
     fetch("/api/leave/profiles")
@@ -74,7 +74,7 @@ export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) 
       ) : visibleRoster.length === 0 ? (
         <EmptyState
           icon={<Users className="h-6 w-6" />}
-          title={staffType === "teaching" ? "No faculty found" : "No technical staff found"}
+          title={staffType === "faculty" ? "No faculty found" : "No supporting staff found"}
         />
       ) : (
         <div className="space-y-2">

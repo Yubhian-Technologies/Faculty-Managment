@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { toCSV, parseCSV, downloadCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { COLUMNS, HINTS } from "@/lib/college/departmentsCsvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Info } from "lucide-react";
 
@@ -60,6 +60,11 @@ export default function DepartmentsImportPage() {
       }
       if (!Object.values(keyMap).includes("name")) {
         setParseError("Couldn't find a \"Department Name\" column. Check your file's header row against the template.");
+        return;
+      }
+      const unmatched = getUnmatchedHeaders(headers, keyMap);
+      if (unmatched.length > 0) {
+        setParseError(`These column(s) don't match any template column, so nothing was imported: ${unmatched.map((h) => `"${h}"`).join(", ")}. Rename them to match the template or remove them, then re-upload.`);
         return;
       }
 

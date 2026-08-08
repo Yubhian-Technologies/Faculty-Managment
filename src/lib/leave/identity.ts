@@ -19,13 +19,17 @@ export interface ResolvedIdentity {
 
 // Three account shapes, checked in order:
 //  - PANEL_MEMBER has a richer FacultyMember record (designation, joiningDate)
-//  - COLLEGE_STAFF backed by a SupportingStaffMember record (technical/non-
-//    technical staff) - always non-teaching, uses its own joiningDate.
+//  - COLLEGE_STAFF backed by a SupportingStaffMember record (Non-Technical
+//    staff) - always non-teaching, uses its own joiningDate.
 //  - Everyone else (HOD/PRINCIPAL/VICE_PRINCIPAL, ACCOUNTS/FINANCE/
 //    COLLEGE_OFFICE, and label-only COLLEGE_STAFF logins like Dean/IQAC/T&P)
 //    has no FacultyMember/SupportingStaff record - only a thin users/{uid}
 //    doc. isTeachingStaff is derived from that doc's stored role: true only
-//    for academic leadership (HOD/PRINCIPAL/VICE_PRINCIPAL). dateOfJoining
+//    for HOD (a working faculty member holding administrative charge, same
+//    vacation entitlement as any other teaching designation). PRINCIPAL and
+//    VICE_PRINCIPAL are full-time academic administrators, not classroom
+//    faculty, so they get non-vacation entitlement (EL 30 instead of 6, no
+//    SCL) just like Accounts/Finance/College Office/Dean. dateOfJoining
 //    falls back to when their login was created.
 export async function resolveEmployeeIdentity(
   db: Firestore,
@@ -88,7 +92,21 @@ export async function resolveEmployeeIdentity(
   return {
     name: u.name ?? "Unknown",
     department: u.department,
-    isTeachingStaff: isAcademicLeadership,
-    dateOfJoining: u.createdAt?.toDate?.() ?? new Date(),
+    isTeachingStaff: u.role === "HOD",
+    // HOD/Principal/Vice Principal login accounts have no FacultyMember
+    // record to source a real joining date from - falling back to this
+    // login's own createdAt (as every other role here does) would wrongly
+    // cycle a freshly-created HOD/Principal/VP account through the
+    // "new-joining" leave category (computeEffectiveCategory in
+    // categoryEngine.ts: reduced CL, no SL/SCL/EL) for a full
+    // newJoiningYears after every re-provisioned login, even though nobody
+    // is appointed to these roles as a brand-new hire. Back-date them well
+    // past any realistic newJoiningYears threshold so they get the same
+    // "vacation" (teaching-staff) entitlements as teaching faculty from day
+    // one - still correctable via the Leave Profile edit screen if a
+    // college ever needs a real date on record.
+    dateOfJoining: isAcademicLeadership
+      ? new Date(new Date().getFullYear() - 50, 0, 1)
+      : (u.createdAt?.toDate?.() ?? new Date()),
   };
 }

@@ -4,11 +4,11 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
+import { getOrCreateProfile } from "@/lib/leave/profile";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
-import { PROFILES_COL, loadBalances, computeEntitlement } from "@/lib/leave/balanceEngine";
+import { loadBalances, computeEntitlement } from "@/lib/leave/balanceEngine";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
-import type { EmployeeLeaveProfile } from "@/types/leave";
 
 // Balances for CL/SL/SCL/EL (whichever the profile's effective category is
 // eligible for) plus an `unlimited: true` entry for OD - no balance is ever
@@ -28,11 +28,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const profileSnap = await PROFILES_COL(session.collegeId, db).doc(targetUid).get();
-    if (!profileSnap.exists) {
-      return NextResponse.json({ error: "Leave profile not set up yet" }, { status: 404 });
+    // Auto-create on first lookup, same as GET /api/leave/profile - a
+    // Principal/VP/HOD/Supporting Staff member visiting "My Leave" is
+    // usually the *first* thing that ever resolves their identity (unlike
+    // faculty, whose profile tends to already exist by the time they look
+    // because their HOD/Principal visited the Leave Profiles roster first).
+    // 404-ing here instead left those roles' balances silently blank.
+    const profile = await getOrCreateProfile(db, session.collegeId, targetUid);
+    if (!profile) {
+      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
-    const profile = { id: profileSnap.id, ...profileSnap.data() } as EmployeeLeaveProfile;
 
     const settings = await loadCollegeSettings(db, session.collegeId);
     const effectiveCategory = computeEffectiveCategory(profile, settings.newJoiningYears);

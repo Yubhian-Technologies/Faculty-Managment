@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
-import { FacultyModuleTabs } from "@/components/faculty/FacultyModuleTabs";
 import { toast } from "@/hooks/useToast";
 import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
@@ -279,7 +278,7 @@ export default function HODFacultyPage() {
     <div className="space-y-6">
       <PageHeader
         title="Faculty Register"
-        description="Teaching staff and faculty records for your department"
+        description="Teaching and Technical staff records for your department"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => router.push("/hod/faculty/import")}>
@@ -294,8 +293,6 @@ export default function HODFacultyPage() {
           </div>
         }
       />
-
-      <FacultyModuleTabs facultyHref="/hod/faculty" supportingStaffHref="/hod/supporting-staff" />
 
       <div className="flex gap-2 flex-wrap">
         {STATUS_TABS.map((tab) => (

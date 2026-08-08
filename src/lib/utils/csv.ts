@@ -100,6 +100,19 @@ export function matchHeaders(
   return keyMap;
 }
 
+/**
+ * Headers from the uploaded file that `matchHeaders` couldn't map to any
+ * template column. Callers that want a strict import (reject the file rather
+ * than silently drop unrecognized columns) should check this list is empty
+ * before accepting the parsed rows - see e.g. the faculty/supporting-staff/
+ * students/departments import pages.
+ */
+export function getUnmatchedHeaders(headers: string[], keyMap: Record<number, string>): string[] {
+  return headers
+    .map((h, i) => (h.trim() && !keyMap[i] ? h.trim() : null))
+    .filter((h): h is string => h !== null);
+}
+
 export function downloadCSV(csv: string, filename: string): void {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);

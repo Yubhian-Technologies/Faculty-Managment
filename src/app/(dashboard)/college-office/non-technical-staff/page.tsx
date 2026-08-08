@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Pencil, Trash2, Upload } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Upload, LogIn } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -122,6 +122,17 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
+          {!(row.userUid as string) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              title="Create login account"
+              onClick={(e) => { e.stopPropagation(); router.push(`/college-office/non-technical-staff/${row.id}/credentials`); }}
+            >
+              <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/college-office/non-technical-staff/${row.id}/edit`); }}>
             <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
           </Button>

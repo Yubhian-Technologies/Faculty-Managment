@@ -26,9 +26,10 @@ const DESIGNATION_MAP: Record<string, Designation> = {
   "visiting faculty": "VISITING_FACULTY",
   "adjunct faculty": "ADJUNCT_FACULTY",
   "lab assistant": "LAB_ASSISTANT",
-  "technical": "TECHNICAL",
-  "non-technical": "NON_TECHNICAL",
-  "non technical": "NON_TECHNICAL",
+  "programmer": "PROGRAMMER",
+  "system administrator": "SYSTEM_ADMINISTRATOR",
+  "sysadmin": "SYSTEM_ADMINISTRATOR",
+  "network engineer": "NETWORK_ENGINEER",
   "other": "OTHER",
 };
 

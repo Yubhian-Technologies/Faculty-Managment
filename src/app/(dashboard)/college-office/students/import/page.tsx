@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
-import { toCSV, parseCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { toCSV, parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 
 // ─── Template definition ───────────────────────────────────────────────────────
 // S.No is a convenience column for the sheet author only (not stored) - every
@@ -93,6 +93,11 @@ export default function OfficeStudentImportPage() {
       const mappedCount = Object.keys(keyMap).length;
       if (mappedCount < 3) {
         setParseError(`Only ${mappedCount} column(s) matched. Make sure the header row is the first row, and its wording is close to the template.`);
+        return;
+      }
+      const unmatched = getUnmatchedHeaders(headers, keyMap);
+      if (unmatched.length > 0) {
+        setParseError(`These column(s) don't match any template column, so nothing was imported: ${unmatched.map((h) => `"${h}"`).join(", ")}. Rename them to match the template or remove them, then re-upload.`);
         return;
       }
 

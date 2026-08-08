@@ -10,14 +10,51 @@ export async function GET() {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER");
 
     const db = getAdminDb();
-    const snap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("departments")
-      .orderBy("name")
-      .get();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [snap, hodSnap] = await Promise.all([
+      collegeRef.collection("departments").orderBy("name").get(),
+      collegeRef.collection("users").where("role", "==", "HOD").get(),
+    ]);
 
-    const departments = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // Self-heal hodUid/hodName drift: these fields only update when
+    // explicitly written (Assign HOD save, syncDepartmentHod on account
+    // create/edit - see src/lib/departments/scope.ts). If a department's
+    // recorded HOD disagrees with who actually has this department on their
+    // own login (the field that drives their real dashboard access), fix the
+    // department doc here - so "No HOD assigned" can't linger while that HOD
+    // is actively working, and anything else keyed off hodUid (budget/
+    // recruitment/indent routing) sees the correct person too. Departments
+    // with more than one HOD login claiming them are left untouched rather
+    // than guessed.
+    const hodByDepartment = new Map<string, { uid: string; name: string }>();
+    const ambiguousDepartments = new Set<string>();
+    for (const doc of hodSnap.docs) {
+      const data = doc.data() as { department?: string; name?: string };
+      const dept = data.department?.trim();
+      if (!dept) continue;
+      if (hodByDepartment.has(dept)) ambiguousDepartments.add(dept);
+      else hodByDepartment.set(dept, { uid: doc.id, name: data.name ?? "" });
+    }
+
+    const departments = await Promise.all(
+      snap.docs.map(async (d) => {
+        const data = d.data() as { name?: string; hodUid?: string; hodName?: string };
+        const name = data.name?.trim() ?? "";
+        const actualHod = ambiguousDepartments.has(name) ? undefined : hodByDepartment.get(name);
+
+        if (actualHod && actualHod.uid !== data.hodUid) {
+          await d.ref.update({ hodUid: actualHod.uid, hodName: actualHod.name, updatedAt: new Date() }).catch(() => {});
+          return { id: d.id, ...data, hodUid: actualHod.uid, hodName: actualHod.name };
+        }
+        if (!actualHod && data.hodUid && !ambiguousDepartments.has(name)) {
+          // Recorded HOD no longer actually has this department on their own login.
+          await d.ref.update({ hodUid: "", hodName: "", updatedAt: new Date() }).catch(() => {});
+          return { id: d.id, ...data, hodUid: "", hodName: "" };
+        }
+        return { id: d.id, ...data };
+      })
+    );
+
     return NextResponse.json({ departments });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

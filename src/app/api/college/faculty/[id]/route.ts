@@ -90,6 +90,7 @@ export async function PATCH(
       hasPHD: boolean;
       userUid: string;
       academicProfile: Record<string, unknown>;
+      technicalProfile: Record<string, unknown>;
       profilePhotoUrl: string;
       joiningLetterUrl: string;
       appointmentLetterUrl: string;
@@ -170,8 +171,9 @@ export async function PATCH(
     if (body.aicteEligible !== undefined) updates.aicteEligible = body.aicteEligible;
     if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
 
-    // Academic profile (Modules 1-5)
+    // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
+    if (body.technicalProfile !== undefined) updates.technicalProfile = body.technicalProfile;
 
     // Date fields
     if (body.joiningDate) updates.joiningDate = new Date(body.joiningDate);
