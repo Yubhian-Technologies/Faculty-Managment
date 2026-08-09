@@ -44,3 +44,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# office docs dropped in docs/ (interview proformas, sheets, etc.)
+docs/**/*.doc
+docs/**/*.docx
+docs/**/*.xlsx
