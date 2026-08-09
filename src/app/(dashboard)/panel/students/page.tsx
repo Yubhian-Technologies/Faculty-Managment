@@ -27,10 +27,18 @@ export default function StudentsPage() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // The API already scopes `students` to exactly the faculty's in-charge
+  // sections (department + section + year) - this is a defense-in-depth
+  // re-check, not the primary authorization boundary.
+  const inChargeKeys = new Set(sections.map((s) => `${s.department}::${s.name}::${s.year}`));
+  const authorizedStudents = students.filter((s) => inChargeKeys.has(`${s.department}::${s.section}::${s.year}`));
+
   const selectedSection = sections.find((s) => s.id === sectionFilter);
   const visibleStudents = selectedSection
-    ? students.filter((s) => s.section === selectedSection.name && s.year === selectedSection.year)
-    : students;
+    ? authorizedStudents.filter(
+        (s) => s.department === selectedSection.department && s.section === selectedSection.name && s.year === selectedSection.year
+      )
+    : authorizedStudents;
 
   return (
     <div className="space-y-6">

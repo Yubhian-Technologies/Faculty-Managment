@@ -61,13 +61,21 @@ export async function GET(request: Request) {
       if (sections.length === 0) {
         return NextResponse.json({ students: [] });
       }
-      // Section *names* aren't unique across years (e.g. "A" exists in both Year 1
-      // and Year 2) - a single `where("section", "in", names)` would silently pull
-      // in every other year's same-named section too. Match each in-charge section
-      // by its exact (name, year) pair instead, one query per section, then merge.
+      // Section *names* aren't unique across years or departments (e.g. "A" exists
+      // in both Year 1 and Year 2, and independently in both CSE and AIDS) - a
+      // single `where("section", "in", names)` would silently pull in every other
+      // year's/department's same-named section too. Match each in-charge section
+      // by its exact (department, name, year) triple instead, one query per
+      // section, then merge. This is also what implicitly pins the student to the
+      // right *course*: StudentRecord has no courseId of its own, so a student's
+      // course is only ever determined by which Section (department+courseId+
+      // name+year) they're enrolled in - matching that exact triple is matching
+      // the exact section, and therefore the exact course.
       const sectionSnaps = await Promise.all(
         sections.slice(0, 30).map((s) =>
-          withCommonFilters(studentsColl.where("section", "==", s.name).where("year", "==", s.year)).get()
+          withCommonFilters(
+            studentsColl.where("department", "==", s.department).where("section", "==", s.name).where("year", "==", s.year)
+          ).get()
         )
       );
       const seen = new Set<string>();
