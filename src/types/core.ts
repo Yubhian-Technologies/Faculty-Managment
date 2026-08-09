@@ -17,6 +17,10 @@ export type UserRole =
   | "HOD"
   | "COLLEGE_OFFICE"
   | "COLLEGE_STAFF"
+  | "DEAN"
+  | "IQAC_COORDINATOR"
+  | "T_AND_P"
+  | "R_AND_D"
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
@@ -40,6 +44,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   HOD: "Head of Department",
   COLLEGE_OFFICE: "College Office",
   COLLEGE_STAFF: "College Staff",
+  DEAN: "Dean",
+  IQAC_COORDINATOR: "IQAC Coordinator",
+  T_AND_P: "T&P",
+  R_AND_D: "R&D",
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
@@ -64,6 +72,10 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   HOD: "/hod",
   COLLEGE_OFFICE: "/college-office",
   COLLEGE_STAFF: "/college-staff",
+  DEAN: "/dean",
+  IQAC_COORDINATOR: "/iqac-coordinator",
+  T_AND_P: "/t-and-p",
+  R_AND_D: "/r-and-d",
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
@@ -98,6 +110,10 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   HOD: 4,
   COLLEGE_OFFICE: 4,
   COLLEGE_STAFF: 4,
+  DEAN: 4,
+  IQAC_COORDINATOR: 4,
+  T_AND_P: 4,
+  R_AND_D: 4,
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
@@ -138,6 +154,10 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   HOD: "COLLEGE",
   COLLEGE_OFFICE: "COLLEGE",
   COLLEGE_STAFF: "COLLEGE",
+  DEAN: "COLLEGE",
+  IQAC_COORDINATOR: "COLLEGE",
+  T_AND_P: "COLLEGE",
+  R_AND_D: "COLLEGE",
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",

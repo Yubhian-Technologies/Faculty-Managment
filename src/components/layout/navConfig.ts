@@ -147,9 +147,25 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Accounts" },
   { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"] },
 
-  // College Staff (dynamic-title roles: Dean, IQAC Coordinator, T&P, etc.)
+  // College Staff (generic fallback for titles that don't warrant their own role)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"], section: "Personal" },
+
+  // Dean
+  { label: "Dashboard", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
+  { label: "My Leave", href: "/dean/leave", iconName: "CalendarClock", roles: ["DEAN"], section: "Personal" },
+
+  // IQAC Coordinator
+  { label: "Dashboard", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
+  { label: "My Leave", href: "/iqac-coordinator/leave", iconName: "CalendarClock", roles: ["IQAC_COORDINATOR"], section: "Personal" },
+
+  // T&P
+  { label: "Dashboard", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
+  { label: "My Leave", href: "/t-and-p/leave", iconName: "CalendarClock", roles: ["T_AND_P"], section: "Personal" },
+
+  // R&D
+  { label: "Dashboard", href: "/r-and-d", iconName: "LayoutDashboard", roles: ["R_AND_D"] },
+  { label: "My Leave", href: "/r-and-d/leave", iconName: "CalendarClock", roles: ["R_AND_D"], section: "Personal" },
 
   // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
@@ -383,6 +399,18 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   COLLEGE_STAFF: [
     { label: "Home", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
+  ],
+  DEAN: [
+    { label: "Home", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
+  ],
+  IQAC_COORDINATOR: [
+    { label: "Home", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
+  ],
+  T_AND_P: [
+    { label: "Home", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
+  ],
+  R_AND_D: [
+    { label: "Home", href: "/r-and-d", iconName: "LayoutDashboard", roles: ["R_AND_D"] },
   ],
   PANEL_MEMBER: [
     { label: "Home", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },

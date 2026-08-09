@@ -22,8 +22,9 @@ export interface ResolvedIdentity {
 //  - COLLEGE_STAFF backed by a SupportingStaffMember record (Non-Technical
 //    staff) - always non-teaching, uses its own joiningDate.
 //  - Everyone else (HOD/PRINCIPAL/VICE_PRINCIPAL, ACCOUNTS/FINANCE/
-//    COLLEGE_OFFICE, and label-only COLLEGE_STAFF logins like Dean/IQAC/T&P)
-//    has no FacultyMember/SupportingStaff record - only a thin users/{uid}
+//    COLLEGE_OFFICE, DEAN/IQAC_COORDINATOR/T_AND_P/R_AND_D, and any
+//    remaining label-only COLLEGE_STAFF logins) has no FacultyMember/
+//    SupportingStaff record - only a thin users/{uid}
 //    doc. isTeachingStaff is derived from that doc's stored role: true only
 //    for HOD (a working faculty member holding administrative charge, same
 //    vacation entitlement as any other teaching designation). PRINCIPAL and
