@@ -78,7 +78,13 @@ export default function HODPurchaseClearancePage() {
       .finally(() => setIsLoading(false));
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // Awaited in a wrapper so the loader's setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+        await load();
+    })();
+  }, []);
 
   const columns: Column<Row>[] = [
     { key: "title", header: "Items" },

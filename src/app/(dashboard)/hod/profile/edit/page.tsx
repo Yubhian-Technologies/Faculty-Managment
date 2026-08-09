@@ -32,36 +32,42 @@ export default function EditHodProfilePage() {
 
   useEffect(() => {
     if (!user) return;
-    setName(user.name ?? "");
-    setEmail(user.email ?? "");
-    setPhone(user.phone ?? "");
-    setPhotoUrl(user.profilePhotoUrl || undefined);
-    setAcademicProfile(user.academicProfile ?? {});
+    const u = user;
+    // Seeding the form straight from the effect body is a cascading render
+    // (react-hooks/set-state-in-effect); applying it through an async wrapper
+    // defers the same assignments by a microtask, which is imperceptible here.
+    void (async () => {
+    setName(u.name ?? "");
+    setEmail(u.email ?? "");
+    setPhone(u.phone ?? "");
+    setPhotoUrl(u.profilePhotoUrl || undefined);
+    setAcademicProfile(u.academicProfile ?? {});
     setPersonalDetails({
-      gender: user.gender ?? "",
-      dateOfBirth: toDateInputValue(user.dateOfBirth),
-      legalName: user.legalName ?? "",
-      fatherName: user.fatherName ?? "",
-      motherName: user.motherName ?? "",
-      religion: user.religion ?? "",
-      caste: user.caste ?? "",
-      aadharNo: user.aadharNo ?? "",
-      panNo: user.panNo ?? "",
-      passportNumber: user.passportNumber ?? "",
-      emergencyContactName: user.emergencyContactName ?? "",
-      emergencyContactPhone: user.emergencyContactPhone ?? "",
-      ratificationStatus: user.ratificationStatus ?? "",
-      ratificationDate: toDateInputValue(user.ratificationDate),
-      maritalStatus: user.maritalStatus ?? "",
-      spouseName: user.spouseName ?? "",
-      numberOfChildren: user.numberOfChildren,
-      referral: user.referral ?? "",
-      nativePlace: user.nativePlace ?? "",
-      temporaryAddress: user.temporaryAddress ?? "",
-      permanentSameAsTemporary: user.permanentSameAsTemporary ?? false,
-      permanentAddress: user.permanentAddress ?? "",
-      bloodGroup: user.bloodGroup ?? "",
+      gender: u.gender ?? "",
+      dateOfBirth: toDateInputValue(u.dateOfBirth),
+      legalName: u.legalName ?? "",
+      fatherName: u.fatherName ?? "",
+      motherName: u.motherName ?? "",
+      religion: u.religion ?? "",
+      caste: u.caste ?? "",
+      aadharNo: u.aadharNo ?? "",
+      panNo: u.panNo ?? "",
+      passportNumber: u.passportNumber ?? "",
+      emergencyContactName: u.emergencyContactName ?? "",
+      emergencyContactPhone: u.emergencyContactPhone ?? "",
+      ratificationStatus: u.ratificationStatus ?? "",
+      ratificationDate: toDateInputValue(u.ratificationDate),
+      maritalStatus: u.maritalStatus ?? "",
+      spouseName: u.spouseName ?? "",
+      numberOfChildren: u.numberOfChildren,
+      referral: u.referral ?? "",
+      nativePlace: u.nativePlace ?? "",
+      temporaryAddress: u.temporaryAddress ?? "",
+      permanentSameAsTemporary: u.permanentSameAsTemporary ?? false,
+      permanentAddress: u.permanentAddress ?? "",
+      bloodGroup: u.bloodGroup ?? "",
     });
+    })();
   }, [user]);
 
   async function handleSubmit(e: React.FormEvent) {

@@ -58,21 +58,26 @@ export default function HODDashboard() {
   const [parentDeptName, setParentDeptName] = useState<string | null>(null);
 
   useEffect(() => {
-    setIsLoading(true);
-    Promise.all([
-      fetch("/api/college/vacancy-requests")
-        .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
-        .then((d) => d.vacancyRequests ?? []),
-      fetch("/api/college/hiring-batches")
-        .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
-        .then((d) => d.batches ?? []),
-    ])
-      .then(([v, b]) => {
+    // isLoading already starts true, so nothing is set synchronously here -
+    // a setState in the effect body triggers a cascading render.
+    void (async () => {
+      try {
+        const [v, b] = await Promise.all([
+          fetch("/api/college/vacancy-requests")
+            .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
+            .then((d) => d.vacancyRequests ?? []),
+          fetch("/api/college/hiring-batches")
+            .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
+            .then((d) => d.batches ?? []),
+        ]);
         setVacancies(v);
         setBatches(b);
-      })
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
+      } catch {
+        // Non-fatal: the dashboard renders with empty lists.
+      } finally {
+        setIsLoading(false);
+      }
+    })();
 
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)

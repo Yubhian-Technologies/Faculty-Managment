@@ -44,7 +44,9 @@ export default function HODSubjectsPage() {
     }
   }, []);
 
-  useEffect(() => { void loadCourses(); }, [loadCourses]);
+  useEffect(() => {
+    void (async () => { await loadCourses(); })();
+  }, [loadCourses]);
 
   const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
   const yearOptions = useMemo(

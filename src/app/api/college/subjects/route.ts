@@ -4,11 +4,9 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { SubjectType } from "@/types";
-
-async function getHodDept(db: FirebaseFirestore.Firestore, collegeId: string, uid: string): Promise<string> {
-  const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-  return (snap.data() as { department?: string } | undefined)?.department ?? "";
-}
+import {
+  getHodDepartmentScope, canHodEditDepartment, editableDepartmentNames,
+} from "@/lib/departments/scope";
 
 export async function GET(request: Request) {
   try {
@@ -22,8 +20,16 @@ export async function GET(request: Request) {
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
 
     if (session.role === "HOD") {
-      const dept = await getHodDept(db, session.collegeId, session.uid);
-      if (dept) query = query.where("department", "==", dept);
+      // A parent HOD sees their own department's subjects and every
+      // sub-department's, since they manage those too. Firestore caps `in` at 30
+      // values, which comfortably covers a department's sub-departments.
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const names = editableDepartmentNames(scope);
+      if (names.length === 1) {
+        query = query.where("department", "==", names[0]);
+      } else if (names.length > 1) {
+        query = query.where("department", "in", names.slice(0, 30));
+      }
     } else if (deptFilter) {
       query = query.where("department", "==", deptFilter);
     }
@@ -86,13 +92,21 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
       }
 
-      const dept = session.role === "HOD"
-        ? await getHodDept(db, session.collegeId, session.uid)
-        : "";
-      if (session.role === "HOD" && dept) {
+      let dept = "";
+      if (session.role === "HOD") {
+        // A parent HOD may file the subject under their own department or any
+        // sub-department; body.department names which. A sub-HOD has no children,
+        // so this collapses to their own department either way.
+        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+        dept = body.department?.trim() || scope.departmentName;
+        if (!canHodEditDepartment(scope, dept)) {
+          return NextResponse.json(
+            { error: "That department is not yours or one of your sub-departments" },
+            { status: 403 },
+          );
+        }
         // A sub-department borrows its parent's courses (it never has its own),
-        // so a sub-HOD adding subjects for their own sections must be allowed
-        // against the parent's course, not just an exact department match.
+        // so the course may belong to the target department itself or its parent.
         const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
           .where("name", "==", dept).limit(1).get();
         const deptDoc = deptSnap.empty ? null : (deptSnap.docs[0].data() as { parentDepartmentId?: string });
@@ -133,9 +147,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "name, code, semester are required" }, { status: 400 });
     }
 
-    const department = session.role === "HOD"
-      ? await getHodDept(db, session.collegeId, session.uid)
-      : (body.department ?? "");
+    let department = body.department ?? "";
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      department = body.department?.trim() || scope.departmentName;
+      if (!canHodEditDepartment(scope, department)) {
+        return NextResponse.json(
+          { error: "That department is not yours or one of your sub-departments" },
+          { status: 403 },
+        );
+      }
+    }
 
     if (!department) {
       return NextResponse.json({ error: "department is required" }, { status: 400 });

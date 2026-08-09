@@ -320,10 +320,13 @@ export interface Department {
   // Sub-department support: a parent department (Principal-created) can be
   // split into several sub-departments (e.g. Basic Science → BS-Maths,
   // BS-English, ...), each with its own HOD ("sub-HOD" — just a normal HOD
-  // account on this child Department doc, no separate role). The parent's
-  // HOD gets automatic view-only access to every child's students/sections/
-  // assigned faculty; only the child's own HOD can edit it. One level deep
-  // only — child departments never set `hasSubDepartments`.
+  // account on this child Department doc, no separate role). The parent's HOD
+  // has FULL control over every child as well as their own department — they
+  // can create sections, add subjects, add faculty and make teaching
+  // assignments in any of them, alongside the sub-HOD who runs it day to day.
+  // Authority flows down the tree only: a sub-HOD never reaches the parent or a
+  // sibling. Enforced via canHodEditDepartment() in src/lib/departments/scope.ts.
+  // One level deep only — child departments never set `hasSubDepartments`.
   parentDepartmentId?: string;
   hasSubDepartments?: boolean;
   // Cross-listing: other departments whose HODs each get automatic view-only

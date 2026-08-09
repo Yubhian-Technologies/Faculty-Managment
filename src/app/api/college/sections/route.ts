@@ -3,12 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
-
-async function getHodDept(db: FirebaseFirestore.Firestore, collegeId: string, uid: string): Promise<string> {
-  const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-  return (snap.data() as { department?: string } | undefined)?.department ?? "";
-}
+import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 
 export async function GET(request: Request) {
   try {
@@ -195,7 +190,24 @@ export async function POST(request: Request) {
     // departmentId.
     let dept = "";
     if (session.role === "HOD") {
-      dept = await getHodDept(db, session.collegeId, session.uid);
+      // A parent department's HOD runs its sub-departments too, so they may
+      // create a section directly in one by naming it. Omitting departmentId
+      // keeps the old behaviour (their own department), which is also all a
+      // sub-HOD can ever do.
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (body.departmentId && !canHodEditDepartmentId(scope, body.departmentId)) {
+        return NextResponse.json(
+          { error: "That department is not yours or one of your sub-departments" },
+          { status: 403 },
+        );
+      }
+      if (body.departmentId) {
+        const deptSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("departments").doc(body.departmentId).get();
+        dept = (deptSnap.data() as { name?: string } | undefined)?.name ?? "";
+      } else {
+        dept = scope.departmentName;
+      }
     } else if (body.departmentId) {
       const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").doc(body.departmentId).get();
       if (!deptSnap.exists) {

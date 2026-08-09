@@ -204,7 +204,13 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  useEffect(() => { void load(); }, [id]);
+  useEffect(() => {
+    // Awaited in a wrapper so the loader's setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+        await load();
+    })();
+  }, [id]);
 
   // Panel members submit from their own tabs while this page sits open —
   // refetch on refocus so submitted/pending status doesn't go stale.

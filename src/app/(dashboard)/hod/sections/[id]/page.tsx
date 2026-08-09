@@ -29,17 +29,19 @@ export default function SectionRosterPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(true);
-    fetch("/api/college/sections")
-      .then((r) => r.json() as Promise<{ sections: SectionRow[] }>)
-      .then((d) => {
+    // isLoading already starts true, so nothing is set synchronously here -
+    // a setState in the effect body triggers a cascading render.
+    void (async () => {
+      try {
+        const d = await fetch("/api/college/sections")
+          .then((r) => r.json() as Promise<{ sections: SectionRow[] }>);
         const sec = (d.sections ?? []).find((s) => s.id === id) ?? null;
         setSection(sec);
         if (!sec) {
           toast({ variant: "destructive", title: "Section not found" });
-          return null;
+          return;
         }
-        return Promise.all([
+        await Promise.all([
           // Students API scopes by section NAME + year, not id - section names
           // aren't unique across departments, so narrow client-side (same
           // caveat as the Principal promotions roster fetch).
@@ -50,9 +52,12 @@ export default function SectionRosterPage() {
             .then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>)
             .then((ad) => setAssignments(ad.assignments ?? [])),
         ]);
-      })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load section" }))
-      .finally(() => setIsLoading(false));
+      } catch {
+        toast({ variant: "destructive", title: "Failed to load section" });
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, [id]);
 
   if (isLoading) {

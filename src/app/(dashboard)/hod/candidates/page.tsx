@@ -16,16 +16,23 @@ export default function HODCandidatesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
 
-  function load() {
-    setIsLoading(true);
-    fetch("/api/college/candidates")
-      .then((r) => r.json() as Promise<{ candidates: CandidateRow[] }>)
-      .then((d) => setCandidates(d.candidates ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidates" }))
-      .finally(() => setIsLoading(false));
+  // Nothing is set synchronously: isLoading starts true and the rest happens
+  // after an await, so calling this from an effect can't cascade renders.
+  async function load() {
+    try {
+      const d = await fetch("/api/college/candidates")
+        .then((r) => r.json() as Promise<{ candidates: CandidateRow[] }>);
+      setCandidates(d.candidates ?? []);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load candidates" });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void (async () => { await load(); })();
+  }, []);
 
   async function toggleShortlist(candidate: CandidateRow) {
     setToggling(candidate.id);

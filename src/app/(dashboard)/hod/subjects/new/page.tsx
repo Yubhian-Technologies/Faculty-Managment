@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { DepartmentScopeSelect } from "@/components/shared/DepartmentScopeSelect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,8 @@ export default function NewSubjectPage() {
 
   const [form, setForm] = useState<SubjectForm>(EMPTY_SUBJECT_FORM);
   const [saving, setSaving] = useState(false);
+  // Empty unless a parent HOD explicitly targets one of their sub-departments.
+  const [departmentName, setDepartmentName] = useState("");
 
   useEffect(() => {
     if (!courseId || !year) {
@@ -68,6 +71,9 @@ export default function NewSubjectPage() {
           hoursPerWeek: form.hoursPerWeek === "" ? 0 : Number(form.hoursPerWeek),
           totalHoursPerSemester: form.totalHoursPerSemester === "" ? null : Number(form.totalHoursPerSemester),
           credits: form.credits === "" ? 0 : Number(form.credits),
+          // Omitted unless a parent HOD picked a sub-department; the API then
+          // falls back to their own department, as before.
+          ...(departmentName ? { department: departmentName } : {}),
         }),
       });
       if (!res.ok) {
@@ -96,6 +102,13 @@ export default function NewSubjectPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Only rendered for a parent HOD who actually has sub-departments. */}
+            <DepartmentScopeSelect
+              value={departmentName}
+              onChange={(name) => setDepartmentName(name)}
+              hint="Add this subject to your own department or one of its sub-departments."
+            />
+
             <div className="space-y-2">
               <Label>Subject Name *</Label>
               <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Data Structures" />

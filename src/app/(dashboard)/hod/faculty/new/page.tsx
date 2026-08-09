@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { DepartmentScopeSelect } from "@/components/shared/DepartmentScopeSelect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,8 @@ export default function NewFacultyPage() {
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
+  // Empty unless a parent HOD explicitly targets one of their sub-departments.
+  const [departmentName, setDepartmentName] = useState("");
   const [tempPhotoId] = useState(() => crypto.randomUUID());
 
   const {
@@ -82,6 +85,9 @@ export default function NewFacultyPage() {
           ...(isTechnical ? { technicalProfile } : { academicProfile }),
           ...personalDetails,
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
+          // Omitted unless a parent HOD picked a sub-department; the API then
+          // falls back to their own department, as before.
+          ...(departmentName ? { department: departmentName } : {}),
         }),
       });
       const json = await res.json() as { id?: string; error?: string };
@@ -122,6 +128,13 @@ export default function NewFacultyPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            {/* Only rendered for a parent HOD who actually has sub-departments. */}
+            <DepartmentScopeSelect
+              value={departmentName}
+              onChange={(name) => setDepartmentName(name)}
+              hint="Add this faculty member to your own department or one of its sub-departments."
+            />
+
             {/* Identity */}
             <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
               <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
