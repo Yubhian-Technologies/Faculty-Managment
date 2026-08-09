@@ -325,10 +325,22 @@ export interface LocationDepartment {
 
 // ─── College ──────────────────────────────────────────────────────────────────
 
+export type CollegeType = "ENGINEERING" | "SCHOOL" | "DENTAL" | "PHARMACY" | "POLYTECHNIC" | "DEGREE";
+
+export const COLLEGE_TYPE_LABELS: Record<CollegeType, string> = {
+  ENGINEERING: "Engineering",
+  SCHOOL: "School",
+  DENTAL: "Dental",
+  PHARMACY: "Pharmacy",
+  POLYTECHNIC: "Polytechnic",
+  DEGREE: "Degree",
+};
+
 export interface College {
   id: string;
   locationId?: string;   // which location this college belongs to
   name: string;
+  type?: CollegeType;    // institution category - optional so older records without one still load
   logoUrl?: string;
   address?: string;
   contactEmail?: string;
