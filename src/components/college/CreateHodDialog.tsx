@@ -18,7 +18,14 @@ import { createUserSchema } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
 import type { z } from "zod";
 
-const createHodSchema = createUserSchema.pick({ name: true, email: true, password: true });
+const createHodSchema = createUserSchema.pick({
+  name: true,
+  email: true,
+  collegeEmail: true,
+  employeeId: true,
+  phone: true,
+  password: true,
+});
 type CreateHodFormData = z.infer<typeof createHodSchema>;
 
 interface CreateHodDialogProps {
@@ -105,6 +112,19 @@ export function CreateHodDialog({ department, onCreated }: CreateHodDialogProps)
             <Label htmlFor="hod-email">Email *</Label>
             <Input id="hod-email" type="email" autoComplete="off" {...register("email")} placeholder="hod@college.edu" />
             {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="hod-college-email">College Email</Label>
+            <Input id="hod-college-email" type="email" autoComplete="off" {...register("collegeEmail")} placeholder="Optional" />
+            {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="hod-employee-id">Employee ID</Label>
+            <Input id="hod-employee-id" {...register("employeeId")} placeholder="Optional" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="hod-phone">Phone</Label>
+            <Input id="hod-phone" {...register("phone")} placeholder="Optional" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="hod-password">Temporary Password *</Label>

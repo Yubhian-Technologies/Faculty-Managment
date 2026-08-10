@@ -55,8 +55,8 @@ export async function POST(request: Request) {
     if (!name || String(name).trim().length < 2) {
       return NextResponse.json({ error: "College name is required" }, { status: 400 });
     }
-    if (type !== undefined && !COLLEGE_TYPES.includes(type)) {
-      return NextResponse.json({ error: "Invalid college type" }, { status: 400 });
+    if (!type || !COLLEGE_TYPES.includes(type)) {
+      return NextResponse.json({ error: "College type is required" }, { status: 400 });
     }
 
     // Administration uses their own locationId; Super Admin must supply one
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     await db.collection("colleges").doc(collegeId).set({
       name: String(name).trim(),
       locationId,
-      ...(type ? { type } : {}),
+      type,
       address: address ?? "",
       contactEmail: contactEmail ?? "",
       contactPhone: contactPhone ?? "",

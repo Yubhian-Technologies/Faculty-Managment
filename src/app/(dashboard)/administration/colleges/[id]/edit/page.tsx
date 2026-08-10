@@ -65,6 +65,10 @@ export default function EditAdministrationCollegePage() {
       toast({ variant: "destructive", title: "College name is required" });
       return;
     }
+    if (!form.type) {
+      toast({ variant: "destructive", title: "College type is required" });
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/admin/colleges", {
@@ -73,10 +77,10 @@ export default function EditAdministrationCollegePage() {
         body: JSON.stringify({
           collegeId,
           name: form.name,
+          type: form.type,
           address: form.address,
           contactEmail: form.contactEmail,
           contactPhone: form.contactPhone,
-          ...(form.type ? { type: form.type } : {}),
         }),
       });
       if (!res.ok) throw new Error();
@@ -117,7 +121,7 @@ export default function EditAdministrationCollegePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-type">College Type</Label>
+              <Label htmlFor="edit-type">College Type *</Label>
               <Select value={form.type} onValueChange={(v) => set({ type: v as CollegeType })}>
                 <SelectTrigger id="edit-type">
                   <SelectValue placeholder="Select type..." />

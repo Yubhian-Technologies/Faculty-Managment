@@ -246,6 +246,8 @@ export default function EditStaffPage() {
             includeTeachingAssignment={false}
             collegeType={collegeType}
             hideFinancialModule
+            hideResearchModule
+            hidePromotionHistory
           />
         </CardContent>
       </Card>

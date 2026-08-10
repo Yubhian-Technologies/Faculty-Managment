@@ -29,7 +29,10 @@ export async function GET(request: Request) {
       // Firestore caps `in` at 30 values, which comfortably covers a
       // department's parent + siblings.
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const names = await getRelatedDepartmentNames(db, session.collegeId, scope.departmentName);
+      const relatedNames = await getRelatedDepartmentNames(db, session.collegeId, scope.departmentName);
+      // Also the grouped/managed branches - a Sub-HOD sees IT/CSE subjects they
+      // manage; a main HOD rolls up its sub-HODs' branches.
+      const names = Array.from(new Set([...relatedNames, ...scope.managedDepartmentNames]));
       if (names.length === 1) {
         query = query.where("department", "==", names[0]);
       } else if (names.length > 1) {
