@@ -146,11 +146,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This candidate is not part of this batch" }, { status: 400 });
     }
 
-    // Mirrors panel/interviews/[id]/page.tsx's own canScore gate exactly -
-    // demo scoring only while the demo is actually in progress; interview
-    // scoring from the moment HOD releases to panel through final review.
-    if (hasDemo && batch.currentPhase !== "IN_PROGRESS") {
-      return NextResponse.json({ error: "Demo scoring is not open for this batch right now" }, { status: 409 });
+    // Mirrors evaluation/[batchId]/[candidateId]/page.tsx's own canScore gate -
+    // the demo rubric is the only scoring form, open from demo day through
+    // final review (not just while the demo itself is in progress).
+    if (hasDemo && !["IN_PROGRESS", "PANEL_INTERVIEW", "PRINCIPAL_FINAL_REVIEW", "COMPLETED"].includes(batch.currentPhase ?? "")) {
+      return NextResponse.json({ error: "Evaluation is not open for this batch right now" }, { status: 409 });
     }
     if (hasInterview && !["PANEL_INTERVIEW", "PRINCIPAL_FINAL_REVIEW", "COMPLETED"].includes(batch.currentPhase ?? "")) {
       return NextResponse.json({ error: "Interview scoring is not open for this batch right now" }, { status: 409 });

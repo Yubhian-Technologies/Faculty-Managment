@@ -173,9 +173,9 @@ export async function PATCH(
 
     if (
       (body.interviewVenue !== undefined || body.requiredDocuments !== undefined || body.setupComplete !== undefined) &&
-      !isCollegeOffice && !isPrincipalRole
+      !isCollegeOffice && !isPrincipalRole && !isOwnerHod
     ) {
-      return NextResponse.json({ error: "Only College Office can set this up" }, { status: 403 });
+      return NextResponse.json({ error: "Only this batch's HOD or College Office can set this up" }, { status: 403 });
     }
 
     if (

@@ -155,6 +155,19 @@ export default function CollegeOfficeDocumentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A candidate only counts as closed once their faculty account's credentials
+  // have actually been created — not merely once the appointment letter went
+  // out, which still leaves the "Request Faculty Account" step pending. Using
+  // appointmentCandidateIds here would bury that step in the Completed tab the
+  // moment the appointment letter is sent. Matches isHiringClosed() in
+  // hiringPipeline.ts (its single-candidate case), used by the HOD/Principal
+  // pipeline boards for the same reason.
+  function isClosedFor(candidate: DocCandidateView): boolean {
+    const offer = offerByCandidate[offerKey(candidate.candidateId, candidate.batchId)];
+    const accountRequest = offer ? accountRequestsByOfferId[offer.id] : undefined;
+    return accountRequest?.status === "CREDENTIALS_CREATED" || accountRequest?.status === "COMPLETED";
+  }
+
   function phaseFor(candidate: DocCandidateView): Phase {
     if (appointmentCandidateIds.has(candidate.candidateId)) return "APPOINTMENT_SENT";
     const offer = offerByCandidate[offerKey(candidate.candidateId, candidate.batchId)];
@@ -407,7 +420,7 @@ ${institution}`;
     );
   }
 
-  const visibleCandidates = candidates.filter((c) => (phaseFor(c) === "APPOINTMENT_SENT") === (scope === "closed"));
+  const visibleCandidates = candidates.filter((c) => isClosedFor(c) === (scope === "closed"));
 
   const byDepartment = new Map<string, DocCandidateView[]>();
   for (const c of visibleCandidates) {
@@ -424,7 +437,7 @@ ${institution}`;
         description={
           scope === "active"
             ? "Offer letter → document verification & joining letter → appointment letter → credentials & official email setup"
-            : "Candidates whose appointment letter has already been sent"
+            : "Candidates whose faculty account credentials have been created"
         }
       />
 
@@ -594,7 +607,7 @@ ${institution}`;
                             <div className="pt-2 border-t space-y-2">
                               <div className="flex items-center gap-1.5 text-sm text-green-600">
                                 <CheckCircle2 className="h-4 w-4" />
-                                Hiring complete — appointment letter has been sent.
+                                {credentialsReady ? "Hiring complete — appointment letter sent and faculty account created." : "Appointment letter sent — faculty account setup still pending."}
                               </div>
                               {offer && (
                                 accountRequest ? (

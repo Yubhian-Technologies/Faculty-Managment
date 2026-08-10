@@ -20,7 +20,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
 import { ShortlistDialog } from "@/components/hiring/ShortlistDialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { getCurrentStage, stateForStage, getDetailedHiringStatus, getApprovedDetailedStatuses, getOnboardingSummary, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
+import { getCurrentStage, stateForStage, getDetailedHiringStatus, getApprovedDetailedStatuses, getOnboardingSummary, isHiringClosed, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import type { VacancyRequest, Candidate, CandidateApplication, CandidateStatus, CandidateStage, InterviewMode, HiringBatch, OfferLetter, FacultyAccountRequestStatus } from "@/types";
@@ -50,10 +50,6 @@ type PipelineEntry = {
   candidates: PipelineCandidateView[];
   batch: HiringBatch | null;
 };
-
-function isClosed(e: PipelineEntry): boolean {
-  return e.vacancy.status === "REJECTED" || e.batch?.currentPhase === "COMPLETED";
-}
 
 type OfferStatus = "SENT" | "ACCEPTED" | "REJECTED";
 
@@ -538,7 +534,13 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visible = entries.filter((e) => (scope === "closed" ? isClosed(e) : !isClosed(e)));
+  function closedFor(e: PipelineEntry): boolean {
+    const approvedCandidateIds = e.candidates
+      .filter((c) => c.status === "APPROVED" && c.currentStage === "DECISION")
+      .map((c) => c.candidateId);
+    return isHiringClosed(e.vacancy.status, e.batch?.currentPhase, approvedCandidateIds, accountRequestStatusByCandidate);
+  }
+  const visible = entries.filter((e) => (scope === "closed" ? closedFor(e) : !closedFor(e)));
 
   if (isLoading) {
     return (

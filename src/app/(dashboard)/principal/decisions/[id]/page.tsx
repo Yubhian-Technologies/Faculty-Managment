@@ -14,10 +14,6 @@ import { formatDate } from "@/lib/utils";
 import {
   CheckCircle2,
   XCircle,
-  ThumbsUp,
-  ThumbsDown,
-  Minus,
-  Users,
   Star,
   Clock,
   Mail,
@@ -46,28 +42,12 @@ type PanelFeedbackItem = {
   id: string;
   candidateId: string;
   panelName: string;
-  recommendation?: "ACCEPT" | "REJECT" | "MAYBE";
-  ratings?: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
-  remarksByCategory?: Record<string, string | undefined>;
   demoRatings?: Record<string, DemoRatingLevel>;
   demoOverallScore?: number;
-  salaryNegotiated?: number;
-  noticePeriod?: string;
-  strengths?: string;
-  weaknesses?: string;
-  comments?: string;
+  demoComments?: string;
 };
 
 const DEMO_LEVEL_SCORE: Record<DemoRatingLevel, number> = { POOR: 1, AVERAGE: 2, GOOD: 3, EXCELLENT: 4 };
-
-const REMARK_CATEGORY_LABELS: Record<string, string> = {
-  subjectKnowledge: "Subject Knowledge",
-  communication: "Communication",
-  presentationSkills: "Presentation Skills",
-  research: "Research",
-  specificAttributes: "Specific Attributes",
-  others: "Others",
-};
 
 const RESEARCH_PROFILE_LABELS: Record<string, string> = {
   firstAuthorPublications: "Publications (first/corresponding author)",
@@ -287,16 +267,6 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
           const sf = studentFeedback.find((f) => f.candidateId === candidate.candidateId);
           const decision = decisions[candidate.id];
 
-          const interviewPf = pf.filter((f) => f.ratings);
-          const panelAccepts = interviewPf.filter((f) => f.recommendation === "ACCEPT").length;
-          const panelRejects = interviewPf.filter((f) => f.recommendation === "REJECT").length;
-          const panelMaybe = interviewPf.filter((f) => f.recommendation === "MAYBE").length;
-
-          const avgTechnical = avg(interviewPf.map((f) => f.ratings!.technicalKnowledge));
-          const avgCommunication = avg(interviewPf.map((f) => f.ratings!.communicationSkills));
-          const avgTeaching = avg(interviewPf.map((f) => f.ratings!.teachingMethodology));
-          const panelOverall = avg([avgTechnical, avgCommunication, avgTeaching]);
-
           const demoPf = pf.filter((f) => f.demoRatings);
           const demoRubricKeys = [
             "planningAndOrganizing",
@@ -386,77 +356,38 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   </div>
                 )}
 
-                {/* Panel feedback summary */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <Users className="h-3 w-3" />Panel Evaluation ({interviewPf.length} member{interviewPf.length !== 1 ? "s" : ""})
-                    </p>
-                    {interviewPf.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No panel feedback yet</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Technical Knowledge</span>
-                          <ScoreDots value={avgTechnical} />
+                {/* Student feedback summary */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <Star className="h-3 w-3" />Student Feedback{sf ? ` (${sf.count} response${sf.count !== 1 ? "s" : ""})` : ""}
+                  </p>
+                  {!sf ? (
+                    <p className="text-sm text-muted-foreground">No student feedback yet</p>
+                  ) : (
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {(
+                        [
+                          ["clarity", "Clarity"],
+                          ["engagement", "Engagement"],
+                          ["knowledgeDepth", "Knowledge"],
+                          ["timeManagement", "Time Mgmt"],
+                          ["overallImpression", "Overall"],
+                        ] as [string, string][]
+                      ).map(([key, label]) => (
+                        <div key={key} className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">{label}</span>
+                          <ScoreDots value={sf.averages[key] ?? 0} />
                         </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Communication</span>
-                          <ScoreDots value={avgCommunication} />
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground">Teaching Methodology</span>
-                          <ScoreDots value={avgTeaching} />
-                        </div>
-                        <div className="pt-1 border-t flex justify-between items-center text-sm font-medium">
-                          <span>Panel Overall</span>
-                          <div className="flex items-center gap-1">
-                            <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
-                            <span>{panelOverall.toFixed(1)} / 5</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-3 pt-1 text-xs">
-                          <span className="flex items-center gap-1 text-green-600"><ThumbsUp className="h-3 w-3" />{panelAccepts} Accept</span>
-                          <span className="flex items-center gap-1 text-amber-600"><Minus className="h-3 w-3" />{panelMaybe} Maybe</span>
-                          <span className="flex items-center gap-1 text-red-600"><ThumbsDown className="h-3 w-3" />{panelRejects} Reject</span>
+                      ))}
+                      <div className="pt-1 border-t flex justify-between items-center text-sm font-medium sm:col-span-2">
+                        <span>Avg Overall</span>
+                        <div className="flex items-center gap-1">
+                          <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
+                          <span>{avg(Object.values(sf.averages)).toFixed(1)} / 5</span>
                         </div>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Student feedback summary */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <Star className="h-3 w-3" />Student Feedback{sf ? ` (${sf.count} response${sf.count !== 1 ? "s" : ""})` : ""}
-                    </p>
-                    {!sf ? (
-                      <p className="text-sm text-muted-foreground">No student feedback yet</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {(
-                          [
-                            ["clarity", "Clarity"],
-                            ["engagement", "Engagement"],
-                            ["knowledgeDepth", "Knowledge"],
-                            ["timeManagement", "Time Mgmt"],
-                            ["overallImpression", "Overall"],
-                          ] as [string, string][]
-                        ).map(([key, label]) => (
-                          <div key={key} className="flex justify-between items-center text-sm">
-                            <span className="text-muted-foreground">{label}</span>
-                            <ScoreDots value={sf.averages[key] ?? 0} />
-                          </div>
-                        ))}
-                        <div className="pt-1 border-t flex justify-between items-center text-sm font-medium">
-                          <span>Avg Overall</span>
-                          <div className="flex items-center gap-1">
-                            <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
-                            <span>{avg(Object.values(sf.averages)).toFixed(1)} / 5</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Research profile (self-reported by candidate) */}
@@ -475,25 +406,15 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                 )}
 
                 {/* Panel member comments */}
-                {interviewPf.some((f) => f.strengths || f.weaknesses || f.comments || f.remarksByCategory) && (
+                {demoPf.some((f) => f.demoComments) && (
                   <div className="space-y-2 pt-2 border-t">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Panel Notes</p>
-                    {interviewPf
-                      .filter((f) => f.strengths || f.weaknesses || f.comments || f.remarksByCategory)
+                    {demoPf
+                      .filter((f) => f.demoComments)
                       .map((f) => (
                         <div key={f.id} className="text-xs bg-muted/40 rounded-lg p-2 space-y-0.5">
                           <p className="font-medium">{f.panelName}</p>
-                          {f.strengths && <p className="text-green-700">+ {f.strengths}</p>}
-                          {f.weaknesses && <p className="text-red-700">− {f.weaknesses}</p>}
-                          {f.comments && <p className="text-muted-foreground">{f.comments}</p>}
-                          {f.remarksByCategory &&
-                            Object.entries(f.remarksByCategory)
-                              .filter(([, v]) => v)
-                              .map(([key, value]) => (
-                                <p key={key} className="text-muted-foreground">
-                                  <span className="font-medium">{REMARK_CATEGORY_LABELS[key] ?? key}:</span> {value}
-                                </p>
-                              ))}
+                          <p className="text-muted-foreground">{f.demoComments}</p>
                         </div>
                       ))}
                   </div>

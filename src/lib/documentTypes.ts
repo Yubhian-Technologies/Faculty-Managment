@@ -55,3 +55,19 @@ export const DOCUMENT_TYPE_GROUPS: { category: string; items: string[] }[] = [
     "PwD Certificate (if applicable)",
   ] },
 ];
+
+// Maps each "Educational Certificates" document label to a prefilled
+// AcademicQualification.degree value. When the HOD requires one of these,
+// the candidate form renders a structured qualification card (degree,
+// institution, year, percentage/CGPA + certificate upload) for it instead
+// of a bare file upload, and prefills the degree tile from this table.
+export const EDUCATION_DOCUMENT_TEMPLATES: Record<string, string> = {
+  "10th Certificate & Marks Memo": "10th / SSC",
+  "Intermediate (12th) Certificate & Marks Memo": "Intermediate / 12th",
+  "B.Tech Degree Certificate": "B.Tech",
+  "B.Tech Consolidated Marks Memo (CMM)": "B.Tech",
+  "M.Tech Degree Certificate": "M.Tech",
+  "M.Tech Consolidated Marks Memo": "M.Tech",
+  "Ph.D Certificate (if applicable)": "Ph.D",
+  "UGC/NET/SET Qualification Certificate": "UGC-NET/SET",
+};

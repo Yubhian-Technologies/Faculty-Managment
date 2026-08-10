@@ -136,6 +136,28 @@ export function getApprovedDetailedStatuses(
     );
 }
 
+// A vacancy/candidate only counts as fully closed once the faculty account's
+// credentials have actually been created - not merely once the batch reached
+// COMPLETED (which happens right after the Principal's decision, long before
+// offer/docs/appointment/credentials) or once an appointment letter exists.
+// Shared by the HOD, Principal, and Accounts pipeline boards, and (in its
+// single-candidate form) by the College Office documents page, so "closed"
+// means the same thing everywhere instead of each view guessing its own proxy.
+export function isHiringClosed(
+  vacancyStatus: VacancyRequest["status"],
+  batchPhase: BatchPhase | undefined,
+  approvedCandidateIds: string[],
+  accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>
+): boolean {
+  if (vacancyStatus === "REJECTED") return true;
+  if (batchPhase !== "COMPLETED") return false;
+  if (approvedCandidateIds.length === 0) return true;
+  return approvedCandidateIds.every((id) => {
+    const s = accountRequestStatusByCandidate[id];
+    return s === "CREDENTIALS_CREATED" || s === "COMPLETED";
+  });
+}
+
 const DETAILED_STATUS_ORDER = Object.keys(DETAILED_HIRING_STATUS_LABELS) as DetailedHiringStatus[];
 
 // Summarizes a batch's approved candidates' post-decision progress as the

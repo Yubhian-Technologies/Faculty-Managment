@@ -186,6 +186,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Accounts
   { label: "Dashboard", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
   { label: "Hiring — Offer Letters", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"], section: "Hiring" },
+  { label: "Hiring Pipeline", href: "/accounts/pipeline", iconName: "GitBranch", roles: ["ACCOUNTS"], section: "Hiring" },
   { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
   { label: "My Leave", href: "/accounts/leave", iconName: "CalendarClock", roles: ["ACCOUNTS"], section: "Personal" },
 
@@ -433,6 +434,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ACCOUNTS: [
     { label: "Home", href: "/accounts", iconName: "LayoutDashboard", roles: ["ACCOUNTS"] },
     { label: "Hiring", href: "/accounts/hiring", iconName: "UserCheck", roles: ["ACCOUNTS"] },
+    { label: "Pipeline", href: "/accounts/pipeline", iconName: "GitBranch", roles: ["ACCOUNTS"] },
     { label: "Salary", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"] },
   ],
   FINANCE: [
