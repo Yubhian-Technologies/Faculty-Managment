@@ -77,7 +77,20 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const vacancy = vacancySnap.data() as { hodUid: string; position: string };
+    const vacancy = vacancySnap.data() as { hodUid: string; position: string; status?: string };
+
+    // A vacancy decision is terminal - once APPROVED/REJECTED, it can't be
+    // silently re-decided by a later request (e.g. two Principal tabs, or a
+    // stale form resubmit after someone else already acted on it).
+    if (
+      (vacancy.status === "APPROVED" || vacancy.status === "REJECTED") &&
+      status !== vacancy.status
+    ) {
+      return NextResponse.json(
+        { error: `This hiring request is already ${vacancy.status.toLowerCase()}` },
+        { status: 409 }
+      );
+    }
 
     await db
       .collection("colleges")

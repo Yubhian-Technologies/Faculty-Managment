@@ -105,7 +105,7 @@ export async function POST(
         type: "OFFER_RESPONSE_RECEIVED",
         title: body.decision === "ACCEPTED" ? "Offer Accepted" : "Offer Rejected",
         message: `${letter.candidateName ?? "The candidate"} has ${body.decision === "ACCEPTED" ? "accepted" : "rejected"} the offer for ${letter.designation}.`,
-        link: `/college-office/offers`,
+        link: `/college-office/documents`,
         read: false,
         createdAt: now,
       });

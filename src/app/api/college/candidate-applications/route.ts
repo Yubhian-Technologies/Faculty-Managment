@@ -96,6 +96,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Hiring request is not approved" }, { status: 400 });
     }
 
+    // An HOD may only attach candidates to their own department's hiring
+    // requests - Principal/VP/SuperAdmin retain full cross-department access.
+    if (session.role === "HOD") {
+      const hodSnap = await collegeRef.collection("users").doc(session.uid).get();
+      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+      if (hodDept && vacancy.department !== hodDept) {
+        return NextResponse.json({ error: "You can only attach candidates to your own department's hiring requests" }, { status: 403 });
+      }
+    }
+
     // Guard against attaching the same candidate to the same hiring request twice
     // while a prior attempt is still live (candidate <-> vacancy is many-to-many,
     // but not duplicated for the same pair at once).
