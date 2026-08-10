@@ -12,7 +12,7 @@ import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { Avatar } from "@/components/shared/Avatar";
 import { DESIGNATION_LABELS } from "@/types";
-import type { Department, FacultyMember, TeachingAssignment, College } from "@/types";
+import type { Department, FacultyMember, TeachingAssignment, College, ResearchPublication } from "@/types";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
 import { formatDate } from "@/lib/utils";
 
@@ -24,11 +24,12 @@ export default function ManagementFacultyDetailPage() {
     queryKey: ["mgmt-faculty", collegeId, deptId, facultyId],
     queryFn: () =>
       fetch(`/api/management/colleges/${collegeId}/departments/${deptId}/faculty/${facultyId}`)
-        .then((r) => r.json() as Promise<{ faculty: FacultyMember; teachingAssignments: TeachingAssignment[] }>),
+        .then((r) => r.json() as Promise<{ faculty: FacultyMember; teachingAssignments: TeachingAssignment[]; publications?: ResearchPublication[] }>),
   });
 
   const faculty = data?.faculty ?? null;
   const teachingAssignments = data?.teachingAssignments ?? [];
+  const publications = data?.publications;
 
   const { data: collegeData } = useQuery({
     queryKey: ["mgmt-college-type", collegeId],
@@ -100,7 +101,7 @@ export default function ManagementFacultyDetailPage() {
           </SectionCard>
 
           <SectionCard icon={GraduationCap} title="Academic Profile" accent="emerald">
-            <ProfileFieldsView profile={faculty.academicProfile} includeTeachingAssignment collegeType={collegeType} />
+            <ProfileFieldsView profile={faculty.academicProfile} includeTeachingAssignment collegeType={collegeType} publications={publications} />
           </SectionCard>
 
           <SectionCard icon={BookOpen} title="Teaching Load" accent="amber">

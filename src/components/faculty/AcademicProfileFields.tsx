@@ -11,7 +11,6 @@ import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config"
 import type {
   FacultyProfileFields,
   CollegeType,
-  Publication,
   FundedProject,
   ConsultancyProject,
   LabEstablished,
@@ -41,7 +40,6 @@ interface Props {
   collegeType?: CollegeType;
 }
 
-const EMPTY_PUBLICATION: Publication = { title: "", coAuthors: "", journalOrConference: "", publicationYear: new Date().getFullYear(), indexing: "", driveLink: "" };
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
@@ -181,24 +179,10 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
 
       {/* Module 3 */}
       <SectionTitle>Module 3 - Research Publications</SectionTitle>
-      <RepeatingGroup
-        title="Publications"
-        items={value.publications}
-        empty={EMPTY_PUBLICATION}
-        onChange={(v) => set("publications", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Co-Authors" value={item.coAuthors} onChange={(v) => update({ coAuthors: v })} placeholder="Comma-separated names" />
-            <TextInput label="Journal / Conference" value={item.journalOrConference} onChange={(v) => update({ journalOrConference: v })} />
-            <NumInput label="Year of Publication" value={item.publicationYear} onChange={(v) => update({ publicationYear: v })} />
-            <TextInput label="Indexing" value={item.indexing} onChange={(v) => update({ indexing: v })} placeholder="e.g. SCI, Scopus, WoS, UGC-CARE" />
-            <div className="sm:col-span-2">
-              <TextInput label="Publication Link" value={item.driveLink} onChange={(v) => update({ driveLink: v })} placeholder="Paste your Google Drive public view link" />
-            </div>
-          </>
-        )}
-      />
+      <p className="text-xs text-muted-foreground">
+        Individual publication records are maintained by the R&amp;D office - view them on the Research Publications module.
+        The fields below are self-reported summary metrics.
+      </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <NumInput label="First/Corresponding Author Pubs" value={value.publicationsFirstOrCorrespondingAuthor} onChange={(v) => set("publicationsFirstOrCorrespondingAuthor", v)} />
         <NumInput label="Q1 / IF > 4.0 Pubs" value={value.publicationsQ1OrHighImpact} onChange={(v) => set("publicationsQ1OrHighImpact", v)} />

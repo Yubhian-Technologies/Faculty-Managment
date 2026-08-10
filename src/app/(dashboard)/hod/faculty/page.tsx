@@ -117,7 +117,16 @@ export default function HODFacultyPage() {
         const taData = await taRes.json() as { assignments?: unknown[] };
         teachingAssignments = taData.assignments ?? [];
       } catch { /* non-critical - resume still generates without the live teaching-load table */ }
-      await downloadResumePdf({ ...row, teachingAssignments, collegeName }, (row.employeeId as string) || (row.name as string));
+      let researchPublications: unknown[] = [];
+      const researchUid = (row.userUid as string | undefined) ?? (row.uid as string | undefined);
+      if (researchUid) {
+        try {
+          const pubRes = await fetch(`/api/college/publications?uid=${encodeURIComponent(researchUid)}`);
+          const pubData = await pubRes.json() as { publications?: unknown[] };
+          researchPublications = pubData.publications ?? [];
+        } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
+      }
+      await downloadResumePdf({ ...row, teachingAssignments, researchPublications, collegeName }, (row.employeeId as string) || (row.name as string));
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {

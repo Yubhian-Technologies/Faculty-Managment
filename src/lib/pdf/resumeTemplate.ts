@@ -145,6 +145,11 @@ export interface ResumeData {
   name: string;
   role?: string;
   designation?: string;
+  /** R&D-managed publication records (see /api/college/publications) - the
+   *  caller fetches these itself and passes them in, since this is the
+   *  authoritative publication list; ap.publications below is a legacy
+   *  self-reported fallback kept only for records this was never fetched for. */
+  researchPublications?: Publication[];
   department?: string;
   employeeId?: string;
   email?: string;
@@ -423,8 +428,9 @@ export function getResumeHTML(data: ResumeData): string {
     (ap?.totalCitations || ap?.hIndex || ap?.i10Index) &&
       `Citations: ${ap?.totalCitations ?? 0} · h-Index: ${ap?.hIndex ?? 0} · i10-Index: ${ap?.i10Index ?? 0}`,
   ]);
-  const publicationEntries = ap?.publications?.length
-    ? ap.publications
+  const publicationList = data.researchPublications?.length ? data.researchPublications : ap?.publications;
+  const publicationEntries = publicationList?.length
+    ? publicationList
         .filter((p) => p.title)
         .map((p, i) => {
           const meta = [p.coAuthors, p.journalOrConference].filter(Boolean).join(" · ");
