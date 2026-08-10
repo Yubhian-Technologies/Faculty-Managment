@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { UserPlus, ChevronDown, ChevronUp, Plus, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
+import { COLLEGE_TYPE_LABELS } from "@/types";
 import type { College } from "@/types";
 
 type PrincipalRow = { uid: string; name: string; email: string; role: string; isActive: boolean };
@@ -94,11 +95,24 @@ export default function AdministrationCollegesPage() {
                     <p className="font-medium truncate">{college.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{college.contactEmail ?? college.address ?? "-"}</p>
                   </div>
+                  {college.type && (
+                    <Badge variant="outline" className="shrink-0 text-xs font-normal">
+                      {COLLEGE_TYPE_LABELS[college.type]}
+                    </Badge>
+                  )}
                   <Badge variant={college.isActive ? "default" : "secondary"} className="shrink-0">
                     {college.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => router.push(`/administration/colleges/${college.id}/edit`)}
+                  >
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                    Edit
+                  </Button>
                   {showAddBtn && (
                     <Button
                       size="sm"

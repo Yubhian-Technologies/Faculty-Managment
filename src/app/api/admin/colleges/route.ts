@@ -130,7 +130,11 @@ export async function DELETE(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await requireSuperAdmin();
+    const { verifySession } = await import("@/lib/auth/verifySession");
+    const session = await verifySession();
+    if (!session || !["SUPER_ADMIN", "ADMINISTRATION"].includes(session.role)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const body = (await request.json()) as {
       collegeId: string;
@@ -154,6 +158,20 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Invalid college type" }, { status: 400 });
     }
 
+    const db = getAdminDb();
+
+    // Administration may only edit colleges within their own location, and cannot
+    // (de)activate them - that stays a Super Admin-only power.
+    if (session.role === "ADMINISTRATION") {
+      if (isActive !== undefined) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const collegeSnap = await db.collection("colleges").doc(collegeId).get();
+      if (!collegeSnap.exists || collegeSnap.data()?.locationId !== session.locationId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (isActive !== undefined) updates.isActive = isActive;
     if (name !== undefined) updates.name = String(name).trim();
@@ -162,7 +180,6 @@ export async function PATCH(request: Request) {
     if (contactEmail !== undefined) updates.contactEmail = contactEmail;
     if (contactPhone !== undefined) updates.contactPhone = contactPhone;
 
-    const db = getAdminDb();
     await db.collection("colleges").doc(collegeId).update(updates);
 
     return NextResponse.json({ ok: true });

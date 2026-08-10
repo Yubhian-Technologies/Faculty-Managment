@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getPublicationsForUid } from "@/lib/firestore/publications";
 
 // MANAGEMENT is read-only - this route only implements GET.
 export async function GET(_request: Request, { params }: { params: Promise<{ collegeId: string; deptId: string }> }) {
@@ -30,8 +31,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
 
     const hod = hodSnap?.exists ? { uid: hodSnap.id, ...hodSnap.data() } : null;
+    const hodPublications = hod ? await getPublicationsForUid(db, collegeId, hod.uid) : [];
 
-    return NextResponse.json({ faculty, collegeName, hod });
+    return NextResponse.json({ faculty, collegeName, hod, hodPublications });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

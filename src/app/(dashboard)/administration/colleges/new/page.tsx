@@ -7,11 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { COLLEGE_TYPE_LABELS } from "@/types";
+import type { CollegeType } from "@/types";
+
+const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
 export default function NewAdministrationCollegePage() {
   const router = useRouter();
-  const [collegeForm, setCollegeForm] = useState({ name: "", address: "", contactEmail: "", contactPhone: "" });
+  const [collegeForm, setCollegeForm] = useState<{ name: string; type: CollegeType | ""; address: string; contactEmail: string; contactPhone: string }>({ name: "", type: "", address: "", contactEmail: "", contactPhone: "" });
   const [saving, setSaving] = useState(false);
 
   function set(patch: Partial<typeof collegeForm>) {
@@ -26,7 +31,7 @@ export default function NewAdministrationCollegePage() {
       const res = await fetch("/api/admin/colleges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(collegeForm),
+        body: JSON.stringify({ ...collegeForm, type: collegeForm.type || undefined }),
       });
       const json = await res.json() as { collegeId?: string; error?: string };
       if (!res.ok) {
@@ -59,6 +64,19 @@ export default function NewAdministrationCollegePage() {
                 onChange={(e) => set({ name: e.target.value })}
                 placeholder="e.g. Vishnu Institute of Technology"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>College Type</Label>
+              <Select value={collegeForm.type} onValueChange={(v) => set({ type: v as CollegeType })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {COLLEGE_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>{COLLEGE_TYPE_LABELS[t]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Address</Label>

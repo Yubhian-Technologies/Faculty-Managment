@@ -32,10 +32,11 @@ function PublicationRow({ pub }: { pub: ResearchPublication }) {
 // Research Publications module - the paper list itself is now R&D-managed
 // (see /api/college/publications), read-only here for everyone but R&D.
 // The surrounding bibliometric stats/IDs stay self-reported on academicProfile.
+// Split from PublicationsSection below so callers that already have the list
+// (e.g. Management dashboards, which fetch it server-side via a different API
+// surface - see ProfileFieldsView.tsx's ResearchModule) can skip the fetch.
 export function PublicationsModuleView({ uid, academicProfile }: { uid?: string; academicProfile: Partial<FacultyProfileFields> | undefined }) {
-  const p = academicProfile ?? {};
   const [publications, setPublications] = useState<ResearchPublication[] | null>(null);
-  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     const url = uid ? `/api/college/publications?uid=${encodeURIComponent(uid)}` : "/api/college/publications";
@@ -44,6 +45,13 @@ export function PublicationsModuleView({ uid, academicProfile }: { uid?: string;
       .then((d) => setPublications(d.publications ?? []))
       .catch(() => setPublications([]));
   }, [uid]);
+
+  return <PublicationsSection publications={publications} academicProfile={academicProfile} />;
+}
+
+export function PublicationsSection({ publications, academicProfile }: { publications: ResearchPublication[] | null; academicProfile: Partial<FacultyProfileFields> | undefined }) {
+  const p = academicProfile ?? {};
+  const [expanded, setExpanded] = useState(false);
 
   const sorted = (publications ?? []).slice().sort((a, b) => (b.publicationYear ?? 0) - (a.publicationYear ?? 0));
   const visible = expanded ? sorted : sorted.slice(0, PREVIEW_COUNT);

@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import { Avatar } from "@/components/shared/Avatar";
-import type { FacultyMember, FMSUser, FacultyProfileFields, College } from "@/types";
+import type { FacultyMember, FMSUser, FacultyProfileFields, College, ResearchPublication } from "@/types";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 type HodProfile = FMSUser & { academicProfile?: FacultyProfileFields };
@@ -26,13 +26,14 @@ export default function ManagementDepartmentFacultyPage() {
     queryKey: ["mgmt-dept-faculty", collegeId, deptId],
     queryFn: () =>
       fetch(`/api/management/colleges/${collegeId}/departments/${deptId}/faculty`).then(
-        (r) => r.json() as Promise<{ faculty: FacultyRow[]; collegeName: string; hod: HodProfile | null }>
+        (r) => r.json() as Promise<{ faculty: FacultyRow[]; collegeName: string; hod: HodProfile | null; hodPublications?: ResearchPublication[] }>
       ),
   });
 
   const faculty = data?.faculty ?? [];
   const collegeName = data?.collegeName ?? "";
   const hod = data?.hod ?? null;
+  const hodPublications = data?.hodPublications;
 
   const { data: collegeData } = useQuery({
     queryKey: ["mgmt-college-type", collegeId],
@@ -125,7 +126,7 @@ export default function ManagementDepartmentFacultyPage() {
                   </span>
                   <p className="text-sm font-semibold">Academic Profile</p>
                 </div>
-                <ProfileFieldsView profile={hod.academicProfile} includeTeachingAssignment collegeType={collegeType} />
+                <ProfileFieldsView profile={hod.academicProfile} includeTeachingAssignment collegeType={collegeType} publications={hodPublications} />
               </div>
             </CardContent>
           )}
