@@ -24,8 +24,8 @@ export type UserRole =
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
-  | "PANEL_MEMBER"
   | "WEBMASTER"
+  | "PANEL_MEMBER"
   | "ACCOUNTS"
   | "FINANCE"
   | "PURCHASE_DEPT"
@@ -51,8 +51,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
-  PANEL_MEMBER: "Faculty",
   WEBMASTER: "Webmaster",
+  PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
   PURCHASE_DEPT: "Purchase Department",
@@ -79,8 +79,8 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
-  PANEL_MEMBER: "/panel",
   WEBMASTER: "/webmaster",
+  PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
   PURCHASE_DEPT: "/purchase",
@@ -625,6 +625,7 @@ export interface FacultyMember {
   joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
   resumeUrl?: string;              // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
+  officialEmail?: string;         // institutional email address, set by Webmaster once an EmailCreationRequest is fulfilled — distinct from collegeEmail (the FMS login username)
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -1084,7 +1085,11 @@ export type NotificationType =
   | "OFFER_LETTER_GENERATED"
   | "CREDENTIAL_REQUESTED"
   | "COORDINATOR_ASSIGNED"
-  // Leave
+  // Webmaster (official email provisioning)
+  | "EMAIL_REQUEST_SUBMITTED"
+  | "OFFICIAL_EMAIL_CREATED"
+  | "EMAIL_REQUEST_CANCELLED"
+  // Leave & Attendance
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
@@ -1181,6 +1186,10 @@ export type AuditAction =
   | "HIRING_DECISION_MADE"
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
+  // Webmaster module
+  | "EMAIL_REQUEST_CREATED"
+  | "EMAIL_REQUEST_FULFILLED"
+  | "EMAIL_REQUEST_CANCELLED"
   | "DOCUMENTS_VERIFIED"
   | "JOINING_LETTER_UPLOADED"
   | "CREDENTIAL_REQUESTED"

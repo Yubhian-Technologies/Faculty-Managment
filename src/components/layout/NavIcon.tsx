@@ -46,6 +46,7 @@ import {
   Tags,
   PackageCheck,
   Landmark,
+  AtSign,
   FlaskConical,
   type LucideProps,
 } from "lucide-react";
@@ -98,6 +99,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   Tags,
   PackageCheck,
   Landmark,
+  AtSign,
   FlaskConical,
 };
 
