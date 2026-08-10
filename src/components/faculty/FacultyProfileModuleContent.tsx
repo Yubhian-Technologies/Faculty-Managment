@@ -4,9 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
 import { DocLink } from "@/components/shared/ProfileFieldPrimitives";
 import {
-  QualificationModule, ExperienceModule, ResearchModule, GrantsModule,
+  QualificationModule, ExperienceModule, GrantsModule,
   MentorshipModule, FinancialModule, OthersModule, TeachingDocsModule,
 } from "@/components/faculty/ProfileFieldsView";
+import { PublicationsModuleView } from "@/components/faculty/PublicationsModuleView";
 import { TechnicalProfileView } from "@/components/faculty/TechnicalProfileView";
 import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
@@ -24,6 +25,8 @@ export interface FacultyProfileSource extends PersonalDetailsSource {
   department?: string;
   joiningLetterUrl?: string;
   appointmentLetterUrl?: string;
+  uid?: string;      // FMSUser (HOD/Principal self-profile) login uid
+  userUid?: string;  // FacultyMember's linked login uid
 }
 
 interface Props {
@@ -47,7 +50,7 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
         {moduleKey === "personal" && <PersonalDetailsView value={faculty} />}
         {moduleKey === "qualification" && <QualificationModule profile={faculty.academicProfile} />}
         {moduleKey === "experience" && <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} />}
-        {moduleKey === "research" && <ResearchModule profile={faculty.academicProfile} />}
+        {moduleKey === "research" && <PublicationsModuleView uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} />}
         {moduleKey === "grants" && <GrantsModule profile={faculty.academicProfile} />}
         {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} />}
         {moduleKey === "financial" && <FinancialModule profile={faculty.academicProfile} />}

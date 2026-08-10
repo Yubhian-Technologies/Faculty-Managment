@@ -67,10 +67,12 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       {/* Module 1 */}
       <SectionTitle>Module 1 - General &amp; Academic Profile</SectionTitle>
       <TextInput label="Highest Qualification Earned" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
-      <DegreeFields label="UG Details" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
-      <DegreeFields label="PG Details" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
-      <DegreeFields label="PhD Details" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
-      <DegreeFields label="Post-Doctoral Details" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
+      <DegreeFields label="High School (10th) Details" level="HIGH_SCHOOL" value={value.highSchoolDetails} onChange={(v) => set("highSchoolDetails", v)} />
+      <DegreeFields label="Intermediate (12th) Details" level="INTERMEDIATE" value={value.intermediateDetails} onChange={(v) => set("intermediateDetails", v)} />
+      <DegreeFields label="UG Details" level="UG" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
+      <DegreeFields label="PG Details" level="PG" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
+      <DegreeFields label="PhD Details" level="DOCTORAL" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
+      <DegreeFields label="Post-Doctoral Details" level="POST_DOCTORAL" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Ph.D. Status</Label>
@@ -491,22 +493,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             <TextInput label="Course Code" value={item.courseCode} onChange={(v) => update({ courseCode: v })} />
             <TextInput label="Course Name" value={item.courseName} onChange={(v) => update({ courseName: v })} />
             <TextInput label="Academic Year" value={item.academicYear} onChange={(v) => update({ academicYear: v })} placeholder="e.g. 2025-26" />
-            <div className="space-y-1">
-              <Label className="text-xs">Course File</Label>
-              <CertificateUploadField
-                value={item.courseFileUrl}
-                onUploaded={(url) => update({ courseFileUrl: url })}
-                onRemoved={() => update({ courseFileUrl: "" })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">CO-PO Mapping</Label>
-              <CertificateUploadField
-                value={item.coPoMappingUrl}
-                onUploaded={(url) => update({ coPoMappingUrl: url })}
-                onRemoved={() => update({ coPoMappingUrl: "" })}
-              />
-            </div>
           </>
         )}
       />

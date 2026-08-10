@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { College } from "@/types";
+import type { College, CollegeType } from "@/types";
+
+const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
 export async function GET(request: Request) {
   try {
@@ -48,10 +50,13 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as Partial<College> & { locationId?: string };
-    const { name, address, contactEmail, contactPhone } = body;
+    const { name, type, address, contactEmail, contactPhone } = body;
 
     if (!name || String(name).trim().length < 2) {
       return NextResponse.json({ error: "College name is required" }, { status: 400 });
+    }
+    if (type !== undefined && !COLLEGE_TYPES.includes(type)) {
+      return NextResponse.json({ error: "Invalid college type" }, { status: 400 });
     }
 
     // Administration uses their own locationId; Super Admin must supply one
@@ -71,6 +76,7 @@ export async function POST(request: Request) {
     await db.collection("colleges").doc(collegeId).set({
       name: String(name).trim(),
       locationId,
+      ...(type ? { type } : {}),
       address: address ?? "",
       contactEmail: contactEmail ?? "",
       contactPhone: contactPhone ?? "",
@@ -130,11 +136,12 @@ export async function PATCH(request: Request) {
       collegeId: string;
       isActive?: boolean;
       name?: string;
+      type?: CollegeType;
       address?: string;
       contactEmail?: string;
       contactPhone?: string;
     };
-    const { collegeId, isActive, name, address, contactEmail, contactPhone } = body;
+    const { collegeId, isActive, name, type, address, contactEmail, contactPhone } = body;
 
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
@@ -143,10 +150,14 @@ export async function PATCH(request: Request) {
     if (name !== undefined && String(name).trim().length < 2) {
       return NextResponse.json({ error: "College name must be at least 2 characters" }, { status: 400 });
     }
+    if (type !== undefined && !COLLEGE_TYPES.includes(type)) {
+      return NextResponse.json({ error: "Invalid college type" }, { status: 400 });
+    }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (isActive !== undefined) updates.isActive = isActive;
     if (name !== undefined) updates.name = String(name).trim();
+    if (type !== undefined) updates.type = type;
     if (address !== undefined) updates.address = address;
     if (contactEmail !== undefined) updates.contactEmail = contactEmail;
     if (contactPhone !== undefined) updates.contactPhone = contactPhone;

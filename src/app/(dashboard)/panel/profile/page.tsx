@@ -1,11 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { MyProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABELS } from "@/types";
@@ -19,11 +16,6 @@ export default function FacultyProfilePage() {
       <PageHeader
         title="My Profile"
         description="Manage your profile photo and account details"
-        actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href="/panel/profile/edit"><Pencil className="mr-2 h-4 w-4" />Edit Profile</Link>
-          </Button>
-        }
       />
       <Card>
         <CardContent className="p-6 space-y-6">
