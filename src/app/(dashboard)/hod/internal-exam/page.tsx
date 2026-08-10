@@ -152,7 +152,7 @@ export default function HodInternalExamPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Internal Exam Marks"
+        title="Internal Exam"
         description="Submitted internal exam marks for your department (view-only)"
       />
 
