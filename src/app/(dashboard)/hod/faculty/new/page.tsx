@@ -18,7 +18,7 @@ import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import {
   QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
-  MentorshipFields, FinancialFields, OthersFields, TeachingDocsFields,
+  MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { PHONE_REGEX } from "@/lib/validations";
@@ -53,7 +53,7 @@ type FormData = z.infer<typeof schema>;
 
 type WizardStepKey =
   | "core" | "personal" | "qualification" | "experience" | "research" | "grants"
-  | "mentorship" | "financial" | "others" | "teaching-docs" | "technical" | "teaching-load" | "review";
+  | "mentorship" | "financial" | "others" | "technical" | "teaching-load" | "review";
 
 interface WizardStep {
   key: WizardStepKey;
@@ -101,9 +101,8 @@ export default function NewFacultyPage() {
         { key: "grants", label: PROFILE_MODULES.grants.label },
         { key: "mentorship", label: PROFILE_MODULES.mentorship.label },
         { key: "financial", label: PROFILE_MODULES.financial.label },
-        { key: "others", label: PROFILE_MODULES.others.label },
-        { key: "teaching-docs", label: PROFILE_MODULES["teaching-docs"].label },
         { key: "teaching-load", label: PROFILE_MODULES["teaching-load"].label },
+        { key: "others", label: PROFILE_MODULES.others.label },
       );
     }
     base.push({ key: "review", label: "Review & Submit" });
@@ -319,7 +318,6 @@ export default function NewFacultyPage() {
             {step.key === "mentorship" && <MentorshipFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "financial" && <FinancialFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "others" && <OthersFields value={academicProfile} onChange={setAcademicProfile} />}
-            {step.key === "teaching-docs" && <TeachingDocsFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "teaching-load" && <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />}
             {step.key === "review" && (
               <p className="text-sm text-muted-foreground">

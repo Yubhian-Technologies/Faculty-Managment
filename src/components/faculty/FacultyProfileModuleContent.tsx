@@ -2,10 +2,9 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
-import { DocLink } from "@/components/shared/ProfileFieldPrimitives";
 import {
   QualificationModule, ExperienceModule, GrantsModule,
-  MentorshipModule, FinancialModule, OthersModule, TeachingDocsModule,
+  MentorshipModule, FinancialModule, OthersModule,
 } from "@/components/faculty/ProfileFieldsView";
 import { PublicationsModuleView } from "@/components/faculty/PublicationsModuleView";
 import { TechnicalProfileView } from "@/components/faculty/TechnicalProfileView";
@@ -55,7 +54,6 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
         {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} />}
         {moduleKey === "financial" && <FinancialModule profile={faculty.academicProfile} />}
         {moduleKey === "others" && <OthersModule profile={faculty.academicProfile} />}
-        {moduleKey === "teaching-docs" && <TeachingDocsModule profile={faculty.academicProfile} />}
         {moduleKey === "technical" && <TechnicalProfileView profile={faculty.technicalProfile} />}
         {moduleKey === "teaching-load" && (
           <TeachingLoadTable
@@ -65,15 +63,6 @@ export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssign
               department: faculty.department,
             })}
           />
-        )}
-        {moduleKey === "documents" && (
-          <div className="flex flex-wrap gap-4">
-            {!faculty.joiningLetterUrl && !faculty.appointmentLetterUrl && (
-              <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
-            )}
-            <DocLink url={faculty.joiningLetterUrl} label="Joining Letter" />
-            <DocLink url={faculty.appointmentLetterUrl} label="Appointment Letter" />
-          </div>
         )}
       </CardContent>
     </Card>

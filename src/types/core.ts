@@ -862,15 +862,6 @@ export interface AwardEntry {
   certificateUrl?: string;
 }
 
-// NBA compliance documentation per course handled — Teaching Information.
-export interface CourseFileEntry {
-  courseCode: string;
-  courseName: string;
-  academicYear: string; // e.g. "2025-26"
-  courseFileUrl?: string;
-  coPoMappingUrl?: string;
-}
-
 export interface FacultyProfileFields {
   // Module 1 — Academic Qualification
   highestQualification: string;
@@ -942,9 +933,6 @@ export interface FacultyProfileFields {
 
   // Module 7 — Others
   otherInformation?: string;
-
-  // Module 8 — Teaching Documentation (NBA/AICTE)
-  courseFilesAndCoPoMapping: CourseFileEntry[];
 }
 
 // PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object

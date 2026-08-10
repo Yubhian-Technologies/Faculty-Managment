@@ -1,6 +1,6 @@
 import {
   IdCard, GraduationCap, Briefcase, FlaskConical, HandCoins,
-  Users, Wallet, FileQuestion, BookOpenCheck, BookOpen, FileText, Wrench,
+  Users, Wallet, FileQuestion, BookOpen, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { TECHNICAL_STAFF_DESIGNATIONS } from "@/types";
@@ -13,8 +13,8 @@ import type { Designation } from "@/types";
 // (/hod/faculty/[id]/[module]).
 export type ProfileModuleKey =
   | "personal" | "qualification" | "experience" | "research" | "grants"
-  | "mentorship" | "financial" | "others" | "teaching-docs" | "teaching-load"
-  | "technical" | "documents";
+  | "mentorship" | "financial" | "others" | "teaching-load"
+  | "technical";
 
 export interface ProfileModuleDef {
   key: ProfileModuleKey;
@@ -31,17 +31,15 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
   mentorship: { key: "mentorship", label: "Mentorship & Institutional Value", icon: Users },
   financial: { key: "financial", label: "Financial Standing", icon: Wallet },
   others: { key: "others", label: "Others", icon: FileQuestion },
-  "teaching-docs": { key: "teaching-docs", label: "Teaching Documentation", icon: BookOpenCheck },
   "teaching-load": { key: "teaching-load", label: "Teaching Load", icon: BookOpen },
   technical: { key: "technical", label: "Technical Profile", icon: Wrench },
-  documents: { key: "documents", label: "Documents", icon: FileText },
 };
 
 // Self-profile modules a person never edits themselves - financial standing
-// and documents are administratively controlled, teaching load is assigned
-// by HOD/Principal, and research publications are R&D-managed (see the
-// Research Publications feature).
-export const SELF_EDIT_DISABLED_MODULES: ProfileModuleKey[] = ["financial", "teaching-load", "documents", "research"];
+// is administratively controlled, teaching load is assigned by HOD/Principal,
+// and research publications are R&D-managed (see the Research Publications
+// feature).
+export const SELF_EDIT_DISABLED_MODULES: ProfileModuleKey[] = ["financial", "teaching-load", "research"];
 
 function isTechnicalDesignation(designation: Designation | string | undefined): boolean {
   return !!designation && (TECHNICAL_STAFF_DESIGNATIONS as string[]).includes(designation);
@@ -55,11 +53,11 @@ export function getFacultyProfileModules(
   opts: { hideFinancialModule?: boolean; excludeModules?: ProfileModuleKey[] } = {}
 ): ProfileModuleDef[] {
   const keys: ProfileModuleKey[] = isTechnicalDesignation(designation)
-    ? ["personal", "technical", "documents"]
+    ? ["personal", "technical"]
     : [
         "personal", "qualification", "experience", "research", "grants", "mentorship",
         ...(opts.hideFinancialModule ? [] : (["financial"] as ProfileModuleKey[])),
-        "others", "teaching-docs", "teaching-load", "documents",
+        "teaching-load", "others",
       ];
   return keys.filter((k) => !opts.excludeModules?.includes(k)).map((k) => PROFILE_MODULES[k]);
 }

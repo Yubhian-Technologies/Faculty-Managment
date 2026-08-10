@@ -49,7 +49,7 @@ export default function PrincipalProfilePage() {
         designation={user.designation}
         basePath="/principal/profile"
         hideFinancialModule
-        excludeModules={["teaching-load", "documents"]}
+        excludeModules={["teaching-load"]}
       />
     </div>
   );

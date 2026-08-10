@@ -130,8 +130,6 @@ export default function HodFacultyModuleEditPage() {
               }
             : moduleKey === "technical"
             ? { technicalProfile: record.technicalProfile }
-            : moduleKey === "documents"
-            ? { joiningLetterUrl: record.joiningLetterUrl, appointmentLetterUrl: record.appointmentLetterUrl, resumeUrl: record.resumeUrl }
             : { academicProfile: record.academicProfile };
 
         const res = await fetch(`/api/college/faculty/${facultyId}`, {

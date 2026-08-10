@@ -3,10 +3,9 @@
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { TechnicalStaffProfileFields } from "@/components/faculty/TechnicalStaffProfileFields";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
-import { FacultyDocumentsFields, type FacultyDocumentsValue } from "@/components/faculty/FacultyDocumentsFields";
 import {
   QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
-  MentorshipFields, FinancialFields, OthersFields, TeachingDocsFields,
+  MentorshipFields, FinancialFields, OthersFields,
 } from "@/components/faculty/AcademicProfileModuleFields";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
 import type { FacultyProfileFields, TechnicalProfile } from "@/types";
@@ -40,7 +39,7 @@ interface Props {
 // always PATCH the whole academicProfile/technicalProfile object back intact
 // - those PATCH routes replace the field wholesale rather than deep-merging.
 export function FacultyProfileModuleEditor({
-  moduleKey, record, onChange, facultyId, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange,
+  moduleKey, record, onChange, includeTeachingAssignment = true, teachingRows = [], onTeachingRowsChange,
 }: Props) {
   const academicProfile = record.academicProfile ?? {};
   const technicalProfile = record.technicalProfile ?? {};
@@ -68,18 +67,8 @@ export function FacultyProfileModuleEditor({
       return <FinancialFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
     case "others":
       return <OthersFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
-    case "teaching-docs":
-      return <TeachingDocsFields value={academicProfile} onChange={(ap) => onChange({ academicProfile: ap })} />;
     case "technical":
       return <TechnicalStaffProfileFields value={technicalProfile} onChange={(tp) => onChange({ technicalProfile: tp })} />;
-    case "documents":
-      return (
-        <FacultyDocumentsFields
-          facultyId={facultyId}
-          value={{ joiningLetterUrl: record.joiningLetterUrl, appointmentLetterUrl: record.appointmentLetterUrl, resumeUrl: record.resumeUrl } as FacultyDocumentsValue}
-          onChange={(patch) => onChange(patch)}
-        />
-      );
     case "teaching-load":
       return onTeachingRowsChange ? (
         <TeachingAssignmentsEditor value={teachingRows} onChange={onTeachingRowsChange} />

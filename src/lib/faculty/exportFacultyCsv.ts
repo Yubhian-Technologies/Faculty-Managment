@@ -10,7 +10,7 @@ import { ADMIN_RESPONSIBILITY_CATEGORY_LABELS, TRAINING_ENTRY_TYPE_LABELS, PROFE
 import type {
   FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution,
   FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, PromotionRecord, AdminResponsibilityEntry,
-  TrainingEntry, ProfessionalMembership, AwardEntry, CourseFileEntry, Religion, Caste,
+  TrainingEntry, ProfessionalMembership, AwardEntry, Religion, Caste,
 } from "@/types";
 
 function s(v: unknown): string {
@@ -83,11 +83,6 @@ function awardCells(items: AwardEntry[] | undefined, i: number): [string, string
   return a
     ? [AWARD_CATEGORY_LABELS[a.category] ?? a.category, a.title ?? "", a.awardingBody ?? "", a.year ? String(a.year) : ""]
     : ["", "", "", ""];
-}
-
-function courseFileCells(items: CourseFileEntry[] | undefined, i: number): [string, string, string] {
-  const c = items?.[i];
-  return c ? [c.courseCode ?? "", c.courseName ?? "", c.academicYear ?? ""] : ["", "", ""];
 }
 
 function consultancyCells(items: ConsultancyProject[] | undefined, i: number): [string, string, string, string, string] {
@@ -262,9 +257,6 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     const [awCategory, awTitle, awBody, awYear] = awardCells(p.awardEntries, n - 1);
     row[`award${n}_category`] = awCategory; row[`award${n}_title`] = awTitle;
     row[`award${n}_awardingBody`] = awBody; row[`award${n}_year`] = awYear;
-
-    const [cfCode, cfName, cfYear] = courseFileCells(p.courseFilesAndCoPoMapping, n - 1);
-    row[`courseFile${n}_courseCode`] = cfCode; row[`courseFile${n}_courseName`] = cfName; row[`courseFile${n}_academicYear`] = cfYear;
   });
 
   return row;

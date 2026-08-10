@@ -24,7 +24,6 @@ import type {
   AdminResponsibilityCategory,
   AwardEntry,
   AwardCategory,
-  CourseFileEntry,
 } from "@/types";
 import {
   TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, PROFESSIONAL_BODY_LABELS,
@@ -55,7 +54,6 @@ const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "", y
 const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
 const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COORDINATOR", description: "" };
 const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", title: "", awardingBody: "", year: new Date().getFullYear() };
-const EMPTY_COURSE_FILE: CourseFileEntry = { courseCode: "", courseName: "", academicYear: "" };
 
 export function QualificationFields({ value, onChange }: ModuleFieldsProps) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
@@ -519,26 +517,5 @@ export function OthersFields({ value, onChange }: ModuleFieldsProps) {
         rows={4}
       />
     </div>
-  );
-}
-
-export function TeachingDocsFields({ value, onChange }: ModuleFieldsProps) {
-  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
-    onChange({ ...value, [key]: v });
-  }
-  return (
-    <RepeatingGroup
-      title="Course Files & CO-PO Mapping"
-      items={value.courseFilesAndCoPoMapping}
-      empty={EMPTY_COURSE_FILE}
-      onChange={(v) => set("courseFilesAndCoPoMapping", v)}
-      renderRow={(item, update) => (
-        <>
-          <TextInput label="Course Code" value={item.courseCode} onChange={(v) => update({ courseCode: v })} />
-          <TextInput label="Course Name" value={item.courseName} onChange={(v) => update({ courseName: v })} />
-          <TextInput label="Academic Year" value={item.academicYear} onChange={(v) => update({ academicYear: v })} placeholder="e.g. 2025-26" />
-        </>
-      )}
-    />
   );
 }

@@ -401,31 +401,7 @@ export function OthersModule({ profile }: { profile: Partial<FacultyProfileField
   );
 }
 
-export function TeachingDocsModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
-  const p = profile ?? {};
-  return (
-    <Section number={8} title="Teaching Documentation (NBA/AICTE)">
-      <div className="space-y-2">
-        <SubLabel>Course Files &amp; CO-PO Mapping</SubLabel>
-        {(p.courseFilesAndCoPoMapping ?? []).length === 0 ? <p className="text-xs text-muted-foreground">None recorded.</p> : (
-          p.courseFilesAndCoPoMapping?.map((c, i) => (
-            <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <Field label="Course Code" value={c.courseCode} />
-              <Field label="Course Name" value={c.courseName} />
-              <Field label="Academic Year" value={c.academicYear} />
-              <div className="col-span-2 sm:col-span-3 flex gap-4">
-                <DocLink url={c.courseFileUrl} label="View Course File" />
-                <DocLink url={c.coPoMappingUrl} label="View CO-PO Mapping" />
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </Section>
-  );
-}
-
-// Full scrolling view - all 8 modules stacked - kept for any caller that still
+// Full scrolling view - all 7 modules stacked - kept for any caller that still
 // wants the single-page layout (e.g. printable exports).
 export function ProfileFieldsView({ profile, includeTeachingAssignment = true, hideFinancialModule = false }: Props) {
   return (
@@ -437,7 +413,6 @@ export function ProfileFieldsView({ profile, includeTeachingAssignment = true, h
       <MentorshipModule profile={profile} />
       {!hideFinancialModule && <FinancialModule profile={profile} />}
       <OthersModule profile={profile} />
-      <TeachingDocsModule profile={profile} />
     </div>
   );
 }

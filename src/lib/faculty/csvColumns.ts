@@ -287,21 +287,10 @@ export const COLUMNS: FacultyCsvColumn[] = [
   // ─── Others (Module 7) ────────────────────────────────────────────────────────
   { key: "otherInformation",       label: "Other Information",                  required: false, sample: "" },
 
-  // ─── Teaching Documentation, NBA/AICTE (Module 8) ─────────────────────────────
-  { key: "courseFile1_courseCode", label: "Course File 1 - Course Code",        required: false, sample: "" },
-  { key: "courseFile1_courseName", label: "Course File 1 - Course Name",        required: false, sample: "" },
-  { key: "courseFile1_academicYear", label: "Course File 1 - Academic Year",    required: false, sample: "" },
-  { key: "courseFile2_courseCode", label: "Course File 2 - Course Code",        required: false, sample: "" },
-  { key: "courseFile2_courseName", label: "Course File 2 - Course Name",        required: false, sample: "" },
-  { key: "courseFile2_academicYear", label: "Course File 2 - Academic Year",    required: false, sample: "" },
-  { key: "courseFile3_courseCode", label: "Course File 3 - Course Code",        required: false, sample: "" },
-  { key: "courseFile3_courseName", label: "Course File 3 - Course Name",        required: false, sample: "" },
-  { key: "courseFile3_academicYear", label: "Course File 3 - Academic Year",    required: false, sample: "" },
-
   // Resume/CV - Teaching Faculty only, no equivalent on the Supporting Staff
   // templates (src/lib/supportingStaff/csvColumns.ts). A link to an
   // already-hosted file (Drive/Storage) - this template can't upload files
-  // directly; use the faculty edit page's Documents section for that.
+  // directly.
   { key: "resumeUrl",              label: "Resume/CV URL",                      required: false, sample: "" },
 ];
 
