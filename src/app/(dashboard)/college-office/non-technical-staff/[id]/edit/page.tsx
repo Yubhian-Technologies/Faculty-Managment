@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
-import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { SupportingStaffProfileFields } from "@/components/supportingStaff/SupportingStaffProfileFields";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
@@ -55,8 +54,6 @@ export default function EditNonTechnicalStaffPage() {
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [profile, setProfile] = useState<Partial<ProfileFieldsType>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
-  const [joiningLetterUrl, setJoiningLetterUrl] = useState<string>("");
-  const [appointmentLetterUrl, setAppointmentLetterUrl] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/college/departments")
@@ -117,8 +114,6 @@ export default function EditNonTechnicalStaffPage() {
         });
         setProfile((m.supportingStaffProfile as Partial<ProfileFieldsType>) ?? {});
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
-        setJoiningLetterUrl((m.joiningLetterUrl as string) ?? "");
-        setAppointmentLetterUrl((m.appointmentLetterUrl as string) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
       .finally(() => setLoading(false));
@@ -150,8 +145,6 @@ export default function EditNonTechnicalStaffPage() {
           ...personalDetails,
           supportingStaffProfile: profile,
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
-          joiningLetterUrl,
-          appointmentLetterUrl,
         }),
       });
       if (res.status === 409) {
@@ -294,29 +287,6 @@ export default function EditNonTechnicalStaffPage() {
               <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
               <CardContent>
                 <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle className="text-base">Documents</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-xs text-muted-foreground">Upload signed copies of the joining letter and appointment order for this staff member.</p>
-                <DocumentUploadField
-                  label="Joining Letter"
-                  value={joiningLetterUrl || undefined}
-                  uploadEndpoint="/api/upload/supporting-staff-document"
-                  extraFields={{ staffId, docType: "joining-letter" }}
-                  onUploaded={(url) => setJoiningLetterUrl(url)}
-                  onRemoved={() => setJoiningLetterUrl("")}
-                />
-                <DocumentUploadField
-                  label="Appointment Letter"
-                  value={appointmentLetterUrl || undefined}
-                  uploadEndpoint="/api/upload/supporting-staff-document"
-                  extraFields={{ staffId, docType: "appointment-letter" }}
-                  onUploaded={(url) => setAppointmentLetterUrl(url)}
-                  onRemoved={() => setAppointmentLetterUrl("")}
-                />
               </CardContent>
             </Card>
           </div>

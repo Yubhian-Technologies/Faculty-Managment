@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, IdCard, GraduationCap, BookOpen, FileText } from "lucide-react";
+import { ArrowLeft, User, IdCard, GraduationCap, BookOpen } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -94,33 +94,6 @@ export default function ManagementFacultyDetailPage() {
           <SectionCard icon={GraduationCap} title="Academic Profile" accent="emerald">
             <ProfileFieldsView profile={faculty.academicProfile} includeTeachingAssignment />
           </SectionCard>
-
-          {(faculty.joiningLetterUrl || faculty.appointmentLetterUrl) && (
-            <SectionCard icon={FileText} title="Documents" accent="violet">
-              <div className="flex flex-wrap gap-4">
-                {faculty.joiningLetterUrl && (
-                  <a
-                    href={faculty.joiningLetterUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                  >
-                    <FileText className="h-4 w-4" />Joining Letter
-                  </a>
-                )}
-                {faculty.appointmentLetterUrl && (
-                  <a
-                    href={faculty.appointmentLetterUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                  >
-                    <FileText className="h-4 w-4" />Appointment Letter
-                  </a>
-                )}
-              </div>
-            </SectionCard>
-          )}
 
           <SectionCard icon={BookOpen} title="Teaching Load" accent="amber">
             <TeachingLoadTable
