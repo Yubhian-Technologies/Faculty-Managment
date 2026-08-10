@@ -72,6 +72,8 @@ export function QualificationModule({ profile }: { profile: Partial<FacultyProfi
     <Section number={1} title="General & Academic Profile">
       <Field label="Highest Qualification Earned" value={p.highestQualification} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <DegreeView label="High School (10th)" degree={p.highSchoolDetails} />
+        <DegreeView label="Intermediate (12th)" degree={p.intermediateDetails} />
         <DegreeView label="UG" degree={p.ugDetails} />
         <DegreeView label="PG" degree={p.pgDetails} />
         <DegreeView label="PhD" degree={p.phdDetails} />

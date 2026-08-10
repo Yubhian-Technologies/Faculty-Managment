@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+// A value typed into a phone field is unlikely to contain letters or an "@" -
+// catches "an email was typed into a phone field" and similar mistakes
+// without being strict enough to reject real phone formats (spaces, dashes,
+// parentheses, country code +).
+export const PHONE_REGEX = /^[+()\d\s-]{7,20}$/;
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export const loginSchema = z.object({
@@ -16,6 +22,9 @@ export const changePasswordSchema = z.object({
 }).refine((d) => d.newPassword === d.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
+}).refine((d) => d.newPassword !== d.currentPassword, {
+  message: "New password must be different from your current password",
+  path: ["newPassword"],
 });
 
 export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
