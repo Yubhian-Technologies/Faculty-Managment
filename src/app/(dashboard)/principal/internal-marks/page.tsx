@@ -275,7 +275,17 @@ export default function PrincipalInternalMarksPage() {
       });
       const json = (await res.json()) as { batch?: Batch; error?: string };
       if (!res.ok || !json.batch) throw new Error(json.error ?? "Failed to save changes");
-      setAllBatches((prev) => prev.map((b) => (b.id === json.batch!.id ? json.batch! : b)));
+      // PATCH returns the raw Firestore document — it never carries
+      // courseId/courseName, since those are synthesized client-side only by
+      // the initial list load (joined from the Exam Cell's ExamConfiguration,
+      // never persisted on the batch itself). Replacing the batch outright
+      // with the PATCH response would silently drop that enrichment and make
+      // matchingBatches' `b.courseId === resolvedCourse.id` filter fail,
+      // vanishing the just-edited record from the current selection. Merge
+      // over the previous object instead so every real field the server
+      // returns (entries, enteredCount, lastModifiedBy, ...) updates, while
+      // client-only fields the server never sends are preserved.
+      setAllBatches((prev) => prev.map((b) => (b.id === json.batch!.id ? { ...b, ...json.batch! } : b)));
       toast({ variant: "success", title: `Marks updated for ${editTarget.entry.name}` });
       setEditTarget(null);
     } catch (err) {
