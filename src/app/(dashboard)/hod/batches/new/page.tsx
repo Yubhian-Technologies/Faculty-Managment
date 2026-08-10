@@ -13,7 +13,7 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { ShieldCheck, KeyRound } from "lucide-react";
 import { ROLE_LABELS } from "@/types";
-import type { VacancyRequest, Candidate, FMSUser } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, FMSUser } from "@/types";
 
 const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL"] as const;
 const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
@@ -32,7 +32,8 @@ export default function NewBatchPage() {
   const prefilledVacancyId = searchParams.get("vacancyId") ?? "";
 
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [applications, setApplications] = useState<CandidateApplication[]>([]);
+  const [candidatesById, setCandidatesById] = useState<Map<string, Candidate>>(new Map());
   // Always-included locked panel members (Principal, VP - fetched)
   const [defaultMembers, setDefaultMembers] = useState<FMSUser[]>([]);
   // Selectable: other HODs + PANEL_MEMBER
@@ -42,7 +43,7 @@ export default function NewBatchPage() {
   const [loginlessFaculty, setLoginlessFaculty] = useState<FacultyRecord[]>([]);
 
   const [selectedVacancyId, setSelectedVacancyId] = useState("");
-  const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
+  const [selectedApplications, setSelectedApplications] = useState<string[]>([]);
   // selectedPanel includes HOD + all defaults; extras toggled by user
   const [selectedPanel, setSelectedPanel] = useState<string[]>(() =>
     user?.uid ? [user.uid] : []
@@ -56,7 +57,10 @@ export default function NewBatchPage() {
       fetch("/api/college/vacancy-requests?status=APPROVED")
         .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
         .then((d) => d.vacancyRequests ?? []),
-      fetch("/api/college/candidates?isShortlisted=true")
+      fetch("/api/college/candidate-applications?isShortlisted=true")
+        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
+        .then((d) => d.applications ?? []),
+      fetch("/api/college/candidates")
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
       fetch("/api/college/users?allDepts=true&includeAll=true")
@@ -67,9 +71,10 @@ export default function NewBatchPage() {
         .then((d) => d.faculty ?? [])
         .catch(() => [] as FacultyRecord[]),
     ])
-      .then(([v, c, s, f]) => {
+      .then(([v, apps, candidates, s, f]) => {
         setVacancies(v);
-        setCandidates(c);
+        setApplications(apps);
+        setCandidatesById(new Map(candidates.map((c) => [c.id, c])));
         setLoginlessFaculty(f.filter((rec) => !rec.userUid));
 
         // Auto-select if vacancyId was passed from pipeline
@@ -83,10 +88,13 @@ export default function NewBatchPage() {
         );
         setDefaultMembers(defaults);
 
-        // Selectable: other HODs + PANEL_MEMBER (excluding self)
+        // Selectable: other HODs + PANEL_MEMBER, same department only (excluding self)
         setStaffList(
           s.filter(
-            (u) => u.uid !== user?.uid && (SELECTABLE_ROLES as readonly string[]).includes(u.role)
+            (u) =>
+              u.uid !== user?.uid &&
+              (SELECTABLE_ROLES as readonly string[]).includes(u.role) &&
+              u.department === user?.department
           )
         );
 
@@ -113,17 +121,13 @@ export default function NewBatchPage() {
   ]);
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
-  const filteredCandidates = selectedVacancy
-    ? candidates.filter(
-        (c) =>
-          !c.batchId &&
-          (c.vacancyId === selectedVacancyId || c.position === selectedVacancy.position)
-      )
-    : candidates.filter((c) => !c.batchId);
+  const filteredApplications = selectedVacancy
+    ? applications.filter((a) => !a.batchId && a.vacancyRequestId === selectedVacancyId)
+    : [];
 
-  function toggleCandidate(id: string) {
-    setSelectedCandidates((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+  function toggleApplication(id: string) {
+    setSelectedApplications((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     );
   }
 
@@ -137,11 +141,12 @@ export default function NewBatchPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedVacancyId) { toast({ variant: "destructive", title: "Select a hiring request" }); return; }
-    if (selectedCandidates.length === 0) { toast({ variant: "destructive", title: "Select at least one candidate" }); return; }
+    if (selectedApplications.length === 0) { toast({ variant: "destructive", title: "Select at least one candidate" }); return; }
     if (!interviewDate) { toast({ variant: "destructive", title: "Set an interview date" }); return; }
     if (!interviewTime) { toast({ variant: "destructive", title: "Set an interview time" }); return; }
 
-    const vacancy = vacancies.find((v) => v.id === selectedVacancyId)!;
+    const vacancy = vacancies.find((v) => v.id === selectedVacancyId);
+    if (!vacancy) { toast({ variant: "destructive", title: "That hiring request is no longer available — refresh and try again" }); return; }
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/college/hiring-batches", {
@@ -152,7 +157,7 @@ export default function NewBatchPage() {
           department: vacancy.department,
           position: vacancy.position,
           panelMemberUids: selectedPanel,
-          candidateIds: selectedCandidates,
+          applicationIds: selectedApplications,
           interviewDate,
           interviewTime,
         }),
@@ -252,34 +257,39 @@ export default function NewBatchPage() {
           <CardHeader>
             <CardTitle className="text-base">
               Step 3: Select Candidates
-              {selectedCandidates.length > 0 && (
+              {selectedApplications.length > 0 && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {selectedCandidates.length} selected
+                  {selectedApplications.length} selected
                 </span>
               )}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {filteredCandidates.length === 0 ? (
+            {!selectedVacancyId ? (
+              <p className="text-sm text-muted-foreground">Select a hiring request first.</p>
+            ) : filteredApplications.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No shortlisted candidates without a batch. Add and shortlist candidates first.
+                No shortlisted candidates without a batch for this hiring request. Attach and shortlist candidates first.
               </p>
             ) : (
               <div className="space-y-3">
-                {filteredCandidates.map((c) => (
-                  <div key={c.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                    <Checkbox
-                      id={`c-${c.id}`}
-                      checked={selectedCandidates.includes(c.id)}
-                      onCheckedChange={() => toggleCandidate(c.id)}
-                    />
-                    <label htmlFor={`c-${c.id}`} className="flex-1 cursor-pointer">
-                      <p className="font-medium text-sm">{c.name}</p>
-                      <p className="text-xs text-muted-foreground">{c.email} · {c.phone}</p>
-                      <p className="text-xs text-muted-foreground">{c.position} · {c.department}</p>
-                    </label>
-                  </div>
-                ))}
+                {filteredApplications.map((a) => {
+                  const c = candidatesById.get(a.candidateId);
+                  return (
+                    <div key={a.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                      <Checkbox
+                        id={`a-${a.id}`}
+                        checked={selectedApplications.includes(a.id)}
+                        onCheckedChange={() => toggleApplication(a.id)}
+                      />
+                      <label htmlFor={`a-${a.id}`} className="flex-1 cursor-pointer">
+                        <p className="font-medium text-sm">{c?.name ?? "Unknown"}</p>
+                        <p className="text-xs text-muted-foreground">{c?.email} · {c?.phone}</p>
+                        <p className="text-xs text-muted-foreground">{a.position} · {a.department}</p>
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

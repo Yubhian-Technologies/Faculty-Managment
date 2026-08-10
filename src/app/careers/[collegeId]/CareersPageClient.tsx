@@ -7,7 +7,7 @@ import { GraduationCap, Briefcase, MapPin, Send, Loader2 } from "lucide-react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage, db } from "@/lib/firebase/client";
 import { getDoc, doc, getDocs, collection, query, where } from "firebase/firestore";
-import { createCandidate } from "@/lib/firestore/hiring";
+import { createCandidate, createCandidateApplication } from "@/lib/firestore/hiring";
 import { publicApplicationSchema, type PublicApplicationFormData } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,19 +79,29 @@ export function CareersPageClient({ collegeId }: Props) {
       await uploadBytes(resumeRef, resume);
       const resumeUrl = await getDownloadURL(resumeRef);
 
-      await createCandidate(collegeId, {
+      const candidateId = await createCandidate(collegeId, {
         name: data.name,
         email: data.email,
         phone: data.phone,
-        department: selectedVacancy.department,
-        position: selectedVacancy.position,
         resumeUrl,
         source: "CAREERS_PAGE",
+        addedByUid: "",
+        addedByName: "Careers Page (self-applied)",
+        collegeId,
+      });
+
+      await createCandidateApplication(collegeId, {
+        candidateId,
+        vacancyRequestId: selectedVacancy.id,
+        batchId: "",
+        department: selectedVacancy.department,
+        position: selectedVacancy.position,
         currentStage: "DEMO",
         status: "PENDING",
         isShortlisted: false,
         hasArrived: false,
-        vacancyId: selectedVacancy.id,
+        addedByUid: "",
+        addedByName: "Careers Page (self-applied)",
         collegeId,
       });
 

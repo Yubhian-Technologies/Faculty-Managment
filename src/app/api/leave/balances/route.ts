@@ -17,7 +17,8 @@ export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF"
+      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D"
     );
     const url = new URL(request.url);
     const targetUid = url.searchParams.get("uid") || session.uid;

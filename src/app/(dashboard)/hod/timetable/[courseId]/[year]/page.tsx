@@ -22,18 +22,24 @@ export default function HODTimetableSectionsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(true);
-    Promise.all([
-      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
-      fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
-        .then((r) => r.json() as Promise<{ sections: Section[] }>),
-    ])
-      .then(([coursesData, sectionsData]) => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [coursesData, sectionsData] = await Promise.all([
+          fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
+          fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
+            .then((r) => r.json() as Promise<{ sections: Section[] }>),
+        ]);
+        if (cancelled) return;
         setCourse((coursesData.courses ?? []).find((c) => c.id === courseId) ?? null);
         setSections((sectionsData.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
-      })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load sections" }))
-      .finally(() => setIsLoading(false));
+      } catch {
+        if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [courseId, year]);
 
   return (

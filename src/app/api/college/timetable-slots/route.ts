@@ -97,6 +97,12 @@ export async function POST(request: Request) {
       day,
       periodNumber: Number(periodNumber),
       classroom: body.classroom ?? null,
+      // This route backs the per-faculty "Weekly Schedule" picker, so anything
+      // created here was placed deliberately by a human. Marking it MANUAL/pinned
+      // makes the generator schedule around it and stops publish from replacing
+      // it (the publish route only clears source === "GENERATED" slots).
+      source: "MANUAL",
+      isPinned: true,
       createdAt: now,
       updatedAt: now,
     });

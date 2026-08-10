@@ -8,6 +8,7 @@ type TimestampLike = { toDate?: () => Date; seconds?: number; _seconds?: number 
 interface DegreeDetail {
   degree?: string;
   branch?: string;
+  specialization?: string; // Doctoral only - shown instead of Branch
   degreeAndBranch?: string; // legacy - pre-split records that haven't been re-saved yet
   universityOrInstitute?: string;
   percentageOrDivision?: string;
@@ -15,8 +16,9 @@ interface DegreeDetail {
   certificateUrl?: string;
 }
 
-function degreeAndBranchLabel(d: DegreeDetail): string {
-  const combined = [d.degree, d.branch].filter(Boolean).join(" ");
+function degreeAndBranchLabel(d: DegreeDetail, useSpecialization = false): string {
+  const secondary = useSpecialization ? d.specialization : d.branch;
+  const combined = [d.degree, secondary].filter(Boolean).join(" ");
   return combined || d.degreeAndBranch || "";
 }
 
@@ -293,16 +295,17 @@ function renderSection(title: string, body: string): string {
   return body.trim() ? `${sectionTitle(title)}${body}` : "";
 }
 
-function degreeEntry(label: string, d?: DegreeDetail): string {
-  if (!d || (!degreeAndBranchLabel(d) && !d.universityOrInstitute)) return "";
+function degreeEntry(label: string, d?: DegreeDetail, useSpecialization = false): string {
+  if (!d || (!degreeAndBranchLabel(d, useSpecialization) && !d.universityOrInstitute)) return "";
   const certLink = d.certificateUrl
     ? `<div class="doc-link"><a href="${esc(d.certificateUrl)}" target="_blank">View Certificate ↗</a></div>`
     : "";
+  const secondary = degreeAndBranchLabel(d, useSpecialization);
   return (
     entry(
       d.universityOrInstitute || label,
       d.yearOfCompletion ? String(d.yearOfCompletion) : "",
-      `${label}${degreeAndBranchLabel(d) ? ` - ${degreeAndBranchLabel(d)}` : ""}`,
+      `${label}${secondary ? ` - ${secondary}` : ""}`,
       d.percentageOrDivision || ""
     ) + certLink
   );
@@ -350,7 +353,7 @@ export function getResumeHTML(data: ResumeData): string {
   // ── Education ────────────────────────────────────────────────────────────
   const highestQualification = ap?.highestQualification || data.qualification;
   const educationEntries =
-    degreeEntry("Ph.D.", ap?.phdDetails) +
+    degreeEntry("Ph.D.", ap?.phdDetails, true) +
     degreeEntry("Postgraduate", ap?.pgDetails) +
     degreeEntry("Undergraduate", ap?.ugDetails);
   const educationExtras = bullets([

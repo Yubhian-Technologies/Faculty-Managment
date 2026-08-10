@@ -180,11 +180,11 @@ export async function DELETE(
       return NextResponse.json({ error: "You can only delete your own hiring requests" }, { status: 403 });
     }
 
-    const [batchSnap, candidateSnap] = await Promise.all([
+    const [batchSnap, applicationSnap] = await Promise.all([
       db.collection("colleges").doc(session.collegeId).collection("hiringBatches")
         .where("vacancyId", "==", id).limit(1).get(),
-      db.collection("colleges").doc(session.collegeId).collection("candidates")
-        .where("vacancyId", "==", id).limit(1).get(),
+      db.collection("colleges").doc(session.collegeId).collection("candidateApplications")
+        .where("vacancyRequestId", "==", id).limit(1).get(),
     ]);
 
     if (!batchSnap.empty) {
@@ -193,9 +193,9 @@ export async function DELETE(
         { status: 400 }
       );
     }
-    if (!candidateSnap.empty) {
+    if (!applicationSnap.empty) {
       return NextResponse.json(
-        { error: "Cannot delete - candidates have already been added against this request." },
+        { error: "Cannot delete - candidates have already been attached to this request." },
         { status: 400 }
       );
     }

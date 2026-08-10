@@ -2,11 +2,11 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
-import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useAuth } from "@/hooks/useAuth";
 
 // Principal/VP have no FacultyMember record of their own (see AGENTS.md) - their
@@ -27,9 +27,16 @@ export default function PrincipalProfileModulePage() {
       <PageHeader
         title={moduleDef.label}
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/principal/profile"><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/principal/profile"><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            </Button>
+            {!SELF_EDIT_DISABLED_MODULES.includes(moduleKey) && (
+              <Button asChild>
+                <Link href={`/principal/profile/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+              </Button>
+            )}
+          </div>
         }
       />
 

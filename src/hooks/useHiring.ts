@@ -5,11 +5,14 @@ import { useAuthStore } from "@/store/authStore";
 import {
   getVacancyRequests,
   getCandidates,
+  getCandidateApplications,
   getHiringBatches,
   updateVacancyStatus,
   updateCandidate,
+  createCandidateApplication,
+  updateCandidateApplication,
+  markCandidateApplicationArrived,
   updateHiringBatch,
-  markCandidateArrived,
 } from "@/lib/firestore/hiring";
 import type { WorkflowStatus } from "@/types";
 
@@ -24,17 +27,30 @@ export function useVacancyRequests(filters?: { status?: WorkflowStatus; departme
   });
 }
 
-export function useCandidates(filters?: {
+export function useCandidates() {
+  const user = useAuthStore((s) => s.user);
+
+  return useQuery({
+    queryKey: ["candidates", user?.collegeId],
+    queryFn: () => getCandidates(user!.collegeId),
+    enabled: !!user?.collegeId,
+    select: (res) => res.data,
+  });
+}
+
+export function useCandidateApplications(filters?: {
   status?: string;
   department?: string;
+  candidateId?: string;
+  vacancyRequestId?: string;
   batchId?: string;
   isShortlisted?: boolean;
 }) {
   const user = useAuthStore((s) => s.user);
 
   return useQuery({
-    queryKey: ["candidates", user?.collegeId, filters],
-    queryFn: () => getCandidates(user!.collegeId, filters),
+    queryKey: ["candidateApplications", user?.collegeId, filters],
+    queryFn: () => getCandidateApplications(user!.collegeId, filters),
     enabled: !!user?.collegeId,
     select: (res) => res.data,
   });
@@ -69,17 +85,6 @@ export function useUpdateVacancyStatus() {
   });
 }
 
-export function useMarkCandidateArrived() {
-  const user = useAuthStore((s) => s.user);
-  const qc = useQueryClient();
-
-  return useMutation({
-    mutationFn: (candidateId: string) =>
-      markCandidateArrived(user!.collegeId, candidateId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["candidates"] }),
-  });
-}
-
 export function useUpdateCandidate() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
@@ -93,6 +98,44 @@ export function useUpdateCandidate() {
       data: Parameters<typeof updateCandidate>[2];
     }) => updateCandidate(user!.collegeId, candidateId, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["candidates"] }),
+  });
+}
+
+export function useCreateCandidateApplication() {
+  const user = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof createCandidateApplication>[1]) =>
+      createCandidateApplication(user!.collegeId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["candidateApplications"] }),
+  });
+}
+
+export function useUpdateCandidateApplication() {
+  const user = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      applicationId,
+      data,
+    }: {
+      applicationId: string;
+      data: Parameters<typeof updateCandidateApplication>[2];
+    }) => updateCandidateApplication(user!.collegeId, applicationId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["candidateApplications"] }),
+  });
+}
+
+export function useMarkCandidateApplicationArrived() {
+  const user = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (applicationId: string) =>
+      markCandidateApplicationArrived(user!.collegeId, applicationId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["candidateApplications"] }),
   });
 }
 

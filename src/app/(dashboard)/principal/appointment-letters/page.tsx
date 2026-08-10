@@ -12,12 +12,26 @@ import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { downloadAppointmentLetterPdf } from "@/lib/pdf/downloadAppointmentLetter";
 import { ChevronDown, ChevronUp, FileText, Download, Mail, CheckCircle2 } from "lucide-react";
-import type { Candidate, OfferLetter } from "@/types";
+import type { Candidate, CandidateApplication, OfferLetter } from "@/types";
 
 type FormState = { designation: string; department: string; joiningDate: string };
 
+// Joined view: application (per-hiring-request document/decision state) +
+// candidate (person) fields. `id` is the applicationId; `candidateId` is the
+// real Candidate id (OfferLetter/AppointmentLetter are still keyed by it).
+type AppointmentCandidateView = {
+  id: string;
+  candidateId: string;
+  batchId: string;
+  name: string;
+  email: string;
+  position: string;
+  department: string;
+  dateOfJoining?: string;
+};
+
 export default function PrincipalAppointmentLettersPage() {
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candidates, setCandidates] = useState<AppointmentCandidateView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [forms, setForms] = useState<Record<string, FormState>>({});
@@ -28,18 +42,37 @@ export default function PrincipalAppointmentLettersPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const [candidatesRes, offersRes, appointmentsRes] = await Promise.all([
+      const [applicationsRes, candidatesRes, offersRes, appointmentsRes] = await Promise.all([
+        fetch("/api/college/candidate-applications").then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
         fetch("/api/college/candidates").then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
         fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferLetter[] }>),
-        fetch("/api/college/appointment-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>),
+        fetch("/api/college/appointment-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string; batchId: string }[] }>),
       ]);
-      const acceptedCandidateIds = new Set(
-        (offersRes.letters ?? []).filter((l) => l.status === "ACCEPTED").map((l) => l.candidateId)
+      // Offer/appointment letters are still keyed by (candidateId, batchId) directly
+      // (unchanged schema) — match on that pair since one candidate can have
+      // independent applications/offers across multiple hiring batches.
+      const acceptedKeys = new Set(
+        (offersRes.letters ?? []).filter((l) => l.status === "ACCEPTED").map((l) => `${l.candidateId}:${l.batchId}`)
       );
-      const alreadyGenerated = new Set((appointmentsRes.letters ?? []).map((l) => l.candidateId));
-      const eligible = (candidatesRes.candidates ?? []).filter(
-        (c) => c.joiningLetterUrl && acceptedCandidateIds.has(c.id) && !alreadyGenerated.has(c.id)
+      const alreadyGeneratedKeys = new Set(
+        (appointmentsRes.letters ?? []).map((l) => `${l.candidateId}:${l.batchId}`)
       );
+      const candidateMap = new Map((candidatesRes.candidates ?? []).map((c) => [c.id, c]));
+      const eligible: AppointmentCandidateView[] = (applicationsRes.applications ?? [])
+        .filter((a) => a.joiningLetterUrl && a.batchId && acceptedKeys.has(`${a.candidateId}:${a.batchId}`) && !alreadyGeneratedKeys.has(`${a.candidateId}:${a.batchId}`))
+        .map((a) => {
+          const person = candidateMap.get(a.candidateId);
+          return {
+            id: a.id,
+            candidateId: a.candidateId,
+            batchId: a.batchId ?? "",
+            name: person?.name ?? "Unknown",
+            email: person?.email ?? "",
+            position: a.position,
+            department: a.department,
+            dateOfJoining: a.dateOfJoining,
+          };
+        });
       setCandidates(eligible);
       setForms(
         Object.fromEntries(
@@ -65,7 +98,7 @@ export default function PrincipalAppointmentLettersPage() {
       .catch(() => {});
   }, []);
 
-  async function generateAndRelease(candidate: Candidate) {
+  async function generateAndRelease(candidate: AppointmentCandidateView) {
     const form = forms[candidate.id];
     if (!form?.designation || !form.department || !form.joiningDate) {
       toast({ variant: "destructive", title: "Fill in designation, department, and joining date" });
@@ -77,8 +110,8 @@ export default function PrincipalAppointmentLettersPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          candidateId: candidate.id,
-          batchId: candidate.batchId ?? "",
+          candidateId: candidate.candidateId,
+          batchId: candidate.batchId,
           candidateName: candidate.name,
           designation: form.designation,
           department: form.department,
@@ -132,7 +165,7 @@ ${institution}`;
     }
   }
 
-  async function downloadPdf(candidate: Candidate) {
+  async function downloadPdf(candidate: AppointmentCandidateView) {
     const form = forms[candidate.id];
     if (!form) return;
     await downloadAppointmentLetterPdf(

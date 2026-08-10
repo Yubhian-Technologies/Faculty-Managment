@@ -94,6 +94,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Timetable", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   { label: "Non-Technical Staff", href: "/principal/non-technical-staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -116,8 +117,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "First Year Students", href: "/hod/students/incoming", iconName: "UserPlus", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
-  { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
+  // Sits directly below Teaching Assignments: subjects are assigned there first,
+  // then scheduled here.
+  { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
@@ -137,15 +140,34 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
   { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
+  { label: "Faculty", href: "/college-office/faculty", iconName: "Wallet", roles: ["COLLEGE_OFFICE"], section: "Staff" },
+  { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   { label: "Hiring Pipeline", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
   { label: "Official Emails", href: "/college-office/email-requests", iconName: "AtSign", roles: ["COLLEGE_OFFICE"] },
   { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
   { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], section: "Personal" },
 
-  // College Staff (dynamic-title roles: Dean, IQAC Coordinator, T&P, etc.)
+  // College Staff (generic fallback for titles that don't warrant their own role)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"], section: "Personal" },
+
+  // Dean
+  { label: "Dashboard", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
+  { label: "My Leave", href: "/dean/leave", iconName: "CalendarClock", roles: ["DEAN"], section: "Personal" },
+
+  // IQAC Coordinator
+  { label: "Dashboard", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
+  { label: "My Leave", href: "/iqac-coordinator/leave", iconName: "CalendarClock", roles: ["IQAC_COORDINATOR"], section: "Personal" },
+
+  // T&P
+  { label: "Dashboard", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
+  { label: "My Leave", href: "/t-and-p/leave", iconName: "CalendarClock", roles: ["T_AND_P"], section: "Personal" },
+
+  // R&D
+  { label: "Dashboard", href: "/r-and-d", iconName: "LayoutDashboard", roles: ["R_AND_D"] },
+  { label: "Publications", href: "/r-and-d/publications", iconName: "FlaskConical", roles: ["R_AND_D"], section: "Research" },
+  { label: "My Leave", href: "/r-and-d/leave", iconName: "CalendarClock", roles: ["R_AND_D"], section: "Personal" },
 
   // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
@@ -375,12 +397,27 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
     { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"] },
     { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"] },
+    { label: "Faculty", href: "/college-office/faculty", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
+    { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
     { label: "Hiring Pipeline", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"] },
     { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
     { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
   ],
   COLLEGE_STAFF: [
     { label: "Home", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
+  ],
+  DEAN: [
+    { label: "Home", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
+  ],
+  IQAC_COORDINATOR: [
+    { label: "Home", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
+  ],
+  T_AND_P: [
+    { label: "Home", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
+  ],
+  R_AND_D: [
+    { label: "Home", href: "/r-and-d", iconName: "LayoutDashboard", roles: ["R_AND_D"] },
+    { label: "Publications", href: "/r-and-d/publications", iconName: "FlaskConical", roles: ["R_AND_D"] },
   ],
   PANEL_MEMBER: [
     { label: "Home", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },

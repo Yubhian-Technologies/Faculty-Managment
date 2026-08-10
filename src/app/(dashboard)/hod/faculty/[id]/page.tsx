@@ -37,7 +37,7 @@ export default function HodFacultyViewPage() {
       faculty={faculty}
       basePath={`/hod/faculty/${facultyId}`}
       backHref="/hod/faculty"
-      editHref={`/hod/faculty/${facultyId}/edit`}
     />
+
   );
 }

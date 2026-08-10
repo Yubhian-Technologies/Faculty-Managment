@@ -78,7 +78,7 @@ export async function PATCH(
       meetingLink?: string;
       coordinatorFacultyId?: string;
       panelMemberUids?: string[];
-      candidateIds?: string[];
+      applicationIds?: string[];
       interviewDate?: string;
       interviewTime?: string;
       // Coordinator action
@@ -121,7 +121,7 @@ export async function PATCH(
       position: string;
       department: string;
       demoComplete?: boolean;
-      candidateIds?: string[];
+      applicationIds?: string[];
     };
 
     const updates: Record<string, unknown> = { updatedAt: now };
@@ -157,7 +157,7 @@ export async function PATCH(
       updates.coordinatorUid = faculty?.userUid ?? null;
     }
     if (body.panelMemberUids !== undefined) updates.panelMemberUids = body.panelMemberUids;
-    if (body.candidateIds !== undefined) updates.candidateIds = body.candidateIds;
+    if (body.applicationIds !== undefined) updates.applicationIds = body.applicationIds;
     if (body.interviewDate !== undefined) updates.interviewDate = new Date(body.interviewDate);
     if (body.interviewTime !== undefined) updates.interviewTime = body.interviewTime;
     if (body.demoComplete === true) {
@@ -174,13 +174,13 @@ export async function PATCH(
       .doc(id)
       .update(updates);
 
-    // Rejected proposal: free up its candidates so the HOD can pick them
+    // Rejected proposal: free up its applications so the HOD can pick them
     // again for a new interview session (they remain shortlisted).
-    if (body.status === "REJECTED" && batchData.candidateIds?.length) {
+    if (body.status === "REJECTED" && batchData.applicationIds?.length) {
       const releaseBatch = db.batch();
-      for (const cid of batchData.candidateIds) {
-        const cRef = db.collection("colleges").doc(session.collegeId).collection("candidates").doc(cid);
-        releaseBatch.update(cRef, { batchId: "", updatedAt: now });
+      for (const aid of batchData.applicationIds) {
+        const aRef = db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid);
+        releaseBatch.update(aRef, { batchId: "", updatedAt: now });
       }
       await releaseBatch.commit();
     }

@@ -20,16 +20,24 @@ export default function HODIndentsPage() {
   const dashboardRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
 
-  function load() {
-    setIsLoading(true);
-    fetch("/api/college/indent-requests")
-      .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>)
-      .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
-      .finally(() => setIsLoading(false));
+  // No synchronous setState here: isLoading starts true, and everything else is
+  // set after an await. Calling this straight from an effect would otherwise
+  // trip react-hooks/set-state-in-effect (cascading renders).
+  async function load() {
+    try {
+      const d = await fetch("/api/college/indent-requests")
+        .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>);
+      setRequests(d.requests ?? []);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load indent requests" });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void (async () => { await load(); })();
+  }, []);
 
   const requestCounts = useMemo(() => {
     const terminal = new Set(["REJECTED_BY_PURCHASE", "REJECTED"]);

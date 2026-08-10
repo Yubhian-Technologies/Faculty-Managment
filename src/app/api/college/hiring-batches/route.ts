@@ -83,14 +83,14 @@ export async function POST(request: Request) {
       department: string;
       position: string;
       panelMemberUids: string[];
-      candidateIds: string[];
+      applicationIds: string[];
       interviewDate: string;
       interviewTime?: string;
     };
 
-    const { vacancyId, department, position, panelMemberUids, candidateIds, interviewDate, interviewTime } = body;
-    if (!vacancyId || !department || !position || !panelMemberUids?.length || !candidateIds?.length || !interviewDate) {
-      return NextResponse.json({ error: "vacancyId, department, position, panelMemberUids, candidateIds, interviewDate required" }, { status: 400 });
+    const { vacancyId, department, position, panelMemberUids, applicationIds, interviewDate, interviewTime } = body;
+    if (!vacancyId || !department || !position || !panelMemberUids?.length || !applicationIds?.length || !interviewDate) {
+      return NextResponse.json({ error: "vacancyId, department, position, panelMemberUids, applicationIds, interviewDate required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         hodUid: session.uid,
         hodName,
         panelMemberUids,
-        candidateIds,
+        applicationIds,
         interviewDate: new Date(interviewDate),
         interviewTime: interviewTime ?? "",
         interviewVenue: "",
@@ -124,11 +124,11 @@ export async function POST(request: Request) {
         updatedAt: now,
       });
 
-    // Update all candidates with this batchId
+    // Update all applications with this batchId
     const writeBatch = db.batch();
-    for (const cid of candidateIds) {
-      const cRef = db.collection("colleges").doc(session.collegeId).collection("candidates").doc(cid);
-      writeBatch.update(cRef, { batchId: ref.id, isShortlisted: true, status: "SHORTLISTED", updatedAt: now });
+    for (const aid of applicationIds) {
+      const aRef = db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid);
+      writeBatch.update(aRef, { batchId: ref.id, isShortlisted: true, status: "SHORTLISTED", updatedAt: now });
     }
     await writeBatch.commit();
 
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
       performedBy: session.uid,
       performedByName: hodName,
       targetId: ref.id,
-      details: { position, department, candidateCount: candidateIds.length },
+      details: { position, department, candidateCount: applicationIds.length },
       timestamp: now,
     });
 

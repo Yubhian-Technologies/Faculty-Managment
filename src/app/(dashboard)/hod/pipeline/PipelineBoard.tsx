@@ -18,17 +18,34 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
+import { ShortlistDialog } from "@/components/hiring/ShortlistDialog";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { getCurrentStage, stateForStage, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import type { VacancyRequest, Candidate, HiringBatch, OfferLetter } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, CandidateStatus, CandidateStage, InterviewMode, HiringBatch, OfferLetter } from "@/types";
 import { BATCH_PHASE_LABELS } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Joined view: application (per-hiring-request pipeline state) + candidate
+// (person) fields. `id` is the applicationId; `candidateId` is the real
+// Candidate id (used wherever offer/appointment letters key by candidate).
+type PipelineCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+  isShortlisted: boolean;
+  interviewMode?: InterviewMode;
+  bioDataSubmitted?: boolean;
+  status: CandidateStatus;
+  currentStage: CandidateStage;
+};
+
 type PipelineEntry = {
   vacancy: VacancyRequest;
-  candidates: Candidate[];
+  candidates: PipelineCandidateView[];
   batch: HiringBatch | null;
 };
 
@@ -39,30 +56,34 @@ function isClosed(e: PipelineEntry): boolean {
 type OfferStatus = "SENT" | "ACCEPTED" | "REJECTED";
 
 // Once the Principal decides, the candidate's hiring status keeps moving through
-// office/Principal-owned steps (offer → acceptance → appointment letter) that this
-// dashboard has no action for — but it should still show where each one stands.
+// office/Principal-owned steps (offer → acceptance → appointment letter →
+// webmaster login provisioning) that this dashboard has no action for — but it
+// should still show where each one stands.
 function candidateProgressLabel(
-  candidate: Candidate,
+  candidate: PipelineCandidateView,
   offerStatusByCandidate: Record<string, OfferStatus>,
-  appointmentCandidateIds: Set<string>
+  appointmentCandidateIds: Set<string>,
+  loginGeneratedCandidateIds: Set<string>
 ): string {
-  if (appointmentCandidateIds.has(candidate.id)) return "Appointment Letter Sent";
-  const offerStatus = offerStatusByCandidate[candidate.id];
+  if (loginGeneratedCandidateIds.has(candidate.candidateId)) return "Login Generated";
+  if (appointmentCandidateIds.has(candidate.candidateId)) return "Appointment Letter Sent";
+  const offerStatus = offerStatusByCandidate[candidate.candidateId];
   if (offerStatus === "ACCEPTED") return "Offer Accepted";
   if (offerStatus === "SENT") return "Offer Sent";
   return "Awaiting Offer Letter";
 }
 
-const PROGRESS_ORDER = ["Awaiting Offer Letter", "Offer Sent", "Offer Accepted", "Appointment Letter Sent"];
+const PROGRESS_ORDER = ["Awaiting Offer Letter", "Offer Sent", "Offer Accepted", "Appointment Letter Sent", "Login Generated"];
 
 function hiringResultsSummary(
-  candidates: Candidate[],
+  candidates: PipelineCandidateView[],
   offerStatusByCandidate: Record<string, OfferStatus>,
-  appointmentCandidateIds: Set<string>
+  appointmentCandidateIds: Set<string>,
+  loginGeneratedCandidateIds: Set<string>
 ): string {
   const approved = candidates.filter((c) => c.status === "APPROVED" && c.currentStage === "DECISION");
   if (approved.length === 0) return "Awaiting hiring results";
-  const labels = approved.map((c) => candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds));
+  const labels = approved.map((c) => candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds));
   const counts = PROGRESS_ORDER.map((label) => labels.filter((l) => l === label).length);
   const leastAdvancedIdx = counts.findIndex((n) => n > 0);
   const label = PROGRESS_ORDER[leastAdvancedIdx];
@@ -75,7 +96,8 @@ type NextAction = { label: string; href: string; disabled?: boolean; variant?: "
 function getNextAction(
   entry: PipelineEntry,
   offerStatusByCandidate: Record<string, OfferStatus>,
-  appointmentCandidateIds: Set<string>
+  appointmentCandidateIds: Set<string>,
+  loginGeneratedCandidateIds: Set<string>
 ): NextAction {
   const { vacancy, candidates, batch } = entry;
 
@@ -91,7 +113,7 @@ function getNextAction(
     if (shortlisted >= 1) {
       return { label: "Create Interview Session →", href: `/hod/batches/new?vacancyId=${vacancy.id}` };
     }
-    return { label: "Add Candidates", href: `/hod/candidates/new?vacancyId=${vacancy.id}` };
+    return { label: "Add Candidates", href: "/hod/candidates" };
   }
 
   const p = batch.currentPhase;
@@ -102,7 +124,7 @@ function getNextAction(
     return { label: "Complete Interview Setup →", href: `/hod/batches/${batch.id}` };
   }
   if (p === "INTERVIEW_READY" || p === "IN_PROGRESS") {
-    const sessionCandidates = candidates.filter((c) => batch.candidateIds.includes(c.id));
+    const sessionCandidates = candidates.filter((c) => (batch.applicationIds ?? []).includes(c.id));
     const pendingBioData = sessionCandidates.filter((c) => !c.bioDataSubmitted);
     if (pendingBioData.length > 0) {
       return {
@@ -116,7 +138,7 @@ function getNextAction(
   if (p === "PRINCIPAL_FINAL_REVIEW" || p === "COMPLETED") {
     // Offer letters, acceptance, and the appointment letter are all handled by
     // the office/Principal now — HOD has nothing left to do here but track status.
-    return { label: hiringResultsSummary(candidates, offerStatusByCandidate, appointmentCandidateIds), href: "#", disabled: true };
+    return { label: hiringResultsSummary(candidates, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds), href: "#", disabled: true };
   }
   return { label: "View Details", href: `/hod/batches/${batch.id}`, variant: "outline" };
 }
@@ -127,25 +149,31 @@ function PipelineCard({
   entry,
   offerStatusByCandidate,
   appointmentCandidateIds,
+  loginGeneratedCandidateIds,
   onDeleted,
+  onRefresh,
 }: {
   entry: PipelineEntry;
   offerStatusByCandidate: Record<string, OfferStatus>;
   appointmentCandidateIds: Set<string>;
+  loginGeneratedCandidateIds: Set<string>;
   onDeleted: (vacancyId: string) => void;
+  onRefresh: () => void;
 }) {
   const { vacancy, candidates, batch } = entry;
   const [expanded, setExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [shortlistOpen, setShortlistOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   async function handleDelete() {
-    if (!confirm(`Delete the hiring request for ${vacancy.position}? This cannot be undone.`)) return;
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/college/vacancy-requests/${vacancy.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to delete");
       toast({ variant: "success", title: "Hiring request deleted" });
+      setDeleteConfirmOpen(false);
       onDeleted(vacancy.id);
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to delete", description: err instanceof Error ? err.message : undefined });
@@ -156,7 +184,7 @@ function PipelineCard({
 
   const currentStage = getCurrentStage(vacancy, batch);
   const shortlisted = candidates.filter((c) => c.isShortlisted).length;
-  const nextAction = getNextAction(entry, offerStatusByCandidate, appointmentCandidateIds);
+  const nextAction = getNextAction(entry, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds);
 
   function stateFor(stage: PipelineStage) {
     return stateForStage(stage, currentStage);
@@ -180,7 +208,7 @@ function PipelineCard({
 
   const stage4Sub =
     batch?.currentPhase === "COMPLETED" || batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
-      ? hiringResultsSummary(candidates, offerStatusByCandidate, appointmentCandidateIds)
+      ? hiringResultsSummary(candidates, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds)
       : "-";
 
   const accentColor =
@@ -195,6 +223,7 @@ function PipelineCard({
   // Only show secondary Add Candidate button when the primary action is something else
   // (i.e. when there are already shortlisted candidates and primary = "Create Interview Session")
   const showAddCandidate = vacancy.status === "APPROVED" && !batch && shortlisted >= 1;
+  const showShortlist = vacancy.status === "APPROVED" && !batch && candidates.length > 0;
 
   return (
     <div className={`rounded-xl border border-l-4 ${accentColor} bg-card shadow-sm overflow-hidden`}>
@@ -251,10 +280,16 @@ function PipelineCard({
           )}
           {showAddCandidate && (
             <Button size="sm" variant="outline" asChild>
-              <Link href={`/hod/candidates/new?vacancyId=${vacancy.id}`}>
+              <Link href="/hod/candidates">
                 <Plus className="h-3.5 w-3.5 mr-1" />
                 Add Candidate
               </Link>
+            </Button>
+          )}
+          {showShortlist && (
+            <Button size="sm" variant="outline" onClick={() => setShortlistOpen(true)}>
+              <UserCheck className="h-3.5 w-3.5 mr-1" />
+              Shortlist Candidates
             </Button>
           )}
         </div>
@@ -264,7 +299,7 @@ function PipelineCard({
             variant="ghost"
             size="sm"
             loading={isDeleting}
-            onClick={handleDelete}
+            onClick={() => setDeleteConfirmOpen(true)}
             className="text-destructive hover:text-destructive h-auto py-1 px-2"
           >
             <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
@@ -317,14 +352,14 @@ function PipelineCard({
                       ) : (
                         <Badge variant="secondary" className="text-[10px] py-0 px-1.5">Added</Badge>
                       )}
-                      {batch?.candidateIds.includes(c.id) && !c.bioDataSubmitted && (
+                      {(batch?.applicationIds ?? []).includes(c.id) && !c.bioDataSubmitted && (
                         <Badge variant="secondary" className="text-[10px] py-0 px-1.5 text-amber-700 bg-amber-100">
                           Bio Data Pending
                         </Badge>
                       )}
                       {c.status === "APPROVED" && c.currentStage === "DECISION" && (
                         <Badge variant="outline" className="text-[10px] py-0 px-1.5">
-                          {candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds)}
+                          {candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds)}
                         </Badge>
                       )}
                       {c.status === "REJECTED" && (
@@ -383,6 +418,30 @@ function PipelineCard({
           )}
         </div>
       )}
+
+      <ShortlistDialog
+        vacancyPosition={vacancy.position}
+        candidates={candidates.map((c) => ({
+          applicationId: c.id,
+          name: c.name,
+          email: c.email,
+          isShortlisted: c.isShortlisted,
+        }))}
+        open={shortlistOpen}
+        onOpenChange={setShortlistOpen}
+        onSaved={onRefresh}
+      />
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title={`Delete the hiring request for ${vacancy.position}?`}
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => void handleDelete()}
+        loading={isDeleting}
+      />
     </div>
   );
 }
@@ -393,13 +452,17 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
   const [offerStatusByCandidate, setOfferStatusByCandidate] = useState<Record<string, OfferStatus>>({});
   const [appointmentCandidateIds, setAppointmentCandidateIds] = useState<Set<string>>(new Set());
+  const [loginGeneratedCandidateIds, setLoginGeneratedCandidateIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  function load() {
     void Promise.all([
       fetch("/api/college/vacancy-requests")
         .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
         .then((d) => d.vacancyRequests ?? []),
+      fetch("/api/college/candidate-applications")
+        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
+        .then((d) => d.applications ?? []),
       fetch("/api/college/candidates")
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
@@ -414,7 +477,7 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         .then((d) => d.letters ?? [])
         .catch(() => []),
     ])
-      .then(([vacancies, candidates, batches, letters, appointmentLetters]) => {
+      .then(([vacancies, applications, candidates, batches, letters, appointmentLetters]) => {
         // Prefer a non-rejected offer per candidate — mirrors the office dashboard's logic.
         const offerMap: Record<string, OfferStatus> = {};
         for (const letter of letters) {
@@ -423,20 +486,32 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         }
         setOfferStatusByCandidate(offerMap);
         setAppointmentCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
-        // A candidate's batch (if any) is the authority on which vacancy they
-        // actually belong to. Without this, a candidate lacking a vacancyId
-        // (legacy data) would loosely position/department-match - and get
-        // double-counted under - every other vacancy that happens to share
-        // the same position and department, even once they're already
-        // committed to a specific one via a batch.
-        const vacancyIdByBatchId = new Map(batches.map((b) => [b.id, b.vacancyId]));
+        setLoginGeneratedCandidateIds(
+          new Set(letters.filter((l) => l.credentialsFulfilledAt).map((l) => l.candidateId))
+        );
+
+        const candidateMap = new Map(candidates.map((c) => [c.id, c]));
+        const viewsByVacancy = new Map<string, PipelineCandidateView[]>();
+        for (const a of applications) {
+          const person = candidateMap.get(a.candidateId);
+          const view: PipelineCandidateView = {
+            id: a.id,
+            candidateId: a.candidateId,
+            name: person?.name ?? "Unknown",
+            email: person?.email ?? "",
+            isShortlisted: a.isShortlisted,
+            interviewMode: a.interviewMode,
+            bioDataSubmitted: person?.bioDataSubmitted,
+            status: a.status,
+            currentStage: a.currentStage,
+          };
+          const list = viewsByVacancy.get(a.vacancyRequestId);
+          if (list) list.push(view);
+          else viewsByVacancy.set(a.vacancyRequestId, [view]);
+        }
         const built: PipelineEntry[] = vacancies.map((v) => ({
           vacancy: v,
-          candidates: candidates.filter((c) => {
-            if (c.vacancyId) return c.vacancyId === v.id;
-            if (c.batchId) return vacancyIdByBatchId.get(c.batchId) === v.id;
-            return c.position === v.position && c.department === v.department;
-          }),
+          candidates: viewsByVacancy.get(v.id) ?? [],
           // A rejected proposal shouldn't block the HOD from starting a fresh
           // interview session for the same vacancy - treat it as no batch yet.
           batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
@@ -448,6 +523,20 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
+  }
+
+  useEffect(() => {
+    load();
+    // This is the primary HOD dashboard, likely to stay open longest through a
+    // multi-actor pipeline — refetch on refocus so it doesn't go stale.
+    function onFocus() { load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const visible = entries.filter((e) => (scope === "closed" ? isClosed(e) : !isClosed(e)));
@@ -491,7 +580,9 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
           entry={e}
           offerStatusByCandidate={offerStatusByCandidate}
           appointmentCandidateIds={appointmentCandidateIds}
+          loginGeneratedCandidateIds={loginGeneratedCandidateIds}
           onDeleted={(vacancyId) => setEntries((prev) => prev.filter((entry) => entry.vacancy.id !== vacancyId))}
+          onRefresh={load}
         />
       ))}
     </div>

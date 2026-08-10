@@ -16,6 +16,7 @@ import type { Department, UserRole } from "@/types";
 // src/app/api/college/users/route.ts.
 const CREATABLE_ROLES: UserRole[] = [
   "HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF",
+  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
   "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER",
 ];
 

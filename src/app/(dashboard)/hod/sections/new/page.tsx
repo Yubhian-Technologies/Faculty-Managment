@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { DepartmentScopeSelect } from "@/components/shared/DepartmentScopeSelect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,9 @@ export default function NewSectionPage() {
     facultyInchargeName: "",
   });
   const [saving, setSaving] = useState(false);
+  // Empty unless a parent HOD explicitly targets one of their sub-departments.
+  const [departmentName, setDepartmentName] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
 
   useEffect(() => {
     fetch("/api/college/courses")
@@ -104,6 +108,9 @@ export default function NewSectionPage() {
           batch: form.batch,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
+          // Omitted unless a parent HOD picked a sub-department; the API then
+          // falls back to their own department, as before.
+          ...(departmentId ? { departmentId } : {}),
         }),
       });
       if (!res.ok) {
@@ -133,6 +140,13 @@ export default function NewSectionPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Only rendered for a parent HOD who actually has sub-departments. */}
+            <DepartmentScopeSelect
+              value={departmentName}
+              onChange={(name, id) => { setDepartmentName(name); setDepartmentId(id); }}
+              hint="Create this section in your own department or one of its sub-departments."
+            />
+
             <div className="space-y-2">
               <Label>Course *</Label>
               <Select value={form.courseId} onValueChange={(v) => setF({ courseId: v, year: "" })}>

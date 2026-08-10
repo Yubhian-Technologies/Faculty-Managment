@@ -37,6 +37,12 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
   documents: { key: "documents", label: "Documents", icon: FileText },
 };
 
+// Self-profile modules a person never edits themselves - financial standing
+// and documents are administratively controlled, teaching load is assigned
+// by HOD/Principal, and research publications are R&D-managed (see the
+// Research Publications feature).
+export const SELF_EDIT_DISABLED_MODULES: ProfileModuleKey[] = ["financial", "teaching-load", "documents", "research"];
+
 function isTechnicalDesignation(designation: Designation | string | undefined): boolean {
   return !!designation && (TECHNICAL_STAFF_DESIGNATIONS as string[]).includes(designation);
 }

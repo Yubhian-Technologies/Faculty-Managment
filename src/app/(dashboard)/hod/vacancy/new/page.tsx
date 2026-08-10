@@ -21,16 +21,45 @@ import type { FacultyRequirementResult } from "@/app/api/college/faculty-require
 type Category = "TEACHING" | "SUPPORTING_STAFF";
 
 const TEACHING_ROLES = [
+  "Professor & Head",
   "Professor",
   "Associate Professor",
+  "Reader",
   "Assistant Professor",
   "Senior Lecturer",
   "Lecturer",
+  "Medical Officer",
+  "Psychology Counsellor",
   "Others",
 ] as const;
 
 const SUPPORTING_ROLES = [
-  "Non-Technical",
+  "Assistant Manager (Admin)",
+  "Senior Assistant",
+  "Junior Assistant",
+  "Librarian",
+  "Assistant Librarian",
+  "Nurse",
+  "Lab Technician",
+  "Assistant",
+  "Lab Assistant",
+  "OT Assistant",
+  "Sr. Dental Equipment Technician",
+  "Dental Equipment Technician",
+  "Dental Technician",
+  "Radiographer",
+  "Receptionist",
+  "Stores Incharge",
+  "Physical Director",
+  "Accounts Officer",
+  "Electrician",
+  "Plumber",
+  "Stores Assistant",
+  "Driver",
+  "Warden",
+  "Assistant Systems Administrator",
+  "Trainee Dental Technician",
+  "Others",
 ] as const;
 
 const CATEGORY_LABELS: Record<Category, string> = {
@@ -111,12 +140,18 @@ export default function NewVacancyPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    setReqLoading(true);
-    fetch("/api/college/faculty-requirement")
-      .then(async (r) => (r.ok ? (r.json() as Promise<FacultyRequirementResult>) : null))
-      .then((d) => setRequirement(d))
-      .catch(() => {})
-      .finally(() => setReqLoading(false));
+    // reqLoading already starts true, so nothing is set synchronously here -
+    // a setState in the effect body triggers a cascading render.
+    void (async () => {
+      try {
+        const r = await fetch("/api/college/faculty-requirement");
+        setRequirement(r.ok ? ((await r.json()) as FacultyRequirementResult) : null);
+      } catch {
+        // Non-fatal: the form renders without the requirement summary.
+      } finally {
+        setReqLoading(false);
+      }
+    })();
   }, []);
 
   function updateEntry(key: string, patch: Partial<PositionEntry>) {
@@ -227,7 +262,7 @@ export default function NewVacancyPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="max-w-4xl space-y-5">
       <PageHeader
         title="New Hiring Request"
         description="Submit one or more faculty vacancy requests to the Principal"
@@ -279,76 +314,105 @@ export default function NewVacancyPage() {
                       size="icon"
                       className="h-7 w-7 text-destructive hover:text-destructive"
                       onClick={() => removeEntry(entry.key)}
+                      aria-label="Remove position"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="space-y-5">
-                {/* Position Category */}
-                <div className="space-y-2">
-                  <Label>Position Category <span className="text-destructive">*</span></Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(Object.keys(CATEGORY_LABELS) as Category[]).map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => handleCategoryChange(entry.key, cat)}
-                        className={`p-3 rounded-lg border-2 text-sm font-medium transition-all text-left ${
-                          entry.category === cat
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-border hover:border-primary/40"
-                        }`}
-                      >
-                        <span className="block font-semibold">{CATEGORY_LABELS[cat]}</span>
-                      </button>
-                    ))}
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                  {/* Position Category */}
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Position Category <span className="text-destructive">*</span></Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {(Object.keys(CATEGORY_LABELS) as Category[]).map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => handleCategoryChange(entry.key, cat)}
+                          className={`p-3 rounded-lg border-2 text-sm font-medium transition-all text-left ${
+                            entry.category === cat
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border hover:border-primary/40"
+                          }`}
+                        >
+                          <span className="block font-semibold">{CATEGORY_LABELS[cat]}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {entry.category && (
+                  {entry.category && (
+                    <div className="space-y-2">
+                      <Label>Designation <span className="text-destructive">*</span></Label>
+                      <Select value={entry.designation} onValueChange={(v) => handleDesignationChange(entry.key, v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select designation..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roleOptions.map((role) => {
+                            const cadreKey = DESIGNATION_TO_CADRE[role];
+                            const cadreRow = requirement?.cadre.find((c) => c.key === cadreKey);
+                            return (
+                              <SelectItem key={role} value={role}>
+                                <span className="flex items-center gap-2">
+                                  {role}
+                                  {cadreRow && cadreRow.gap > 0 && (
+                                    <span className="text-xs text-red-500 font-medium">−{cadreRow.gap}</span>
+                                  )}
+                                  {cadreRow && cadreRow.gap === 0 && cadreRow.surplus === 0 && (
+                                    <span className="text-xs text-green-500">✓</span>
+                                  )}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {entry.designation === "Others" && (
+                    <div className="space-y-2">
+                      <Label>Specify Designation <span className="text-destructive">*</span></Label>
+                      <Input
+                        value={entry.customDesignation}
+                        onChange={(e) => updateEntry(entry.key, { customDesignation: e.target.value })}
+                        placeholder="Enter the designation..."
+                      />
+                    </div>
+                  )}
+
                   <div className="space-y-2">
-                    <Label>Designation <span className="text-destructive">*</span></Label>
-                    <Select value={entry.designation} onValueChange={(v) => handleDesignationChange(entry.key, v)}>
+                    <Label>Required Qualification <span className="text-destructive">*</span></Label>
+                    <Select
+                      value={entry.qualification}
+                      onValueChange={(v) => updateEntry(entry.key, { qualification: v, qualificationOther: "" })}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select designation..." />
+                        <SelectValue placeholder="Select qualification..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {roleOptions.map((role) => {
-                          const cadreKey = DESIGNATION_TO_CADRE[role];
-                          const cadreRow = requirement?.cadre.find((c) => c.key === cadreKey);
-                          return (
-                            <SelectItem key={role} value={role}>
-                              <span className="flex items-center gap-2">
-                                {role}
-                                {cadreRow && cadreRow.gap > 0 && (
-                                  <span className="text-xs text-red-500 font-medium">−{cadreRow.gap}</span>
-                                )}
-                                {cadreRow && cadreRow.gap === 0 && cadreRow.surplus === 0 && (
-                                  <span className="text-xs text-green-500">✓</span>
-                                )}
-                              </span>
-                            </SelectItem>
-                          );
-                        })}
+                        {QUALIFICATION_OPTIONS.map((q) => (
+                          <SelectItem key={q} value={q}>{q}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
 
-                {entry.designation === "Others" && (
-                  <div className="space-y-2">
-                    <Label>Specify Designation <span className="text-destructive">*</span></Label>
-                    <Input
-                      value={entry.customDesignation}
-                      onChange={(e) => updateEntry(entry.key, { customDesignation: e.target.value })}
-                      placeholder="Enter the designation..."
-                    />
-                  </div>
-                )}
+                  {entry.qualification === "Others" && (
+                    <div className="space-y-2">
+                      <Label>Specify Qualification <span className="text-destructive">*</span></Label>
+                      <Input
+                        value={entry.qualificationOther}
+                        onChange={(e) => updateEntry(entry.key, { qualificationOther: e.target.value })}
+                        placeholder="Specify qualification..."
+                      />
+                    </div>
+                  )}
 
-                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Current Hiring Requirement <span className="text-destructive">*</span></Label>
                     <Input
@@ -375,56 +439,32 @@ export default function NewVacancyPage() {
                       onChange={(e) => updateEntry(entry.key, { availableCount: Number(e.target.value) })}
                     />
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label>Required Qualification <span className="text-destructive">*</span></Label>
-                  <Select
-                    value={entry.qualification}
-                    onValueChange={(v) => updateEntry(entry.key, { qualification: v, qualificationOther: "" })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select qualification..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {QUALIFICATION_OPTIONS.map((q) => (
-                        <SelectItem key={q} value={q}>{q}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {entry.qualification === "Others" && (
-                    <Input
-                      value={entry.qualificationOther}
-                      onChange={(e) => updateEntry(entry.key, { qualificationOther: e.target.value })}
-                      placeholder="Specify qualification..."
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Justification <span className="text-destructive">*</span></Label>
+                    <Textarea
+                      value={entry.justification}
+                      onChange={(e) => updateEntry(entry.key, { justification: e.target.value })}
+                      placeholder="Explain why this vacancy is required..."
+                      rows={3}
                     />
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Justification <span className="text-destructive">*</span></Label>
-                  <Textarea
-                    value={entry.justification}
-                    onChange={(e) => updateEntry(entry.key, { justification: e.target.value })}
-                    placeholder="Explain why this vacancy is required..."
-                    rows={3}
-                  />
-                  {entry.justification.length > 0 && entry.justification.trim().length < 10 && (
-                    <p className="text-xs text-destructive">Minimum 10 characters required</p>
-                  )}
-                </div>
-
-                {isEntryValid(entry) && (
-                  <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-                    <span className="font-semibold">{entry.requiredCount}</span> × {finalPosition}
-                    &nbsp;·&nbsp; {CATEGORY_LABELS[entry.category as Category]}
-                    {requirement && requirement.totalStudents > 0 && (
-                      <span className="text-xs ml-2 opacity-80">
-                        ({requirement.totalStudents} students · 1:{requirement.studentFacultyRatio} ratio)
-                      </span>
+                    {entry.justification.length > 0 && entry.justification.trim().length < 10 && (
+                      <p className="text-xs text-destructive">Minimum 10 characters required</p>
                     )}
                   </div>
-                )}
+
+                  {isEntryValid(entry) && (
+                    <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800 sm:col-span-2">
+                      <span className="font-semibold">{entry.requiredCount}</span> × {finalPosition}
+                      &nbsp;·&nbsp; {CATEGORY_LABELS[entry.category as Category]}
+                      {requirement && requirement.totalStudents > 0 && (
+                        <span className="text-xs ml-2 opacity-80">
+                          ({requirement.totalStudents} students · 1:{requirement.studentFacultyRatio} ratio)
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           );

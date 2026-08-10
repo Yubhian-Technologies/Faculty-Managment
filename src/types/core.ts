@@ -17,6 +17,10 @@ export type UserRole =
   | "HOD"
   | "COLLEGE_OFFICE"
   | "COLLEGE_STAFF"
+  | "DEAN"
+  | "IQAC_COORDINATOR"
+  | "T_AND_P"
+  | "R_AND_D"
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
@@ -40,6 +44,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   HOD: "Head of Department",
   COLLEGE_OFFICE: "College Office",
   COLLEGE_STAFF: "College Staff",
+  DEAN: "Dean",
+  IQAC_COORDINATOR: "IQAC Coordinator",
+  T_AND_P: "T&P",
+  R_AND_D: "R&D",
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
@@ -64,6 +72,10 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   HOD: "/hod",
   COLLEGE_OFFICE: "/college-office",
   COLLEGE_STAFF: "/college-staff",
+  DEAN: "/dean",
+  IQAC_COORDINATOR: "/iqac-coordinator",
+  T_AND_P: "/t-and-p",
+  R_AND_D: "/r-and-d",
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
@@ -98,6 +110,10 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   HOD: 4,
   COLLEGE_OFFICE: 4,
   COLLEGE_STAFF: 4,
+  DEAN: 4,
+  IQAC_COORDINATOR: 4,
+  T_AND_P: 4,
+  R_AND_D: 4,
   PLACEMENT_DEPT: 4,
   LIBRARY: 4,
   EXAM_CELL: 4,
@@ -138,6 +154,10 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   HOD: "COLLEGE",
   COLLEGE_OFFICE: "COLLEGE",
   COLLEGE_STAFF: "COLLEGE",
+  DEAN: "COLLEGE",
+  IQAC_COORDINATOR: "COLLEGE",
+  T_AND_P: "COLLEGE",
+  R_AND_D: "COLLEGE",
   PLACEMENT_DEPT: "COLLEGE",
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
@@ -305,10 +325,22 @@ export interface LocationDepartment {
 
 // ─── College ──────────────────────────────────────────────────────────────────
 
+export type CollegeType = "ENGINEERING" | "SCHOOL" | "DENTAL" | "PHARMACY" | "POLYTECHNIC" | "DEGREE";
+
+export const COLLEGE_TYPE_LABELS: Record<CollegeType, string> = {
+  ENGINEERING: "Engineering",
+  SCHOOL: "School",
+  DENTAL: "Dental",
+  PHARMACY: "Pharmacy",
+  POLYTECHNIC: "Polytechnic",
+  DEGREE: "Degree",
+};
+
 export interface College {
   id: string;
   locationId?: string;   // which location this college belongs to
   name: string;
+  type?: CollegeType;    // institution category - optional so older records without one still load
   logoUrl?: string;
   address?: string;
   contactEmail?: string;
@@ -336,10 +368,13 @@ export interface Department {
   // Sub-department support: a parent department (Principal-created) can be
   // split into several sub-departments (e.g. Basic Science → BS-Maths,
   // BS-English, ...), each with its own HOD ("sub-HOD" — just a normal HOD
-  // account on this child Department doc, no separate role). The parent's
-  // HOD gets automatic view-only access to every child's students/sections/
-  // assigned faculty; only the child's own HOD can edit it. One level deep
-  // only — child departments never set `hasSubDepartments`.
+  // account on this child Department doc, no separate role). The parent's HOD
+  // has FULL control over every child as well as their own department — they
+  // can create sections, add subjects, add faculty and make teaching
+  // assignments in any of them, alongside the sub-HOD who runs it day to day.
+  // Authority flows down the tree only: a sub-HOD never reaches the parent or a
+  // sibling. Enforced via canHodEditDepartment() in src/lib/departments/scope.ts.
+  // One level deep only — child departments never set `hasSubDepartments`.
   parentDepartmentId?: string;
   hasSubDepartments?: boolean;
   // Cross-listing: other departments whose HODs each get automatic view-only
@@ -658,8 +693,10 @@ export interface TechnicalProfile {
 // dateOfBirth) live on the host doc itself, not here.
 
 export interface DegreeDetail {
+  domain?: string; // Management / Engineering / Arts & Science / Medicine / Law / Others - not applicable to School/Intermediate
   degree: string;
   branch: string;
+  specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
   universityOrInstitute: string;
   percentageOrDivision: string;
   yearOfCompletion: number;
@@ -703,6 +740,30 @@ export interface Publication {
   publicationYear: number;
   indexing?: string; // e.g. SCI, Scopus, WoS, UGC-CARE
   driveLink?: string; // Google Drive public-view link for the published paper
+}
+
+// R&D-managed official publication record - attaches to any staff login
+// (colleges/{collegeId}/users/{uid}), regardless of role, not just Faculty.
+// Stored at colleges/{collegeId}/publications/{id}. Only R_AND_D can write;
+// the owner (`uid`) can only read their own rows - see
+// src/app/api/college/publications/route.ts. Reuses Publication's field
+// names so it renders as a drop-in for the existing Research module UI.
+export interface ResearchPublication {
+  id: string;
+  collegeId: string;
+  uid: string;            // owning staff member - any role
+  ownerName: string;
+  ownerRole: UserRole;
+  title: string;
+  coAuthors: string;
+  journalOrConference: string;
+  publicationYear: number;
+  indexing?: string;
+  driveLink?: string;
+  addedBy: string;        // R&D uid who created/last edited it
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface FundedProject {
@@ -817,6 +878,8 @@ export interface CourseFileEntry {
 export interface FacultyProfileFields {
   // Module 1 — Academic Qualification
   highestQualification: string;
+  highSchoolDetails?: DegreeDetail; // 10th
+  intermediateDetails?: DegreeDetail; // 12th
   ugDetails?: DegreeDetail;
   pgDetails?: DegreeDetail;
   phdDetails?: DegreeDetail;
@@ -1102,12 +1165,15 @@ export interface AppNotification {
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 
 export type AuditAction =
-  // Recruitment module
+  // Recruitment module. CANDIDATE_SHORTLISTED/CANDIDATE_ARRIVED/CANDIDATE_STAGE_ADVANCED/
+  // HIRING_DECISION_MADE/DOCUMENTS_VERIFIED/JOINING_LETTER_UPLOADED all log targetId as
+  // the CandidateApplication id (not the Candidate id) since that's where this state lives.
   | "VACANCY_REQUEST_CREATED"
   | "VACANCY_REQUEST_APPROVED"
   | "VACANCY_REQUEST_REJECTED"
   | "VACANCY_REQUEST_DELETED"
   | "CANDIDATE_ADDED"
+  | "CANDIDATE_APPLICATION_CREATED" // candidate attached to a VacancyRequest; targetId is the CandidateApplication id
   | "CANDIDATE_SHORTLISTED"
   | "CANDIDATE_ARRIVED"
   | "CANDIDATE_STAGE_ADVANCED"

@@ -47,6 +47,7 @@ import {
   PackageCheck,
   Landmark,
   AtSign,
+  FlaskConical,
   type LucideProps,
 } from "lucide-react";
 
@@ -99,6 +100,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   PackageCheck,
   Landmark,
   AtSign,
+  FlaskConical,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {
