@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
@@ -58,9 +58,16 @@ export default function HodFacultyModulePage() {
         title={moduleDef.label}
         description={faculty?.name}
         actions={
-          <Button variant="outline" asChild>
-            <Link href={`/hod/faculty/${facultyId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href={`/hod/faculty/${facultyId}`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            </Button>
+            {moduleKey !== "research" && moduleKey !== "financial" && (
+              <Button asChild>
+                <Link href={`/hod/faculty/${facultyId}/${moduleKey}/edit`}><Pencil className="h-4 w-4 mr-2" />Edit</Link>
+              </Button>
+            )}
+          </div>
         }
       />
 

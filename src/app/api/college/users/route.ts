@@ -24,7 +24,7 @@ const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "WEBMASTER");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "WEBMASTER", "R_AND_D", "COLLEGE_OFFICE");
     const { searchParams } = new URL(request.url);
     const roleFilter = searchParams.get("role");
     const allDepts = searchParams.get("allDepts") === "true";

@@ -5,11 +5,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import {
-  SectionTitle, NumInput, TextInput, DegreeFields, RepeatingGroup,
+  NumInput, TextInput, DegreeFields, RepeatingGroup,
 } from "@/components/shared/ProfileFieldPrimitives";
 import type {
   FacultyProfileFields,
-  Publication,
   FundedProject,
   ConsultancyProject,
   LabEstablished,
@@ -32,14 +31,20 @@ import {
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
 } from "@/types";
 
-interface Props {
+// Edit-side per-module field components - the editable counterpart to
+// ProfileFieldsView.tsx's per-module read-only exports. Each takes the same
+// full Partial<FacultyProfileFields> + onChange (merged client-side, same as
+// the old single-form AcademicProfileFields used to) so a module edit page
+// can fetch the whole academicProfile once, hand it to exactly one of these,
+// and PATCH the whole (slice-updated) object back - see
+// FacultyProfileModuleEditor.tsx for the round-trip that makes this safe
+// against the PATCH routes' wholesale-replace behavior.
+
+export interface ModuleFieldsProps {
   value: Partial<FacultyProfileFields>;
   onChange: (next: Partial<FacultyProfileFields>) => void;
-  includeTeachingAssignment?: boolean;
-  hideFinancialModule?: boolean;
 }
 
-const EMPTY_PUBLICATION: Publication = { title: "", coAuthors: "", journalOrConference: "", publicationYear: new Date().getFullYear(), indexing: "", driveLink: "" };
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
@@ -52,20 +57,12 @@ const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COORDI
 const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", title: "", awardingBody: "", year: new Date().getFullYear() };
 const EMPTY_COURSE_FILE: CourseFileEntry = { courseCode: "", courseName: "", academicYear: "" };
 
-export function AcademicProfileFields({ value, onChange, includeTeachingAssignment = true, hideFinancialModule = false }: Props) {
+export function QualificationFields({ value, onChange }: ModuleFieldsProps) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
-
-  const teaching = value.teachingAssignment;
-  const patents = value.patents;
-  const phdPursuing = value.phdScholarsPursuing;
-  const phdAwarded = value.phdScholarsAwarded;
-
   return (
     <div className="space-y-5">
-      {/* Module 1 */}
-      <SectionTitle>Module 1 - General &amp; Academic Profile</SectionTitle>
       <TextInput label="Highest Qualification Earned" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
       <DegreeFields label="High School (10th) Details" level="HIGH_SCHOOL" value={value.highSchoolDetails} onChange={(v) => set("highSchoolDetails", v)} />
       <DegreeFields label="Intermediate (12th) Details" level="INTERMEDIATE" value={value.intermediateDetails} onChange={(v) => set("intermediateDetails", v)} />
@@ -104,8 +101,17 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         <NumInput label="GATE Score" value={value.gateScore} onChange={(v) => set("gateScore", v)} />
         <NumInput label="NET/SLET Qualification Year" value={value.netSletQualificationYear} onChange={(v) => set("netSletQualificationYear", v)} />
       </div>
+    </div>
+  );
+}
 
-      <SectionTitle>Module 2 - Previous Experience</SectionTitle>
+export function ExperienceFields({ value, onChange, includeTeachingAssignment = true }: ModuleFieldsProps & { includeTeachingAssignment?: boolean }) {
+  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
+    onChange({ ...value, [key]: v });
+  }
+  const teaching = value.teachingAssignment;
+  return (
+    <div className="space-y-5">
       <RepeatingGroup
         title="Previous Experience"
         items={value.previousInstitutions}
@@ -128,28 +134,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           </>
         )}
       />
-      <RepeatingGroup
-        title="Promotion History"
-        items={value.promotionHistory}
-        empty={EMPTY_PROMOTION}
-        onChange={(v) => set("promotionHistory", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
-            <TextInput label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
-            <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
-            <div className="sm:col-span-2">
-              <Label className="text-xs">Promotion Order</Label>
-              <CertificateUploadField
-                value={item.orderUrl}
-                onUploaded={(url) => update({ orderUrl: url })}
-                onRemoved={() => update({ orderUrl: "" })}
-              />
-            </div>
-          </>
-        )}
-      />
-
+      <p className="text-xs text-muted-foreground rounded-md border bg-muted/20 p-2">
+        Promotion History is maintained by the College Office - it can no longer be edited here.
+      </p>
       {includeTeachingAssignment && (
         <div className="space-y-3 rounded-lg border p-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Teaching Role</p>
@@ -159,31 +146,60 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             onChange={(v) => set("teachingAssignment", { primaryTeachingRole: v, courses: teaching?.courses ?? [] })}
           />
           <p className="text-xs text-muted-foreground">
-            Subject-level teaching assignments (course, section, subject, weekly schedule) are managed below in &ldquo;Current Teaching Assignments&rdquo;.
+            Subject-level teaching assignments (course, section, subject, weekly schedule) are managed from the &ldquo;Teaching Load&rdquo; module.
           </p>
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* Module 3 */}
-      <SectionTitle>Module 3 - Research Publications</SectionTitle>
-      <RepeatingGroup
-        title="Publications"
-        items={value.publications}
-        empty={EMPTY_PUBLICATION}
-        onChange={(v) => set("publications", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Co-Authors" value={item.coAuthors} onChange={(v) => update({ coAuthors: v })} placeholder="Comma-separated names" />
-            <TextInput label="Journal / Conference" value={item.journalOrConference} onChange={(v) => update({ journalOrConference: v })} />
-            <NumInput label="Year of Publication" value={item.publicationYear} onChange={(v) => update({ publicationYear: v })} />
-            <TextInput label="Indexing" value={item.indexing} onChange={(v) => update({ indexing: v })} placeholder="e.g. SCI, Scopus, WoS, UGC-CARE" />
-            <div className="sm:col-span-2">
-              <TextInput label="Publication Link" value={item.driveLink} onChange={(v) => update({ driveLink: v })} placeholder="Paste your Google Drive public view link" />
-            </div>
-          </>
-        )}
-      />
+// College Office-only editor for Promotion History - split out of
+// ExperienceFields since promotion (and salary, see FinancialFields) is no
+// longer editable by the owner or their HOD/Principal, only by College Office.
+export function PromotionFields({ value, onChange }: ModuleFieldsProps) {
+  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
+    onChange({ ...value, [key]: v });
+  }
+  return (
+    <RepeatingGroup
+      title="Promotion History"
+      items={value.promotionHistory}
+      empty={EMPTY_PROMOTION}
+      onChange={(v) => set("promotionHistory", v)}
+      renderRow={(item, update) => (
+        <>
+          <TextInput label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
+          <TextInput label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
+          <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
+          <div className="sm:col-span-2">
+            <Label className="text-xs">Promotion Order</Label>
+            <CertificateUploadField
+              value={item.orderUrl}
+              onUploaded={(url) => update({ orderUrl: url })}
+              onRemoved={() => update({ orderUrl: "" })}
+            />
+          </div>
+        </>
+      )}
+    />
+  );
+}
+
+// Publications themselves are no longer self-editable here - R&D owns the
+// official publication record (see the Research Publications module page,
+// which now reads from GET /api/college/publications). Only the aggregate
+// self-reported bibliometrics/IDs stay editable.
+export function ResearchFields({ value, onChange }: ModuleFieldsProps) {
+  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
+    onChange({ ...value, [key]: v });
+  }
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-muted-foreground">
+        Individual publication records are maintained by the R&amp;D office - view them on the Research Publications module.
+        The fields below are self-reported summary metrics.
+      </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <NumInput label="First/Corresponding Author Pubs" value={value.publicationsFirstOrCorrespondingAuthor} onChange={(v) => set("publicationsFirstOrCorrespondingAuthor", v)} />
         <NumInput label="Q1 / IF > 4.0 Pubs" value={value.publicationsQ1OrHighImpact} onChange={(v) => set("publicationsQ1OrHighImpact", v)} />
@@ -202,9 +218,17 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         <TextInput label="Scopus Author ID" value={value.scopusAuthorId} onChange={(v) => set("scopusAuthorId", v)} />
         <TextInput label="ORCID iD" value={value.orcidId} onChange={(v) => set("orcidId", v)} />
       </div>
+    </div>
+  );
+}
 
-      {/* Module 4 */}
-      <SectionTitle>Module 4 - Grants, Consultancy &amp; IP</SectionTitle>
+export function GrantsFields({ value, onChange }: ModuleFieldsProps) {
+  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
+    onChange({ ...value, [key]: v });
+  }
+  const patents = value.patents;
+  return (
+    <div className="space-y-5">
       <RepeatingGroup
         title="Funded Projects"
         items={value.fundedProjects}
@@ -260,9 +284,18 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           <Textarea value={patents?.details ?? ""} onChange={(e) => set("patents", { ...patents, details: e.target.value } as FacultyProfileFields["patents"])} />
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Module 5 */}
-      <SectionTitle>Module 5 - Mentorship &amp; Institutional Value</SectionTitle>
+export function MentorshipFields({ value, onChange }: ModuleFieldsProps) {
+  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
+    onChange({ ...value, [key]: v });
+  }
+  const phdPursuing = value.phdScholarsPursuing;
+  const phdAwarded = value.phdScholarsAwarded;
+  return (
+    <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2 rounded-lg border p-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ph.D. Scholars Pursuing</p>
@@ -446,56 +479,66 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       {value.notableAwards && (
         <p className="text-xs text-muted-foreground italic">Legacy note: {value.notableAwards}</p>
       )}
+    </div>
+  );
+}
 
-      {/* Module 6 */}
-      {!hideFinancialModule && (
-        <>
-          <SectionTitle>Module 6 - Financial Standing &amp; Budgetary Impact</SectionTitle>
-          <div className="space-y-3 rounded-lg border p-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Financial Standing</p>
-            <NumInput label="Present Salary (₹)" value={value.presentSalary} onChange={(v) => set("presentSalary", v)} />
-          </div>
-          <div className="space-y-3 rounded-lg border p-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Budgetary Impact</p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <NumInput label="Gross Annual CTC (₹)" value={value.grossAnnualCTC} onChange={(v) => set("grossAnnualCTC", v)} />
-              <NumInput label="Increments Awarded" value={value.incrementsAwarded} onChange={(v) => set("incrementsAwarded", v)} />
-              <NumInput label="Funding/Consultancy Revenue Generation (₹)" value={value.fundingConsultancyRevenue} onChange={(v) => set("fundingConsultancyRevenue", v)} />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Revenue brought in through research/consultancy grants, offsetting this faculty member&rsquo;s salary cost to the institution.
-            </p>
-          </div>
-        </>
-      )}
-
-      {/* Module 7 */}
-      <SectionTitle>Module 7 - Others</SectionTitle>
-      <div className="space-y-2">
-        <Label>Other Information</Label>
-        <Textarea
-          value={value.otherInformation ?? ""}
-          onChange={(e) => set("otherInformation", e.target.value)}
-          placeholder="Anything not covered above - add it here"
-          rows={4}
-        />
+export function FinancialFields({ value, onChange }: ModuleFieldsProps) {
+  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
+    onChange({ ...value, [key]: v });
+  }
+  return (
+    <div className="space-y-5">
+      <div className="space-y-3 rounded-lg border p-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Financial Standing</p>
+        <NumInput label="Present Salary (₹)" value={value.presentSalary} onChange={(v) => set("presentSalary", v)} />
       </div>
+      <div className="space-y-3 rounded-lg border p-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Budgetary Impact</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <NumInput label="Gross Annual CTC (₹)" value={value.grossAnnualCTC} onChange={(v) => set("grossAnnualCTC", v)} />
+          <NumInput label="Increments Awarded" value={value.incrementsAwarded} onChange={(v) => set("incrementsAwarded", v)} />
+          <NumInput label="Funding/Consultancy Revenue Generation (₹)" value={value.fundingConsultancyRevenue} onChange={(v) => set("fundingConsultancyRevenue", v)} />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Revenue brought in through research/consultancy grants, offsetting this faculty member&rsquo;s salary cost to the institution.
+        </p>
+      </div>
+    </div>
+  );
+}
 
-      {/* Module 8 */}
-      <SectionTitle>Module 8 - Teaching Documentation (NBA/AICTE)</SectionTitle>
-      <RepeatingGroup
-        title="Course Files & CO-PO Mapping"
-        items={value.courseFilesAndCoPoMapping}
-        empty={EMPTY_COURSE_FILE}
-        onChange={(v) => set("courseFilesAndCoPoMapping", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Course Code" value={item.courseCode} onChange={(v) => update({ courseCode: v })} />
-            <TextInput label="Course Name" value={item.courseName} onChange={(v) => update({ courseName: v })} />
-            <TextInput label="Academic Year" value={item.academicYear} onChange={(v) => update({ academicYear: v })} placeholder="e.g. 2025-26" />
-          </>
-        )}
+export function OthersFields({ value, onChange }: ModuleFieldsProps) {
+  return (
+    <div className="space-y-2">
+      <Label>Other Information</Label>
+      <Textarea
+        value={value.otherInformation ?? ""}
+        onChange={(e) => onChange({ ...value, otherInformation: e.target.value })}
+        placeholder="Anything not covered above - add it here"
+        rows={4}
       />
     </div>
+  );
+}
+
+export function TeachingDocsFields({ value, onChange }: ModuleFieldsProps) {
+  function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
+    onChange({ ...value, [key]: v });
+  }
+  return (
+    <RepeatingGroup
+      title="Course Files & CO-PO Mapping"
+      items={value.courseFilesAndCoPoMapping}
+      empty={EMPTY_COURSE_FILE}
+      onChange={(v) => set("courseFilesAndCoPoMapping", v)}
+      renderRow={(item, update) => (
+        <>
+          <TextInput label="Course Code" value={item.courseCode} onChange={(v) => update({ courseCode: v })} />
+          <TextInput label="Course Name" value={item.courseName} onChange={(v) => update({ courseName: v })} />
+          <TextInput label="Academic Year" value={item.academicYear} onChange={(v) => update({ academicYear: v })} placeholder="e.g. 2025-26" />
+        </>
+      )}
+    />
   );
 }

@@ -689,6 +689,7 @@ export interface TechnicalProfile {
 // dateOfBirth) live on the host doc itself, not here.
 
 export interface DegreeDetail {
+  domain?: string; // Management / Engineering / Arts & Science / Medicine / Law / Others - not applicable to School/Intermediate
   degree: string;
   branch: string;
   universityOrInstitute: string;
@@ -734,6 +735,30 @@ export interface Publication {
   publicationYear: number;
   indexing?: string; // e.g. SCI, Scopus, WoS, UGC-CARE
   driveLink?: string; // Google Drive public-view link for the published paper
+}
+
+// R&D-managed official publication record - attaches to any staff login
+// (colleges/{collegeId}/users/{uid}), regardless of role, not just Faculty.
+// Stored at colleges/{collegeId}/publications/{id}. Only R_AND_D can write;
+// the owner (`uid`) can only read their own rows - see
+// src/app/api/college/publications/route.ts. Reuses Publication's field
+// names so it renders as a drop-in for the existing Research module UI.
+export interface ResearchPublication {
+  id: string;
+  collegeId: string;
+  uid: string;            // owning staff member - any role
+  ownerName: string;
+  ownerRole: UserRole;
+  title: string;
+  coAuthors: string;
+  journalOrConference: string;
+  publicationYear: number;
+  indexing?: string;
+  driveLink?: string;
+  addedBy: string;        // R&D uid who created/last edited it
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface FundedProject {
@@ -848,6 +873,8 @@ export interface CourseFileEntry {
 export interface FacultyProfileFields {
   // Module 1 — Academic Qualification
   highestQualification: string;
+  highSchoolDetails?: DegreeDetail; // 10th
+  intermediateDetails?: DegreeDetail; // 12th
   ugDetails?: DegreeDetail;
   pgDetails?: DegreeDetail;
   phdDetails?: DegreeDetail;
