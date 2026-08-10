@@ -10,7 +10,7 @@ interface YearlyReportRow {
   uid: string;
   employeeId: string;
   name: string;
-  role: "HOD" | "PANEL_MEMBER";
+  role: string;
   category: string | null;
   months: Awaited<ReturnType<typeof computeYearlyLeaveSummary>>["months"];
   totals: Awaited<ReturnType<typeof computeYearlyLeaveSummary>>["totals"];

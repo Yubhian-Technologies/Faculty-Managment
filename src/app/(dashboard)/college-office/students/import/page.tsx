@@ -56,7 +56,10 @@ export default function OfficeStudentImportPage() {
   const lockedDepartment = searchParams.get("department") ?? "";
   const lockedYear = searchParams.get("year") ?? "";
   const isLocked = !!(sectionId && lockedSection && lockedDepartment && lockedYear);
-  const backHref = sectionId ? `/college-office/sections/${sectionId}` : "/college-office/sections";
+  // The College Office section pages this used to return to have been removed,
+  // so Back goes to the dashboard. Nothing links here any more - see the note
+  // in the page header below.
+  const backHref = "/college-office";
 
   const columns = isLocked ? COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key)) : COLUMNS;
 
@@ -179,7 +182,7 @@ export default function OfficeStudentImportPage() {
           : "Bulk upload the student roster - across every department - from a CSV/Excel file"}
         actions={
           <Button variant="outline" asChild>
-            <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to {sectionId ? "Section" : "Sections"}</Link>
+            <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Dashboard</Link>
           </Button>
         }
       />
@@ -337,7 +340,7 @@ export default function OfficeStudentImportPage() {
             )}
             {result.created > 0 && (
               <Button asChild variant="outline" size="sm">
-                <Link href={backHref}>Back to {sectionId ? "Section" : "Sections"}</Link>
+                <Link href={backHref}>Back to Dashboard</Link>
               </Button>
             )}
           </CardContent>
