@@ -85,7 +85,7 @@ export default function SectionRosterPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Section ${section.name}`}
-        description={`${section.courseName ?? ""}${section.secondaryDepartments && section.secondaryDepartments.length > 0 ? ` → ${section.secondaryDepartments.join(", ")}` : ""} · ${ordinalYear(section.year)} · ${section.batch}`}
+        description={`${section.department ?? ""}${section.department && section.courseName ? " · " : ""}${section.courseName ?? ""}${section.secondaryDepartments && section.secondaryDepartments.length > 0 ? ` → ${section.secondaryDepartments.join(", ")}` : ""} · ${ordinalYear(section.year)} · ${section.batch}`}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>

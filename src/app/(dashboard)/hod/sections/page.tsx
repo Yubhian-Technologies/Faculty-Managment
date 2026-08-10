@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Eye, Network } from "lucide-react";
+import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Eye, Network, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,7 @@ export default function HODSectionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeCourseId, setActiveCourseId] = useState<string>("all");
   const [activeYear, setActiveYear] = useState<number | "all">("all");
+  const [deptFilter, setDeptFilter] = useState<string>("all");
   const [reassigningId, setReassigningId] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<SectionRow | null>(null);
@@ -83,10 +84,27 @@ export default function HODSectionsPage() {
   // back). Empty for a Sub-HOD (their department has no children of its own),
   // so the picker below simply doesn't render for them.
   const ownDept = useMemo(() => departments.find((d) => d.name === user?.department) ?? null, [departments, user]);
-  const deptOptions = useMemo(
-    () => (ownDept ? [ownDept, ...departments.filter((d) => d.parentDepartmentId === ownDept.id)] : []),
-    [departments, ownDept]
-  );
+  // A grouping container (e.g. "BS-Maths" grouping IT + CSE under a Sub-HOD) is
+  // not a real department, so it's never a section's owner or a target here.
+  const isGroupingContainer = (ownDept?.managedDepartments?.length ?? 0) > 0;
+  // Real departments this HOD can assign a section to: sub-departments and
+  // grouped/managed branches. A grouping container drops itself; a normal HOD
+  // keeps their own department too.
+  const deptOptions = useMemo(() => {
+    if (!ownDept) return [];
+    const children = departments.filter((d) => d.parentDepartmentId === ownDept.id);
+    const managed = departments.filter((d) => (ownDept.managedDepartments ?? []).includes(d.name));
+    return isGroupingContainer ? [...children, ...managed] : [ownDept, ...children, ...managed];
+  }, [departments, ownDept, isGroupingContainer]);
+
+  // The department/branch filter tabs - the real departments this (sub-)HOD
+  // manages (never the grouping container), union-ed with any real department
+  // already present on a loaded section so none is unreachable by a tab.
+  const scopeDepartments = useMemo(() => {
+    const names = new Set(deptOptions.map((d) => d.name));
+    for (const s of sections) if (s.department && s.department !== ownDept?.name) names.add(s.department);
+    return Array.from(names).filter(Boolean).sort();
+  }, [deptOptions, sections, ownDept]);
 
   async function handleReassign(section: SectionRow, departmentId: string) {
     if (departmentId === deptOptions.find((d) => d.name === section.department)?.id) return;
@@ -141,6 +159,7 @@ export default function HODSectionsPage() {
   const filteredSections = sections.filter((s) => {
     if (activeCourseId !== "all" && s.courseId !== activeCourseId) return false;
     if (activeCourse && activeYear !== "all" && s.year !== activeYear) return false;
+    if (deptFilter !== "all" && s.department !== deptFilter) return false;
     return true;
   });
 
@@ -166,11 +185,9 @@ export default function HODSectionsPage() {
         description="Manage class sections, assign faculty incharge, and track student count"
         actions={
           <div className="flex gap-2">
-            {/* Import Students - temporarily hidden, not removed. Re-enable by
-                uncommenting this button. */}
-            {/* <Button variant="outline" asChild>
+            <Button variant="outline" asChild>
               <Link href="/hod/students/import"><Upload className="h-4 w-4 mr-2" />Import Students</Link>
-            </Button> */}
+            </Button>
             <Button onClick={openCreate} disabled={courses.length === 0}>
               <Plus className="h-4 w-4 mr-2" />Add Section
             </Button>
@@ -229,6 +246,37 @@ export default function HODSectionsPage() {
               }`}
             >
               {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Department / branch filter tabs - own department plus every branch
+          grouped under this (sub-)HOD, so a Sub-HOD can jump between the
+          departments assigned to them (All, CSE, IT, ...). */}
+      {scopeDepartments.length > 1 && (
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setDeptFilter("all")}
+            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+              deptFilter === "all"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background border-border hover:bg-muted"
+            }`}
+          >
+            All Departments
+          </button>
+          {scopeDepartments.map((d) => (
+            <button
+              key={d}
+              onClick={() => setDeptFilter(d)}
+              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                deptFilter === d
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              }`}
+            >
+              {d}
             </button>
           ))}
         </div>
@@ -301,8 +349,13 @@ export default function HODSectionsPage() {
                         <Link href={`/hod/sections/${sec.id}`} className="hover:underline">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-2xl font-bold tracking-tight">Section {sec.name}</p>
+                            {/* The section's own department (branch) - always shown so a
+                                Sub-HOD can tell which of their managed branches it belongs to. */}
+                            {sec.department && (
+                              <Badge variant="secondary" className="text-xs">{sec.department}</Badge>
+                            )}
                             {sec.secondaryDepartments && sec.secondaryDepartments.length > 0 && (
-                              <Badge variant="outline" className="text-xs">{sec.secondaryDepartments.join(", ")}</Badge>
+                              <Badge variant="outline" className="text-xs">+ {sec.secondaryDepartments.join(", ")}</Badge>
                             )}
                             {sec.accessLevel === "secondary" && (
                               <Badge variant="secondary" className="text-xs">View only</Badge>
