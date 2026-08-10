@@ -95,6 +95,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Timetable", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   { label: "Non-Technical Staff", href: "/principal/non-technical-staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -118,6 +119,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
+  { label: "Internal Exam Marks", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
