@@ -110,45 +110,6 @@ export interface TimetableSlot {
   updatedAt: Timestamp;
 }
 
-// ─── Internal Marks ───────────────────────────────────────────────────────────
-// A faculty's internal-assessment marks for their own students, scoped to a
-// (section, subject) they actively teach per TeachingAssignment. `examType` is
-// picked explicitly by the faculty at entry time (independent of the subject's
-// own SubjectType) since a single subject can carry both a theory and a lab
-// internal. Doc id is deterministic —
-// `${sectionId}_${subjectId}_${examType}_${assessmentName}_${studentId}` — so
-// re-saving the same assessment upserts instead of duplicating rows.
-// `department`/`facultyName` are denormalized from the TeachingAssignment at
-// write time so the HOD oversight view can query/display without extra joins.
-
-export type ExamType = "THEORY" | "LAB";
-
-export const EXAM_TYPE_LABELS: Record<ExamType, string> = {
-  THEORY: "Theory",
-  LAB: "Lab",
-};
-
-export interface InternalMark {
-  id: string;
-  collegeId: string;
-  department: string;
-  facultyId: string;
-  facultyName: string;
-  sectionId: string;
-  sectionName: string;
-  subjectId: string;
-  subjectName: string;
-  studentId: string;
-  studentName: string;
-  rollNumber: string;
-  examType: ExamType;
-  assessmentName: string;   // e.g. "IA1", "IA2", "Assignment 1"
-  maxMarks: number;
-  marksObtained: number;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
 // ─── Workload Summary ─────────────────────────────────────────────────────────
 // Computed aggregate of total hours assigned per faculty per semester
 

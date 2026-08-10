@@ -12,6 +12,7 @@ import { AcademicProfileFields } from "@/components/faculty/AcademicProfileField
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { TechnicalStaffProfileFields } from "@/components/faculty/TechnicalStaffProfileFields";
+import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
@@ -20,12 +21,11 @@ import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import {
-  DESIGNATION_LABELS,
   EMPLOYMENT_TYPE_LABELS,
   FACULTY_STATUS_LABELS,
   TECHNICAL_STAFF_DESIGNATIONS,
 } from "@/types";
-import type { Designation, EmploymentType, FacultyStatus, FacultyProfileFields, TechnicalProfile, Subject } from "@/types";
+import type { Designation, EmploymentType, FacultyStatus, FacultyProfileFields, TechnicalProfile, Subject, Religion, Caste } from "@/types";
 
 interface PendingTeachingPreference {
   courseId: string;
@@ -136,8 +136,9 @@ export default function EditFacultyPage() {
           legalName: (m.legalName as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
           motherName: (m.motherName as string) ?? "",
-          religion: (m.religion as string) ?? "",
-          caste: (m.caste as string) ?? "",
+          religion: m.religion as Religion | undefined,
+          caste: m.caste as Caste | undefined,
+          subCaste: (m.subCaste as string) ?? "",
           aadharNo: (m.aadharNo as string) ?? "",
           panNo: (m.panNo as string) ?? "",
           passportNumber: (m.passportNumber as string) ?? "",
@@ -354,7 +355,7 @@ export default function EditFacultyPage() {
                     <Select value={form.designation} onValueChange={(v) => set({ designation: v as Designation })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(DESIGNATION_LABELS).filter(([v]) => v !== "LAB_ASSISTANT").map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        <DesignationOptions />
                       </SelectContent>
                     </Select>
                   </div>

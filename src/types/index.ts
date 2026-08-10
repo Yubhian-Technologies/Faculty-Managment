@@ -7,6 +7,8 @@ export * from "./recruitment";
 export * from "./attendance";
 export * from "./payroll";
 export * from "./teaching";
+export * from "./exams";
+export * from "./examConfig";
 export * from "./appraisal";
 export * from "./training";
 export * from "./grievance";

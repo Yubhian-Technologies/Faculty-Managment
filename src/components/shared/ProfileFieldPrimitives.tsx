@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { Plus, Trash2, ExternalLink, X } from "lucide-react";
+import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import type { DegreeDetail } from "@/types";
 
 // Shared building blocks for the NBA/AICTE-style profile forms (Teaching Faculty's
@@ -15,9 +16,21 @@ import type { DegreeDetail } from "@/types";
 // repeating-list UI instead of maintaining two near-duplicate copies.
 
 export const EMPTY_DEGREE: DegreeDetail = {
-  degreeAndBranch: "", universityOrInstitute: "", percentageOrDivision: "",
+  degree: "", branch: "", universityOrInstitute: "", percentageOrDivision: "",
   yearOfCompletion: new Date().getFullYear(), certificateUrl: "",
 };
+
+// A record fetched from Firestore may still have the pre-split shape
+// (`degreeAndBranch` combined, no `degree`/`branch` yet) if it hasn't been
+// re-saved since the split - auto-split it for display/editing here rather
+// than in every caller, so the fallback applies wherever DegreeFields/
+// DegreeView are used.
+function resolveDegree(v: DegreeDetail | undefined): DegreeDetail {
+  const raw = (v ?? EMPTY_DEGREE) as DegreeDetail & { degreeAndBranch?: string };
+  if ((raw.degree || raw.branch) || !raw.degreeAndBranch) return { ...EMPTY_DEGREE, ...raw };
+  const { degree, branch } = splitDegreeAndBranch(raw.degreeAndBranch);
+  return { ...EMPTY_DEGREE, ...raw, degree, branch };
+}
 
 // ── Editable primitives ─────────────────────────────────────────────────────
 
@@ -44,12 +57,13 @@ export function TextInput({ label, value, onChange, placeholder }: { label: stri
 }
 
 export function DegreeFields({ label, value, onChange }: { label: string; value: DegreeDetail | undefined; onChange: (v: DegreeDetail) => void }) {
-  const v = value ?? EMPTY_DEGREE;
+  const v = resolveDegree(value);
   return (
     <div className="space-y-3 rounded-lg border p-3">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <TextInput label="Degree & Branch" value={v.degreeAndBranch} onChange={(x) => onChange({ ...v, degreeAndBranch: x })} />
+        <TextInput label="Degree" value={v.degree} onChange={(x) => onChange({ ...v, degree: x })} placeholder="e.g. B.Tech" />
+        <TextInput label="Branch" value={v.branch} onChange={(x) => onChange({ ...v, branch: x })} placeholder="e.g. CSE" />
         <TextInput label="University / Institute" value={v.universityOrInstitute} onChange={(x) => onChange({ ...v, universityOrInstitute: x })} />
         <TextInput label="Percentage / Division" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
         <NumInput label="Year of Completion" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
@@ -64,7 +78,7 @@ export function DegreeFields({ label, value, onChange }: { label: string; value:
 }
 
 export function RepeatingGroup<T>({
-  title, items, empty, onChange, renderRow, addLabel = "Add",
+  title, items, empty, onChange, renderRow, addLabel = "Add More",
 }: {
   title: string;
   items: T[] | undefined;
@@ -198,11 +212,13 @@ export function Field({ label, value }: { label: string; value: string | number 
   );
 }
 
-export function DegreeView({ label, degree }: { label: string; degree: DegreeDetail | undefined }) {
+export function DegreeView({ label, degree: degreeInput }: { label: string; degree: DegreeDetail | undefined }) {
+  const degree = resolveDegree(degreeInput);
   return (
     <div className="rounded-lg border bg-muted/20 shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
       <p className="col-span-2 sm:col-span-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-      <Field label="Degree & Branch" value={degree?.degreeAndBranch} />
+      <Field label="Degree" value={degree?.degree} />
+      <Field label="Branch" value={degree?.branch} />
       <Field label="University / Institute" value={degree?.universityOrInstitute} />
       <Field label="Percentage / Division" value={degree?.percentageOrDivision} />
       <Field label="Year of Completion" value={degree?.yearOfCompletion} />

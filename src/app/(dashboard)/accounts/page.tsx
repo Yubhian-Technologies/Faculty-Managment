@@ -51,7 +51,7 @@ export default function AccountsDashboard() {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/accounts/offers">
+        <Link href="/accounts/hiring">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-blue-600 bg-blue-50">

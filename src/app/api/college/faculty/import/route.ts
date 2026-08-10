@@ -5,12 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
-import type {
-  Designation, EmploymentType, FacultyStatus, DegreeDetail, CourseAssignment, Publication, PreviousInstitution,
-  FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, PromotionRecord, AdminResponsibilityEntry,
-  AdminResponsibilityCategory, TrainingEntry, TrainingEntryType, ProfessionalMembership, ProfessionalBody,
-  AwardEntry, AwardCategory, CourseFileEntry,
-} from "@/types";
+import type { Designation, EmploymentType } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -44,134 +39,21 @@ const EMPLOYMENT_MAP: Record<string, EmploymentType> = {
   "dummy": "CONTRACT",
 };
 
-const STATUS_MAP: Record<string, FacultyStatus> = {
-  "active": "ACTIVE",
-  "on leave": "ON_LEAVE",
-  "resigned": "RESIGNED",
-  "retired": "RETIRED",
-};
-
-const PI_CO_PI_MAP: Record<string, "PI" | "CO_PI"> = {
-  "pi": "PI",
-  "co-pi": "CO_PI",
-  "co pi": "CO_PI",
-  "copi": "CO_PI",
-};
-
-const ADMIN_RESPONSIBILITY_CATEGORY_MAP: Record<string, AdminResponsibilityCategory> = {
-  "coordinator role": "COORDINATOR",
-  "coordinator": "COORDINATOR",
-  "committee membership": "COMMITTEE_MEMBER",
-  "committee member": "COMMITTEE_MEMBER",
-  "nba / naac work": "NBA_NAAC",
-  "nba/naac work": "NBA_NAAC",
-  "nba naac": "NBA_NAAC",
-  "nba": "NBA_NAAC",
-  "naac": "NBA_NAAC",
-  "iqac": "IQAC",
-  "examination duty": "EXAMINATION_DUTY",
-  "other": "OTHER",
-};
-
-const TRAINING_TYPE_MAP: Record<string, TrainingEntryType> = {
-  "fdp": "FDP",
-  "workshop": "WORKSHOP",
-  "mooc": "MOOC",
-  "certification": "CERTIFICATION",
-  "skill development": "SKILL_DEVELOPMENT",
-  "administrative": "ADMINISTRATIVE",
-  "administrative training": "ADMINISTRATIVE",
-  "erp": "ERP",
-  "erp training": "ERP",
-  "office automation": "OFFICE_AUTOMATION",
-  "office automation training": "OFFICE_AUTOMATION",
-  "other": "OTHER",
-};
-
-const PROFESSIONAL_BODY_MAP: Record<string, ProfessionalBody> = {
-  "ieee": "IEEE",
-  "iste": "ISTE",
-  "csi": "CSI",
-  "acm": "ACM",
-  "iei": "IEI",
-  "other": "OTHER",
-};
-
-const AWARD_CATEGORY_MAP: Record<string, AwardCategory> = {
-  "best teacher award": "BEST_TEACHER",
-  "best teacher": "BEST_TEACHER",
-  "research award": "RESEARCH_AWARD",
-  "appreciation certificate": "APPRECIATION_CERTIFICATE",
-  "appreciation": "APPRECIATION_CERTIFICATE",
-  "other": "OTHER",
-};
-
 type ImportRow = {
   employeeId: string;
   name: string;
-  email: string;
-  password?: string;
+  apaarFacultyId?: string;
+  collegeEmail: string;
   phone?: string;
+  password?: string;
   designation: string;
   qualification: string;
   specialization?: string;
+  experienceYears?: string;
   employmentType: string;
   joiningDate: string;
-  dateOfBirth?: string;
-  gender?: string;
-  fatherName?: string;
-  motherName?: string;
-  aadharNo?: string;
-  panNo?: string;
-  passportNumber?: string;
-  emergencyContactName?: string;
-  emergencyContactPhone?: string;
-  religion?: string;
-  caste?: string;
-  legalName?: string;
-  collegeEmail?: string;
-  ratificationStatus?: string;
-  ratificationDate?: string;
-  hasPHD?: string;
-  experienceYears?: string;
-  internalExperience?: string;
-  externalExperience?: string;
-  inCampusExperience?: string;
-  industryExperience?: string;
-  researchExperience?: string;
-  status?: string;
-  maritalStatus?: string;
-  spouseName?: string;
-  numberOfChildren?: string;
-  referral?: string;
-  nativePlace?: string;
-  temporaryAddress?: string;
-  permanentSameAsTemporary?: string;
-  permanentAddress?: string;
-  bloodGroup?: string;
-  // Academic Profile (Modules 1-5) - flattened columns, all optional
-  [key: string]: string | undefined;
+  dateOfJoiningDepartment?: string;
 };
-
-function num(v: string | undefined): number | undefined {
-  if (!v?.trim()) return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-// Firestore rejects `undefined` inside array elements (unlike top-level
-// document fields, which the payload-building code strips manually below) -
-// so any repeating-group entry with an optional numeric/string field left
-// blank (e.g. an Admin Responsibility with no "To Year" because it's
-// ongoing) must have that field removed here, not just left `undefined`, or
-// batch.set() throws and fails the entire import.
-function omitUndefined<T extends Record<string, unknown>>(obj: T): T {
-  const out = { ...obj };
-  for (const key of Object.keys(out)) {
-    if (out[key] === undefined) delete out[key];
-  }
-  return out;
-}
 
 // Accepts the template's YYYY-MM-DD format, and falls back to DD-MM-YYYY /
 // DD/MM/YYYY (what Excel re-saves a date cell as under an Indian locale, even
@@ -205,202 +87,6 @@ function parseDate(v: string | undefined): Date | undefined {
     return d.getMonth() === Number(mm) - 1 && d.getDate() === Number(dd) ? sane(d) : undefined;
   }
   return sane(new Date(trimmed));
-}
-
-function degree(row: ImportRow, prefix: string): DegreeDetail | undefined {
-  const degreeAndBranch = row[`${prefix}_degreeAndBranch`]?.trim();
-  const universityOrInstitute = row[`${prefix}_university`]?.trim();
-  const percentageOrDivision = row[`${prefix}_percentage`]?.trim();
-  const yearOfCompletion = num(row[`${prefix}_year`]);
-  if (!degreeAndBranch && !universityOrInstitute && !percentageOrDivision && !yearOfCompletion) return undefined;
-  return { degreeAndBranch: degreeAndBranch ?? "", universityOrInstitute: universityOrInstitute ?? "", percentageOrDivision: percentageOrDivision ?? "", yearOfCompletion: yearOfCompletion ?? 0 };
-}
-
-function courses(row: ImportRow): CourseAssignment[] {
-  return [1, 2, 3]
-    .map((i) => ({ code: row[`course${i}_code`]?.trim() ?? "", name: row[`course${i}_name`]?.trim() ?? "", weeklyCreditHours: num(row[`course${i}_hours`]) ?? 0 }))
-    .filter((c) => c.code || c.name || c.weeklyCreditHours);
-}
-
-function previousInstitutions(row: ImportRow): PreviousInstitution[] {
-  return [1, 2, 3]
-    .map((i) => ({ institutionName: row[`previousInstitution${i}_name`]?.trim() ?? "", designation: row[`previousInstitution${i}_designation`]?.trim() ?? "", yearsWorked: num(row[`previousInstitution${i}_years`]) ?? 0 }))
-    .filter((p) => p.institutionName || p.designation);
-}
-
-function publications(row: ImportRow): Publication[] {
-  return [1, 2, 3]
-    .map((i) => ({ title: row[`publication${i}_title`]?.trim() ?? "", coAuthors: row[`publication${i}_coAuthors`]?.trim() ?? "", journalOrConference: row[`publication${i}_journal`]?.trim() ?? "", publicationYear: num(row[`publication${i}_year`]) ?? 0, indexing: row[`publication${i}_indexing`]?.trim() ?? "" }))
-    .filter((p) => p.title || p.journalOrConference);
-}
-
-function fundedProjects(row: ImportRow): FundedProject[] {
-  return [1, 2, 3]
-    .map((i) => {
-      const roleKey = (row[`project${i}_role`] ?? "").trim().toLowerCase();
-      const piOrCoPi = PI_CO_PI_MAP[roleKey];
-      return {
-        title: row[`project${i}_title`]?.trim() ?? "", fundingAgency: row[`project${i}_agency`]?.trim() ?? "",
-        grantAmountLakhs: num(row[`project${i}_amount`]) ?? 0, year: num(row[`project${i}_year`]) ?? 0,
-        status: row[`project${i}_status`]?.trim() ?? "", ...(piOrCoPi ? { piOrCoPi } : {}),
-      };
-    })
-    .filter((p) => p.title || p.fundingAgency);
-}
-
-function promotions(row: ImportRow): PromotionRecord[] {
-  return [1, 2, 3]
-    .map((i) => ({ fromDesignation: row[`promotion${i}_fromDesignation`]?.trim() ?? "", toDesignation: row[`promotion${i}_toDesignation`]?.trim() ?? "", effectiveYear: num(row[`promotion${i}_effectiveYear`]) ?? 0 }))
-    .filter((p) => p.fromDesignation || p.toDesignation);
-}
-
-function adminResponsibilities(row: ImportRow): AdminResponsibilityEntry[] {
-  return [1, 2, 3]
-    .map((i) => omitUndefined({
-      category: ADMIN_RESPONSIBILITY_CATEGORY_MAP[(row[`adminResp${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
-      description: row[`adminResp${i}_description`]?.trim() ?? "",
-      fromYear: num(row[`adminResp${i}_fromYear`]),
-      toYear: num(row[`adminResp${i}_toYear`]),
-    }))
-    .filter((a) => a.description);
-}
-
-function trainingEntries(row: ImportRow): TrainingEntry[] {
-  return [1, 2, 3]
-    .map((i) => omitUndefined({
-      type: TRAINING_TYPE_MAP[(row[`training${i}_type`] ?? "").trim().toLowerCase()] ?? "OTHER",
-      title: row[`training${i}_title`]?.trim() ?? "",
-      organizer: row[`training${i}_organizer`]?.trim() ?? "",
-      year: num(row[`training${i}_year`]) ?? 0,
-      durationDays: num(row[`training${i}_durationDays`]),
-    }))
-    .filter((t) => t.title || t.organizer);
-}
-
-function professionalMemberships(row: ImportRow): ProfessionalMembership[] {
-  return [1, 2, 3]
-    .map((i) => {
-      const bodyRaw = row[`membership${i}_body`]?.trim();
-      const body = PROFESSIONAL_BODY_MAP[(bodyRaw ?? "").toLowerCase()];
-      return omitUndefined({
-        body: body ?? "OTHER",
-        ...(!body && bodyRaw ? { otherName: bodyRaw } : row[`membership${i}_otherName`]?.trim() ? { otherName: row[`membership${i}_otherName`]!.trim() } : {}),
-        membershipId: row[`membership${i}_membershipId`]?.trim() || undefined,
-        sinceYear: num(row[`membership${i}_sinceYear`]),
-      });
-    })
-    .filter((m) => m.membershipId || m.sinceYear !== undefined || m.otherName);
-}
-
-function awards(row: ImportRow): AwardEntry[] {
-  return [1, 2, 3]
-    .map((i) => ({
-      category: AWARD_CATEGORY_MAP[(row[`award${i}_category`] ?? "").trim().toLowerCase()] ?? "OTHER",
-      title: row[`award${i}_title`]?.trim() ?? "",
-      awardingBody: row[`award${i}_awardingBody`]?.trim() ?? "",
-      year: num(row[`award${i}_year`]) ?? 0,
-    }))
-    .filter((a) => a.title || a.awardingBody);
-}
-
-function courseFiles(row: ImportRow): CourseFileEntry[] {
-  return [1, 2, 3]
-    .map((i) => ({ courseCode: row[`courseFile${i}_courseCode`]?.trim() ?? "", courseName: row[`courseFile${i}_courseName`]?.trim() ?? "", academicYear: row[`courseFile${i}_academicYear`]?.trim() ?? "" }))
-    .filter((c) => c.courseCode || c.courseName);
-}
-
-function consultancyProjects(row: ImportRow): ConsultancyProject[] {
-  return [1, 2, 3]
-    .map((i) => ({ title: row[`consultancy${i}_title`]?.trim() ?? "", clientOrAgency: row[`consultancy${i}_client`]?.trim() ?? "", revenueLakhs: num(row[`consultancy${i}_revenue`]) ?? 0, year: num(row[`consultancy${i}_year`]) ?? 0, status: row[`consultancy${i}_status`]?.trim() ?? "" }))
-    .filter((c) => c.title || c.clientOrAgency);
-}
-
-function labsEstablished(row: ImportRow): LabEstablished[] {
-  return [1, 2, 3]
-    .map((i) => ({ facilityDetails: row[`lab${i}_details`]?.trim() ?? "", outcomes: row[`lab${i}_outcomes`]?.trim() ?? "" }))
-    .filter((l) => l.facilityDetails || l.outcomes);
-}
-
-function authoredBooks(row: ImportRow): AuthoredBook[] {
-  return [1, 2, 3]
-    .map((i) => ({ title: row[`book${i}_title`]?.trim() ?? "", publisher: row[`book${i}_publisher`]?.trim() ?? "", year: num(row[`book${i}_year`]) ?? 0 }))
-    .filter((b) => b.title || b.publisher);
-}
-
-function buildAcademicProfile(row: ImportRow): Record<string, unknown> | undefined {
-  const profile: Record<string, unknown> = {
-    highestQualification: row.highestQualification?.trim() ?? "",
-    ugDetails: degree(row, "ug"),
-    pgDetails: degree(row, "pg"),
-    phdDetails: degree(row, "phd"),
-    postDoctoralDetails: degree(row, "postdoc"),
-    phdStatus: row.phdStatus?.trim().toUpperCase().includes("PURSU") ? "PURSUING" : row.phdStatus?.trim() ? "AWARDED" : undefined,
-    phdMode: row.phdMode?.trim().toUpperCase().includes("PART") ? "PART_TIME" : row.phdMode?.trim() ? "FULL_TIME" : undefined,
-    phdSupervisorName: row.phdSupervisorName?.trim() || undefined,
-    fellowshipsReceived: row.fellowshipsReceived?.trim() || undefined,
-    gateQualifiedYear: num(row.gateQualifiedYear),
-    gateScore: num(row.gateScore),
-    netSletQualificationYear: num(row.netSletQualificationYear),
-    teachingAssignment: row.primaryTeachingRole?.trim() || courses(row).length > 0
-      ? { primaryTeachingRole: row.primaryTeachingRole?.trim() ?? "", courses: courses(row) }
-      : undefined,
-    previousInstitutions: previousInstitutions(row),
-    promotionHistory: promotions(row),
-    publications: publications(row),
-    publicationsFirstOrCorrespondingAuthor: num(row.publicationsFirstOrCorrespondingAuthor) ?? 0,
-    publicationsQ1OrHighImpact: num(row.publicationsQ1OrHighImpact) ?? 0,
-    sciScopusCount: num(row.sciScopusCount) ?? 0,
-    wosCount: num(row.wosCount) ?? 0,
-    conferencePapersCount: num(row.conferencePapersCount) ?? 0,
-    bookChaptersCount: num(row.bookChaptersCount) ?? 0,
-    reviewPublicationsCount: num(row.reviewPublicationsCount) ?? 0,
-    totalPublications: num(row.totalPublications) ?? 0,
-    totalCitations: num(row.totalCitations) ?? 0,
-    hIndex: num(row.hIndex) ?? 0,
-    i10Index: num(row.i10Index) ?? 0,
-    googleScholarId: row.googleScholarId?.trim() || undefined,
-    scopusAuthorId: row.scopusAuthorId?.trim() || undefined,
-    orcidId: row.orcidId?.trim() || undefined,
-    fundedProjects: fundedProjects(row),
-    consultancyProjects: consultancyProjects(row),
-    patents: {
-      indianFiled: num(row.patentIndianFiled) ?? 0,
-      indianPublished: num(row.patentIndianPublished) ?? 0,
-      indianGranted: num(row.patentIndianGranted) ?? 0,
-      internationalFiled: num(row.patentInternationalFiled) ?? 0,
-      internationalPublished: num(row.patentInternationalPublished) ?? 0,
-      internationalGranted: num(row.patentInternationalGranted) ?? 0,
-      details: row.patentDetails?.trim() ?? "",
-    },
-    phdScholarsPursuing: (num(row.phdScholarsPursuingCount) || row.phdScholarsPursuingUniversities?.trim())
-      ? { count: num(row.phdScholarsPursuingCount) ?? 0, universities: row.phdScholarsPursuingUniversities?.trim() ?? "" }
-      : undefined,
-    phdScholarsAwarded: (num(row.phdScholarsAwardedCount) || row.phdScholarsAwardedUniversities?.trim())
-      ? { count: num(row.phdScholarsAwardedCount) ?? 0, universities: row.phdScholarsAwardedUniversities?.trim() ?? "" }
-      : undefined,
-    nationalExposure: row.nationalExposure?.trim() || undefined,
-    internationalExposure: row.internationalExposure?.trim() || undefined,
-    labsEstablished: labsEstablished(row),
-    adminResponsibilityEntries: adminResponsibilities(row),
-    administrativeResponsibilities: row.administrativeResponsibilities?.trim() || undefined,
-    trainingEntries: trainingEntries(row),
-    certificationsAndFdps: row.certificationsAndFdps?.trim() || undefined,
-    professionalMemberships: professionalMemberships(row),
-    professionalBodyMemberships: row.professionalBodyMemberships?.trim() || undefined,
-    authoredBooks: authoredBooks(row),
-    awardEntries: awards(row),
-    notableAwards: row.notableAwards?.trim() || undefined,
-    courseFilesAndCoPoMapping: courseFiles(row),
-    presentSalary: num(row.presentSalary),
-    grossAnnualCTC: num(row.grossAnnualCTC),
-    incrementsAwarded: num(row.incrementsAwarded),
-    fundingConsultancyRevenue: num(row.fundingConsultancyRevenue),
-    otherInformation: row.otherInformation?.trim() || undefined,
-  };
-  for (const key of Object.keys(profile)) {
-    if (profile[key] === undefined) delete profile[key];
-  }
-  return Object.keys(profile).length > 0 ? profile : undefined;
 }
 
 export async function POST(request: Request) {
@@ -469,9 +155,9 @@ export async function POST(request: Request) {
 
       // Required field validation
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
-      if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name is required" }); continue; }
-      if (!row.email?.trim() || !row.email.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid email is required" }); continue; }
-      if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Joining date is required" }); continue; }
+      if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name is required" }); continue; }
+      if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
+      if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
 
       const empId = row.employeeId.trim();
       if (existingIds.has(empId)) {
@@ -487,17 +173,9 @@ export async function POST(request: Request) {
       const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
       const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
 
-      // Map status
-      const statusKey = (row.status ?? "").trim().toLowerCase();
-      const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
-
       // Parse dates
       const joiningDate = parseDate(row.joiningDate);
-      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid joining date - use YYYY-MM-DD" }); continue; }
-      const dateOfBirth = parseDate(row.dateOfBirth);
-      if (row.dateOfBirth?.trim() && !dateOfBirth) dropped(empId, "Date of birth", row.dateOfBirth);
-      const ratificationDate = parseDate(row.ratificationDate);
-      if (row.ratificationDate?.trim() && !ratificationDate) dropped(empId, "Ratification date", row.ratificationDate);
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid Date of Joining Institution - use YYYY-MM-DD" }); continue; }
       const dateOfJoiningDepartment = parseDate(row.dateOfJoiningDepartment);
       if (row.dateOfJoiningDepartment?.trim() && !dateOfJoiningDepartment) dropped(empId, "Date of joining department", row.dateOfJoiningDepartment);
 
@@ -518,7 +196,7 @@ export async function POST(request: Request) {
       // there is what keeps that button hidden once this has run).
       let userUid: string | undefined;
       const passwordRaw = row.password?.trim();
-      const loginEmail = row.collegeEmail?.trim().toLowerCase() || row.email.trim().toLowerCase();
+      const loginEmail = row.collegeEmail.trim().toLowerCase();
       if (passwordRaw) {
         if (passwordRaw.length < 8) {
           warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - must be at least 8 characters (faculty record was still created without a login)" });
@@ -544,49 +222,16 @@ export async function POST(request: Request) {
         employeeId: empId,
         name: row.name.trim(),
         apaarFacultyId: row.apaarFacultyId?.trim() || undefined,
-        email: row.email.trim().toLowerCase(),
+        collegeEmail: loginEmail,
         phone: row.phone?.trim() ?? "",
         designation,
         qualification: row.qualification?.trim() ?? "",
         specialization: row.specialization?.trim() ?? "",
         employmentType,
-        experienceYears: checkNum(row.experienceYears, "Total Experience") ?? 0,
+        experienceYears: checkNum(row.experienceYears, "Years of Experience") ?? 0,
         joiningDate,
         dateOfJoiningDepartment: dateOfJoiningDepartment || undefined,
-        aicteEligible: row.aicteEligible ? row.aicteEligible.trim().toLowerCase() === "yes" : undefined,
-        status,
-        gender: row.gender?.trim() || undefined,
-        dateOfBirth: dateOfBirth || undefined,
-        legalName: row.legalName?.trim() || undefined,
-        fatherName: row.fatherName?.trim() || undefined,
-        motherName: row.motherName?.trim() || undefined,
-        aadharNo: row.aadharNo?.trim() || undefined,
-        panNo: row.panNo?.trim().toUpperCase() || undefined,
-        passportNumber: row.passportNumber?.trim() || undefined,
-        emergencyContactName: row.emergencyContactName?.trim() || undefined,
-        emergencyContactPhone: row.emergencyContactPhone?.trim() || undefined,
-        religion: row.religion?.trim() || undefined,
-        caste: row.caste?.trim() || undefined,
-        collegeEmail: row.collegeEmail?.trim().toLowerCase() || undefined,
-        ratificationStatus: row.ratificationStatus?.toLowerCase().includes("not") ? "Not Ratified" : row.ratificationStatus?.trim() ? "Ratified" : undefined,
-        ratificationDate: ratificationDate || undefined,
-        hasPHD: row.hasPHD ? row.hasPHD.trim().toLowerCase() === "yes" : undefined,
-        maritalStatus: row.maritalStatus?.trim().toLowerCase().startsWith("married") ? "Married" : row.maritalStatus?.trim() ? "Single" : undefined,
-        spouseName: row.spouseName?.trim() || undefined,
-        numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
-        referral: row.referral?.trim() || undefined,
-        nativePlace: row.nativePlace?.trim() || undefined,
-        bloodGroup: row.bloodGroup?.trim() || undefined,
-        temporaryAddress: row.temporaryAddress?.trim() || undefined,
-        permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
-        permanentAddress: row.permanentAddress?.trim() || undefined,
-        resumeUrl: row.resumeUrl?.trim() || undefined,
-        internalExperience: checkNum(row.internalExperience, "Internal Exp"),
-        externalExperience: checkNum(row.externalExperience, "External Exp"),
-        inCampusExperience: checkNum(row.inCampusExperience, "In Campus Exp"),
-        industryExperience: checkNum(row.industryExperience, "Industry Exp"),
-        researchExperience: checkNum(row.researchExperience, "Research Exp"),
-        academicProfile: buildAcademicProfile(row),
+        status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
       };

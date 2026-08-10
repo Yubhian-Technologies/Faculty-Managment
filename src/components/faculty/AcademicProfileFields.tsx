@@ -18,6 +18,7 @@ import type {
   PromotionRecord,
   TrainingEntry,
   TrainingEntryType,
+  TrainingParticipationRole,
   ProfessionalMembership,
   ProfessionalBody,
   AdminResponsibilityEntry,
@@ -27,7 +28,7 @@ import type {
   CourseFileEntry,
 } from "@/types";
 import {
-  TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
+  TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, PROFESSIONAL_BODY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
 } from "@/types";
 
@@ -43,7 +44,7 @@ const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", gran
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
 const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
-const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "", yearsWorked: 0 };
+const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "", fromYear: new Date().getFullYear(), toYear: new Date().getFullYear() };
 const EMPTY_PROMOTION: PromotionRecord = { fromDesignation: "", toDesignation: "", effectiveYear: new Date().getFullYear() };
 const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "", year: new Date().getFullYear() };
 const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
@@ -112,7 +113,8 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           <>
             <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
             <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
-            <NumInput label="Years Worked" value={item.yearsWorked} onChange={(v) => update({ yearsWorked: v })} />
+            <NumInput label="From Year" value={item.fromYear} onChange={(v) => update({ fromYear: v })} />
+            <NumInput label="To Year" value={item.toYear} onChange={(v) => update({ toYear: v })} />
             <div className="sm:col-span-2">
               <Label className="text-xs">Experience Certificate</Label>
               <CertificateUploadField
@@ -331,6 +333,17 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(TRAINING_ENTRY_TYPE_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Participated or Conducted</Label>
+              <Select value={item.role ?? ""} onValueChange={(v) => update({ role: v as TrainingParticipationRole })}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TRAINING_PARTICIPATION_ROLE_LABELS).map(([k, label]) => (
                     <SelectItem key={k} value={k}>{label}</SelectItem>
                   ))}
                 </SelectContent>

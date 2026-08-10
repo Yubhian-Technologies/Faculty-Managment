@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RELIGION_LABELS, CASTE_LABELS } from "@/types";
+import type { Religion, Caste } from "@/types";
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
@@ -14,8 +16,9 @@ export interface PersonalDetailsValue {
   legalName?: string;
   fatherName?: string;
   motherName?: string;
-  religion?: string;
-  caste?: string;
+  religion?: Religion;
+  caste?: Caste;
+  subCaste?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
@@ -85,11 +88,25 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
         </div>
         <div className="space-y-2">
           <Label>Religion</Label>
-          <Input value={value.religion ?? ""} onChange={(e) => set("religion", e.target.value)} placeholder="e.g. Hindu" />
+          <Select value={value.religion ?? ""} onValueChange={(v) => set("religion", v as Religion)}>
+            <SelectTrigger><SelectValue placeholder="Select religion" /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(RELIGION_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label>Caste</Label>
-          <Input value={value.caste ?? ""} onChange={(e) => set("caste", e.target.value)} placeholder="e.g. OC, BC-B" />
+          <Select value={value.caste ?? ""} onValueChange={(v) => set("caste", v as Caste)}>
+            <SelectTrigger><SelectValue placeholder="Select caste" /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(CASTE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Sub Caste</Label>
+          <Input value={value.subCaste ?? ""} onChange={(e) => set("subCaste", e.target.value)} placeholder="e.g. BC-B" />
         </div>
         <div className="space-y-2">
           <Label>Aadhar No</Label>

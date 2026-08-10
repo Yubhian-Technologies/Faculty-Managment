@@ -2,18 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Pencil, Upload, Download, Trash2, LogIn, FileDown } from "lucide-react";
+import { UserPlus, Eye, Upload, Download, Trash2, LogIn, FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
 import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
-import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
+import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS, TECHNICAL_STAFF_DESIGNATIONS } from "@/types";
 import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment } from "@/types";
+
+type FacultyCategory = "TEACHING" | "TECHNICAL";
+
+const CATEGORY_TABS: { key: FacultyCategory; label: string }[] = [
+  { key: "TEACHING", label: "Teaching Faculty" },
+  { key: "TECHNICAL", label: "Technical Faculty" },
+];
+
+function isTechnicalDesignation(designation: unknown): boolean {
+  return TECHNICAL_STAFF_DESIGNATIONS.includes(designation as Designation);
+}
 
 function fmtDate(val: unknown): string {
   if (!val) return "-";
@@ -57,6 +69,7 @@ export default function HODFacultyPage() {
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<FacultyCategory>("TEACHING");
 
   const [deleteTarget, setDeleteTarget] = useState<FacultyRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -147,6 +160,10 @@ export default function HODFacultyPage() {
     { key: "RETIRED", label: "Retired" },
   ];
 
+  const visibleFaculty = faculty.filter((f) =>
+    categoryFilter === "TECHNICAL" ? isTechnicalDesignation(f.designation) : !isTechnicalDesignation(f.designation)
+  );
+
   const columns: Column<FacultyRow>[] = [
     {
       key: "name",
@@ -176,7 +193,7 @@ export default function HODFacultyPage() {
     },
     {
       key: "designation",
-      header: "Academic Profile",
+      header: "Designation",
       render: (row) => (
         <div className="space-y-0.5">
           <p className="text-sm font-medium">{DESIGNATION_LABELS[row.designation as Designation] ?? (row.designation as string)}</p>
@@ -250,8 +267,8 @@ export default function HODFacultyPage() {
             </Button>
           )}
           {row.accessLevel !== "secondary" && (
-            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}/edit`); }}>
-              <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
+            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}`); }}>
+              <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
             </Button>
           )}
           <Button
@@ -294,6 +311,8 @@ export default function HODFacultyPage() {
         }
       />
 
+      <SegmentedTabs options={CATEGORY_TABS} value={categoryFilter} onChange={(key) => setCategoryFilter(key as FacultyCategory)} />
+
       <div className="flex gap-2 flex-wrap">
         {STATUS_TABS.map((tab) => (
           <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
@@ -304,13 +323,14 @@ export default function HODFacultyPage() {
       </div>
 
       <DataTable
-        data={faculty}
+        data={visibleFaculty}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
+        onRowClick={(row) => router.push(`/hod/faculty/${row.id}`)}
         searchPlaceholder="Search by name, email, employee ID..."
         searchKeys={["name", "email", "employeeId", "specialization"] as (keyof FacultyRow)[]}
-        emptyTitle="No faculty records yet"
+        emptyTitle={categoryFilter === "TECHNICAL" ? "No technical staff records yet" : "No teaching faculty records yet"}
         emptyDescription="Add faculty members to build your department's staff register"
         emptyAction={<Button onClick={() => router.push("/hod/faculty/new")}><UserPlus className="h-4 w-4 mr-2" />Add Faculty</Button>}
       />

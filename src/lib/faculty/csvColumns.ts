@@ -1,6 +1,12 @@
-// Shared faculty CSV column definitions - used by both the bulk-import template
-// (src/app/(dashboard)/hod/faculty/import/page.tsx) and the full-detail export
-// (src/lib/faculty/exportFacultyCsv.ts), so the two stay in sync.
+// Faculty CSV column definitions.
+//
+// IMPORT_COLUMNS/IMPORT_HINTS (below COLUMNS/HINTS) are the only columns the
+// bulk-import template (src/app/(dashboard)/hod/faculty/import/page.tsx) and
+// import route (src/app/api/college/faculty/import/route.ts) accept -
+// deliberately just the core identity/employment fields, not the full
+// Academic Profile. COLUMNS/HINTS remain the full column set used only by the
+// full-detail export (src/lib/faculty/exportFacultyCsv.ts) - import and
+// export are intentionally no longer symmetric.
 
 export interface FacultyCsvColumn {
   key: string;
@@ -44,6 +50,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "emergencyContactPhone", label: "Emergency Contact Phone",  required: false, sample: "" },
   { key: "religion",          label: "Religion",                     required: false, sample: "Hindu" },
   { key: "caste",             label: "Caste",                        required: false, sample: "OC" },
+  { key: "subCaste",          label: "Sub Caste",                    required: false, sample: "" },
   { key: "collegeEmail",      label: "College Email",                required: false, sample: "ravi@vishnu.edu.in" },
   { key: "ratificationStatus",label: "Ratification Status",          required: false, sample: "Ratified" },
   { key: "ratificationDate",  label: "Ratification Date (YYYY-MM-DD)", required: false, sample: "2021-04-27" },
@@ -62,19 +69,23 @@ export const COLUMNS: FacultyCsvColumn[] = [
 
   // ─── Academic Profile (Modules 1-5) - all optional ───────────────────────────
   { key: "highestQualification",   label: "Highest Qualification Earned",       required: false, sample: "Ph.D" },
-  { key: "ug_degreeAndBranch",     label: "UG Degree & Branch",                 required: false, sample: "B.Tech CSE" },
+  { key: "ug_degree",              label: "UG Degree",                          required: false, sample: "B.Tech" },
+  { key: "ug_branch",              label: "UG Branch",                          required: false, sample: "CSE" },
   { key: "ug_university",          label: "UG University/Institute",            required: false, sample: "JNTU Kakinada" },
   { key: "ug_percentage",          label: "UG Percentage/Division",             required: false, sample: "78%" },
   { key: "ug_year",                label: "UG Year of Completion",              required: false, sample: "2008" },
-  { key: "pg_degreeAndBranch",     label: "PG Degree & Branch",                 required: false, sample: "M.Tech CSE" },
+  { key: "pg_degree",              label: "PG Degree",                          required: false, sample: "M.Tech" },
+  { key: "pg_branch",              label: "PG Branch",                          required: false, sample: "CSE" },
   { key: "pg_university",          label: "PG University/Institute",            required: false, sample: "NIT Warangal" },
   { key: "pg_percentage",          label: "PG Percentage/Division",             required: false, sample: "82%" },
   { key: "pg_year",                label: "PG Year of Completion",              required: false, sample: "2011" },
-  { key: "phd_degreeAndBranch",    label: "PhD Degree & Branch",                required: false, sample: "Ph.D CSE" },
+  { key: "phd_degree",             label: "PhD Degree",                         required: false, sample: "Ph.D" },
+  { key: "phd_branch",             label: "PhD Branch",                         required: false, sample: "CSE" },
   { key: "phd_university",         label: "PhD University/Institute",           required: false, sample: "IIT Hyderabad" },
   { key: "phd_percentage",         label: "PhD Percentage/Division",            required: false, sample: "-" },
   { key: "phd_year",               label: "PhD Year of Completion",             required: false, sample: "2017" },
-  { key: "postdoc_degreeAndBranch", label: "Post-Doctoral Degree & Branch",     required: false, sample: "" },
+  { key: "postdoc_degree",         label: "Post-Doctoral Degree",               required: false, sample: "" },
+  { key: "postdoc_branch",         label: "Post-Doctoral Branch",               required: false, sample: "" },
   { key: "postdoc_university",     label: "Post-Doctoral University/Institute", required: false, sample: "" },
   { key: "postdoc_percentage",     label: "Post-Doctoral Percentage/Division",  required: false, sample: "" },
   { key: "postdoc_year",           label: "Post-Doctoral Year of Completion",   required: false, sample: "" },
@@ -213,16 +224,19 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "adminResp3_toYear",      label: "Admin Responsibility 3 - To Year (blank = ongoing)", required: false, sample: "" },
   { key: "administrativeResponsibilities", label: "Administrative Responsibilities Held (+achievements) - legacy, read-only in the form", required: false, sample: "" },
   { key: "training1_type",         label: "Training 1 - Type",                  required: false, sample: "" },
+  { key: "training1_role",         label: "Training 1 - Participated/Conducted", required: false, sample: "" },
   { key: "training1_title",        label: "Training 1 - Title",                 required: false, sample: "" },
   { key: "training1_organizer",    label: "Training 1 - Organizer",             required: false, sample: "" },
   { key: "training1_year",         label: "Training 1 - Year",                  required: false, sample: "" },
   { key: "training1_durationDays", label: "Training 1 - Duration (Days)",       required: false, sample: "" },
   { key: "training2_type",         label: "Training 2 - Type",                  required: false, sample: "" },
+  { key: "training2_role",         label: "Training 2 - Participated/Conducted", required: false, sample: "" },
   { key: "training2_title",        label: "Training 2 - Title",                 required: false, sample: "" },
   { key: "training2_organizer",    label: "Training 2 - Organizer",             required: false, sample: "" },
   { key: "training2_year",         label: "Training 2 - Year",                  required: false, sample: "" },
   { key: "training2_durationDays", label: "Training 2 - Duration (Days)",       required: false, sample: "" },
   { key: "training3_type",         label: "Training 3 - Type",                  required: false, sample: "" },
+  { key: "training3_role",         label: "Training 3 - Participated/Conducted", required: false, sample: "" },
   { key: "training3_title",        label: "Training 3 - Title",                 required: false, sample: "" },
   { key: "training3_organizer",    label: "Training 3 - Organizer",             required: false, sample: "" },
   { key: "training3_year",         label: "Training 3 - Year",                  required: false, sample: "" },
@@ -319,3 +333,33 @@ export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
   required: false,
   sample: "",
 };
+
+// ─── Bulk-import template - core fields only ──────────────────────────────────
+// The rest of a faculty member's record (personal details, Academic Profile,
+// Technical Profile, etc.) is filled in afterward from the Edit Faculty page -
+// bulk import is for quickly getting people into the system, not a full data
+// migration path.
+export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
+  { key: "employeeId",   label: "Employee ID",   required: true,  sample: "VIT001", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
+  { key: "name",         label: "Full Name",     required: true,  sample: "Dr. A. Ravi Kumar", aliases: ["Faculty Name", "Name", "Employee Name"] },
+  { key: "apaarFacultyId", label: "APAAR Faculty ID", required: false, sample: "", aliases: ["APAAR ID"] },
+  { key: "collegeEmail", label: "College Email", required: true,  sample: "ravi@vishnu.edu.in", aliases: ["Email", "Email ID"] },
+  { key: "phone",        label: "Phone",         required: false, sample: "9876543210", aliases: ["Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
+  { key: "password",     label: "Login Password (min 8 characters, optional)", required: false, sample: "", aliases: ["Password"] },
+  { key: "designation",  label: "Designation",   required: true,  sample: "Asst. Prof." },
+  { key: "qualification", label: "Highest Qualification", required: true, sample: "M.Tech", aliases: ["Qualification"] },
+  { key: "specialization", label: "Specialization", required: false, sample: "Machine Learning" },
+  { key: "experienceYears", label: "Years of Experience", required: false, sample: "5", aliases: ["Experience", "Total Experience"] },
+  { key: "employmentType", label: "Employment Type", required: true, sample: "Regular", aliases: ["Employment", "Type of Employment"] },
+  { key: "joiningDate",  label: "Date of Joining Institution (YYYY-MM-DD)", required: true, sample: "2020-06-01", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
+  { key: "dateOfJoiningDepartment", label: "Date of Joining Department (YYYY-MM-DD)", required: false, sample: "", aliases: ["Department Joining Date"] },
+];
+
+export const IMPORT_HINTS = [
+  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty (Teaching); Lab Assistant, Programmer, System Administrator, Network Engineer, Other (Technical)",
+  "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",
+  "Dates must be in YYYY-MM-DD format (e.g. 2020-06-01)",
+  "Department is auto-assigned from your HOD profile",
+  "Login Password (optional): fill this in to create the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Leave it blank to skip login creation for that row; you can still set it up later from the Faculty list's \"Set Login\" button.",
+  "Personal details, Academic Profile, and Technical Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
+];

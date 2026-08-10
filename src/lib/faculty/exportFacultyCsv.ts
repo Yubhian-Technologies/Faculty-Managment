@@ -6,11 +6,11 @@
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
 import { COLUMNS, TEACHING_SUMMARY_COLUMN } from "@/lib/faculty/csvColumns";
-import { ADMIN_RESPONSIBILITY_CATEGORY_LABELS, TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, AWARD_CATEGORY_LABELS } from "@/types";
+import { ADMIN_RESPONSIBILITY_CATEGORY_LABELS, TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, AWARD_CATEGORY_LABELS, RELIGION_LABELS, CASTE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS } from "@/types";
 import type {
   FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution,
   FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, PromotionRecord, AdminResponsibilityEntry,
-  TrainingEntry, ProfessionalMembership, AwardEntry, CourseFileEntry,
+  TrainingEntry, ProfessionalMembership, AwardEntry, CourseFileEntry, Religion, Caste,
 } from "@/types";
 
 function s(v: unknown): string {
@@ -21,9 +21,9 @@ function yesNo(v: boolean | undefined): string {
   return v === undefined ? "" : v ? "Yes" : "No";
 }
 
-function degreeCells(d: DegreeDetail | undefined): [string, string, string, string] {
-  if (!d) return ["", "", "", ""];
-  return [d.degreeAndBranch ?? "", d.universityOrInstitute ?? "", d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
+function degreeCells(d: DegreeDetail | undefined): [string, string, string, string, string] {
+  if (!d) return ["", "", "", "", ""];
+  return [d.degree ?? "", d.branch ?? "", d.universityOrInstitute ?? "", d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
 }
 
 function courseCells(courses: CourseAssignment[] | undefined, i: number): [string, string, string] {
@@ -33,7 +33,9 @@ function courseCells(courses: CourseAssignment[] | undefined, i: number): [strin
 
 function previousInstitutionCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string] {
   const p = items?.[i];
-  return p ? [p.institutionName ?? "", p.designation ?? "", p.yearsWorked ? String(p.yearsWorked) : ""] : ["", "", ""];
+  if (!p) return ["", "", ""];
+  const years = p.fromYear || p.toYear ? `${p.fromYear ?? ""}-${p.toYear ?? ""}` : "";
+  return [p.institutionName ?? "", p.designation ?? "", years];
 }
 
 function publicationCells(items: Publication[] | undefined, i: number): [string, string, string, string, string] {
@@ -62,11 +64,11 @@ function adminRespCells(items: AdminResponsibilityEntry[] | undefined, i: number
     : ["", "", "", ""];
 }
 
-function trainingCells(items: TrainingEntry[] | undefined, i: number): [string, string, string, string, string] {
+function trainingCells(items: TrainingEntry[] | undefined, i: number): [string, string, string, string, string, string] {
   const t = items?.[i];
   return t
-    ? [TRAINING_ENTRY_TYPE_LABELS[t.type] ?? t.type, t.title ?? "", t.organizer ?? "", t.year ? String(t.year) : "", t.durationDays ? String(t.durationDays) : ""]
-    : ["", "", "", "", ""];
+    ? [TRAINING_ENTRY_TYPE_LABELS[t.type] ?? t.type, t.role ? TRAINING_PARTICIPATION_ROLE_LABELS[t.role] : "", t.title ?? "", t.organizer ?? "", t.year ? String(t.year) : "", t.durationDays ? String(t.durationDays) : ""]
+    : ["", "", "", "", "", ""];
 }
 
 function membershipCells(items: ProfessionalMembership[] | undefined, i: number): [string, string, string, string] {
@@ -107,10 +109,10 @@ function bookCells(books: AuthoredBook[] | undefined, i: number): [string, strin
 
 function buildRow(faculty: FacultyMember, teachingSummary: string): Record<string, string> {
   const p: Partial<FacultyProfileFields> = faculty.academicProfile ?? {};
-  const [ugDegree, ugUniv, ugPct, ugYear] = degreeCells(p.ugDetails);
-  const [pgDegree, pgUniv, pgPct, pgYear] = degreeCells(p.pgDetails);
-  const [phdDegree, phdUniv, phdPct, phdYear] = degreeCells(p.phdDetails);
-  const [postdocDegree, postdocUniv, postdocPct, postdocYear] = degreeCells(p.postDoctoralDetails);
+  const [ugDegree, ugBranch, ugUniv, ugPct, ugYear] = degreeCells(p.ugDetails);
+  const [pgDegree, pgBranch, pgUniv, pgPct, pgYear] = degreeCells(p.pgDetails);
+  const [phdDegree, phdBranch, phdUniv, phdPct, phdYear] = degreeCells(p.phdDetails);
+  const [postdocDegree, postdocBranch, postdocUniv, postdocPct, postdocYear] = degreeCells(p.postDoctoralDetails);
 
   const row: Record<string, string> = {
     employeeId: s(faculty.employeeId),
@@ -142,8 +144,9 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     passportNumber: s(faculty.passportNumber),
     emergencyContactName: s(faculty.emergencyContactName),
     emergencyContactPhone: s(faculty.emergencyContactPhone),
-    religion: s(faculty.religion),
-    caste: s(faculty.caste),
+    religion: faculty.religion ? (RELIGION_LABELS[faculty.religion as Religion] ?? s(faculty.religion)) : "",
+    caste: faculty.caste ? (CASTE_LABELS[faculty.caste as Caste] ?? s(faculty.caste)) : "",
+    subCaste: s(faculty.subCaste),
     collegeEmail: s(faculty.collegeEmail),
     ratificationStatus: s(faculty.ratificationStatus),
     ratificationDate: toDateInputValue(faculty.ratificationDate),
@@ -161,10 +164,10 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     resumeUrl: s(faculty.resumeUrl),
 
     highestQualification: s(p.highestQualification),
-    ug_degreeAndBranch: ugDegree, ug_university: ugUniv, ug_percentage: ugPct, ug_year: ugYear,
-    pg_degreeAndBranch: pgDegree, pg_university: pgUniv, pg_percentage: pgPct, pg_year: pgYear,
-    phd_degreeAndBranch: phdDegree, phd_university: phdUniv, phd_percentage: phdPct, phd_year: phdYear,
-    postdoc_degreeAndBranch: postdocDegree, postdoc_university: postdocUniv, postdoc_percentage: postdocPct, postdoc_year: postdocYear,
+    ug_degree: ugDegree, ug_branch: ugBranch, ug_university: ugUniv, ug_percentage: ugPct, ug_year: ugYear,
+    pg_degree: pgDegree, pg_branch: pgBranch, pg_university: pgUniv, pg_percentage: pgPct, pg_year: pgYear,
+    phd_degree: phdDegree, phd_branch: phdBranch, phd_university: phdUniv, phd_percentage: phdPct, phd_year: phdYear,
+    postdoc_degree: postdocDegree, postdoc_branch: postdocBranch, postdoc_university: postdocUniv, postdoc_percentage: postdocPct, postdoc_year: postdocYear,
     phdStatus: s(p.phdStatus),
     phdMode: s(p.phdMode),
     phdSupervisorName: s(p.phdSupervisorName),
@@ -245,8 +248,8 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     row[`adminResp${n}_category`] = arCategory; row[`adminResp${n}_description`] = arDescription;
     row[`adminResp${n}_fromYear`] = arFromYear; row[`adminResp${n}_toYear`] = arToYear;
 
-    const [trType, trTitle, trOrganizer, trYear, trDuration] = trainingCells(p.trainingEntries, n - 1);
-    row[`training${n}_type`] = trType; row[`training${n}_title`] = trTitle; row[`training${n}_organizer`] = trOrganizer;
+    const [trType, trRole, trTitle, trOrganizer, trYear, trDuration] = trainingCells(p.trainingEntries, n - 1);
+    row[`training${n}_type`] = trType; row[`training${n}_role`] = trRole; row[`training${n}_title`] = trTitle; row[`training${n}_organizer`] = trOrganizer;
     row[`training${n}_year`] = trYear; row[`training${n}_durationDays`] = trDuration;
 
     const [memBody, memOtherName, memId, memSinceYear] = membershipCells(p.professionalMemberships, n - 1);
