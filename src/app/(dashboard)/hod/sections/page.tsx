@@ -392,10 +392,12 @@ export default function HODSectionsPage() {
                         </div>
                       </div>
 
-                      {/* Department assignment - only rendered for a main HOD whose
-                          department has sub-departments; lets them hand this section
-                          to a Sub-HOD (or pull it back) without recreating it. */}
-                      {deptOptions.length > 1 && sec.accessLevel !== "secondary" && (
+                      {/* Department reassignment - only for a MAIN HOD whose department
+                          has sub-departments, to hand a section to a Sub-HOD (or pull it
+                          back). Hidden for a Sub-HOD: their sections already carry the
+                          real branch they created them under, so the picker was just
+                          noise. The section's department is shown as a badge above. */}
+                      {deptOptions.length > 1 && !isGroupingContainer && sec.accessLevel !== "secondary" && (
                         <div className="flex items-center gap-2">
                           <Network className="h-4 w-4 opacity-50 shrink-0" />
                           <Select

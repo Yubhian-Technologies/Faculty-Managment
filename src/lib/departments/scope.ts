@@ -90,25 +90,34 @@ export async function getHodDepartmentScope(
 
   let childDepartmentNames: string[] = [];
   let childDepartmentIds: string[] = [];
+  // Start with this department's own grouped branches; a parent HOD also rolls
+  // up every branch grouped under its sub-HODs (below), so e.g. the Basic
+  // Science HOD manages IT/CSE that a BS-Maths sub-HOD manages - "manages the
+  // whole tree", not just the direct sub-departments.
+  const managedNameSet = new Set((dept.managedDepartments ?? []).map((n) => n.trim()).filter(Boolean));
   if (dept.hasSubDepartments) {
     const childrenSnap = await deptsColl.where("parentDepartmentId", "==", deptDoc.id).get();
     // Firestore `in` filters cap at 30 values - realistically a handful of sub-departments per parent.
     const children = childrenSnap.docs
-      .map((d) => ({ id: d.id, name: (d.data() as { name?: string }).name ?? "" }))
+      .map((d) => ({ id: d.id, ...(d.data() as { name?: string; managedDepartments?: string[] }) }))
       .filter((d) => d.name)
       .slice(0, 30);
-    childDepartmentNames = children.map((d) => d.name);
+    childDepartmentNames = children.map((d) => d.name as string);
     childDepartmentIds = children.map((d) => d.id);
+    for (const c of children) {
+      for (const n of c.managedDepartments ?? []) {
+        const t = n.trim();
+        if (t) managedNameSet.add(t);
+      }
+    }
   }
 
-  // Grouped/managed branches: resolve this department's `managedDepartments`
-  // names to their department ids (skip any that no longer exist). Capped at 30
-  // to stay within Firestore `in`-query limits at the call sites that use these.
+  // Grouped/managed branches: resolve the collected `managedDepartments` names
+  // (own + sub-HODs') to their department ids (skip any that no longer exist).
+  // Capped at 30 to stay within Firestore `in`-query limits at the call sites.
   const managedDepartmentNames: string[] = [];
   const managedDepartmentIds: string[] = [];
-  const managedNames = Array.from(
-    new Set((dept.managedDepartments ?? []).map((n) => n.trim()).filter(Boolean))
-  ).slice(0, 30);
+  const managedNames = Array.from(managedNameSet).slice(0, 30);
   if (managedNames.length > 0) {
     const managedSnaps = await Promise.all(
       managedNames.map((n) => deptsColl.where("name", "==", n).limit(1).get())
