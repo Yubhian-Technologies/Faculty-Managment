@@ -509,6 +509,18 @@ service cloud.firestore {
         allow delete: if isHODorAbove(collegeId);
       }
 
+      // Faculty's own class attendance session for a section+subject+date
+      // (owner can create/edit while DRAFT; locked once SUBMITTED — mirrors
+      // internalExamMarks above).
+      match /studentAttendance/{sessionId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isPanelMember(collegeId) && request.resource.data.facultyId == request.auth.uid;
+        allow update: if isHODorAbove(collegeId) ||
+          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
+            && resource.data.status == 'DRAFT');
+        allow delete: if isHODorAbove(collegeId);
+      }
+
       match /workloadSummaries/{summaryId} {
         allow read: if isStaff(collegeId);
         allow write: if isHODorAbove(collegeId);
