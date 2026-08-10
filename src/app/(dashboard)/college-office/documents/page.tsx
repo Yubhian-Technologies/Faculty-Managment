@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Save, Mail, CheckCircle2, XCircle, Send } from "lucide-react";
+import { Plus, Download, Save, Mail, CheckCircle2, XCircle, Send, KeyRound, Clock } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { downloadDocumentAcknowledgementPdf } from "@/lib/pdf/downloadDocumentAcknowledgement";
 import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
-import type { Candidate, CandidateApplication, HiringBatch, OfferLetter } from "@/types";
+import { RequestFacultyAccountDialog } from "@/components/hiring/RequestFacultyAccountDialog";
+import { MarkOfferAcceptedDialog } from "@/components/hiring/MarkOfferAcceptedDialog";
+import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
+import type { Candidate, CandidateApplication, HiringBatch, OfferLetter, FacultyAccountRequest } from "@/types";
 
 type Phase = "AWAITING_OFFER" | "AWAITING_ACCEPTANCE" | "AWAITING_DOCS" | "READY_TO_NOTIFY" | "NOTIFIED" | "APPOINTMENT_SENT";
 
@@ -55,6 +58,9 @@ export default function CollegeOfficeDocumentsPage() {
   // the Principal before ever saving. See documentVerification.allVerified.
   const [persistedVerified, setPersistedVerified] = useState<Record<string, boolean>>({});
   const [scope, setScope] = useState<"active" | "closed">("active");
+  const [accountRequestsByOfferId, setAccountRequestsByOfferId] = useState<Record<string, FacultyAccountRequest>>({});
+  const [requestDialogOffer, setRequestDialogOffer] = useState<OfferLetter | null>(null);
+  const [acceptDialogOffer, setAcceptDialogOffer] = useState<OfferLetter | null>(null);
 
   function offerKey(candidateId: string, batchId?: string) {
     return `${candidateId}::${batchId ?? ""}`;
@@ -68,8 +74,9 @@ export default function CollegeOfficeDocumentsPage() {
       fetch("/api/college/info").then((r) => r.json() as Promise<{ name: string }>).catch(() => ({ name: "" })),
       fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferLetter[] }>).catch(() => ({ letters: [] })),
       fetch("/api/college/appointment-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>).catch(() => ({ letters: [] })),
+      fetch("/api/college/faculty-account-requests").then((r) => r.json() as Promise<{ requests: FacultyAccountRequest[] }>).catch(() => ({ requests: [] })),
     ])
-      .then(([appsRes, candsRes, batchesRes, infoRes, offersRes, appointmentsRes]) => {
+      .then(([appsRes, candsRes, batchesRes, infoRes, offersRes, appointmentsRes, accountRequestsRes]) => {
         // Show every Principal-approved application right away — the office dashboard
         // tracks them from decision through offer, verification, and appointment.
         const personMap = new Map((candsRes.candidates ?? []).map((c) => [c.id, c]));
@@ -98,6 +105,7 @@ export default function CollegeOfficeDocumentsPage() {
           if (!offerMap[key]) offerMap[key] = letter;
         }
         setOfferByCandidate(offerMap);
+        setAccountRequestsByOfferId(Object.fromEntries((accountRequestsRes.requests ?? []).map((r) => [r.offerId, r])));
 
         setJoiningLetterUrls(Object.fromEntries(decisionApps.map((a) => [a.id, a.joiningLetterUrl ?? ""])));
         setNotifiedIds(new Set(decisionApps.filter((a) => a.documentVerification?.notifiedPrincipalAt).map((a) => a.id)));
@@ -226,7 +234,7 @@ export default function CollegeOfficeDocumentsPage() {
     }
   }
 
-  async function handleOfferAction(candidate: DocCandidateView, action: "ACCEPTED" | "REJECTED") {
+  async function handleOfferReject(candidate: DocCandidateView) {
     const key = offerKey(candidate.candidateId, candidate.batchId);
     const offer = offerByCandidate[key];
     if (!offer) return;
@@ -235,16 +243,15 @@ export default function CollegeOfficeDocumentsPage() {
       const res = await fetch(`/api/college/offer-letters/${offer.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: action }),
+        body: JSON.stringify({ status: "REJECTED" }),
       });
       if (!res.ok) throw new Error();
       setOfferByCandidate((prev) => {
         const next = { ...prev };
-        if (action === "REJECTED") delete next[key];
-        else next[key] = { ...offer, status: "ACCEPTED" };
+        delete next[key];
         return next;
       });
-      toast({ variant: "success", title: action === "ACCEPTED" ? "Offer marked accepted" : "Offer marked rejected" });
+      toast({ variant: "success", title: "Offer marked rejected" });
     } catch {
       toast({ variant: "destructive", title: "Failed to update offer status" });
     } finally {
@@ -362,10 +369,15 @@ export default function CollegeOfficeDocumentsPage() {
                           Offer sent — mark it once the candidate confirms acceptance.
                         </span>
                         <div className="flex gap-2 shrink-0">
-                          <Button size="sm" className="bg-green-600 hover:bg-green-700" disabled={busyId === candidate.id} onClick={() => void handleOfferAction(candidate, "ACCEPTED")}>
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                            disabled={busyId === candidate.id}
+                            onClick={() => setAcceptDialogOffer(offerByCandidate[offerKey(candidate.candidateId, candidate.batchId)] ?? null)}
+                          >
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Mark Accepted
                           </Button>
-                          <Button size="sm" variant="destructive" disabled={busyId === candidate.id} onClick={() => void handleOfferAction(candidate, "REJECTED")}>
+                          <Button size="sm" variant="destructive" disabled={busyId === candidate.id} onClick={() => void handleOfferReject(candidate)}>
                             <XCircle className="h-3.5 w-3.5 mr-1.5" /> Mark Rejected
                           </Button>
                         </div>
@@ -433,12 +445,35 @@ export default function CollegeOfficeDocumentsPage() {
                             Principal notified — awaiting the appointment letter.
                           </div>
                         )}
-                        {phase === "APPOINTMENT_SENT" && (
-                          <div className="pt-2 border-t flex items-center gap-1.5 text-sm text-green-600">
-                            <CheckCircle2 className="h-4 w-4" />
-                            Hiring complete — appointment letter has been sent.
-                          </div>
-                        )}
+                        {phase === "APPOINTMENT_SENT" && (() => {
+                          const offer = offerByCandidate[offerKey(candidate.candidateId, candidate.batchId)];
+                          const accountRequest = offer ? accountRequestsByOfferId[offer.id] : undefined;
+                          return (
+                            <div className="pt-2 border-t space-y-2">
+                              <div className="flex items-center gap-1.5 text-sm text-green-600">
+                                <CheckCircle2 className="h-4 w-4" />
+                                Hiring complete — appointment letter has been sent.
+                              </div>
+                              {offer && (
+                                accountRequest ? (
+                                  <Badge variant="outline" className="text-xs">
+                                    {accountRequest.status === "COMPLETED" ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                                    Faculty Account: {FACULTY_ACCOUNT_REQUEST_STATUS_LABELS[accountRequest.status]}
+                                  </Badge>
+                                ) : !offer.candidateConfirmedJoiningDate ? (
+                                  <p className="text-xs text-muted-foreground" title="The candidate hasn't confirmed a date of joining via the offer acceptance form yet">
+                                    Awaiting candidate&apos;s confirmed date of joining before the faculty account can be requested
+                                  </p>
+                                ) : (
+                                  <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" onClick={() => setRequestDialogOffer(offer)}>
+                                    <KeyRound className="h-3.5 w-3.5 mr-1.5" />
+                                    Request Faculty Account
+                                  </Button>
+                                )
+                              )}
+                            </div>
+                          );
+                        })()}
                       </>
                     )}
                   </CardContent>
@@ -448,6 +483,27 @@ export default function CollegeOfficeDocumentsPage() {
           </div>
         </div>
       ))}
+
+      {requestDialogOffer && (
+        <RequestFacultyAccountDialog
+          offerId={requestDialogOffer.id}
+          candidateName={requestDialogOffer.candidateName ?? ""}
+          open={!!requestDialogOffer}
+          onOpenChange={(open) => { if (!open) setRequestDialogOffer(null); }}
+          onSubmitted={() => { setRequestDialogOffer(null); load(); }}
+        />
+      )}
+
+      {acceptDialogOffer && (
+        <MarkOfferAcceptedDialog
+          offerId={acceptDialogOffer.id}
+          candidateName={acceptDialogOffer.candidateName ?? ""}
+          defaultJoiningDate={acceptDialogOffer.joiningDate}
+          open={!!acceptDialogOffer}
+          onOpenChange={(open) => { if (!open) setAcceptDialogOffer(null); }}
+          onAccepted={() => { setAcceptDialogOffer(null); load(); }}
+        />
+      )}
     </div>
   );
 }

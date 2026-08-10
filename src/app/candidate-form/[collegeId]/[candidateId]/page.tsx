@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { FileUpload } from "@/components/shared/FileUpload";
 import { DocumentTypeCombobox } from "@/components/shared/DocumentTypeCombobox";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
 import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
@@ -74,6 +75,7 @@ export default function CandidateFormPage() {
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const [form, setForm] = useState<CandidateBioData>({});
   const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
@@ -144,7 +146,7 @@ export default function CandidateFormPage() {
     setRelatives((prev) => prev.filter((r) => r.id !== id));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmitClick(e: React.FormEvent) {
     e.preventDefault();
     const missing = requiredDocuments.filter((label) => !requiredFiles[label]);
     if (missing.length > 0) {
@@ -155,6 +157,10 @@ export default function CandidateFormPage() {
       });
       return;
     }
+    setConfirmOpen(true);
+  }
+
+  async function handleSubmit() {
     setSaving(true);
     try {
       const certificates: Array<{ name: string; url: string }> = [];
@@ -216,6 +222,7 @@ export default function CandidateFormPage() {
         }),
       });
       if (!res.ok) throw new Error();
+      setConfirmOpen(false);
       setSubmitted(true);
     } catch {
       toast({ variant: "destructive", title: "Failed to submit", description: "Please try again." });
@@ -277,7 +284,8 @@ export default function CandidateFormPage() {
           </CardContent>
         </Card>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+        <form onSubmit={handleSubmitClick} className="space-y-5">
+        <div className="columns-1 md:columns-2 gap-5 [&>*]:mb-5 [&>*]:break-inside-avoid">
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -664,17 +672,27 @@ export default function CandidateFormPage() {
               </Button>
             </CardContent>
           </Card>
+        </div>
 
           <Button
             type="submit"
-            className="w-full md:col-span-2"
-            loading={saving}
+            className="w-full"
             disabled={!form.dateOfBirth || !form.gender}
           >
             Submit My Details
           </Button>
         </form>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Submit your details?"
+        description="Once submitted, you won't be able to edit these details or documents yourself — please review everything before confirming. Contact the institution if you need to make changes afterward."
+        confirmLabel="Confirm & Submit"
+        onConfirm={handleSubmit}
+        loading={saving}
+      />
     </div>
   );
 }
