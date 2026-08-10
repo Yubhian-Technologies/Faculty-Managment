@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
-import type { Section, StudentRecord } from "@/types";
+import type { Section, StudentRecord, StudentStatus } from "@/types";
 
 // Move a single student to a different section (roster-management fix-up -
 // e.g. correcting a student who landed under the wrong one of two
@@ -23,7 +23,10 @@ async function loadStudentAndScope(
 ) {
   const scope = role === "HOD" ? await getHodDepartmentScope(db, collegeId, uid) : null;
   const inHodScope = (dept: string) =>
-    !scope || dept === scope.departmentName || scope.childDepartmentNames.includes(dept);
+    !scope ||
+    dept === scope.departmentName ||
+    scope.childDepartmentNames.includes(dept) ||
+    scope.managedDepartmentNames.includes(dept);
   return { scope, inHodScope };
 }
 
@@ -33,9 +36,73 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"
     );
     const { id } = await params;
-    const body = (await request.json()) as { targetSectionId?: string; secondaryDepartment?: string | null };
+    const body = (await request.json()) as {
+      targetSectionId?: string;
+      secondaryDepartment?: string | null;
+      rollNumber?: string;
+      status?: StudentStatus;
+    };
+
+    // Field-only edit (no section move): assign/correct a student's roll number
+    // or status. Roll numbers are the department's responsibility - the assigned
+    // HOD (years 2-4) or sub-HOD (year 1) fills them in after sectioning - so
+    // this path is closed to the College Office and faculty.
     if (!body.targetSectionId) {
-      return NextResponse.json({ error: "targetSectionId is required" }, { status: 400 });
+      if (body.rollNumber === undefined && body.status === undefined) {
+        return NextResponse.json({ error: "targetSectionId is required" }, { status: 400 });
+      }
+      if (!["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"].includes(session.role)) {
+        return NextResponse.json(
+          { error: "Only the department's HOD can set a student's roll number or status" },
+          { status: 403 }
+        );
+      }
+
+      const db = getAdminDb();
+      const collegeRef = db.collection("colleges").doc(session.collegeId);
+      const studentRef = collegeRef.collection("students").doc(id);
+      const studentSnap = await studentRef.get();
+      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      const student = studentSnap.data() as StudentRecord;
+
+      if (session.role === "HOD") {
+        const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+        if (!inHodScope(student.department)) {
+          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        }
+      }
+
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+
+      if (body.status !== undefined) {
+        if (!["REGULAR", "DETAINED", "GRADUATED"].includes(body.status)) {
+          return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+        }
+        updates.status = body.status;
+      }
+
+      if (body.rollNumber !== undefined) {
+        const roll = body.rollNumber.trim();
+        // Roll numbers are unique within a branch + year. Skip the check when
+        // clearing the roll (empty) - many roll-less students can coexist.
+        if (roll) {
+          const dupSnap = await collegeRef.collection("students")
+            .where("rollNumber", "==", roll)
+            .where("department", "==", student.department)
+            .where("year", "==", student.year)
+            .get();
+          if (dupSnap.docs.some((d) => d.id !== id)) {
+            return NextResponse.json(
+              { error: `Roll number ${roll} is already used in ${student.department} Year ${student.year}` },
+              { status: 400 }
+            );
+          }
+        }
+        updates.rollNumber = roll;
+      }
+
+      await studentRef.update(updates);
+      return NextResponse.json({ ok: true });
     }
 
     const db = getAdminDb();
@@ -97,14 +164,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       );
     }
 
+    // Only a real roll number can clash - roll-less students (Office imports
+    // before the department assigns numbers) can share a section freely.
     const roll = student.rollNumber;
-    const dupSnap = await collegeRef.collection("students")
-      .where("rollNumber", "==", roll)
-      .where("section", "==", targetSection.name)
-      .where("year", "==", targetSection.year)
-      .get();
-    if (dupSnap.docs.some((d) => d.id !== id)) {
-      return NextResponse.json({ error: "Roll number already exists in the target section" }, { status: 400 });
+    if (roll) {
+      const dupSnap = await collegeRef.collection("students")
+        .where("rollNumber", "==", roll)
+        .where("section", "==", targetSection.name)
+        .where("year", "==", targetSection.year)
+        .get();
+      if (dupSnap.docs.some((d) => d.id !== id)) {
+        return NextResponse.json({ error: "Roll number already exists in the target section" }, { status: 400 });
+      }
     }
 
     const now = new Date();
