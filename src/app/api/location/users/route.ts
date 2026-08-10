@@ -35,7 +35,9 @@ export async function GET(request: Request) {
       .doc(locationId)
       .collection("locationUsers")
       .get();
-    const users = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    const users = snap.docs
+      .map((d) => ({ uid: d.id, ...d.data() }))
+      .filter((u) => (u as { role?: UserRole }).role !== "ADMINISTRATION");
     return NextResponse.json({ users });
   } catch (err) {
     console.error("[location/users GET]", err);

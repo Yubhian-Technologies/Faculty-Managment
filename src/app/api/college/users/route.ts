@@ -97,6 +97,7 @@ export async function POST(request: Request) {
       email: string;
       collegeEmail?: string;
       employeeId?: string;
+      phone?: string;
       password: string;
       role: UserRole;
       department?: string;
@@ -218,6 +219,7 @@ export async function POST(request: Request) {
         email,
         ...(body.collegeEmail ? { collegeEmail: body.collegeEmail } : {}),
         ...(body.employeeId ? { employeeId: body.employeeId } : {}),
+        ...(body.phone ? { phone: body.phone } : {}),
         role,
         department: resolvedDepartment,
         ...(body.staffType ? { staffType: body.staffType } : {}),

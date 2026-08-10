@@ -233,7 +233,7 @@ export default function PrincipalTimetablePage() {
         </div>
       ) : slots.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No timetable has been published for this section yet. The HOD generates and publishes it from their Timetable page.
+          No timetable has been published for this section yet. The HOD builds and publishes it from their Timetable page.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
