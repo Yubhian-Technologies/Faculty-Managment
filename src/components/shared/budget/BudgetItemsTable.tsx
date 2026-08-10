@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, stripLeadingZeros } from "@/lib/utils";
-import { fieldConfigForCategory, itemTitleOptionsForCategory, itemTotal, DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem, type SalaryStructure, type FacultyMember } from "@/types";
+import { designationLabel } from "@/lib/designations/config";
+import { fieldConfigForCategory, itemTitleOptionsForCategory, itemTotal, EMPLOYMENT_TYPE_LABELS, type BudgetCategoryFieldConfig, type BudgetExtraFieldDef, type BudgetExtraFieldType, type BudgetRequestItem, type SalaryStructure, type FacultyMember } from "@/types";
 
 // Radix Select disallows an empty-string item value, so "none" is the sentinel
 // for "no salary structure selected / enter price manually" and is translated
@@ -17,7 +18,7 @@ const CUSTOM_SALARY_OPTION = "none";
 const CUSTOM_TITLE_OPTION = "__custom__";
 
 function salaryStructureLabel(s: SalaryStructure): string {
-  return `${DESIGNATION_LABELS[s.designation]} · ${EMPLOYMENT_TYPE_LABELS[s.employmentType]}`;
+  return `${designationLabel(s.designation)} · ${EMPLOYMENT_TYPE_LABELS[s.employmentType]}`;
 }
 
 function headcountKey(designation: string, employmentType: string): string {

@@ -39,12 +39,22 @@ function buildDepartmentResolver(
   return (input: string) => byCodeOrName.get(input.trim().toLowerCase());
 }
 
+// Free text (see src/lib/designations/config.ts) - normalizes the original
+// fixed codes every existing Engineering/Pharmacy/Dental record and the 4
+// migrated-in ex-Faculty technical codes expect; anything else (e.g. "AO",
+// "PGT"-adjacent supporting titles for Degree/Polytechnic/School colleges)
+// is stored exactly as typed.
 const NON_TECHNICAL_DESIGNATION_MAP: Record<string, SupportingStaffDesignation> = {
   "office staff": "OFFICE_STAFF",
   "accountant": "ACCOUNTANT",
   "clerk": "CLERK",
   "attender": "ATTENDER",
   "office assistant": "OFFICE_ASSISTANT",
+  "lab assistant": "LAB_ASSISTANT",
+  "programmer": "PROGRAMMER",
+  "system administrator": "SYSTEM_ADMINISTRATOR",
+  "sysadmin": "SYSTEM_ADMINISTRATOR",
+  "network engineer": "NETWORK_ENGINEER",
   "other": "OTHER",
 };
 
@@ -325,6 +335,7 @@ export async function POST(request: Request) {
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Joining date is required" }); continue; }
+      if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
 
       const empId = row.employeeId.trim();
       if (existingIds.has(empId)) {
@@ -334,11 +345,8 @@ export async function POST(request: Request) {
 
       const staffCategory: SupportingStaffCategory = "NON_TECHNICAL";
 
-      const designationKey = (row.designation ?? "").trim().toLowerCase();
-      const designation: SupportingStaffDesignation = NON_TECHNICAL_DESIGNATION_MAP[designationKey] ?? "OTHER";
-      if (designation === "OTHER" && designationKey && designationKey !== "other" && !row.otherDesignationTitle?.trim()) {
-        dropped(empId, "Designation", row.designation);
-      }
+      const designationKey = row.designation.trim().toLowerCase();
+      const designation: SupportingStaffDesignation = NON_TECHNICAL_DESIGNATION_MAP[designationKey] ?? row.designation.trim();
 
       const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
       const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";

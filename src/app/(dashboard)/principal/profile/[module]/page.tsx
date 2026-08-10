@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useAuth } from "@/hooks/useAuth";
+import { useCollegeType } from "@/hooks/useCollegeType";
 
 // Principal/VP have no FacultyMember record of their own (see AGENTS.md) - their
 // academicProfile lives directly on the FMSUser session doc, so this sources
@@ -18,6 +19,7 @@ export default function PrincipalProfileModulePage() {
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
+  const { collegeType } = useCollegeType();
 
   if (!user) return null;
   if (!moduleDef) return <p className="text-sm text-muted-foreground">Unknown section.</p>;
@@ -40,7 +42,7 @@ export default function PrincipalProfileModulePage() {
         }
       />
 
-      <FacultyProfileModuleContent moduleKey={moduleKey} faculty={user} includeTeachingAssignment={false} />
+      <FacultyProfileModuleContent moduleKey={moduleKey} faculty={user} includeTeachingAssignment={false} collegeType={collegeType} />
     </div>
   );
 }

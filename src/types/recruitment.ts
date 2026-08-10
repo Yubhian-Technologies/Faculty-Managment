@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { WorkflowStatus } from "./core";
+import type { WorkflowStatus, UserRole, EmploymentType } from "./core";
 
 // ─── Vacancy Request ──────────────────────────────────────────────────────────
 
@@ -390,6 +390,24 @@ export interface StudentFeedback {
   submittedAt: Timestamp;
 }
 
+// ─── Hiring Terms & Conditions Library ─────────────────────────────────────────
+// Principal-managed, reusable terms shown/ticked during offer negotiation
+// (see /principal/settings and /principal/negotiate/[id]). Offers/applications
+// store a text *snapshot* of whichever terms were selected, not a reference to
+// this doc, so deactivating a template never changes what already-sent offers
+// say.
+
+export interface HiringTermsTemplate {
+  id: string;
+  collegeId: string;
+  text: string;
+  isActive: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 // ─── Offer & Appointment Letters ──────────────────────────────────────────────
 
 export interface OfferLetter {
@@ -416,6 +434,14 @@ export interface OfferLetter {
   credentialsRequestedByName?: string;
   credentialsFulfilledAt?: Timestamp;
   credentialsFulfilledBy?: string;
+  // Candidate self-service acceptance (see /offer-acceptance/[collegeId]/[offerId]).
+  // offeredTerms is a snapshot of the terms shown to the candidate at send time -
+  // not a reference to HiringTermsTemplate, so it never changes after the fact.
+  offeredTerms?: string[];
+  termsAcceptedAt?: Timestamp;
+  candidateConfirmedJoiningDate?: string;
+  respondedAt?: Timestamp;
+  respondedBy?: "CANDIDATE" | string; // uid when a staff member used the manual override instead
 }
 
 export interface AppointmentLetter {
@@ -433,4 +459,53 @@ export interface AppointmentLetter {
   status: "DRAFT" | "GENERATED" | "SENT";
   generatedBy: string;
   generatedByUid?: string;
+}
+
+// ─── Office → Webmaster Faculty Account Request ────────────────────────────────
+// A distinct state machine from OfferLetter's own SENT/ACCEPTED/REJECTED -
+// this tracks the separate "create this accepted candidate's login" handoff
+// (see /college-office/offers "Request Faculty Account" and /webmaster).
+// "Pending" from the spec is the pre-request eligibility gate shown in the UI
+// before Office acts (offer ACCEPTED + appointment letter sent) - not a stored
+// status; the doc is created directly at SUBMITTED.
+
+export type FacultyAccountRequestStatus = "SUBMITTED" | "IN_PROGRESS" | "CREDENTIALS_CREATED" | "COMPLETED";
+
+export const FACULTY_ACCOUNT_REQUEST_STATUS_LABELS: Record<FacultyAccountRequestStatus, string> = {
+  SUBMITTED: "Submitted",
+  IN_PROGRESS: "In Progress",
+  CREDENTIALS_CREATED: "Credentials Created",
+  COMPLETED: "Completed",
+};
+
+export interface FacultyAccountRequestAction {
+  action: FacultyAccountRequestStatus;
+  byUid: string;
+  byName: string;
+  byRole: UserRole;
+  at: Timestamp;
+  remarks?: string;
+}
+
+export interface FacultyAccountRequest {
+  id: string;
+  collegeId: string;
+  offerId: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone: string;
+  officialEmail: string;
+  designation: string;
+  department: string;
+  employmentType: EmploymentType;
+  specialization?: string;
+  qualification?: string;
+  status: FacultyAccountRequestStatus;
+  history: FacultyAccountRequestAction[]; // doubles as this workflow's audit trail
+  facultyId?: string;
+  requestedBy: string;
+  requestedByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }

@@ -25,13 +25,13 @@ export async function GET(request: Request) {
     // they are listed alongside their own - needed both to pick a sub-department
     // specialist when assigning a shared/parent-owned subject, and to administer
     // those faculty directly (see canHodEditDepartment in lib/departments/scope).
-    let secondaryQuery: FirebaseFirestore.Query | null = null;
+    let childDeptQuery: FirebaseFirestore.Query | null = null;
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.departmentName) primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
       if (scope.childDepartmentNames.length > 0) {
-        secondaryQuery = withStatus(facultyColl.where("department", "in", scope.childDepartmentNames));
+        childDeptQuery = withStatus(facultyColl.where("department", "in", scope.childDepartmentNames));
       }
     } else if (deptFilter) {
       // Office/Principal/VP picking faculty for a specific department (e.g.
@@ -47,16 +47,19 @@ export async function GET(request: Request) {
 
     primaryQuery = withStatus(primaryQuery);
 
-    const [primarySnap, secondarySnap] = await Promise.all([
+    const [primarySnap, childDeptSnap] = await Promise.all([
       primaryQuery.get(),
-      secondaryQuery ? secondaryQuery.get() : Promise.resolve(null),
+      childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
     ]);
 
     const faculty: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] =
       primarySnap.docs.map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" }));
-    if (secondarySnap) {
-      for (const d of secondarySnap.docs) {
-        faculty.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
+    if (childDeptSnap) {
+      // "primary", not "secondary": for an HOD this query holds their own
+      // sub-departments' faculty, which they fully manage (canHodEditDepartment),
+      // so the UI must not mark them view-only.
+      for (const d of childDeptSnap.docs) {
+        faculty.push({ id: d.id, ...d.data(), accessLevel: "primary" });
       }
     }
     faculty.sort((a, b) => {

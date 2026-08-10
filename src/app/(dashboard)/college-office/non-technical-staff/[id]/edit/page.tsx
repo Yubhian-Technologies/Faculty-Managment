@@ -10,14 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
-import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { SupportingStaffProfileFields } from "@/components/supportingStaff/SupportingStaffProfileFields";
+import { DesignationOptions } from "@/components/faculty/DesignationOptions";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
-import {
-  EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
-  NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
-} from "@/types";
+import { EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type {
   EmploymentType, FacultyStatus, SupportingStaffDesignation,
   SupportingStaffProfileFields as ProfileFieldsType, Department, Religion, Caste,
@@ -37,7 +35,7 @@ interface StaffForm {
 }
 
 const EMPTY_FORM: StaffForm = {
-  name: "", phone: "", collegeEmail: "", designation: "OFFICE_STAFF", otherDesignationTitle: "",
+  name: "", phone: "", collegeEmail: "", designation: "", otherDesignationTitle: "",
   department: "", experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
 };
 
@@ -45,6 +43,7 @@ export default function EditNonTechnicalStaffPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
+  const { collegeType } = useCollegeType();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,8 +54,6 @@ export default function EditNonTechnicalStaffPage() {
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [profile, setProfile] = useState<Partial<ProfileFieldsType>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
-  const [joiningLetterUrl, setJoiningLetterUrl] = useState<string>("");
-  const [appointmentLetterUrl, setAppointmentLetterUrl] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/college/departments")
@@ -81,7 +78,7 @@ export default function EditNonTechnicalStaffPage() {
           name: (m.name as string) ?? "",
           phone: (m.phone as string) ?? "",
           collegeEmail: (m.collegeEmail as string) ?? "",
-          designation: (m.designation as SupportingStaffDesignation) ?? "OFFICE_STAFF",
+          designation: (m.designation as SupportingStaffDesignation) ?? "",
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
           department: (m.department as string) ?? "",
           experienceYears: (m.experienceYears as number) ?? 0,
@@ -117,8 +114,6 @@ export default function EditNonTechnicalStaffPage() {
         });
         setProfile((m.supportingStaffProfile as Partial<ProfileFieldsType>) ?? {});
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
-        setJoiningLetterUrl((m.joiningLetterUrl as string) ?? "");
-        setAppointmentLetterUrl((m.appointmentLetterUrl as string) ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
       .finally(() => setLoading(false));
@@ -150,8 +145,6 @@ export default function EditNonTechnicalStaffPage() {
           ...personalDetails,
           supportingStaffProfile: profile,
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
-          joiningLetterUrl,
-          appointmentLetterUrl,
         }),
       });
       if (res.status === 409) {
@@ -230,10 +223,8 @@ export default function EditNonTechnicalStaffPage() {
                   <div className="space-y-2">
                     <Label>Designation *</Label>
                     <Select value={form.designation} onValueChange={(v) => set({ designation: v as SupportingStaffDesignation })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(NON_TECHNICAL_STAFF_DESIGNATION_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                      </SelectContent>
+                      <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
+                      <SelectContent><DesignationOptions collegeType={collegeType} kind="supporting" /></SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
@@ -296,29 +287,6 @@ export default function EditNonTechnicalStaffPage() {
                 <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader><CardTitle className="text-base">Documents</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-xs text-muted-foreground">Upload signed copies of the joining letter and appointment order for this staff member.</p>
-                <DocumentUploadField
-                  label="Joining Letter"
-                  value={joiningLetterUrl || undefined}
-                  uploadEndpoint="/api/upload/supporting-staff-document"
-                  extraFields={{ staffId, docType: "joining-letter" }}
-                  onUploaded={(url) => setJoiningLetterUrl(url)}
-                  onRemoved={() => setJoiningLetterUrl("")}
-                />
-                <DocumentUploadField
-                  label="Appointment Letter"
-                  value={appointmentLetterUrl || undefined}
-                  uploadEndpoint="/api/upload/supporting-staff-document"
-                  extraFields={{ staffId, docType: "appointment-letter" }}
-                  onUploaded={(url) => setAppointmentLetterUrl(url)}
-                  onRemoved={() => setAppointmentLetterUrl("")}
-                />
-              </CardContent>
-            </Card>
           </div>
 
           {/* Right column */}
@@ -326,7 +294,7 @@ export default function EditNonTechnicalStaffPage() {
             <Card>
               <CardHeader><CardTitle className="text-base">Profile</CardTitle></CardHeader>
               <CardContent>
-                <SupportingStaffProfileFields value={profile} onChange={setProfile} />
+                <SupportingStaffProfileFields value={profile} onChange={setProfile} collegeType={collegeType} />
               </CardContent>
             </Card>
           </div>

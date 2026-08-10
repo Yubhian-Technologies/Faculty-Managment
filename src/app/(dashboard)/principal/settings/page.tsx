@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { Info } from "lucide-react";
+import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettingsCard";
 import type { FacultyNorms } from "@/types/core";
 
 interface CollegeInfo {
@@ -198,6 +199,8 @@ export default function PrincipalSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <HiringTermsSettingsCard />
 
       <div className="flex justify-end">
         <Button size="lg" onClick={handleSave} loading={isSaving}>

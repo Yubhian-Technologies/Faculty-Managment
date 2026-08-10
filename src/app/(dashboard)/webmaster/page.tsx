@@ -7,30 +7,29 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmailRequestQueue } from "./EmailRequestQueue";
-import type { EmailCreationRequest, OfferLetter, FMSUser } from "@/types";
+import type { EmailCreationRequest, FacultyAccountRequest, FMSUser } from "@/types";
 
 export default function WebmasterDashboardPage() {
   const [stats, setStats] = useState({ pending: 0, completed: 0 });
-  const [pendingCredentialRequests, setPendingCredentialRequests] = useState(0);
+  const [pendingFacultyAccountRequests, setPendingFacultyAccountRequests] = useState(0);
   const [totalAccounts, setTotalAccounts] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/college/email-requests").then((r) => r.json() as Promise<{ requests: EmailCreationRequest[] }>),
-      fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferLetter[] }>),
+      fetch("/api/college/faculty-account-requests").then((r) => r.json() as Promise<{ requests: FacultyAccountRequest[] }>),
       fetch("/api/college/users?includeAll=true").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
     ])
-      .then(([emailRes, offersRes, usersRes]) => {
+      .then(([emailRes, accountRequestsRes, usersRes]) => {
         const requests = emailRes.requests ?? [];
         setStats({
           pending: requests.filter((r) => r.status === "PENDING").length,
           completed: requests.filter((r) => r.status === "COMPLETED").length,
         });
-        const pendingCredentials = (offersRes.letters ?? []).filter(
-          (l) => l.credentialsRequestedAt && !l.credentialsFulfilledAt
-        ).length;
-        setPendingCredentialRequests(pendingCredentials);
+        setPendingFacultyAccountRequests(
+          (accountRequestsRes.requests ?? []).filter((r) => r.status !== "COMPLETED").length
+        );
         setTotalAccounts((usersRes.users ?? []).length);
       })
       .catch(() => {})
@@ -70,8 +69,8 @@ export default function WebmasterDashboardPage() {
                 <KeyRound className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Pending Credential Requests</p>
-                <p className="text-2xl font-bold">{isLoading ? "…" : pendingCredentialRequests}</p>
+                <p className="text-xs text-muted-foreground">Pending Faculty Account Requests</p>
+                <p className="text-2xl font-bold">{isLoading ? "…" : pendingFacultyAccountRequests}</p>
               </div>
             </CardContent>
           </Card>

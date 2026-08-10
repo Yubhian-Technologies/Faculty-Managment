@@ -67,7 +67,11 @@ export default function HODCandidateDetailPage() {
       .finally(() => setIsLoading(false));
   }, [candidateId, router]);
 
-  useEffect(() => { load(); }, [load]);
+  // Awaited in a wrapper so load()'s setState calls aren't reachable
+  // synchronously from the effect body (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    void (async () => { await load(); })();
+  }, [load]);
 
   if (isLoading || !candidate) {
     return (

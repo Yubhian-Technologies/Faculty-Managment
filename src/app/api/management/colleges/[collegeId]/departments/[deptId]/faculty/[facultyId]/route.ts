@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getPublicationsForUid } from "@/lib/firestore/publications";
 
 // MANAGEMENT is read-only - this route only implements GET.
 export async function GET(_request: Request, { params }: { params: Promise<{ collegeId: string; facultyId: string }> }) {
@@ -18,14 +19,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const assignmentsSnap = await collegeRef
-      .collection("teachingAssignments")
-      .where("facultyId", "==", facultyId)
-      .get();
+    const faculty = { id: snap.id, ...snap.data() } as { userUid?: string };
+
+    const [assignmentsSnap, publications] = await Promise.all([
+      collegeRef.collection("teachingAssignments").where("facultyId", "==", facultyId).get(),
+      faculty.userUid ? getPublicationsForUid(db, collegeId, faculty.userUid) : Promise.resolve([]),
+    ]);
 
     return NextResponse.json({
-      faculty: { id: snap.id, ...snap.data() },
+      faculty,
       teachingAssignments: assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+      publications,
     });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {

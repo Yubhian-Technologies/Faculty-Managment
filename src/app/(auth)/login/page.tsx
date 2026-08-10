@@ -205,6 +205,7 @@ function LoginForm() {
                   autoFocus
                   {...register("email")}
                   aria-invalid={!!errors.email}
+                  suppressHydrationWarning
                 />
                 {errors.email && (
                   <p className="text-sm text-destructive">{errors.email.message}</p>
@@ -222,12 +223,14 @@ function LoginForm() {
                     {...register("password")}
                     aria-invalid={!!errors.password}
                     className="pr-10"
+                    suppressHydrationWarning
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     aria-label={showPassword ? "Hide password" : "Show password"}
+                    suppressHydrationWarning
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -246,6 +249,7 @@ function LoginForm() {
                 className="w-full"
                 size="lg"
                 loading={isSubmitting}
+                suppressHydrationWarning
               >
                 {isSubmitting ? "Signing in..." : "Sign in"}
               </Button>

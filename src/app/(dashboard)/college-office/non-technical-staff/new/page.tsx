@@ -14,11 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { SupportingStaffProfileFields } from "@/components/supportingStaff/SupportingStaffProfileFields";
+import { DesignationOptions } from "@/components/faculty/DesignationOptions";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import {
-  EMPLOYMENT_TYPE_LABELS,
-  NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
-} from "@/types";
+import { EMPLOYMENT_TYPE_LABELS } from "@/types";
 import type { SupportingStaffProfileFields as ProfileFieldsType } from "@/types";
 import type { EmploymentType, Department } from "@/types";
 
@@ -42,6 +41,7 @@ type FormData = z.infer<typeof schema>;
 
 export default function NewNonTechnicalStaffPage() {
   const router = useRouter();
+  const { collegeType } = useCollegeType();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [profile, setProfile] = useState<Partial<ProfileFieldsType>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
@@ -63,7 +63,7 @@ export default function NewNonTechnicalStaffPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, staffCategory: "NON_TECHNICAL", designation: "OFFICE_STAFF", employmentType: "PERMANENT", password: "", department: "" },
+    defaultValues: { experienceYears: 0, staffCategory: "NON_TECHNICAL", designation: "", employmentType: "PERMANENT", password: "", department: "" },
   });
 
   const designation = watch("designation");
@@ -163,11 +163,7 @@ export default function NewNonTechnicalStaffPage() {
                 <Label>Designation *</Label>
                 <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(NON_TECHNICAL_STAFF_DESIGNATION_LABELS).map(([v, l]) => (
-                      <SelectItem key={v} value={v}>{l}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent><DesignationOptions collegeType={collegeType} kind="supporting" /></SelectContent>
                 </Select>
                 {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
               </div>
@@ -239,7 +235,7 @@ export default function NewNonTechnicalStaffPage() {
       <Card className="mt-6">
         <CardHeader><CardTitle className="text-base">Profile</CardTitle></CardHeader>
         <CardContent>
-          <SupportingStaffProfileFields value={profile} onChange={setProfile} />
+          <SupportingStaffProfileFields value={profile} onChange={setProfile} collegeType={collegeType} />
         </CardContent>
       </Card>
     </div>

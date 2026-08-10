@@ -3,10 +3,11 @@
 import { useState, Fragment } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { History } from "lucide-react";
+import { History, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveTypeCode } from "@/types/leave";
@@ -167,6 +168,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [category, setCategory] = useState<EffectiveLeaveCategory>("vacation");
+  const [search, setSearch] = useState("");
 
   const monthlyQuery = useQuery({
     queryKey: [...queryKey, "month", year, month],
@@ -186,14 +188,36 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
   });
 
   const { data, isLoading } = mode === "month" ? monthlyQuery : yearlyQuery;
-  const rows = showCategoryFilter ? (data?.rows ?? []).filter((row) => row.category === category) : (data?.rows ?? []);
+  const categoryRows = showCategoryFilter
+    ? (data?.rows ?? []).filter((row) => row.category === category)
+    : (data?.rows ?? []);
+  const searchTerm = search.trim().toLowerCase();
+  const rows = searchTerm
+    ? categoryRows.filter(
+        (row) =>
+          row.employeeId.toLowerCase().includes(searchTerm) ||
+          row.name.toLowerCase().includes(searchTerm)
+      )
+    : categoryRows;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3 justify-between">
-        {showCategoryFilter ? (
-          <SegmentedTabs value={category} onChange={(key) => setCategory(key as EffectiveLeaveCategory)} options={CATEGORY_TABS} />
-        ) : <div />}
+        <div className="flex flex-wrap items-center gap-3">
+          {showCategoryFilter && (
+            <SegmentedTabs value={category} onChange={(key) => setCategory(key as EffectiveLeaveCategory)} options={CATEGORY_TABS} />
+          )}
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by employee code or name"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+              autoComplete="off"
+            />
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <SegmentedTabs value={mode} onChange={(key) => setMode(key as "month" | "year")} options={MODE_TABS} />
           {mode === "month" && (
@@ -234,9 +258,11 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
               <EmptyState
                 icon={<History className="h-6 w-6" />}
                 title={
-                  !showCategoryFilter || !data || data.rows.length === 0
+                  !data || data.rows.length === 0
                     ? (emptyTitle ?? "No faculty with a login here yet")
-                    : `No ${EFFECTIVE_CATEGORY_LABELS[category]} found`
+                    : categoryRows.length === 0
+                    ? `No ${EFFECTIVE_CATEGORY_LABELS[category]} found`
+                    : `No results for "${search.trim()}"`
                 }
               />
             </div>

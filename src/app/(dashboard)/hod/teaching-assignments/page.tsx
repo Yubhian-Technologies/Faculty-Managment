@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import type { Course, SectionListItem, Subject, TeachingAssignment, FacultyMember } from "@/types";
+import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
+import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
 type FacultyRow = FacultyMember & { accessLevel?: "primary" | "secondary" };
@@ -18,6 +19,9 @@ function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
 }
+
+/** Radix Select rejects "" as an item value, so the "no filter" option needs one. */
+const ALL_DEPARTMENTS = "__all__";
 
 export default function TeachingAssignmentsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -28,7 +32,13 @@ export default function TeachingAssignmentsPage() {
   // Shared course/year context for both the staffing-gap finder and the assign-faculty form.
   const [courseId, setCourseId] = useState("");
   const [year, setYear] = useState("");
+  // "" = every department this HOD manages. Set once a sub-department is picked.
+  const [departmentFilter, setDepartmentFilter] = useState("");
   const [sectionsCache, setSectionsCache] = useState<Record<string, SectionListItem[]>>({});
+  // Needed only to resolve department codes for section labels: a parent HOD
+  // sees their own department's "A" next to each sub-department's "A", so the
+  // department code is what tells them apart - see sectionDisplayLabel.
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
 
   const [assignForm, setAssignForm] = useState({ sectionId: "", subjectId: "", facultyId: "" });
@@ -40,6 +50,7 @@ export default function TeachingAssignmentsPage() {
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)))),
       fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty(d.faculty ?? [])),
       fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>).then((d) => setAssignments(d.assignments ?? [])),
+      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
     ])
       .catch(() => toast({ variant: "destructive", title: "Failed to load teaching data" }))
       .finally(() => setIsLoading(false));
@@ -54,12 +65,33 @@ export default function TeachingAssignmentsPage() {
   }, []);
 
   const key = `${courseId}_${year}`;
-  // Sub-department sections are view-only for a parent HOD - exclude them here
-  // so both the staffing-gap finder and the assign-faculty form only ever
-  // operate on sections this HOD can actually edit.
-  const sections = useMemo(
+  // Everything this HOD may actually edit for the chosen course+year: their own
+  // department's sections plus every sub-department's (a main HOD runs the whole
+  // tree). Only genuinely cross-listed sections from an unrelated department
+  // stay "secondary" and are excluded, since those are view-only.
+  const editableSections = useMemo(
     () => (sectionsCache[key] ?? []).filter((s) => s.accessLevel !== "secondary"),
     [sectionsCache, key]
+  );
+
+  // The departments those sections belong to - the HOD's own plus any
+  // sub-departments that actually run this course+year. Derived from the
+  // sections already loaded, so no extra request.
+  const departmentOptions = useMemo(
+    () =>
+      Array.from(new Set(editableSections.map((s) => s.department).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b)),
+    [editableSections]
+  );
+
+  // A main HOD narrows to one sub-department before picking a section; a sub-HOD
+  // only ever has their own, so this is a no-op for them.
+  const sections = useMemo(
+    () =>
+      departmentFilter
+        ? editableSections.filter((s) => s.department === departmentFilter)
+        : editableSections,
+    [editableSections, departmentFilter]
   );
   const subjects = useMemo(() => subjectsCache[key] ?? [], [subjectsCache, key]);
   const course = courses.find((c) => c.id === courseId) ?? null;
@@ -82,13 +114,21 @@ export default function TeachingAssignmentsPage() {
   function handleCourseChange(v: string) {
     setCourseId(v);
     setYear("");
+    setDepartmentFilter("");
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
   async function handleYearChange(v: string) {
     setYear(v);
+    setDepartmentFilter("");
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
     await ensureCourseYearData(courseId, v);
+  }
+
+  function handleDepartmentChange(v: string) {
+    // ALL is a sentinel: Radix Select can't hold "" as an item value.
+    setDepartmentFilter(v === ALL_DEPARTMENTS ? "" : v);
+    setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
   // Which subject/section combos for the selected course+year have no faculty assigned yet.
@@ -160,12 +200,27 @@ export default function TeachingAssignmentsPage() {
   // missing that context (shouldn't happen going forward, but data can be old) falls into
   // its own bucket rather than silently disappearing.
   const { groups, ungrouped } = useMemo(() => {
-    const map = new Map<string, { courseName: string; year: number; sectionName: string; items: AssignmentRow[] }>();
+    // `key` carries the sectionId-based map key through to React. Course name +
+    // year + section NAME is not unique - a department and its sub-departments
+    // each have their own "A" in the same course-year, which collides.
+    const map = new Map<string, {
+      key: string; courseName: string; year: number; sectionName: string;
+      department?: string; items: AssignmentRow[];
+    }>();
     const ungrouped: AssignmentRow[] = [];
     for (const a of assignments) {
       if (!a.courseId || a.year == null || !a.sectionId) { ungrouped.push(a); continue; }
       const k = `${a.courseId}_${a.year}_${a.sectionId}`;
-      if (!map.has(k)) map.set(k, { courseName: a.courseName ?? "Course", year: a.year, sectionName: a.sectionName ?? "", items: [] });
+      if (!map.has(k)) {
+        map.set(k, {
+          key: k,
+          courseName: a.courseName ?? "Course",
+          year: a.year,
+          sectionName: a.sectionName ?? "",
+          department: a.department,
+          items: [],
+        });
+      }
       map.get(k)!.items.push(a);
     }
     const groups = Array.from(map.values()).sort(
@@ -179,9 +234,9 @@ export default function TeachingAssignmentsPage() {
       <PageHeader title="Teaching Assignments" description="Find staffing gaps and assign faculty to subjects, course &amp; year wise" />
 
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Course &amp; Year</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Course, Year &amp; Department</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-md">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:max-w-3xl">
             <div className="space-y-2">
               <Label>Course</Label>
               <Select value={courseId} onValueChange={handleCourseChange}>
@@ -197,6 +252,28 @@ export default function TeachingAssignmentsPage() {
                 <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                 <SelectContent>
                   {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Narrows everything below to one sub-department. A sub-HOD only
+                ever has their own, so it collapses to a single option. */}
+            <div className="space-y-2">
+              <Label>Sub-department</Label>
+              <Select
+                value={departmentFilter || ALL_DEPARTMENTS}
+                onValueChange={handleDepartmentChange}
+                disabled={!year || departmentOptions.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={year ? "All departments" : "Select a year first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_DEPARTMENTS}>All departments</SelectItem>
+                  {departmentOptions.map((d) => (
+                    <SelectItem key={d} value={d}>
+                      {departmentCode(d, departments)} · {d}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -224,7 +301,7 @@ export default function TeachingAssignmentsPage() {
                     ) : (
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {unstaffedSections.map((s) => (
-                          <Badge key={s.id} variant="rejected">Section {s.name} unstaffed</Badge>
+                          <Badge key={s.id} variant="rejected">{sectionDisplayLabel(s, departments)} unstaffed</Badge>
                         ))}
                       </div>
                     )}
@@ -250,7 +327,9 @@ export default function TeachingAssignmentsPage() {
                   >
                     <SelectTrigger><SelectValue placeholder={sections.length ? "Select section" : "No sections for this year"} /></SelectTrigger>
                     <SelectContent>
-                      {sections.map((s) => <SelectItem key={s.id} value={s.id}>Section {s.name}</SelectItem>)}
+                      {sections.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -313,9 +392,12 @@ export default function TeachingAssignmentsPage() {
           ) : (
             <div className="space-y-5">
               {groups.map((g) => (
-                <div key={`${g.courseName}_${g.year}_${g.sectionName}`}>
+                <div key={g.key}>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                    {g.courseName} · {ordinalYear(g.year)} · Section {g.sectionName}
+                    {g.courseName} · {ordinalYear(g.year)} ·{" "}
+                    {/* Department included: two sections can share a letter. */}
+                    {g.department ? `${departmentCode(g.department, departments)} ` : ""}
+                    Section {g.sectionName}
                   </p>
                   <div className="divide-y rounded-md border">
                     {g.items.map((a) => (

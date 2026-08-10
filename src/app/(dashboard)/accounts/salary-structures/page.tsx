@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { formatCurrency } from "@/lib/utils";
-import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, type SalaryStructure } from "@/types";
+import { designationLabel } from "@/lib/designations/config";
+import { EMPLOYMENT_TYPE_LABELS, type SalaryStructure } from "@/types";
 
 export default function SalaryStructuresPage() {
   const router = useRouter();
@@ -89,7 +90,7 @@ export default function SalaryStructuresPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="secondary" className="text-xs shrink-0">{DESIGNATION_LABELS[s.designation]}</Badge>
+                      <Badge variant="secondary" className="text-xs shrink-0">{designationLabel(s.designation)}</Badge>
                       <Badge variant="outline" className="text-xs shrink-0">{EMPLOYMENT_TYPE_LABELS[s.employmentType]}</Badge>
                       {!s.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
                     </div>

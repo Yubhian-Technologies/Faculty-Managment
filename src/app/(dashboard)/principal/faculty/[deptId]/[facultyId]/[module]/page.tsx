@@ -8,12 +8,14 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import type { FacultyMember, TeachingAssignment } from "@/types";
 
 export default function PrincipalFacultyModulePage() {
   const { deptId, facultyId, module: moduleParam } = useParams<{ deptId: string; facultyId: string; module: string }>();
   const moduleKey = moduleParam as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
+  const { collegeType } = useCollegeType();
 
   const { data: faculty, isLoading } = useQuery({
     queryKey: ["principal-faculty-profile", facultyId],
@@ -49,7 +51,7 @@ export default function PrincipalFacultyModulePage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} />
+        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} />
       ) : null}
     </div>
   );

@@ -348,6 +348,20 @@ service cloud.firestore {
         allow delete: if isSuperAdmin();
       }
 
+      match /hiringTermsTemplates/{templateId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isPrincipal(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      // Office → Webmaster faculty-account handoff. Written exclusively via
+      // Admin SDK API routes (see /api/college/faculty-account-requests) —
+      // this rule is a read-guard for the dashboard pages, not enforcement.
+      match /facultyAccountRequests/{requestId} {
+        allow read: if isStaff(collegeId);
+        allow write: if false;
+      }
+
       // ─── [ WEBMASTER MODULE ] ───────────────────────────────────────────────
       // College Office requests an official institutional email once a hire is
       // finalized; that college's own WEBMASTER fulfills it. All writes happen
@@ -499,14 +513,19 @@ service cloud.firestore {
       }
 
       // Faculty's own internal-exam marks batch (owner can create/edit while
-      // DRAFT; locked once SUBMITTED — mirrors leaveApplications below).
+      // DRAFT; locked once SUBMITTED). HOD is read-only here by design (see
+      // GET /api/college/internal-exam-marks) — deliberately isPrincipal(),
+      // not isHODorAbove(), so HOD never gets write/delete access even at
+      // this coarse rules layer. Principal/VP/Super Admin may correct an
+      // already-submitted batch (enforced status-aware server-side in
+      // PATCH /internal-exam-marks/[id]).
       match /internalExamMarks/{markId} {
         allow read: if isStaff(collegeId);
         allow create: if isPanelMember(collegeId) && request.resource.data.facultyId == request.auth.uid;
-        allow update: if isHODorAbove(collegeId) ||
+        allow update: if isPrincipal(collegeId) ||
           (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
             && resource.data.status == 'DRAFT');
-        allow delete: if isHODorAbove(collegeId);
+        allow delete: if isPrincipal(collegeId);
       }
 
       // Faculty's own class attendance session for a section+subject+date

@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
-import type { Course, Section } from "@/types";
+import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
+import type { Course, Department, Section } from "@/types";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -19,20 +20,24 @@ export default function HODTimetableSectionsPage() {
   const { courseId, year } = useParams<{ courseId: string; year: string }>();
   const [course, setCourse] = useState<Course | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const [coursesData, sectionsData] = await Promise.all([
+        const [coursesData, sectionsData, deptsData] = await Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
           fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
             .then((r) => r.json() as Promise<{ sections: Section[] }>),
+          fetch("/api/college/departments")
+            .then((r) => r.json() as Promise<{ departments: Department[] }>),
         ]);
         if (cancelled) return;
         setCourse((coursesData.courses ?? []).find((c) => c.id === courseId) ?? null);
         setSections((sectionsData.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+        setDepartments(deptsData.departments ?? []);
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
       } finally {
@@ -72,7 +77,9 @@ export default function HODTimetableSectionsPage() {
             >
               <CardContent className="p-4 flex items-center justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-sm">Section {s.name}</p>
+                  {/* Department code included: a parent HOD sees their own "A"
+                      alongside each sub-department's "A". */}
+                  <p className="font-semibold text-sm">{sectionDisplayLabel(s, departments)}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                     <Users className="h-3 w-3" />{s.studentCount ?? 0} students
                   </p>
