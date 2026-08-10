@@ -17,11 +17,11 @@ import type { Department, UserRole } from "@/types";
 const CREATABLE_ROLES: UserRole[] = [
   "HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF",
   "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
-  "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER",
+  "LIBRARY", "EXAM_CELL", "WEBMASTER",
 ];
 
 // One holder per college — matches COLLEGE_SINGLETON_ROLES on the API route.
-const SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
+const SINGLETON_ROLES: UserRole[] = ["LIBRARY", "EXAM_CELL", "WEBMASTER"];
 
 export default function NewStaffPage() {
   const router = useRouter();

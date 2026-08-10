@@ -10,7 +10,7 @@ interface ReportRow {
   uid: string;
   employeeId: string;
   name: string;
-  role: "HOD" | "PANEL_MEMBER";
+  role: string;
   category: string | null;
   types: Awaited<ReturnType<typeof computeMonthlyLeaveSummary>>["types"];
   lopDays: number;

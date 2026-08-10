@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2, Clock } from "lucide-react";
+import { BookOpen, Pencil, Trash2, Clock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,11 @@ export default function HODSubjectsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
 
-  const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
+  // Explicit picks only - "" means "no override yet, use the default below".
+  // Keeping these separate from the effective values actually shown avoids
+  // needing an effect to sync state just to pick a default.
+  const [pickedCourseId, setPickedCourseId] = useState("");
+  const [pickedYear, setPickedYear] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
 
@@ -48,11 +51,17 @@ export default function HODSubjectsPage() {
     void (async () => { await loadCourses(); })();
   }, [loadCourses]);
 
+  // Default straight to the first course/year - Course/Year stay switchable
+  // via the pickers below for departments with more than one, but the HOD
+  // shouldn't have to click through both just to see subjects that are
+  // almost always already there.
+  const selectedCourseId = pickedCourseId || courses[0]?.id || "";
   const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
   const yearOptions = useMemo(
     () => (selectedCourse ? Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1) : []),
     [selectedCourse]
   );
+  const selectedYear = pickedYear || (yearOptions.length > 0 ? String(yearOptions[0]) : "");
 
   const loadSubjects = useCallback(async (courseId: string, year: string) => {
     if (!courseId || !year) { setSubjects([]); return; }
@@ -68,15 +77,13 @@ export default function HODSubjectsPage() {
     }
   }, []);
 
-  function selectCourse(courseId: string) {
-    setSelectedCourseId(courseId);
-    setSelectedYear("");
-    setSubjects([]);
-  }
+  useEffect(() => {
+    void (async () => { await loadSubjects(selectedCourseId, selectedYear); })();
+  }, [selectedCourseId, selectedYear, loadSubjects]);
 
-  function selectYear(year: string) {
-    setSelectedYear(year);
-    void loadSubjects(selectedCourseId, year);
+  function selectCourse(courseId: string) {
+    setPickedCourseId(courseId);
+    setPickedYear(""); // fall back to the new course's own first year
   }
 
   async function handleDelete() {
@@ -122,7 +129,7 @@ export default function HODSubjectsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Year</Label>
-                <Select value={selectedYear} onValueChange={selectYear} disabled={!selectedCourse}>
+                <Select value={selectedYear} onValueChange={setPickedYear} disabled={!selectedCourse}>
                   <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                   <SelectContent>
                     {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
@@ -135,15 +142,10 @@ export default function HODSubjectsPage() {
           {selectedCourseId && selectedYear && (
             <Card>
               <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="font-semibold text-sm flex items-center gap-2">
-                    <BookOpen className="h-4 w-4" />
-                    {selectedCourse?.name} · {ordinalYear(Number(selectedYear))}
-                  </h2>
-                  <Button size="sm" onClick={() => router.push(`/hod/subjects/new?courseId=${selectedCourseId}&year=${selectedYear}`)}>
-                    <Plus className="h-4 w-4 mr-2" />Add Subject
-                  </Button>
-                </div>
+                <h2 className="font-semibold text-sm flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  {selectedCourse?.name} · {ordinalYear(Number(selectedYear))}
+                </h2>
 
                 {isLoadingSubjects ? (
                   <div className="space-y-2">

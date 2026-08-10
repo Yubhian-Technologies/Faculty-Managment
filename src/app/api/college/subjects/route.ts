@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { SubjectType } from "@/types";
 import {
-  getHodDepartmentScope, canHodEditDepartment, editableDepartmentNames,
+  getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames,
 } from "@/lib/departments/scope";
 
 export async function GET(request: Request) {
@@ -20,11 +20,16 @@ export async function GET(request: Request) {
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
 
     if (session.role === "HOD") {
-      // A parent HOD sees their own department's subjects and every
-      // sub-department's, since they manage those too. Firestore caps `in` at 30
-      // values, which comfortably covers a department's sub-departments.
+      // Viewing is bidirectional (unlike editing, which stays parent-only -
+      // see canHodEditDepartment in POST below): a parent HOD sees their own
+      // department's subjects and every sub-department's, AND a sub-HOD
+      // (e.g. BS-Chemistry, BS-Mathematics) sees their parent's (Basic
+      // Science) subjects too, since a sub-department's students are taught
+      // under the parent's program/courses rather than owning their own.
+      // Firestore caps `in` at 30 values, which comfortably covers a
+      // department's parent + siblings.
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const names = editableDepartmentNames(scope);
+      const names = await getRelatedDepartmentNames(db, session.collegeId, scope.departmentName);
       if (names.length === 1) {
         query = query.where("department", "==", names[0]);
       } else if (names.length > 1) {
