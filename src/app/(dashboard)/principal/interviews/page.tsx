@@ -16,10 +16,17 @@ import type { HiringBatch } from "@/types";
 
 type BatchRow = Record<string, unknown> & HiringBatch;
 
+// A batch is "past" once it's closed out — decided (COMPLETED) or the HOD's
+// panel proposal itself was rejected — everything else is still active.
+function isPastBatch(b: BatchRow): boolean {
+  return b.currentPhase === "COMPLETED" || b.status === "REJECTED";
+}
+
 export default function PrincipalInterviewsPage() {
   const router = useRouter();
   const [batches, setBatches] = useState<BatchRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [scope, setScope] = useState<"active" | "past">("active");
 
   function loadBatches() {
     setIsLoading(true);
@@ -32,7 +39,9 @@ export default function PrincipalInterviewsPage() {
 
   useEffect(() => { loadBatches(); }, []);
 
-  const decisionBatches = batches.filter(
+  const scopedBatches = batches.filter((b) => (scope === "past" ? isPastBatch(b) : !isPastBatch(b)));
+
+  const decisionBatches = scopedBatches.filter(
     (b) =>
       b.currentPhase === "PANEL_INTERVIEW" ||
       b.currentPhase === "PRINCIPAL_FINAL_REVIEW" ||
@@ -62,9 +71,9 @@ export default function PrincipalInterviewsPage() {
       render: (row) => `${(row.panelMemberUids as string[]).length} members`,
     },
     {
-      key: "candidateIds",
+      key: "applicationIds",
       header: "Candidates",
-      render: (row) => (row.candidateIds as string[]).length,
+      render: (row) => ((row.applicationIds as string[] | undefined) ?? []).length,
     },
     {
       key: "status",
@@ -101,17 +110,30 @@ export default function PrincipalInterviewsPage() {
         description="Review HOD interview panel proposals and make final hiring decisions"
       />
 
+      <div className="flex gap-2">
+        <Button size="sm" variant={scope === "active" ? "default" : "outline"} onClick={() => setScope("active")}>
+          Active
+        </Button>
+        <Button size="sm" variant={scope === "past" ? "default" : "outline"} onClick={() => setScope("past")}>
+          Past
+        </Button>
+      </div>
+
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Interview Plans</h2>
         <DataTable
-          data={batches}
+          data={scopedBatches}
           columns={columns}
           isLoading={isLoading}
           keyExtractor={(r) => r.id as string}
           searchPlaceholder="Search interview plans..."
           searchKeys={["position", "department"] as (keyof BatchRow)[]}
-          emptyTitle="No interview plans submitted"
-          emptyDescription="HODs will submit interview plans after vacancies are approved"
+          emptyTitle={scope === "past" ? "No past interviews" : "No interview plans submitted"}
+          emptyDescription={
+            scope === "past"
+              ? "Completed and rejected interview plans will show up here."
+              : "HODs will submit interview plans after vacancies are approved"
+          }
           csvFilename="interview-plans"
           onRowClick={(row) => router.push(`/principal/interviews/${row.id}`)}
         />
@@ -154,7 +176,7 @@ export default function PrincipalInterviewsPage() {
                       </div>
                       <p className="text-sm text-muted-foreground">{b.department}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                        <span><Users className="h-3 w-3 inline mr-1" />{b.candidateIds.length} candidate{b.candidateIds.length !== 1 ? "s" : ""}</span>
+                        <span><Users className="h-3 w-3 inline mr-1" />{(b.applicationIds ?? []).length} candidate{(b.applicationIds ?? []).length !== 1 ? "s" : ""}</span>
                         <span>{formatDate(b.interviewDate)}</span>
                       </div>
                     </div>

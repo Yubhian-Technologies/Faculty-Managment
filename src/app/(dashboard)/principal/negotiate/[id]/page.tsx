@@ -10,7 +10,22 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { ArrowRight, Plus, Save, CheckCircle2 } from "lucide-react";
-import type { HiringBatch, Candidate } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
+
+// Joined view: application (per-hiring-request negotiation state) + candidate
+// (person) fields. `id` is the applicationId (used for PATCHes to
+// candidate-applications).
+type NegotiateCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+  phone: string;
+  expectedSalary?: number;
+  negotiatedSalary?: number;
+  dateOfJoining?: string;
+  termsAndConditions?: string[];
+};
 
 type HireTerms = { expectedSalary: string; negotiatedSalary: string; dateOfJoining: string };
 const emptyHireTerms: HireTerms = { expectedSalary: "", negotiatedSalary: "", dateOfJoining: "" };
@@ -19,7 +34,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
   const { id } = use(params);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candidates, setCandidates] = useState<NegotiateCandidateView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hireTerms, setHireTerms] = useState<Record<string, HireTerms>>({});
   const [termsChecklists, setTermsChecklists] = useState<Record<string, Record<string, boolean>>>({});
@@ -29,12 +44,27 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
 
   async function load() {
     try {
-      const [batchRes, candidatesRes] = await Promise.all([
+      const [batchRes, applicationsRes, candidatesRes] = await Promise.all([
         fetch(`/api/college/hiring-batches/${id}`).then((r) => r.json() as Promise<{ batch: HiringBatch }>),
-        fetch(`/api/college/candidates?batchId=${id}`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
+        fetch(`/api/college/candidate-applications?batchId=${id}`).then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
+        fetch(`/api/college/candidates`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
       ]);
       setBatch(batchRes.batch);
-      const cands = candidatesRes.candidates ?? [];
+      const candidateMap = new Map((candidatesRes.candidates ?? []).map((c) => [c.id, c]));
+      const cands: NegotiateCandidateView[] = (applicationsRes.applications ?? []).map((a) => {
+        const person = candidateMap.get(a.candidateId);
+        return {
+          id: a.id,
+          candidateId: a.candidateId,
+          name: person?.name ?? "Unknown",
+          email: person?.email ?? "",
+          phone: person?.phone ?? "",
+          expectedSalary: a.expectedSalary,
+          negotiatedSalary: a.negotiatedSalary,
+          dateOfJoining: a.dateOfJoining,
+          termsAndConditions: a.termsAndConditions,
+        };
+      });
       setCandidates(cands);
       setHireTerms(Object.fromEntries(cands.map((c) => [c.id, {
         expectedSalary: c.expectedSalary != null ? String(c.expectedSalary) : "",
@@ -62,18 +92,18 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
     setNewTermInputs((prev) => ({ ...prev, [candidateId]: "" }));
   }
 
-  async function saveCandidate(candidateId: string) {
-    const terms = hireTerms[candidateId] ?? emptyHireTerms;
+  async function saveCandidate(applicationId: string) {
+    const terms = hireTerms[applicationId] ?? emptyHireTerms;
     if (!terms.negotiatedSalary || !terms.dateOfJoining) {
       toast({ variant: "destructive", title: "Enter negotiated salary and date of joining" });
       return;
     }
-    setSavingId(candidateId);
+    setSavingId(applicationId);
     try {
-      const selectedTerms = Object.entries(termsChecklists[candidateId] ?? {})
+      const selectedTerms = Object.entries(termsChecklists[applicationId] ?? {})
         .filter(([, checked]) => checked)
         .map(([term]) => term);
-      const res = await fetch(`/api/college/candidates/${candidateId}`, {
+      const res = await fetch(`/api/college/candidate-applications/${applicationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -84,7 +114,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
         }),
       });
       if (!res.ok) throw new Error();
-      setSavedIds((prev) => new Set(prev).add(candidateId));
+      setSavedIds((prev) => new Set(prev).add(applicationId));
       toast({ variant: "success", title: "Saved" });
     } catch {
       toast({ variant: "destructive", title: "Failed to save" });

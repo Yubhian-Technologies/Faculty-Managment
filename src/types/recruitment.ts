@@ -146,32 +146,39 @@ export interface CandidateBioData {
   experiences?: WorkExperienceEntry[];
   hasRelativesInSociety?: boolean;
   relatives?: RelativeInSociety[];
+  // Research/academic profile, for teaching-research faculty roles (paper
+  // "Recommendations of the Recruiting Committee" form). Free text throughout,
+  // matching the fill-in-the-blank paper form.
+  researchProfile?: {
+    firstAuthorPublications?: string;
+    publicationsQ1OrHighIF?: string;
+    reviewPublications?: string;
+    totalPublicationsInclCoAuthor?: string;
+    patentsPublished?: string;
+    patentsGranted?: string;
+    hIndex?: string;
+    i10Index?: string;
+    fundingReceived?: string;
+    fundingApplied?: string;
+    nationalExposure?: string;
+    internationalExposure?: string;
+    keyResearchSkills?: string;
+  };
 }
 
+// Candidate is a pure person record — reusable across any number of hiring
+// requests. Everything specific to one hiring cycle (stage, documents,
+// salary negotiation, committee recommendation, etc.) lives on
+// CandidateApplication instead, since the same person can be attached to
+// multiple VacancyRequests at once with independent pipeline state for each.
 export interface Candidate {
   id: string;
   collegeId: string;
-  batchId?: string;
-  vacancyId?: string;
   name: string;
   email: string;
   phone: string;
-  department: string;
-  position: string;
-  courseId?: string;              // course the candidate is being hired to teach (if teaching faculty)
-  courseName?: string;
-  year?: number;                  // academic year within the course
-  preferredSubjectIds?: string[]; // subjects the candidate is expected to teach, if known at hiring time
-  preferredSubjectNames?: string[];
   resumeUrl: string;
   source: CandidateSource;
-  currentStage: CandidateStage;
-  interviewSubStage?: InterviewSubStage;
-  status: CandidateStatus;
-  isShortlisted: boolean;
-  hasArrived: boolean;
-  arrivedAt?: Timestamp;
-  interviewMode?: InterviewMode;
   referralType?: ReferralType;
   referralName?: string;
   referralPhone?: string;
@@ -187,6 +194,38 @@ export interface Candidate {
   certificates?: Array<{ name: string; url: string }>;
   bioDataSubmitted?: boolean;
   bioDataSubmittedAt?: Timestamp;
+  addedByUid: string;
+  addedByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── Candidate Application ─────────────────────────────────────────────────
+// Join entity: "this Candidate applied to this Hiring Request (VacancyRequest)".
+// A candidate may have any number of applications (one per VacancyRequest,
+// enforced server-side); a VacancyRequest/HiringBatch may have many
+// applications. All per-hiring-cycle state lives here, not on Candidate.
+
+export interface CandidateApplication {
+  id: string;
+  collegeId: string;
+  candidateId: string;        // FK -> candidates/{id}
+  vacancyRequestId: string;   // FK -> vacancyRequests/{id}
+  batchId?: string;           // FK -> hiringBatches/{id}; "" until batched
+  department: string;         // denormalized from VacancyRequest at attach time
+  position: string;           // denormalized from VacancyRequest at attach time
+  courseId?: string;              // course the candidate is being hired to teach (if teaching faculty)
+  courseName?: string;
+  year?: number;                  // academic year within the course
+  preferredSubjectIds?: string[]; // subjects the candidate is expected to teach, if known at hiring time
+  preferredSubjectNames?: string[];
+  interviewMode?: InterviewMode;
+  currentStage: CandidateStage;
+  interviewSubStage?: InterviewSubStage;
+  status: CandidateStatus;
+  isShortlisted: boolean;
+  hasArrived: boolean;
+  arrivedAt?: Timestamp;
   documentVerification?: {
     checkedDocs: Record<string, boolean>; // document label -> verified
     verifiedBy: string;
@@ -208,6 +247,11 @@ export interface Candidate {
   // Terms the Principal ticked at decision time; flows into the offer letter's
   // Terms & Conditions field as a starting point for the office (still editable there).
   termsAndConditions?: string[];
+  // Recruiting committee's written recommendation (paper "Recommendations of
+  // the Recruiting Committee" form), entered by the Principal before the final decision.
+  committeeRecommendation?: string;
+  addedByUid: string;
+  addedByName: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -258,7 +302,7 @@ export interface HiringBatch {
   coordinatorName?: string;
   candidateInfoCard?: string;     // visible to arriving candidates (venue, time, etc.)
   requiredDocuments?: string[];
-  candidateIds: string[];
+  applicationIds: string[];
   status: WorkflowStatus;         // principal's approval decision
   currentPhase: BatchPhase;       // which step of the 9-phase workflow
   principalNotes?: string;
@@ -277,6 +321,12 @@ export interface HiringBatch {
 }
 
 // ─── Panel Feedback (subcollection: hiringBatches/{batchId}/panelFeedback) ────
+// One doc per (candidate, panelist), filled in across two modules of the same
+// flow: demo-day scoring (while the batch is IN_PROGRESS) and panel-interview
+// scoring (PANEL_INTERVIEW+). Either module's fields may be absent until that
+// module is actually filled in by this panelist.
+
+export type DemoRatingLevel = "EXCELLENT" | "GOOD" | "AVERAGE" | "POOR";
 
 export interface PanelFeedback {
   id: string;
@@ -285,17 +335,41 @@ export interface PanelFeedback {
   candidateId: string;
   panelUid: string;
   panelName: string;
-  ratings: {
+
+  // Demo-day module (paper "Demo Sheet")
+  demoRatings?: {
+    planningAndOrganizing: DemoRatingLevel;
+    effectiveUseOfTime: DemoRatingLevel;
+    communicativeAbility: DemoRatingLevel;
+    ensuringStudentAttention: DemoRatingLevel;
+    chalkBoardWork: DemoRatingLevel;
+    studentParticipation: DemoRatingLevel;
+  };
+  demoOverallScore?: number; // 1–10
+  demoComments?: string;
+
+  // Panel-interview module (paper "Panel Sheet")
+  ratings?: {
     technicalKnowledge: number;    // 1–5
     communicationSkills: number;   // 1–5
     teachingMethodology: number;   // 1–5
   };
+  remarksByCategory?: {
+    subjectKnowledge?: string;
+    communication?: string;
+    presentationSkills?: string;
+    research?: string;
+    specificAttributes?: string;
+    others?: string;
+  };
   subjectsTested?: string[];
   strengths?: string;
   weaknesses?: string;
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
+  recommendation?: "ACCEPT" | "REJECT" | "MAYBE";
   comments?: string;
+
   submittedAt: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 // ─── Student Feedback (subcollection: hiringBatches/{batchId}/studentFeedback)

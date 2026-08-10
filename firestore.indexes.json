@@ -12,8 +12,10 @@
     { "collectionGroup": "hiringBatches", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
     { "collectionGroup": "hiringBatches", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "currentPhase", "order": "ASCENDING" }, { "fieldPath": "interviewDate", "order": "ASCENDING" }] },
 
-    { "collectionGroup": "candidates", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "batchId", "order": "ASCENDING" }, { "fieldPath": "currentStage", "order": "ASCENDING" }] },
-    { "collectionGroup": "candidates", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "vacancyId", "order": "ASCENDING" }, { "fieldPath": "isShortlisted", "order": "ASCENDING" }] },
+    { "collectionGroup": "candidateApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "batchId", "order": "ASCENDING" }, { "fieldPath": "currentStage", "order": "ASCENDING" }] },
+    { "collectionGroup": "candidateApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "vacancyRequestId", "order": "ASCENDING" }, { "fieldPath": "isShortlisted", "order": "ASCENDING" }] },
+    { "collectionGroup": "candidateApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "candidateId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "candidateApplications", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "vacancyRequestId", "order": "ASCENDING" }, { "fieldPath": "batchId", "order": "ASCENDING" }] },
 
     { "collectionGroup": "panelFeedback", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "candidateId", "order": "ASCENDING" }, { "fieldPath": "submittedAt", "order": "DESCENDING" }] },
     { "collectionGroup": "panelFeedback", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "candidateId", "order": "ASCENDING" }, { "fieldPath": "panelUid", "order": "ASCENDING" }] },

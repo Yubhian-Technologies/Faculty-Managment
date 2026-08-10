@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,6 +67,8 @@ function newRelativeRow(): RelativeInSociety {
 
 export default function CandidateFormPage() {
   const { collegeId, candidateId } = useParams<{ collegeId: string; candidateId: string }>();
+  const searchParams = useSearchParams();
+  const applicationId = searchParams.get("applicationId") ?? "";
 
   const [candidate, setCandidate] = useState<CandidateInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,7 +85,8 @@ export default function CandidateFormPage() {
   const [relatives, setRelatives] = useState<RelativeInSociety[]>([newRelativeRow()]);
 
   useEffect(() => {
-    fetch(`/api/public/candidate-form/${collegeId}/${candidateId}`)
+    if (!applicationId) { setLoading(false); return; }
+    fetch(`/api/public/candidate-form/${collegeId}/${candidateId}?applicationId=${applicationId}`)
       .then((r) => (r.ok ? (r.json() as Promise<{ candidate: CandidateInfo; requiredDocuments?: string[] }>) : null))
       .then((d) => {
         if (!d) return;
@@ -95,10 +98,14 @@ export default function CandidateFormPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [collegeId, candidateId]);
+  }, [collegeId, candidateId, applicationId]);
 
   function updateForm(patch: Partial<CandidateBioData>) {
     setForm((f) => ({ ...f, ...patch }));
+  }
+
+  function updateResearchProfile(patch: Partial<NonNullable<CandidateBioData["researchProfile"]>>) {
+    setForm((f) => ({ ...f, researchProfile: { ...f.researchProfile, ...patch } }));
   }
 
   function updateRequiredFile(label: string, file: File | null) {
@@ -276,23 +283,23 @@ export default function CandidateFormPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Father&apos;s Name</Label>
-                  <Input value={form.fatherName ?? ""} onChange={(e) => updateForm({ fatherName: e.target.value })} placeholder="Father's full name" />
+                  <Label htmlFor="fatherName">Father&apos;s Name</Label>
+                  <Input id="fatherName" value={form.fatherName ?? ""} onChange={(e) => updateForm({ fatherName: e.target.value })} placeholder="Father's full name" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Mother&apos;s Name</Label>
-                  <Input value={form.motherName ?? ""} onChange={(e) => updateForm({ motherName: e.target.value })} placeholder="Mother's full name" />
+                  <Label htmlFor="motherName">Mother&apos;s Name</Label>
+                  <Input id="motherName" value={form.motherName ?? ""} onChange={(e) => updateForm({ motherName: e.target.value })} placeholder="Mother's full name" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Date of Birth <span className="text-destructive">*</span></Label>
-                  <Input type="date" value={form.dateOfBirth ?? ""} onChange={(e) => updateForm({ dateOfBirth: e.target.value })} required />
+                  <Label htmlFor="dateOfBirth">Date of Birth <span className="text-destructive">*</span></Label>
+                  <Input id="dateOfBirth" type="date" value={form.dateOfBirth ?? ""} onChange={(e) => updateForm({ dateOfBirth: e.target.value })} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>Gender <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="gender">Gender <span className="text-destructive">*</span></Label>
                   <Select value={form.gender ?? ""} onValueChange={(v) => updateForm({ gender: v })}>
-                    <SelectTrigger><SelectValue placeholder="Select gender..." /></SelectTrigger>
+                    <SelectTrigger id="gender"><SelectValue placeholder="Select gender..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Male">Male</SelectItem>
                       <SelectItem value="Female">Female</SelectItem>
@@ -303,9 +310,9 @@ export default function CandidateFormPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Marital Status</Label>
+                  <Label htmlFor="maritalStatus">Marital Status</Label>
                   <Select value={form.maritalStatus ?? ""} onValueChange={(v) => updateForm({ maritalStatus: v as CandidateBioData["maritalStatus"] })}>
-                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectTrigger id="maritalStatus"><SelectValue placeholder="Select..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Single">Single</SelectItem>
                       <SelectItem value="Married">Married</SelectItem>
@@ -314,35 +321,35 @@ export default function CandidateFormPage() {
                 </div>
                 {form.maritalStatus === "Married" && (
                   <div className="space-y-2">
-                    <Label>Spouse Name</Label>
-                    <Input value={form.spouseName ?? ""} onChange={(e) => updateForm({ spouseName: e.target.value })} placeholder="Spouse's full name" />
+                    <Label htmlFor="spouseName">Spouse Name</Label>
+                    <Input id="spouseName" value={form.spouseName ?? ""} onChange={(e) => updateForm({ spouseName: e.target.value })} placeholder="Spouse's full name" />
                   </div>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Aadhaar Number</Label>
-                  <Input value={form.aadharNo ?? ""} onChange={(e) => updateForm({ aadharNo: e.target.value })} placeholder="XXXX XXXX XXXX" maxLength={14} />
+                  <Label htmlFor="aadharNo">Aadhaar Number</Label>
+                  <Input id="aadharNo" value={form.aadharNo ?? ""} onChange={(e) => updateForm({ aadharNo: e.target.value })} placeholder="XXXX XXXX XXXX" maxLength={14} />
                 </div>
                 <div className="space-y-2">
-                  <Label>PAN Number</Label>
-                  <Input value={form.panNo ?? ""} onChange={(e) => updateForm({ panNo: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" maxLength={10} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Blood Group</Label>
-                  <Input value={form.bloodGroup ?? ""} onChange={(e) => updateForm({ bloodGroup: e.target.value })} placeholder="e.g. O+" />
+                  <Label htmlFor="panNo">PAN Number</Label>
+                  <Input id="panNo" value={form.panNo ?? ""} onChange={(e) => updateForm({ panNo: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" maxLength={10} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Emergency Contact Name</Label>
-                  <Input value={form.emergencyContactName ?? ""} onChange={(e) => updateForm({ emergencyContactName: e.target.value })} />
+                  <Label htmlFor="bloodGroup">Blood Group</Label>
+                  <Input id="bloodGroup" value={form.bloodGroup ?? ""} onChange={(e) => updateForm({ bloodGroup: e.target.value })} placeholder="e.g. O+" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="emergencyContactName">Emergency Contact Name</Label>
+                  <Input id="emergencyContactName" value={form.emergencyContactName ?? ""} onChange={(e) => updateForm({ emergencyContactName: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Emergency Contact Phone</Label>
-                  <Input value={form.emergencyContactPhone ?? ""} onChange={(e) => updateForm({ emergencyContactPhone: e.target.value })} />
+                  <Label htmlFor="emergencyContactPhone">Emergency Contact Phone</Label>
+                  <Input id="emergencyContactPhone" value={form.emergencyContactPhone ?? ""} onChange={(e) => updateForm({ emergencyContactPhone: e.target.value })} />
                 </div>
               </div>
             </CardContent>
@@ -356,29 +363,29 @@ export default function CandidateFormPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium text-muted-foreground">Qualification {i + 1}</p>
                     {qualifications.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeQualificationRow(row.id)}>
+                      <Button type="button" variant="ghost" size="icon" aria-label="Remove qualification" onClick={() => removeQualificationRow(row.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label>Degree / Course</Label>
-                      <Input value={row.degree} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="e.g. M.Tech" />
+                      <Label htmlFor={`qual-degree-${row.id}`}>Degree / Course</Label>
+                      <Input id={`qual-degree-${row.id}`} value={row.degree} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="e.g. M.Tech" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Institution</Label>
-                      <Input value={row.institution} onChange={(e) => updateQualificationRow(row.id, { institution: e.target.value })} placeholder="College / University name" />
+                      <Label htmlFor={`qual-institution-${row.id}`}>Institution</Label>
+                      <Input id={`qual-institution-${row.id}`} value={row.institution} onChange={(e) => updateQualificationRow(row.id, { institution: e.target.value })} placeholder="College / University name" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label>Year of Passing</Label>
-                      <Input value={row.yearOfPassing} onChange={(e) => updateQualificationRow(row.id, { yearOfPassing: e.target.value })} placeholder="e.g. 2020" />
+                      <Label htmlFor={`qual-year-${row.id}`}>Year of Passing</Label>
+                      <Input id={`qual-year-${row.id}`} value={row.yearOfPassing} onChange={(e) => updateQualificationRow(row.id, { yearOfPassing: e.target.value })} placeholder="e.g. 2020" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Percentage / CGPA</Label>
-                      <Input value={row.percentageOrCGPA} onChange={(e) => updateQualificationRow(row.id, { percentageOrCGPA: e.target.value })} placeholder="e.g. 8.5 CGPA" />
+                      <Label htmlFor={`qual-pct-${row.id}`}>Percentage / CGPA</Label>
+                      <Input id={`qual-pct-${row.id}`} value={row.percentageOrCGPA} onChange={(e) => updateQualificationRow(row.id, { percentageOrCGPA: e.target.value })} placeholder="e.g. 8.5 CGPA" />
                     </div>
                   </div>
                   <FileUpload
@@ -404,34 +411,34 @@ export default function CandidateFormPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium text-muted-foreground">Experience {i + 1}</p>
                     {experiences.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeExperienceRow(row.id)}>
+                      <Button type="button" variant="ghost" size="icon" aria-label="Remove experience" onClick={() => removeExperienceRow(row.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label>Organization</Label>
-                      <Input value={row.organization} onChange={(e) => updateExperienceRow(row.id, { organization: e.target.value })} placeholder="College / Company name" />
+                      <Label htmlFor={`exp-org-${row.id}`}>Organization</Label>
+                      <Input id={`exp-org-${row.id}`} value={row.organization} onChange={(e) => updateExperienceRow(row.id, { organization: e.target.value })} placeholder="College / Company name" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Designation</Label>
-                      <Input value={row.designation} onChange={(e) => updateExperienceRow(row.id, { designation: e.target.value })} placeholder="e.g. Assistant Professor" />
+                      <Label htmlFor={`exp-designation-${row.id}`}>Designation</Label>
+                      <Input id={`exp-designation-${row.id}`} value={row.designation} onChange={(e) => updateExperienceRow(row.id, { designation: e.target.value })} placeholder="e.g. Assistant Professor" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label>From</Label>
-                      <Input type="month" value={row.fromDate} onChange={(e) => updateExperienceRow(row.id, { fromDate: e.target.value })} />
+                      <Label htmlFor={`exp-from-${row.id}`}>From</Label>
+                      <Input id={`exp-from-${row.id}`} type="month" value={row.fromDate} onChange={(e) => updateExperienceRow(row.id, { fromDate: e.target.value })} />
                     </div>
                     <div className="space-y-2">
-                      <Label>To</Label>
-                      <Input type="month" value={row.toDate} onChange={(e) => updateExperienceRow(row.id, { toDate: e.target.value })} placeholder="Leave blank if current" />
+                      <Label htmlFor={`exp-to-${row.id}`}>To</Label>
+                      <Input id={`exp-to-${row.id}`} type="month" value={row.toDate} onChange={(e) => updateExperienceRow(row.id, { toDate: e.target.value })} placeholder="Leave blank if current" />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Responsibilities (optional)</Label>
-                    <Textarea value={row.responsibilities ?? ""} onChange={(e) => updateExperienceRow(row.id, { responsibilities: e.target.value })} rows={2} />
+                    <Label htmlFor={`exp-resp-${row.id}`}>Responsibilities (optional)</Label>
+                    <Textarea id={`exp-resp-${row.id}`} value={row.responsibilities ?? ""} onChange={(e) => updateExperienceRow(row.id, { responsibilities: e.target.value })} rows={2} />
                   </div>
                 </div>
               ))}
@@ -439,6 +446,77 @@ export default function CandidateFormPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Another Experience
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Research Profile</CardTitle>
+              <p className="text-xs text-muted-foreground">For teaching/research faculty roles — leave blank if not applicable</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="firstAuthorPublications">Publications (first/corresponding author)</Label>
+                  <Input id="firstAuthorPublications" value={form.researchProfile?.firstAuthorPublications ?? ""} onChange={(e) => updateResearchProfile({ firstAuthorPublications: e.target.value })} placeholder="e.g. 5 (SCOPUS/WOS)" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="publicationsQ1OrHighIF">Publications in Q1 or IF &gt; 4.0</Label>
+                  <Input id="publicationsQ1OrHighIF" value={form.researchProfile?.publicationsQ1OrHighIF ?? ""} onChange={(e) => updateResearchProfile({ publicationsQ1OrHighIF: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="reviewPublications">Review Publications</Label>
+                  <Input id="reviewPublications" value={form.researchProfile?.reviewPublications ?? ""} onChange={(e) => updateResearchProfile({ reviewPublications: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="totalPublicationsInclCoAuthor">Total Publications (incl. co-author)</Label>
+                  <Input id="totalPublicationsInclCoAuthor" value={form.researchProfile?.totalPublicationsInclCoAuthor ?? ""} onChange={(e) => updateResearchProfile({ totalPublicationsInclCoAuthor: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="patentsPublished">Patents Published</Label>
+                  <Input id="patentsPublished" value={form.researchProfile?.patentsPublished ?? ""} onChange={(e) => updateResearchProfile({ patentsPublished: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="patentsGranted">Patents Granted</Label>
+                  <Input id="patentsGranted" value={form.researchProfile?.patentsGranted ?? ""} onChange={(e) => updateResearchProfile({ patentsGranted: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="hIndex">H-Index (SCOPUS/WOS)</Label>
+                  <Input id="hIndex" value={form.researchProfile?.hIndex ?? ""} onChange={(e) => updateResearchProfile({ hIndex: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="i10Index">i10-Index (SCOPUS/WOS)</Label>
+                  <Input id="i10Index" value={form.researchProfile?.i10Index ?? ""} onChange={(e) => updateResearchProfile({ i10Index: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="fundingReceived">Funding Projects Received</Label>
+                  <Input id="fundingReceived" value={form.researchProfile?.fundingReceived ?? ""} onChange={(e) => updateResearchProfile({ fundingReceived: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fundingApplied">Funding Projects Applied</Label>
+                  <Input id="fundingApplied" value={form.researchProfile?.fundingApplied ?? ""} onChange={(e) => updateResearchProfile({ fundingApplied: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nationalExposure">National Exposure (IIT/NIT/IIIT/CSIR labs) with joint publications</Label>
+                <Textarea id="nationalExposure" value={form.researchProfile?.nationalExposure ?? ""} onChange={(e) => updateResearchProfile({ nationalExposure: e.target.value })} rows={2} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="internationalExposure">International Exposure with outcomes/joint publications</Label>
+                <Textarea id="internationalExposure" value={form.researchProfile?.internationalExposure ?? ""} onChange={(e) => updateResearchProfile({ internationalExposure: e.target.value })} rows={2} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="keyResearchSkills">Key Research Skills</Label>
+                <Textarea id="keyResearchSkills" value={form.researchProfile?.keyResearchSkills ?? ""} onChange={(e) => updateResearchProfile({ keyResearchSkills: e.target.value })} rows={2} />
+              </div>
             </CardContent>
           </Card>
 
@@ -456,34 +534,34 @@ export default function CandidateFormPage() {
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-medium text-muted-foreground">Relative {i + 1}</p>
                         {relatives.length > 1 && (
-                          <Button type="button" variant="ghost" size="icon" onClick={() => removeRelativeRow(row.id)}>
+                          <Button type="button" variant="ghost" size="icon" aria-label="Remove relative" onClick={() => removeRelativeRow(row.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-2">
-                          <Label>Relative&apos;s Name</Label>
-                          <Input value={row.name} onChange={(e) => updateRelativeRow(row.id, { name: e.target.value })} />
+                          <Label htmlFor={`rel-name-${row.id}`}>Relative&apos;s Name</Label>
+                          <Input id={`rel-name-${row.id}`} value={row.name} onChange={(e) => updateRelativeRow(row.id, { name: e.target.value })} />
                         </div>
                         <div className="space-y-2">
-                          <Label>Relationship</Label>
-                          <Input value={row.relationship} onChange={(e) => updateRelativeRow(row.id, { relationship: e.target.value })} placeholder="e.g. Brother, Spouse" />
+                          <Label htmlFor={`rel-relationship-${row.id}`}>Relationship</Label>
+                          <Input id={`rel-relationship-${row.id}`} value={row.relationship} onChange={(e) => updateRelativeRow(row.id, { relationship: e.target.value })} placeholder="e.g. Brother, Spouse" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-2">
-                          <Label>Working Location</Label>
-                          <Input value={row.workingLocation} onChange={(e) => updateRelativeRow(row.id, { workingLocation: e.target.value })} placeholder="College / Department" />
+                          <Label htmlFor={`rel-location-${row.id}`}>Working Location</Label>
+                          <Input id={`rel-location-${row.id}`} value={row.workingLocation} onChange={(e) => updateRelativeRow(row.id, { workingLocation: e.target.value })} placeholder="College / Department" />
                         </div>
                         <div className="space-y-2">
-                          <Label>Profession / Designation</Label>
-                          <Input value={row.profession} onChange={(e) => updateRelativeRow(row.id, { profession: e.target.value })} />
+                          <Label htmlFor={`rel-profession-${row.id}`}>Profession / Designation</Label>
+                          <Input id={`rel-profession-${row.id}`} value={row.profession} onChange={(e) => updateRelativeRow(row.id, { profession: e.target.value })} />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label>Experience</Label>
-                        <Input value={row.experience} onChange={(e) => updateRelativeRow(row.id, { experience: e.target.value })} placeholder="e.g. 5 years" />
+                        <Label htmlFor={`rel-experience-${row.id}`}>Experience</Label>
+                        <Input id={`rel-experience-${row.id}`} value={row.experience} onChange={(e) => updateRelativeRow(row.id, { experience: e.target.value })} placeholder="e.g. 5 years" />
                       </div>
                     </div>
                   ))}
@@ -500,34 +578,34 @@ export default function CandidateFormPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">Professional Details</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Current / Previous Employer</Label>
-                <Input value={form.currentEmployer ?? ""} onChange={(e) => updateForm({ currentEmployer: e.target.value })} placeholder="College / Institution name" />
+                <Label htmlFor="currentEmployer">Current / Previous Employer</Label>
+                <Input id="currentEmployer" value={form.currentEmployer ?? ""} onChange={(e) => updateForm({ currentEmployer: e.target.value })} placeholder="College / Institution name" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-2">
-                  <Label>Total Experience (years)</Label>
-                  <Input type="number" min={0} value={form.totalExperienceYears ?? ""} onChange={(e) => updateForm({ totalExperienceYears: stripLeadingZeros(e.target.value) })} placeholder="3" />
+                  <Label htmlFor="totalExperienceYears">Total Experience (years)</Label>
+                  <Input id="totalExperienceYears" type="number" min={0} value={form.totalExperienceYears ?? ""} onChange={(e) => updateForm({ totalExperienceYears: stripLeadingZeros(e.target.value) })} placeholder="3" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Current CTC (₹/annum)</Label>
-                  <Input type="number" value={form.currentCTC ?? ""} onChange={(e) => updateForm({ currentCTC: stripLeadingZeros(e.target.value) })} placeholder="600000" />
+                  <Label htmlFor="currentCTC">Current CTC (₹/annum)</Label>
+                  <Input id="currentCTC" type="number" value={form.currentCTC ?? ""} onChange={(e) => updateForm({ currentCTC: stripLeadingZeros(e.target.value) })} placeholder="600000" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Expected CTC (₹/annum)</Label>
-                  <Input type="number" value={form.expectedCTC ?? ""} onChange={(e) => updateForm({ expectedCTC: stripLeadingZeros(e.target.value) })} placeholder="700000" />
+                  <Label htmlFor="expectedCTC">Expected CTC (₹/annum)</Label>
+                  <Input id="expectedCTC" type="number" value={form.expectedCTC ?? ""} onChange={(e) => updateForm({ expectedCTC: stripLeadingZeros(e.target.value) })} placeholder="700000" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Notice Period</Label>
-                <Input value={form.noticePeriod ?? ""} onChange={(e) => updateForm({ noticePeriod: e.target.value })} placeholder="e.g. Immediate / 30 days" />
+                <Label htmlFor="noticePeriod">Notice Period</Label>
+                <Input id="noticePeriod" value={form.noticePeriod ?? ""} onChange={(e) => updateForm({ noticePeriod: e.target.value })} placeholder="e.g. Immediate / 30 days" />
               </div>
               <div className="space-y-2">
-                <Label>References</Label>
-                <Textarea value={form.references ?? ""} onChange={(e) => updateForm({ references: e.target.value })} rows={2} placeholder="Name, Designation, Contact (if any)" />
+                <Label htmlFor="references">References</Label>
+                <Textarea id="references" value={form.references ?? ""} onChange={(e) => updateForm({ references: e.target.value })} rows={2} placeholder="Name, Designation, Contact (if any)" />
               </div>
               <div className="space-y-2">
-                <Label>Any additional information</Label>
-                <Textarea value={form.additionalInfo ?? ""} onChange={(e) => updateForm({ additionalInfo: e.target.value })} rows={2} placeholder="Publications, awards, patents, etc." />
+                <Label htmlFor="additionalInfo">Any additional information</Label>
+                <Textarea id="additionalInfo" value={form.additionalInfo ?? ""} onChange={(e) => updateForm({ additionalInfo: e.target.value })} rows={2} placeholder="Publications, awards, patents, etc." />
               </div>
             </CardContent>
           </Card>
@@ -567,7 +645,7 @@ export default function CandidateFormPage() {
                       />
                     </div>
                     {certRows.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeCertRow(row.key)}>
+                      <Button type="button" variant="ghost" size="icon" aria-label="Remove document" onClick={() => removeCertRow(row.key)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     )}

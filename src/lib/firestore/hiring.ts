@@ -17,6 +17,7 @@ import { db } from "@/lib/firebase/client";
 import type {
   VacancyRequest,
   Candidate,
+  CandidateApplication,
   HiringBatch,
   PanelFeedback,
   StudentFeedback,
@@ -90,6 +91,8 @@ export async function updateVacancyStatus(
 }
 
 // ─── Candidates ───────────────────────────────────────────────────────────────
+// Candidate is a pure person record — created independently of any hiring
+// request. See CandidateApplication below for the per-hiring-cycle join entity.
 
 export async function createCandidate(
   collegeId: string,
@@ -99,10 +102,6 @@ export async function createCandidate(
   const docRef = await addDoc(ref, {
     ...data,
     collegeId,
-    currentStage: "DEMO",
-    status: "PENDING",
-    isShortlisted: false,
-    hasArrived: false,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
   });
@@ -111,21 +110,10 @@ export async function createCandidate(
 
 export async function getCandidates(
   collegeId: string,
-  filters?: {
-    status?: string;
-    department?: string;
-    batchId?: string;
-    isShortlisted?: boolean;
-  },
   lastDoc?: QueryDocumentSnapshot
 ): Promise<{ data: Candidate[]; lastDoc: QueryDocumentSnapshot | null }> {
   const ref = collection(db, "colleges", collegeId, "candidates");
   let q = query(ref, orderBy("createdAt", "desc"), limit(PAGE_SIZE));
-  if (filters?.status) q = query(q, where("status", "==", filters.status));
-  if (filters?.department) q = query(q, where("department", "==", filters.department));
-  if (filters?.batchId) q = query(q, where("batchId", "==", filters.batchId));
-  if (filters?.isShortlisted !== undefined)
-    q = query(q, where("isShortlisted", "==", filters.isShortlisted));
   if (lastDoc) q = query(q, startAfter(lastDoc));
 
   const snap = await getDocs(q);
@@ -154,11 +142,79 @@ export async function updateCandidate(
   await updateDoc(ref, { ...data, updatedAt: Timestamp.now() });
 }
 
-export async function markCandidateArrived(
+// ─── Candidate Applications ───────────────────────────────────────────────────
+// Join entity: a candidate attached to one hiring request (VacancyRequest).
+// Owns all per-hiring-cycle state; a candidate may have several of these.
+
+export async function createCandidateApplication(
   collegeId: string,
-  candidateId: string
+  data: Omit<CandidateApplication, "id" | "createdAt" | "updatedAt">
+): Promise<string> {
+  const ref = collection(db, "colleges", collegeId, "candidateApplications");
+  const docRef = await addDoc(ref, {
+    ...data,
+    collegeId,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  });
+  return docRef.id;
+}
+
+export async function getCandidateApplications(
+  collegeId: string,
+  filters?: {
+    status?: string;
+    department?: string;
+    candidateId?: string;
+    vacancyRequestId?: string;
+    batchId?: string;
+    isShortlisted?: boolean;
+  },
+  lastDoc?: QueryDocumentSnapshot
+): Promise<{ data: CandidateApplication[]; lastDoc: QueryDocumentSnapshot | null }> {
+  const ref = collection(db, "colleges", collegeId, "candidateApplications");
+  let q = query(ref, orderBy("createdAt", "desc"), limit(PAGE_SIZE));
+  if (filters?.status) q = query(q, where("status", "==", filters.status));
+  if (filters?.department) q = query(q, where("department", "==", filters.department));
+  if (filters?.candidateId) q = query(q, where("candidateId", "==", filters.candidateId));
+  if (filters?.vacancyRequestId)
+    q = query(q, where("vacancyRequestId", "==", filters.vacancyRequestId));
+  if (filters?.batchId) q = query(q, where("batchId", "==", filters.batchId));
+  if (filters?.isShortlisted !== undefined)
+    q = query(q, where("isShortlisted", "==", filters.isShortlisted));
+  if (lastDoc) q = query(q, startAfter(lastDoc));
+
+  const snap = await getDocs(q);
+  return {
+    data: snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CandidateApplication),
+    lastDoc: snap.docs[snap.docs.length - 1] ?? null,
+  };
+}
+
+export async function getCandidateApplicationById(
+  collegeId: string,
+  applicationId: string
+): Promise<CandidateApplication | null> {
+  const ref = doc(db, "colleges", collegeId, "candidateApplications", applicationId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as CandidateApplication;
+}
+
+export async function updateCandidateApplication(
+  collegeId: string,
+  applicationId: string,
+  data: Partial<CandidateApplication>
 ): Promise<void> {
-  await updateCandidate(collegeId, candidateId, {
+  const ref = doc(db, "colleges", collegeId, "candidateApplications", applicationId);
+  await updateDoc(ref, { ...data, updatedAt: Timestamp.now() });
+}
+
+export async function markCandidateApplicationArrived(
+  collegeId: string,
+  applicationId: string
+): Promise<void> {
+  await updateCandidateApplication(collegeId, applicationId, {
     hasArrived: true,
     arrivedAt: Timestamp.now(),
     status: "ARRIVED",

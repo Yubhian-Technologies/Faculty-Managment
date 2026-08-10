@@ -15,22 +15,43 @@ import type { HiringBatch } from "@/types";
 
 type BatchRow = Record<string, unknown> & HiringBatch;
 
+// A batch is "past" once it's closed out — decided (COMPLETED) or the HOD's
+// panel proposal itself was rejected — everything else is still active.
+function isPastBatch(b: BatchRow): boolean {
+  return b.currentPhase === "COMPLETED" || b.status === "REJECTED";
+}
+
 export default function PanelInterviewsPage() {
   const user = useAuthStore((s) => s.user);
   const [batches, setBatches] = useState<BatchRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [scope, setScope] = useState<"active" | "past">("active");
 
   useEffect(() => {
     const url =
       user?.role === "PANEL_MEMBER"
         ? "/api/college/hiring-batches"
         : "/api/college/hiring-batches?asPanelMember=true";
-    fetch(url)
-      .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
-      .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load interviews" }))
-      .finally(() => setIsLoading(false));
+    function load() {
+      fetch(url)
+        .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
+        .then((d) => setBatches(d.batches ?? []))
+        .catch(() => toast({ variant: "destructive", title: "Failed to load interviews" }))
+        .finally(() => setIsLoading(false));
+    }
+    load();
+    // The HOD flips batch phase (scoring open/closed) from another session —
+    // refetch on refocus so panel members see it without a manual reload.
+    function onFocus() { load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
   }, [user?.role]);
+
+  const scopedBatches = batches.filter((b) => (scope === "past" ? isPastBatch(b) : !isPastBatch(b)));
 
   const columns: Column<BatchRow>[] = [
     {
@@ -55,9 +76,9 @@ export default function PanelInterviewsPage() {
       render: (row) => (row.interviewVenue as string) || <span className="text-muted-foreground text-xs">TBA</span>,
     },
     {
-      key: "candidateIds",
+      key: "applicationIds",
       header: "Candidates",
-      render: (row) => (row.candidateIds as string[]).length,
+      render: (row) => ((row.applicationIds as string[] | undefined) ?? []).length,
     },
     {
       key: "status",
@@ -100,15 +121,28 @@ export default function PanelInterviewsPage() {
         description="Assigned interview batches and feedback submissions"
       />
 
+      <div className="flex gap-2">
+        <Button size="sm" variant={scope === "active" ? "default" : "outline"} onClick={() => setScope("active")}>
+          Active
+        </Button>
+        <Button size="sm" variant={scope === "past" ? "default" : "outline"} onClick={() => setScope("past")}>
+          Past
+        </Button>
+      </div>
+
       <DataTable
-        data={batches}
+        data={scopedBatches}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
         searchPlaceholder="Search interviews..."
         searchKeys={["position", "department"] as (keyof BatchRow)[]}
-        emptyTitle="No interviews assigned"
-        emptyDescription="You will be added to interview panels by the HOD"
+        emptyTitle={scope === "past" ? "No past interviews" : "No interviews assigned"}
+        emptyDescription={
+          scope === "past"
+            ? "Completed and rejected interviews will show up here."
+            : "You will be added to interview panels by the HOD"
+        }
         csvFilename="panel-interviews"
       />
     </div>

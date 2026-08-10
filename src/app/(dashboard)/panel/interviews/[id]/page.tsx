@@ -13,7 +13,17 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { CheckCircle2, Clock } from "lucide-react";
-import type { HiringBatch, Candidate } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, DemoRatingLevel } from "@/types";
+
+// Joined view for the candidate list this panel member scores: person fields
+// from Candidate, `id` = applicationId (list-key only), `candidateId` = the
+// real Candidate id used in panel-feedback POSTs (that schema is unchanged).
+type PanelCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+};
 
 function RatingSelector({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
@@ -39,11 +49,82 @@ function RatingSelector({ label, value, onChange }: { label: string; value: numb
   );
 }
 
+const DEMO_LEVELS: { value: DemoRatingLevel; label: string }[] = [
+  { value: "POOR", label: "Poor" },
+  { value: "AVERAGE", label: "Avg" },
+  { value: "GOOD", label: "Good" },
+  { value: "EXCELLENT", label: "Excellent" },
+];
+
+function RatingLevelSelector({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: DemoRatingLevel | undefined;
+  onChange: (v: DemoRatingLevel) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs font-medium">{label}</Label>
+      <div className="flex gap-1">
+        {DEMO_LEVELS.map((lvl) => (
+          <button
+            key={lvl.value}
+            type="button"
+            onClick={() => onChange(lvl.value)}
+            className={`flex-1 h-9 rounded text-xs font-medium border transition-colors ${
+              value === lvl.value
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background border-border hover:bg-muted"
+            }`}
+          >
+            {lvl.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type DemoForm = {
+  ratings: {
+    planningAndOrganizing?: DemoRatingLevel;
+    effectiveUseOfTime?: DemoRatingLevel;
+    communicativeAbility?: DemoRatingLevel;
+    ensuringStudentAttention?: DemoRatingLevel;
+    chalkBoardWork?: DemoRatingLevel;
+    studentParticipation?: DemoRatingLevel;
+  };
+  overallScore: number; // 0 = unset, 1-10
+  comments: string;
+};
+
+const DEMO_RUBRIC: [keyof DemoForm["ratings"], string][] = [
+  ["planningAndOrganizing", "Planning and Organizing the Subject"],
+  ["effectiveUseOfTime", "Effective Use of Time"],
+  ["communicativeAbility", "Communicative Ability and Clarity"],
+  ["ensuringStudentAttention", "Ensuring Student Attention"],
+  ["chalkBoardWork", "Clean and Systematic Chalk Board Work"],
+  ["studentParticipation", "Student Participation"],
+];
+
+const defaultDemoForm = (): DemoForm => ({ ratings: {}, overallScore: 0, comments: "" });
+
 type FeedbackForm = {
   ratings: {
     technicalKnowledge: number;
     communicationSkills: number;
     teachingMethodology: number;
+  };
+  remarksByCategory: {
+    subjectKnowledge: string;
+    communication: string;
+    presentationSkills: string;
+    research: string;
+    specificAttributes: string;
+    others: string;
   };
   recommendation: "ACCEPT" | "REJECT" | "MAYBE";
   strengths: string;
@@ -51,11 +132,28 @@ type FeedbackForm = {
   comments: string;
 };
 
+const REMARK_CATEGORIES: [keyof FeedbackForm["remarksByCategory"], string][] = [
+  ["subjectKnowledge", "Subject Knowledge"],
+  ["communication", "Communication"],
+  ["presentationSkills", "Presentation Skills"],
+  ["research", "Research"],
+  ["specificAttributes", "Specific Attributes"],
+  ["others", "Others"],
+];
+
 const defaultFeedback = (): FeedbackForm => ({
   ratings: {
     technicalKnowledge: 0,
     communicationSkills: 0,
     teachingMethodology: 0,
+  },
+  remarksByCategory: {
+    subjectKnowledge: "",
+    communication: "",
+    presentationSkills: "",
+    research: "",
+    specificAttributes: "",
+    others: "",
   },
   recommendation: "MAYBE",
   strengths: "",
@@ -63,47 +161,114 @@ const defaultFeedback = (): FeedbackForm => ({
   comments: "",
 });
 
+type MyFeedback = { candidateId: string; panelUid: string; demoRatings?: unknown; ratings?: unknown };
+
 export default function PanelInterviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const myUid = useAuthStore((s) => s.user?.uid);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [candidates, setCandidates] = useState<PanelCandidateView[]>([]);
+  const [selectedCandidate, setSelectedCandidate] = useState<PanelCandidateView | null>(null);
   const [form, setForm] = useState<FeedbackForm>(defaultFeedback());
+  const [demoForm, setDemoForm] = useState<DemoForm>(defaultDemoForm());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [submittedFor, setSubmittedFor] = useState<string[]>([]);
+  const [myFeedback, setMyFeedback] = useState<MyFeedback[]>([]);
 
   useEffect(() => {
     if (!myUid) return;
-    Promise.all([
-      fetch(`/api/college/hiring-batches/${id}`)
-        .then((r) => r.json() as Promise<{ batch: HiringBatch }>)
-        .then((d) => d.batch),
-      fetch(`/api/college/panel-feedback?batchId=${id}`)
-        .then((r) => r.json() as Promise<{ feedback: { candidateId: string; panelUid: string }[] }>)
-        // GET returns every panelist's feedback for non-PANEL_MEMBER roles (Principal/VP/HOD
-        // included, since they're often panel members too) - only count MY OWN submissions,
-        // otherwise another panelist scoring first would wrongly lock me out of scoring at all.
-        .then((d) => d.feedback.filter((f) => f.panelUid === myUid).map((f) => f.candidateId)),
-    ])
-      .then(([b, submitted]) => {
-        setBatch(b);
-        setSubmittedFor(submitted);
-        if (b.candidateIds.length > 0) {
-          return fetch(`/api/college/candidates?batchId=${id}`)
-            .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
-            .then((d) => { setCandidates(d.candidates ?? []); });
-        }
-      })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load interview" }))
-      .finally(() => setIsLoading(false));
+    function load() {
+      Promise.all([
+        fetch(`/api/college/hiring-batches/${id}`)
+          .then((r) => r.json() as Promise<{ batch: HiringBatch }>)
+          .then((d) => d.batch),
+        fetch(`/api/college/panel-feedback?batchId=${id}`)
+          .then((r) => r.json() as Promise<{ feedback: MyFeedback[] }>)
+          // GET returns every panelist's feedback for non-PANEL_MEMBER roles (Principal/VP/HOD
+          // included, since they're often panel members too) - only count MY OWN submissions,
+          // otherwise another panelist scoring first would wrongly lock me out of scoring at all.
+          .then((d) => d.feedback.filter((f) => f.panelUid === myUid)),
+      ])
+        .then(([b, mine]) => {
+          setBatch(b);
+          setMyFeedback(mine);
+          if ((b.applicationIds ?? []).length > 0) {
+            return Promise.all([
+              fetch(`/api/college/candidate-applications?batchId=${id}`)
+                .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
+                .then((d) => d.applications ?? []),
+              fetch(`/api/college/candidates`)
+                .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
+                .then((d) => d.candidates ?? []),
+            ]).then(([applications, people]) => {
+              const personMap = new Map(people.map((p) => [p.id, p]));
+              setCandidates(
+                applications.map((a) => {
+                  const person = personMap.get(a.candidateId);
+                  return {
+                    id: a.id,
+                    candidateId: a.candidateId,
+                    name: person?.name ?? "Unknown",
+                    email: person?.email ?? "",
+                  };
+                })
+              );
+            });
+          }
+        })
+        .catch(() => toast({ variant: "destructive", title: "Failed to load interview" }))
+        .finally(() => setIsLoading(false));
+    }
+    load();
+    // The batch's phase (whether scoring is open yet) and demo-complete flag
+    // change server-side (HOD/coordinator action) — refetch on refocus so this
+    // page doesn't sit behind a stale "not open yet" snapshot.
+    function onFocus() { load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
   }, [id, myUid]);
 
-  function selectCandidate(c: Candidate) {
+  function selectCandidate(c: PanelCandidateView) {
     setSelectedCandidate(c);
     setForm(defaultFeedback());
+    setDemoForm(defaultDemoForm());
+  }
+
+  async function submitDemoFeedback() {
+    if (!selectedCandidate) return;
+    const allRated = DEMO_RUBRIC.every(([key]) => demoForm.ratings[key] != null);
+    if (!allRated || demoForm.overallScore < 1) {
+      toast({ variant: "destructive", title: "Please rate all 6 criteria and give an overall score" });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/college/panel-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batchId: id,
+          candidateId: selectedCandidate.candidateId,
+          demoRatings: demoForm.ratings,
+          demoOverallScore: demoForm.overallScore,
+          demoComments: demoForm.comments,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Demo evaluation submitted" });
+      setMyFeedback((prev) => [...prev, { candidateId: selectedCandidate.candidateId, panelUid: myUid ?? "", demoRatings: demoForm.ratings }]);
+      setSelectedCandidate(null);
+      setDemoForm(defaultDemoForm());
+    } catch {
+      toast({ variant: "destructive", title: "Failed to submit demo evaluation" });
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function submitFeedback() {
@@ -120,8 +285,9 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           batchId: id,
-          candidateId: selectedCandidate.id,
+          candidateId: selectedCandidate.candidateId,
           ratings: form.ratings,
+          remarksByCategory: form.remarksByCategory,
           strengths: form.strengths,
           weaknesses: form.weaknesses,
           recommendation: form.recommendation,
@@ -130,7 +296,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
       });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Feedback submitted" });
-      setSubmittedFor((prev) => [...prev, selectedCandidate.id]);
+      setMyFeedback((prev) => [...prev, { candidateId: selectedCandidate.candidateId, panelUid: myUid ?? "", ratings: form.ratings }]);
       setSelectedCandidate(null);
       setForm(defaultFeedback());
     } catch {
@@ -151,10 +317,16 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
 
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Not found</div>;
 
-  const canScore =
+  const isDemoPhase = batch.currentPhase === "IN_PROGRESS";
+  const isInterviewPhase =
     batch.currentPhase === "PANEL_INTERVIEW" ||
     batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" ||
     batch.currentPhase === "COMPLETED";
+  const canScore = isDemoPhase || isInterviewPhase;
+
+  const doneIds = new Set(
+    myFeedback.filter((f) => (isDemoPhase ? f.demoRatings != null : f.ratings != null)).map((f) => f.candidateId)
+  );
 
   return (
     <div className="space-y-6">
@@ -178,9 +350,9 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
         <Card className="border-dashed">
           <CardContent className="p-8 text-center space-y-2">
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
-            <p className="font-medium">Panel Scoring Not Yet Open</p>
+            <p className="font-medium">Scoring Not Yet Open</p>
             <p className="text-sm text-muted-foreground">
-              The HOD will open panel scoring after reviewing demo day results. Check back after the demo session is complete.
+              Demo evaluation opens once candidates arrive for their demo class; panel interview scoring opens after the HOD reviews demo day results.
             </p>
           </CardContent>
         </Card>
@@ -194,18 +366,24 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
                 <p className="text-sm text-muted-foreground">No candidates in this batch.</p>
               ) : (
                 candidates.map((c) => {
-                  const done = submittedFor.includes(c.id);
+                  const done = doneIds.has(c.candidateId);
                   const selected = selectedCandidate?.id === c.id;
                   return (
                     <div
                       key={c.id}
                       onClick={() => !done && selectCandidate(c)}
-                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      onKeyDown={(e) => {
+                        if (done) return;
+                        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectCandidate(c); }
+                      }}
+                      role={done ? undefined : "button"}
+                      tabIndex={done ? undefined : 0}
+                      className={`p-3 rounded-lg border transition-colors ${
                         done
                           ? "bg-green-50 border-green-200 cursor-default"
                           : selected
-                          ? "border-primary bg-primary/5"
-                          : "hover:bg-muted"
+                          ? "border-primary bg-primary/5 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
+                          : "hover:bg-muted cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -232,7 +410,64 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
           </Card>
 
           {/* Feedback Form */}
-          {selectedCandidate ? (
+          {selectedCandidate && isDemoPhase ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Demo Evaluation: {selectedCandidate.name}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="space-y-4">
+                  {DEMO_RUBRIC.map(([key, label]) => (
+                    <RatingLevelSelector
+                      key={key}
+                      label={label}
+                      value={demoForm.ratings[key]}
+                      onChange={(v) => setDemoForm((f) => ({ ...f, ratings: { ...f.ratings, [key]: v } }))}
+                    />
+                  ))}
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Overall Performance (out of 10)</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setDemoForm((f) => ({ ...f, overallScore: n }))}
+                        className={`w-8 h-8 rounded text-xs font-medium border transition-colors ${
+                          demoForm.overallScore >= n
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background border-border hover:bg-muted"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Comments (optional)</Label>
+                  <Textarea
+                    value={demoForm.comments}
+                    onChange={(e) => setDemoForm((f) => ({ ...f, comments: e.target.value }))}
+                    placeholder="Any other observations from the demo class..."
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => { setSelectedCandidate(null); setDemoForm(defaultDemoForm()); }}>
+                    Cancel
+                  </Button>
+                  <Button onClick={submitDemoFeedback} loading={isSaving}>
+                    Submit Evaluation
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : selectedCandidate ? (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Feedback: {selectedCandidate.name}</CardTitle>
@@ -272,6 +507,23 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
                       <SelectItem value="REJECT">Reject - Not suitable</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-3 pt-1 border-t">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Remarks</Label>
+                  {REMARK_CATEGORIES.map(([key, label]) => (
+                    <div key={key} className="space-y-1">
+                      <Label className="text-xs">{label}</Label>
+                      <Textarea
+                        value={form.remarksByCategory[key]}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, remarksByCategory: { ...f.remarksByCategory, [key]: e.target.value } }))
+                        }
+                        rows={1}
+                        className="text-sm"
+                      />
+                    </div>
+                  ))}
                 </div>
 
                 <div className="space-y-2">
@@ -317,7 +569,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
           ) : (
             <Card className="border-dashed">
               <CardContent className="p-8 text-center text-muted-foreground">
-                <p className="text-sm">Select a candidate from the list to submit your feedback.</p>
+                <p className="text-sm">Select a candidate from the list to submit your {isDemoPhase ? "demo evaluation" : "feedback"}.</p>
               </CardContent>
             </Card>
           )}
@@ -325,10 +577,10 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
       )}
 
       {/* All submitted */}
-      {canScore && submittedFor.length === candidates.length && candidates.length > 0 && (
+      {canScore && doneIds.size === candidates.length && candidates.length > 0 && (
         <div className="flex items-center gap-2 text-sm text-green-600">
           <CheckCircle2 className="h-4 w-4" />
-          You have submitted feedback for all {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}.
+          You have submitted {isDemoPhase ? "demo evaluations" : "feedback"} for all {candidates.length} candidate{candidates.length !== 1 ? "s" : ""}.
         </div>
       )}
     </div>
