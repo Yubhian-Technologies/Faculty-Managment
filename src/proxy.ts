@@ -17,6 +17,7 @@ const PUBLIC_PATHS = [
   "/api/auth",
   "/location-interview",
   "/candidate-form",
+  "/offer-acceptance",
   "/about-team-illustration.png",
 ];
 
@@ -28,6 +29,7 @@ const PANEL_INTERVIEWS_PATH = "/panel/interviews";
 const ROLE_PATH_MAP: Record<string, string[]> = {
   SUPER_ADMIN: ["/super-admin", PANEL_INTERVIEWS_PATH],
   MANAGEMENT: ["/management"],
+  WEBMASTER: ["/webmaster"],
   ADMINISTRATION: ["/administration"],
   HR_ADMIN: ["/hr-admin"],
   ADMIN_OFFICE: ["/admin-office"],
@@ -41,7 +43,6 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH],
   HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH],
   COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH],
-  WEBMASTER: ["/webmaster"],
   COLLEGE_STAFF: ["/college-staff"],
   DEAN: ["/dean"],
   IQAC_COORDINATOR: ["/iqac-coordinator"],

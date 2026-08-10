@@ -24,8 +24,8 @@ export type UserRole =
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
-  | "PANEL_MEMBER"
   | "WEBMASTER"
+  | "PANEL_MEMBER"
   | "ACCOUNTS"
   | "FINANCE"
   | "PURCHASE_DEPT"
@@ -51,8 +51,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
-  PANEL_MEMBER: "Faculty",
   WEBMASTER: "Webmaster",
+  PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
   PURCHASE_DEPT: "Purchase Department",
@@ -79,8 +79,8 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
-  PANEL_MEMBER: "/panel",
   WEBMASTER: "/webmaster",
+  PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
   PURCHASE_DEPT: "/purchase",
@@ -181,8 +181,7 @@ export function rolesInheritedBy(role: UserRole): UserRole[] {
   const selfScopeRank = scopeRank(ROLE_SCOPE[role]);
   return (Object.keys(ROLE_LEVEL) as UserRole[]).filter(
     (r) =>
-      ROLE_LEVEL[r] > selfLevel &&
-      scopeRank(ROLE_SCOPE[r]) >= selfScopeRank
+      ROLE_LEVEL[r] > selfLevel && scopeRank(ROLE_SCOPE[r]) >= selfScopeRank,
   );
 }
 
@@ -239,37 +238,52 @@ export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
 // came from). "OTHER" is also what a legacy free-text value not matching any
 // code here falls back to until the record is next saved (see subCaste for
 // caste sub-classification, which stays free text since it isn't a fixed list).
-export type Religion = "HINDU" | "CHRISTIAN" | "MUSLIM" | "JAIN" | "SIKH" | "OTHER";
+export type Religion =
+  | "HINDU"
+  | "CHRISTIAN"
+  | "MUSLIM"
+  | "JAIN"
+  | "SIKH"
+  | "OTHER";
 export const RELIGION_LABELS: Record<Religion, string> = {
-  HINDU: "Hindu", CHRISTIAN: "Christian", MUSLIM: "Muslim", JAIN: "Jain", SIKH: "Sikh", OTHER: "Other",
+  HINDU: "Hindu",
+  CHRISTIAN: "Christian",
+  MUSLIM: "Muslim",
+  JAIN: "Jain",
+  SIKH: "Sikh",
+  OTHER: "Other",
 };
 export type Caste = "OC" | "BC" | "SC" | "ST" | "OTHER";
 export const CASTE_LABELS: Record<Caste, string> = {
-  OC: "OC", BC: "BC", SC: "SC", ST: "ST", OTHER: "Other",
+  OC: "OC",
+  BC: "BC",
+  SC: "SC",
+  ST: "ST",
+  OTHER: "Other",
 };
 
 export interface FMSUser {
   uid: string;
   collegeId: string;
-  locationId?: string;      // set for location-scoped roles; also present on college roles
+  locationId?: string; // set for location-scoped roles; also present on college roles
   name: string;
   email: string;
-  collegeEmail?: string;    // same field name as FacultyMember below, for consistency
+  collegeEmail?: string; // same field name as FacultyMember below, for consistency
   phone?: string;
   role: UserRole;
-  department?: string;      // for HOD / LOCATION_DEPT_HEAD
-  locationDeptId?: string;  // for LOCATION_DEPT_HEAD
-  sectionId?: string;       // for CLASS_LEADER - the one Section this login is bound to
-  sectionName?: string;     // for CLASS_LEADER - denormalized Section.name
-  employeeId?: string;      // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
-  designation?: string;     // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
-  dateOfBirth?: Timestamp;  // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
+  department?: string; // for HOD / LOCATION_DEPT_HEAD
+  locationDeptId?: string; // for LOCATION_DEPT_HEAD
+  sectionId?: string; // for CLASS_LEADER - the one Section this login is bound to
+  sectionName?: string; // for CLASS_LEADER - denormalized Section.name
+  employeeId?: string; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
+  designation?: string; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
+  dateOfBirth?: Timestamp; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   profilePhotoUrl?: string; // Firebase Storage download URL, same field name as FacultyMember below
 
   // Personal / statutory details (same field names as FacultyMember below, for consistency)
   gender?: "Male" | "Female" | "Other";
-  legalName?: string;          // name as per SSC certificates (CAPITAL LETTERS)
-  fatherName?: string;         // father or husband name
+  legalName?: string; // name as per SSC certificates (CAPITAL LETTERS)
+  fatherName?: string; // father or husband name
   motherName?: string;
   religion?: Religion;
   caste?: Caste;
@@ -284,11 +298,11 @@ export interface FMSUser {
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string;              // referral source/person, if any
+  referral?: string; // referral source/person, if any
   nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
-  permanentAddress?: string;      // ignored/blank when permanentSameAsTemporary is true
+  permanentAddress?: string; // ignored/blank when permanentSameAsTemporary is true
   bloodGroup?: string;
 
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile; PRINCIPAL/VICE_PRINCIPAL omit teachingAssignment in the UI
@@ -315,7 +329,7 @@ export interface Location {
 export interface LocationDepartment {
   id: string;
   locationId: string;
-  name: string;          // Electrical, Civil, Accounts, etc.
+  name: string; // Electrical, Civil, Accounts, etc.
   deptHeadUid?: string;
   deptHeadName?: string;
   isActive: boolean;
@@ -325,7 +339,13 @@ export interface LocationDepartment {
 
 // ─── College ──────────────────────────────────────────────────────────────────
 
-export type CollegeType = "ENGINEERING" | "SCHOOL" | "DENTAL" | "PHARMACY" | "POLYTECHNIC" | "DEGREE";
+export type CollegeType =
+  | "ENGINEERING"
+  | "SCHOOL"
+  | "DENTAL"
+  | "PHARMACY"
+  | "POLYTECHNIC"
+  | "DEGREE";
 
 export const COLLEGE_TYPE_LABELS: Record<CollegeType, string> = {
   ENGINEERING: "Engineering",
@@ -338,9 +358,9 @@ export const COLLEGE_TYPE_LABELS: Record<CollegeType, string> = {
 
 export interface College {
   id: string;
-  locationId?: string;   // which location this college belongs to
+  locationId?: string; // which location this college belongs to
   name: string;
-  type?: CollegeType;    // institution category - optional so older records without one still load
+  type?: CollegeType; // institution category - optional so older records without one still load
   logoUrl?: string;
   address?: string;
   contactEmail?: string;
@@ -397,9 +417,9 @@ export interface Course {
   id: string;
   collegeId: string;
   departmentId: string;
-  name: string;          // "B.Tech", "B.Pharm", "BDS", "MBA", ...
-  code: string;           // "BTECH"
-  durationYears: number;  // e.g. 4, 2
+  name: string; // "B.Tech", "B.Pharm", "BDS", "MBA", ...
+  code: string; // "BTECH"
+  durationYears: number; // e.g. 4, 2
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -408,18 +428,18 @@ export interface Course {
 // ─── Course-Year Timing (college timings, periods, breaks — per course, per year) ──
 
 export interface BreakConfig {
-  afterPeriod: number;      // e.g. break happens after period 4
+  afterPeriod: number; // e.g. break happens after period 4
   durationMinutes: number;
 }
 
 export interface CourseYearTiming {
-  id: string;                // `${courseId}_year${year}`
+  id: string; // `${courseId}_year${year}`
   collegeId: string;
   departmentId: string;
   courseId: string;
   year: number;
-  collegeStartTime: string;  // "HH:MM" 24h
-  collegeEndTime: string;    // "HH:MM" 24h
+  collegeStartTime: string; // "HH:MM" 24h
+  collegeEndTime: string; // "HH:MM" 24h
   numberOfPeriods: number;
   periodDurationMinutes: number;
   lunchBreak: BreakConfig;
@@ -433,13 +453,13 @@ export interface CourseYearTiming {
 // gate) — the two are unrelated features that happen to share a similar name.
 
 export interface CourseAcademicYear {
-  id: string;                // `${courseId}_year${year}`
+  id: string; // `${courseId}_year${year}`
   collegeId: string;
   departmentId: string;
   courseId: string;
   year: number;
-  label: string;              // "2025-2026"
-  advancedAt?: Timestamp;     // set on every advance (not on first creation)
+  label: string; // "2025-2026"
+  advancedAt?: Timestamp; // set on every advance (not on first creation)
   advancedByName?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -533,7 +553,12 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
 // is marked ACCEPTED (see offer-letters/[id]/route.ts PATCH). Faculty in this
 // status haven't joined yet, so their joiningDate is a proposed/expected date —
 // UI should read "Expected to join on <date>", not "Joined".
-export type FacultyStatus = "INTERVIEW_DONE" | "ACTIVE" | "ON_LEAVE" | "RESIGNED" | "RETIRED";
+export type FacultyStatus =
+  | "INTERVIEW_DONE"
+  | "ACTIVE"
+  | "ON_LEAVE"
+  | "RESIGNED"
+  | "RETIRED";
 
 export const FACULTY_STATUS_LABELS: Record<FacultyStatus, string> = {
   INTERVIEW_DONE: "Interview Done",
@@ -550,18 +575,18 @@ export interface FacultyMember {
   employeeId: string;
   apaarFacultyId?: string; // NBA/AICTE — APAAR Faculty ID
   name: string;
-  email?: string;       // personal email — optional, contact only
+  email?: string; // personal email — optional, contact only
   phone?: string;
   designation: Designation;
   qualification: string;
   specialization?: string;
   experienceYears: number;
-  joiningDate: Timestamp;                  // Date of Joining Institution
-  dateOfJoiningDepartment?: Timestamp;      // Date of Joining Department (NBA/AICTE — may differ from institution)
+  joiningDate: Timestamp; // Date of Joining Institution
+  dateOfJoiningDepartment?: Timestamp; // Date of Joining Department (NBA/AICTE — may differ from institution)
   employmentType: EmploymentType;
-  aicteEligible?: boolean;                  // AICTE Eligibility
+  aicteEligible?: boolean; // AICTE Eligibility
   status: FacultyStatus;
-  userUid?: string;            // links to users/{uid} if they have a system login
+  userUid?: string; // links to users/{uid} if they have a system login
   profilePhotoUrl?: string;
 
   // Carried over from the hiring pipeline when a candidate had a course/subject preference set —
@@ -578,8 +603,8 @@ export interface FacultyMember {
   // Extended profile fields (from institution records / bulk import)
   gender?: "Male" | "Female" | "Other";
   dateOfBirth?: Timestamp;
-  legalName?: string;          // name as per SSC certificates (CAPITAL LETTERS)
-  fatherName?: string;         // father or husband name
+  legalName?: string; // name as per SSC certificates (CAPITAL LETTERS)
+  fatherName?: string; // father or husband name
   motherName?: string;
   religion?: Religion;
   caste?: Caste;
@@ -589,17 +614,17 @@ export interface FacultyMember {
   passportNumber?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
-  collegeEmail: string;    // required — this is the faculty member's login username
+  collegeEmail: string; // required — this is the faculty member's login username
   ratificationStatus?: "Ratified" | "Not Ratified";
   ratificationDate?: Timestamp;
   maritalStatus?: "Single" | "Married";
   spouseName?: string;
   numberOfChildren?: number;
-  referral?: string;              // referral source/person, if any
+  referral?: string; // referral source/person, if any
   nativePlace?: string;
   temporaryAddress?: string;
   permanentSameAsTemporary?: boolean;
-  permanentAddress?: string;      // ignored/blank when permanentSameAsTemporary is true
+  permanentAddress?: string; // ignored/blank when permanentSameAsTemporary is true
   bloodGroup?: string;
   hasPHD?: boolean;
   internalExperience?: number; // years of experience within the institution
@@ -609,9 +634,10 @@ export interface FacultyMember {
   researchExperience?: number; // years of research experience
   academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile
 
-  joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
-  appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
-  resumeUrl?: string;              // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
+  joiningLetterUrl?: string; // Firebase Storage URL for the signed joining letter (uploaded by HOD)
+  appointmentLetterUrl?: string; // Firebase Storage URL for the appointment order (uploaded by HOD)
+  resumeUrl?: string; // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
+  officialEmail?: string; // institutional email address, set by Webmaster once an EmailCreationRequest is fulfilled — distinct from collegeEmail (the FMS login username)
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -693,7 +719,7 @@ export interface Publication {
 export interface ResearchPublication {
   id: string;
   collegeId: string;
-  uid: string;            // owning staff member - any role
+  uid: string; // owning staff member - any role
   ownerName: string;
   ownerRole: UserRole;
   title: string;
@@ -702,7 +728,7 @@ export interface ResearchPublication {
   publicationYear: number;
   indexing?: string;
   driveLink?: string;
-  addedBy: string;        // R&D uid who created/last edited it
+  addedBy: string; // R&D uid who created/last edited it
   addedByName: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -749,16 +775,33 @@ export interface AuthoredBook {
 // Shared structured "training/FDP" entry — used by Teaching Faculty Module 5 AND both
 // Supporting Staff categories' Training sections (their category-specific types apply).
 export type TrainingEntryType =
-  | "FDP" | "WORKSHOP" | "MOOC" | "CERTIFICATION"
-  | "SKILL_DEVELOPMENT" | "ADMINISTRATIVE" | "ERP" | "OFFICE_AUTOMATION" | "OTHER";
+  | "FDP"
+  | "WORKSHOP"
+  | "MOOC"
+  | "CERTIFICATION"
+  | "SKILL_DEVELOPMENT"
+  | "ADMINISTRATIVE"
+  | "ERP"
+  | "OFFICE_AUTOMATION"
+  | "OTHER";
 export const TRAINING_ENTRY_TYPE_LABELS: Record<TrainingEntryType, string> = {
-  FDP: "FDP", WORKSHOP: "Workshop", MOOC: "MOOC", CERTIFICATION: "Certification",
-  SKILL_DEVELOPMENT: "Skill Development", ADMINISTRATIVE: "Administrative Training",
-  ERP: "ERP Training", OFFICE_AUTOMATION: "Office Automation Training", OTHER: "Other",
+  FDP: "FDP",
+  WORKSHOP: "Workshop",
+  MOOC: "MOOC",
+  CERTIFICATION: "Certification",
+  SKILL_DEVELOPMENT: "Skill Development",
+  ADMINISTRATIVE: "Administrative Training",
+  ERP: "ERP Training",
+  OFFICE_AUTOMATION: "Office Automation Training",
+  OTHER: "Other",
 };
 export type TrainingParticipationRole = "PARTICIPATED" | "CONDUCTED";
-export const TRAINING_PARTICIPATION_ROLE_LABELS: Record<TrainingParticipationRole, string> = {
-  PARTICIPATED: "Participated", CONDUCTED: "Conducted",
+export const TRAINING_PARTICIPATION_ROLE_LABELS: Record<
+  TrainingParticipationRole,
+  string
+> = {
+  PARTICIPATED: "Participated",
+  CONDUCTED: "Conducted",
 };
 export interface TrainingEntry {
   type: TrainingEntryType;
@@ -770,9 +813,20 @@ export interface TrainingEntry {
   certificateUrl?: string;
 }
 
-export type ProfessionalBody = "IEEE" | "ISTE" | "CSI" | "ACM" | "IEI" | "OTHER";
+export type ProfessionalBody =
+  | "IEEE"
+  | "ISTE"
+  | "CSI"
+  | "ACM"
+  | "IEI"
+  | "OTHER";
 export const PROFESSIONAL_BODY_LABELS: Record<ProfessionalBody, string> = {
-  IEEE: "IEEE", ISTE: "ISTE", CSI: "CSI", ACM: "ACM", IEI: "IEI", OTHER: "Other",
+  IEEE: "IEEE",
+  ISTE: "ISTE",
+  CSI: "CSI",
+  ACM: "ACM",
+  IEI: "IEI",
+  OTHER: "Other",
 };
 export interface ProfessionalMembership {
   body: ProfessionalBody;
@@ -782,10 +836,22 @@ export interface ProfessionalMembership {
 }
 
 export type AdminResponsibilityCategory =
-  | "COORDINATOR" | "COMMITTEE_MEMBER" | "NBA_NAAC" | "IQAC" | "EXAMINATION_DUTY" | "OTHER";
-export const ADMIN_RESPONSIBILITY_CATEGORY_LABELS: Record<AdminResponsibilityCategory, string> = {
-  COORDINATOR: "Coordinator Role", COMMITTEE_MEMBER: "Committee Membership",
-  NBA_NAAC: "NBA / NAAC Work", IQAC: "IQAC", EXAMINATION_DUTY: "Examination Duty", OTHER: "Other",
+  | "COORDINATOR"
+  | "COMMITTEE_MEMBER"
+  | "NBA_NAAC"
+  | "IQAC"
+  | "EXAMINATION_DUTY"
+  | "OTHER";
+export const ADMIN_RESPONSIBILITY_CATEGORY_LABELS: Record<
+  AdminResponsibilityCategory,
+  string
+> = {
+  COORDINATOR: "Coordinator Role",
+  COMMITTEE_MEMBER: "Committee Membership",
+  NBA_NAAC: "NBA / NAAC Work",
+  IQAC: "IQAC",
+  EXAMINATION_DUTY: "Examination Duty",
+  OTHER: "Other",
 };
 export interface AdminResponsibilityEntry {
   category: AdminResponsibilityCategory;
@@ -795,10 +861,16 @@ export interface AdminResponsibilityEntry {
 }
 
 // Shared award/recognition entry — Teaching Faculty AND both Supporting Staff categories.
-export type AwardCategory = "BEST_TEACHER" | "RESEARCH_AWARD" | "APPRECIATION_CERTIFICATE" | "OTHER";
+export type AwardCategory =
+  | "BEST_TEACHER"
+  | "RESEARCH_AWARD"
+  | "APPRECIATION_CERTIFICATE"
+  | "OTHER";
 export const AWARD_CATEGORY_LABELS: Record<AwardCategory, string> = {
-  BEST_TEACHER: "Best Teacher Award", RESEARCH_AWARD: "Research Award",
-  APPRECIATION_CERTIFICATE: "Appreciation Certificate", OTHER: "Other",
+  BEST_TEACHER: "Best Teacher Award",
+  RESEARCH_AWARD: "Research Award",
+  APPRECIATION_CERTIFICATE: "Appreciation Certificate",
+  OTHER: "Other",
 };
 export interface AwardEntry {
   category: AwardCategory;
@@ -877,17 +949,20 @@ export interface FacultyProfileFields {
   awardEntries: AwardEntry[];
 
   // Module 6 — Financial Standing & Budgetary Impact
-  presentSalary?: number;              // Current Financial Standing — present salary drawn by the faculty member
-  grossAnnualCTC?: number;             // Budgetary Impact
+  presentSalary?: number; // Current Financial Standing — present salary drawn by the faculty member
+  grossAnnualCTC?: number; // Budgetary Impact
   incrementsAwarded?: number;
-  fundingConsultancyRevenue?: number;  // offsets salary cost against research/consultancy grants brought into the institution
+  fundingConsultancyRevenue?: number; // offsets salary cost against research/consultancy grants brought into the institution
 
   // Module 7 — Others
   otherInformation?: string;
 }
 
 // PRINCIPAL / VICE_PRINCIPAL form variant — no teaching-assignment sub-object
-export type PrincipalAcademicProfile = Omit<FacultyProfileFields, "teachingAssignment">;
+export type PrincipalAcademicProfile = Omit<
+  FacultyProfileFields,
+  "teachingAssignment"
+>;
 
 // ─── Academic Year ──────────────────────────────────────────────────────────
 // Which years of study exist for a college — added sequentially (1, 2, 3, …)
@@ -901,7 +976,7 @@ export interface AcademicYear {
   id: string;
   collegeId: string;
   yearNumber: number;
-  label: string;   // e.g. "1st Year"
+  label: string; // e.g. "1st Year"
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -916,7 +991,7 @@ export interface AcademicYear {
 export interface AcademicSession {
   id: string;
   collegeId: string;
-  label: string;   // e.g. "2025-26"
+  label: string; // e.g. "2025-26"
   isCurrent: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -930,9 +1005,9 @@ export interface Section {
   department: string;
   courseId: string;
   courseName?: string;
-  name: string;              // "A", "B", "C" etc.
-  year: number;              // academic year within the course (1..course.durationYears)
-  batch: string;             // admission batch e.g. "2023-2027"
+  name: string; // "A", "B", "C" etc.
+  year: number; // academic year within the course (1..course.durationYears)
+  batch: string; // admission batch e.g. "2023-2027"
   facultyInchargeUid?: string;
   facultyInchargeName?: string;
   classLeaderUid?: string;
@@ -954,7 +1029,9 @@ export interface Section {
 // route per caller, never persisted. "primary" = caller's own department (or
 // caller role sees everyone unscoped, e.g. Principal); "secondary" = view-only,
 // for a parent department's HOD looking at a child sub-department's section.
-export type SectionListItem = Section & { accessLevel: "primary" | "secondary" };
+export type SectionListItem = Section & {
+  accessLevel: "primary" | "secondary";
+};
 
 // ─── Student Record ─────────────────────────────────────────────────────────
 // Enrolled-student roster row, independent of any login account. Faculty manage
@@ -965,14 +1042,14 @@ export type StudentStatus = "REGULAR" | "DETAINED" | "GRADUATED";
 export interface StudentRecord {
   id: string;
   collegeId: string;
-  department: string;   // primary — full access/control (roster, sections, promotion)
-  section: string;      // Section.name — "A", "B", etc.
+  department: string; // primary — full access/control (roster, sections, promotion)
+  section: string; // Section.name — "A", "B", etc.
   year: number;
   rollNumber: string;
   name: string;
   status: StudentStatus;
   gender?: string;
-  dateOfBirth?: string;        // yyyy-mm-dd, kept as string (no statutory-date math needed)
+  dateOfBirth?: string; // yyyy-mm-dd, kept as string (no statutory-date math needed)
   guardianContact?: string;
   email?: string;
   // Secondary — view-only access, for a student pre-registered to a core
@@ -990,7 +1067,9 @@ export interface StudentRecord {
 // route per caller, never persisted to Firestore. "primary" = full control
 // (own department, or caller role sees everyone unscoped e.g. Principal);
 // "secondary" = view-only (caller's department matches secondaryDepartment).
-export type StudentListItem = StudentRecord & { accessLevel: "primary" | "secondary" };
+export type StudentListItem = StudentRecord & {
+  accessLevel: "primary" | "secondary";
+};
 
 // Append-only — one entry per (department, section, year) a student has ever
 // been enrolled in, written at creation and at every promotion. There is no
@@ -1005,7 +1084,7 @@ export interface StudentDepartmentHistoryEntry {
   from: Timestamp;
 }
 
-// ─── Notifications ────────────────────────────────────────────────────────────
+// ─── Notifications ──────────────────────────────────────────────────────────── 
 
 export type NotificationType =
   // Recruitment
@@ -1018,9 +1097,15 @@ export type NotificationType =
   | "HIRING_APPROVED"
   | "HIRING_REJECTED"
   | "OFFER_LETTER_GENERATED"
+  | "OFFER_RESPONSE_RECEIVED"
   | "CREDENTIAL_REQUESTED"
+  | "FACULTY_ACCOUNT_REQUEST_COMPLETED"
   | "COORDINATOR_ASSIGNED"
-  // Leave
+  // Webmaster (official email provisioning)
+  | "EMAIL_REQUEST_SUBMITTED"
+  | "OFFICIAL_EMAIL_CREATED"
+  | "EMAIL_REQUEST_CANCELLED"
+  // Leave & Attendance
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
@@ -1117,10 +1202,20 @@ export type AuditAction =
   | "HIRING_DECISION_MADE"
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
+  // Webmaster module
+  | "EMAIL_REQUEST_CREATED"
+  | "EMAIL_REQUEST_FULFILLED"
+  | "EMAIL_REQUEST_CANCELLED"
   | "DOCUMENTS_VERIFIED"
   | "JOINING_LETTER_UPLOADED"
   | "CREDENTIAL_REQUESTED"
   | "CREDENTIAL_REQUEST_FULFILLED"
+  | "OFFER_ACCEPTED_BY_CANDIDATE"
+  | "OFFER_REJECTED_BY_CANDIDATE"
+  | "FACULTY_ACCOUNT_REQUEST_SUBMITTED"
+  | "FACULTY_ACCOUNT_REQUEST_IN_PROGRESS"
+  | "FACULTY_ACCOUNT_REQUEST_CREDENTIALS_CREATED"
+  | "FACULTY_ACCOUNT_REQUEST_COMPLETED"
   // User management
   | "USER_CREATED"
   | "USER_UPDATED"
