@@ -1,14 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
-
-// Leave-module definition of "vacation staff" - stricter than core.ts's
-// TEACHING_DESIGNATIONS (which also counts Lab Assistant toward faculty-ratio
-// reporting elsewhere in the app). For leave purposes, vacation staff is only
-// actual classroom teaching designations; every other FacultyMember
-// designation (including Lab Assistant) is non-vacation, same as all other
-// supporting staff.
-const VACATION_DESIGNATIONS = [
-  "PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY",
-];
+import { isTeachingDesignation } from "@/lib/designations/config";
+import type { CollegeType } from "@/types/core";
 
 export interface ResolvedIdentity {
   name: string;
@@ -52,10 +44,18 @@ export async function resolveEmployeeIdentity(
       designation: string;
       joiningDate?: { toDate(): Date };
     };
+    // Vacation (classroom teaching) entitlement depends on the designation
+    // being a teaching one for this college's type (see
+    // src/lib/designations/config.ts) - every other FacultyMember
+    // designation (e.g. a not-yet-migrated Lab Assistant, see
+    // scripts/migrate-technical-staff-to-supporting-staff.mjs) is
+    // non-vacation, same as all other supporting staff.
+    const collegeSnap = await collegeRef.get();
+    const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
     return {
       name: f.name,
       department: f.department,
-      isTeachingStaff: VACATION_DESIGNATIONS.includes(f.designation),
+      isTeachingStaff: isTeachingDesignation(f.designation, collegeType),
       dateOfJoining: f.joiningDate?.toDate?.() ?? new Date(),
     };
   }

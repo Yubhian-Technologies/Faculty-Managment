@@ -72,22 +72,21 @@ export const COLUMNS: FacultyCsvColumn[] = [
   { key: "ug_degree",              label: "UG Degree",                          required: false, sample: "B.Tech" },
   { key: "ug_branch",              label: "UG Branch",                          required: false, sample: "CSE" },
   { key: "ug_university",          label: "UG University/Institute",            required: false, sample: "JNTU Kakinada" },
-  { key: "ug_percentage",          label: "UG Percentage/Division",             required: false, sample: "78%" },
+  { key: "ug_percentage",          label: "UG Percentage/CGPA",                 required: false, sample: "78%" },
   { key: "ug_year",                label: "UG Year of Completion",              required: false, sample: "2008" },
   { key: "pg_degree",              label: "PG Degree",                          required: false, sample: "M.Tech" },
   { key: "pg_branch",              label: "PG Branch",                          required: false, sample: "CSE" },
   { key: "pg_university",          label: "PG University/Institute",            required: false, sample: "NIT Warangal" },
-  { key: "pg_percentage",          label: "PG Percentage/Division",             required: false, sample: "82%" },
+  { key: "pg_percentage",          label: "PG Percentage/CGPA",                 required: false, sample: "82%" },
   { key: "pg_year",                label: "PG Year of Completion",              required: false, sample: "2011" },
   { key: "phd_degree",             label: "PhD Degree",                         required: false, sample: "Ph.D" },
-  { key: "phd_branch",             label: "PhD Branch",                         required: false, sample: "CSE" },
+  { key: "phd_specialization",     label: "PhD Specialization",                 required: false, sample: "Machine Learning" },
   { key: "phd_university",         label: "PhD University/Institute",           required: false, sample: "IIT Hyderabad" },
-  { key: "phd_percentage",         label: "PhD Percentage/Division",            required: false, sample: "-" },
   { key: "phd_year",               label: "PhD Year of Completion",             required: false, sample: "2017" },
   { key: "postdoc_degree",         label: "Post-Doctoral Degree",               required: false, sample: "" },
   { key: "postdoc_branch",         label: "Post-Doctoral Branch",               required: false, sample: "" },
   { key: "postdoc_university",     label: "Post-Doctoral University/Institute", required: false, sample: "" },
-  { key: "postdoc_percentage",     label: "Post-Doctoral Percentage/Division",  required: false, sample: "" },
+  { key: "postdoc_percentage",     label: "Post-Doctoral Percentage/CGPA",      required: false, sample: "" },
   { key: "postdoc_year",           label: "Post-Doctoral Year of Completion",   required: false, sample: "" },
   { key: "phdStatus",              label: "Ph.D. Status (Awarded/Pursuing)",    required: false, sample: "Awarded" },
   { key: "phdMode",                label: "Ph.D. Mode (Full-Time/Part-Time)",   required: false, sample: "Full-Time" },
@@ -295,7 +294,7 @@ export const COLUMNS: FacultyCsvColumn[] = [
 ];
 
 export const HINTS = [
-  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty (teaching); Lab Assistant, Programmer, System Administrator, Network Engineer, Other (technical)",
+  "Designation: any teaching title used by your college (e.g. Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty for Engineering/Pharmacy/Dental; Principal, HOD, PGT, TGT, PRT etc. for Degree/Polytechnic/School colleges)",
   "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",
   "Status: Active, On Leave, Resigned, Retired (defaults to Active if left blank)",
   "Gender: Male, Female, Other",
@@ -345,10 +344,10 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
 ];
 
 export const IMPORT_HINTS = [
-  "Designation: Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty (Teaching); Lab Assistant, Programmer, System Administrator, Network Engineer, Other (Technical)",
+  "Designation: any teaching title used by your college (e.g. Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty for Engineering/Pharmacy/Dental; Principal, HOD, PGT, TGT, PRT etc. for Degree/Polytechnic/School colleges) - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead",
   "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",
   "Dates must be in YYYY-MM-DD format (e.g. 2020-06-01)",
   "Department is auto-assigned from your HOD profile",
   "Login Password (optional): fill this in to create the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Leave it blank to skip login creation for that row; you can still set it up later from the Faculty list's \"Set Login\" button.",
-  "Personal details, Academic Profile, and Technical Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
+  "Personal details and Academic Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
 ];

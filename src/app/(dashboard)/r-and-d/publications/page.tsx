@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FlaskConical, Plus, Pencil, Trash2 } from "lucide-react";
+import { FlaskConical, Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -93,9 +93,14 @@ export default function RAndDPublicationsPage() {
         title="Research Publications"
         description="Manage the official publication record for every staff member"
         actions={
-          <Button onClick={() => router.push("/r-and-d/publications/new")}>
-            <Plus className="h-4 w-4 mr-2" />Add Publication
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => router.push("/r-and-d/publications/import")}>
+              <Upload className="h-4 w-4 mr-2" />Import
+            </Button>
+            <Button onClick={() => router.push("/r-and-d/publications/new")}>
+              <Plus className="h-4 w-4 mr-2" />Add Publication
+            </Button>
+          </div>
         }
       />
 

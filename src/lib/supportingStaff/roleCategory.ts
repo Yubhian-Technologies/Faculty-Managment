@@ -1,9 +1,10 @@
 import type { SupportingStaffCategory } from "@/types";
 
-// Non-Technical staff are owned college-wide by College Office - Technical
-// staff moved to the Faculty module (see TECHNICAL_STAFF_DESIGNATIONS in
-// core.ts), so Supporting Staff only ever has the one category now.
-// SUPER_ADMIN is unrestricted (omitted from this map).
+// Supporting Staff is owned college-wide by College Office. staffCategory is
+// a vestigial single-value field (technical vs. non-technical is now carried
+// by `designation` alone - see src/lib/designations/config.ts) kept only
+// because existing records/routes still read it. SUPER_ADMIN is unrestricted
+// (omitted from this map).
 export const SUPPORTING_STAFF_ROLE_CATEGORY: Partial<Record<string, SupportingStaffCategory>> = {
   COLLEGE_OFFICE: "NON_TECHNICAL",
 };

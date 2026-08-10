@@ -17,7 +17,11 @@ interface DegreeDetail {
 }
 
 function degreeAndBranchLabel(d: DegreeDetail, useSpecialization = false): string {
-  const secondary = useSpecialization ? d.specialization : d.branch;
+  // Records saved before Specialization existed have it in Branch instead -
+  // fall back to that so a pre-existing PhD entry doesn't just drop off the
+  // resume the moment this field was added (same idea as the degreeAndBranch
+  // fallback below, for the pre-split legacy shape).
+  const secondary = useSpecialization ? (d.specialization || d.branch) : d.branch;
   const combined = [d.degree, secondary].filter(Boolean).join(" ");
   return combined || d.degreeAndBranch || "";
 }

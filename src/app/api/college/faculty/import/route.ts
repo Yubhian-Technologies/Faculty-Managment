@@ -123,10 +123,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Your account has no department set - ask your Principal to assign one before importing faculty" }, { status: 400 });
     }
 
-    // Load existing employeeIds to detect duplicates
+    // Load existing employeeIds/collegeEmails to detect duplicates - lowercased,
+    // since "VIT001"/"vit001" or two different casings of the same email are
+    // the same real-world identifier and Firestore would otherwise let both
+    // through as separate documents.
     const existingSnap = await db.collection("colleges").doc(collegeId).collection("facultyMembers")
-      .select("employeeId").get();
-    const existingIds = new Set(existingSnap.docs.map((d) => (d.data() as { employeeId: string }).employeeId));
+      .select("employeeId", "collegeEmail").get();
+    const existingIds = new Set(
+      existingSnap.docs.map((d) => (d.data() as { employeeId?: string }).employeeId?.toLowerCase()).filter((v): v is string => !!v)
+    );
+    const existingEmails = new Set(
+      existingSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
+    );
 
     const now = new Date();
     const created: string[] = [];
@@ -158,20 +166,36 @@ export async function POST(request: Request) {
       if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name is required" }); continue; }
       if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
       if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
+      if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
 
       const empId = row.employeeId.trim();
-      if (existingIds.has(empId)) {
+      if (existingIds.has(empId.toLowerCase())) {
         failed.push({ row: rowNum, employeeId: empId, error: "Employee ID already exists" });
         continue;
       }
+      const loginEmailKey = row.collegeEmail.trim().toLowerCase();
+      if (existingEmails.has(loginEmailKey)) {
+        failed.push({ row: rowNum, employeeId: empId, error: "College Email already belongs to another faculty member" });
+        continue;
+      }
 
-      // Map designation
-      const designationKey = (row.designation ?? "").trim().toLowerCase();
-      const designation: Designation = DESIGNATION_MAP[designationKey] ?? "ASSISTANT_PROFESSOR";
+      // Map designation - free text (see src/lib/designations/config.ts),
+      // since it varies by the college's type. DESIGNATION_MAP only
+      // normalizes common Engineering-style abbreviations ("Asst. Prof." ->
+      // "ASSISTANT_PROFESSOR", the legacy code every existing Engineering/
+      // Pharmacy/Dental record and the AICTE cadre-ratio report expect) -
+      // anything else (e.g. "PGT", "Controller of Examinations") is stored
+      // exactly as typed rather than being forced into that list or
+      // defaulted to a designation the row never actually specified.
+      const designationKey = row.designation.trim().toLowerCase();
+      const designation: Designation = DESIGNATION_MAP[designationKey] ?? row.designation.trim();
 
       // Map employment type
       const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
       const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
+      if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
+        warnings.push({ row: rowNum, employeeId: empId, warning: `Employment Type not recognized ("${row.employmentType?.trim()}") - defaulted to Permanent` });
+      }
 
       // Parse dates
       const joiningDate = parseDate(row.joiningDate);
@@ -196,7 +220,7 @@ export async function POST(request: Request) {
       // there is what keeps that button hidden once this has run).
       let userUid: string | undefined;
       const passwordRaw = row.password?.trim();
-      const loginEmail = row.collegeEmail.trim().toLowerCase();
+      const loginEmail = loginEmailKey;
       if (passwordRaw) {
         if (passwordRaw.length < 8) {
           warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - must be at least 8 characters (faculty record was still created without a login)" });
@@ -266,7 +290,8 @@ export async function POST(request: Request) {
         });
       }
 
-      existingIds.add(empId); // prevent duplicates within the same batch
+      existingIds.add(empId.toLowerCase()); // prevent duplicates within the same batch
+      existingEmails.add(loginEmailKey);
       created.push(empId);
     }
 

@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import type { FacultyMember, TeachingAssignment } from "@/types";
 
@@ -17,6 +18,7 @@ export default function HodFacultyModulePage() {
   const facultyId = params.id;
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
+  const { collegeType } = useCollegeType();
 
   const [faculty, setFaculty] = useState<FacultyMember | null>(null);
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
@@ -74,7 +76,7 @@ export default function HodFacultyModulePage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} />
+        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} />
       ) : null}
     </div>
   );

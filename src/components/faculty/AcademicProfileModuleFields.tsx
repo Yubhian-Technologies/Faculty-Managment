@@ -5,10 +5,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import {
-  NumInput, TextInput, DegreeFields, RepeatingGroup,
+  NumInput, TextInput, DegreeFields, RepeatingGroup, QualificationsFields,
 } from "@/components/shared/ProfileFieldPrimitives";
+import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config";
 import type {
   FacultyProfileFields,
+  CollegeType,
   FundedProject,
   ConsultancyProject,
   LabEstablished,
@@ -55,10 +57,24 @@ const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
 const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COORDINATOR", description: "" };
 const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", title: "", awardingBody: "", year: new Date().getFullYear() };
 
-export function QualificationFields({ value, onChange }: ModuleFieldsProps) {
+export function QualificationFields({ value, onChange, collegeType }: ModuleFieldsProps & { collegeType?: CollegeType }) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
+
+  if (collegeType === "SCHOOL") {
+    return (
+      <div className="space-y-5">
+        <TextInput label="Highest Qualification Earned" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
+        <QualificationsFields
+          items={value.schoolQualifications}
+          levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
+          onChange={(v) => set("schoolQualifications", v)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <TextInput label="Highest Qualification Earned" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />

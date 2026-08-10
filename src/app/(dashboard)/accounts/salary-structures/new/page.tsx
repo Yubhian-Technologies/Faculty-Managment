@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { salaryStructureSchema, type SalaryStructureFormData } from "@/lib/validations";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { formatCurrency } from "@/lib/utils";
 import { EMPLOYMENT_TYPE_LABELS, type EmploymentType } from "@/types";
@@ -30,6 +31,7 @@ function computeGrossSalary(data: Partial<SalaryStructureFormData>): number {
 
 export default function NewSalaryStructurePage() {
   const router = useRouter();
+  const { collegeType } = useCollegeType();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -108,7 +110,7 @@ export default function NewSalaryStructurePage() {
                     <SelectValue placeholder="Select designation" />
                   </SelectTrigger>
                   <SelectContent>
-                    <DesignationOptions />
+                    <DesignationOptions collegeType={collegeType} />
                   </SelectContent>
                 </Select>
                 {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}

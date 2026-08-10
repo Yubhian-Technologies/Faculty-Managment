@@ -12,11 +12,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
+import { useCollegeType } from "@/hooks/useCollegeType";
+import { getTeachingDesignations, getSupportingDesignations } from "@/lib/designations/config";
 import { toast } from "@/hooks/useToast";
 import { Plus, Trash2 } from "lucide-react";
 import type { FacultyRequirementResult } from "@/app/api/college/faculty-requirement/route";
 
 // ─── Position catalogue ──────────────────────────────────────────────────────
+// The rich catalogue below (with Dental/Medical-flavored supporting roles and
+// AICTE cadre-ratio auto-fill via DESIGNATION_TO_CADRE) is what Engineering/
+// Pharmacy/Dental colleges have always used - kept exactly as-is for those.
+// Degree/Polytechnic/School colleges instead draw from the shared per-
+// college-type lists in src/lib/designations/config.ts (the same ones Faculty/
+// Supporting Staff add/edit use), so hiring and staff addition stay in sync.
 
 type Category = "TEACHING" | "SUPPORTING_STAFF";
 
@@ -130,9 +138,15 @@ function isEntryValid(entry: PositionEntry): boolean {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+// Colleges with their own per-type designation lists (not the Engineering/
+// Pharmacy/Dental catalogue above) - see src/lib/designations/config.ts.
+const CUSTOM_CATALOGUE_TYPES = ["DEGREE", "POLYTECHNIC", "SCHOOL"];
+
 export default function NewVacancyPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const { collegeType } = useCollegeType();
+  const usesCustomCatalogue = !!collegeType && CUSTOM_CATALOGUE_TYPES.includes(collegeType);
 
   const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
   const [reqLoading, setReqLoading] = useState(true);
@@ -288,11 +302,11 @@ export default function NewVacancyPage() {
 
         {/* Position entries */}
         {entries.map((entry, idx) => {
-          const roleOptions =
+          const roleOptions: readonly string[] =
             entry.category === "TEACHING"
-              ? TEACHING_ROLES
+              ? usesCustomCatalogue ? [...getTeachingDesignations(collegeType), "Others"] : TEACHING_ROLES
               : entry.category === "SUPPORTING_STAFF"
-              ? SUPPORTING_ROLES
+              ? usesCustomCatalogue ? [...getSupportingDesignations(collegeType), "Others"] : SUPPORTING_ROLES
               : [];
 
           const finalPosition =

@@ -491,44 +491,32 @@ export interface NavVisibilitySettings {
 // ─── Faculty Member (central entity across all modules) ───────────────────────
 // All leave, attendance, payroll, appraisal records reference facultyId
 
-export type Designation =
-  | "PROFESSOR"
-  | "ASSOCIATE_PROFESSOR"
-  | "ASSISTANT_PROFESSOR"
-  | "LECTURER"
-  | "VISITING_FACULTY"
-  | "ADJUNCT_FACULTY"
-  | "LAB_ASSISTANT"
-  | "PROGRAMMER"
-  | "SYSTEM_ADMINISTRATOR"
-  | "NETWORK_ENGINEER"
-  | "OTHER";
+// Free text, not a closed enum - real designation ladders vary by
+// College.type (see src/lib/designations/config.ts, the single source of
+// truth for which values each college type's Add/Edit pickers offer). The
+// original fixed codes below ("PROFESSOR" etc.) are still what Engineering/
+// Pharmacy/Dental colleges use and what every pre-existing FacultyMember
+// record holds - DESIGNATION_LABELS keeps them displaying as words; any
+// other college type's designation is already a human-readable string
+// (e.g. "PGT", "Controller of Examinations") and needs no label lookup.
+export type Designation = string;
 
-export const DESIGNATION_LABELS: Record<Designation, string> = {
+export const DESIGNATION_LABELS: Record<string, string> = {
   PROFESSOR: "Professor",
   ASSOCIATE_PROFESSOR: "Associate Professor",
   ASSISTANT_PROFESSOR: "Assistant Professor",
   LECTURER: "Lecturer",
   VISITING_FACULTY: "Visiting Faculty",
   ADJUNCT_FACULTY: "Adjunct Faculty",
+  // Technical designations moved to Supporting Staff - kept here too so any
+  // FacultyMember record not yet moved by the migration script still
+  // displays as a word instead of the raw code.
   LAB_ASSISTANT: "Lab Assistant",
   PROGRAMMER: "Programmer",
   SYSTEM_ADMINISTRATOR: "System Administrator",
   NETWORK_ENGINEER: "Network Engineer",
   OTHER: "Other",
 };
-
-// Which Designation options the Faculty "Add/Edit" designation picker offers,
-// split into two groups so the edit page can tell whether a record needs the
-// Academic Profile / Teaching Assignments treatment or the Technical Profile
-// treatment (see TechnicalProfile below) - Faculty covers both Teaching and
-// Technical staff under one role (PANEL_MEMBER).
-export const TEACHING_DESIGNATIONS: Designation[] = [
-  "PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSISTANT_PROFESSOR", "LECTURER", "VISITING_FACULTY", "ADJUNCT_FACULTY",
-];
-export const TECHNICAL_STAFF_DESIGNATIONS: Designation[] = [
-  "LAB_ASSISTANT", "PROGRAMMER", "SYSTEM_ADMINISTRATOR", "NETWORK_ENGINEER",
-];
 
 export type EmploymentType = "PERMANENT" | "CONTRACT" | "VISITING" | "PART_TIME";
 
@@ -619,8 +607,7 @@ export interface FacultyMember {
   inCampusExperience?: number; // years of on-campus experience
   industryExperience?: number; // years of industry experience
   researchExperience?: number; // years of research experience
-  academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile - populated when designation is a TEACHING_DESIGNATIONS value
-  technicalProfile?: TechnicalProfile;    // populated when designation is a TECHNICAL_STAFF_DESIGNATIONS value - mutually exclusive with academicProfile
+  academicProfile?: FacultyProfileFields; // Modules 1-5 extended profile
 
   joiningLetterUrl?: string;      // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string;  // Firebase Storage URL for the appointment order (uploaded by HOD)
@@ -628,61 +615,6 @@ export interface FacultyMember {
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
-}
-
-// ─── Faculty Technical Profile (for TECHNICAL_STAFF_DESIGNATIONS designations) ──
-// Relocated from the old Supporting Staff "Technical" category (see AGENTS.md) -
-// Technical Staff (Lab Assistant/Programmer/System Administrator/Network
-// Engineer) are Faculty (PANEL_MEMBER) records now, distinguished from Teaching
-// designations by TECHNICAL_STAFF_DESIGNATIONS rather than a separate module.
-
-export interface TechnicalSkillsProfile {
-  programmingLanguages: string[];
-  operatingSystems: string[];
-  networking: string[];
-  databases: string[];
-  cloud: string[];
-  hardware: string[];
-  softwareTools: string[];
-}
-
-export type TechnicalResponsibility =
-  | "LAB_MAINTENANCE" | "EQUIPMENT_MAINTENANCE" | "SOFTWARE_INSTALLATION"
-  | "NETWORK_ADMINISTRATION" | "LAB_STOCK_MANAGEMENT" | "STUDENT_SUPPORT"
-  | "PRACTICAL_SESSION_ASSISTANCE" | "OTHER";
-export const TECHNICAL_RESPONSIBILITY_LABELS: Record<TechnicalResponsibility, string> = {
-  LAB_MAINTENANCE: "Lab Maintenance",
-  EQUIPMENT_MAINTENANCE: "Equipment Maintenance",
-  SOFTWARE_INSTALLATION: "Software Installation",
-  NETWORK_ADMINISTRATION: "Network Administration",
-  LAB_STOCK_MANAGEMENT: "Lab Stock Maintenance",
-  STUDENT_SUPPORT: "Student Support",
-  PRACTICAL_SESSION_ASSISTANCE: "Practical Sessions",
-  OTHER: "Other",
-};
-
-export type VendorCertification =
-  | "CISCO" | "MICROSOFT" | "AWS" | "REDHAT" | "ORACLE" | "GOOGLE" | "VMWARE" | "OTHER";
-export const VENDOR_CERTIFICATION_LABELS: Record<VendorCertification, string> = {
-  CISCO: "Cisco", MICROSOFT: "Microsoft", AWS: "AWS", REDHAT: "RedHat",
-  ORACLE: "Oracle", GOOGLE: "Google", VMWARE: "VMware", OTHER: "Other",
-};
-export interface VendorCertificationEntry {
-  vendor: VendorCertification;
-  otherVendorName?: string; // when vendor === "OTHER"
-  certificationName: string;
-  year?: number;
-  certificateUrl?: string;
-}
-
-export interface TechnicalProfile {
-  skills: TechnicalSkillsProfile;
-  responsibilities: TechnicalResponsibility[];
-  otherResponsibility?: string;
-  certifications: VendorCertificationEntry[];
-  training: TrainingEntry[];
-  innovationsAndAutomation?: string;
-  achievements: AwardEntry[];
 }
 
 // ─── Faculty Academic Profile (Management dashboard / role-aware profile forms) ──
@@ -700,6 +632,17 @@ export interface DegreeDetail {
   percentageOrDivision: string;
   yearOfCompletion: number;
   certificateUrl?: string; // Google Drive public-view link for the degree/transcript certificate
+}
+
+// Shared with SupportingStaffProfileFields.qualifications (supportingStaff.ts) -
+// reuses DegreeDetail's shape + a free `level` label (e.g. "SSC", "Intermediate",
+// "Degree", "Post Graduation") for a repeating list of qualification entries.
+// Used by FacultyProfileFields.schoolQualifications for School-type colleges,
+// which don't fit the fixed UG/PG/PhD DegreeFields slots below (see
+// src/lib/designations/config.ts's SCHOOL_TEACHING_QUALIFICATION_LEVELS /
+// SCHOOL_SUPPORTING_QUALIFICATION_LEVELS).
+export interface StaffQualification extends DegreeDetail {
+  level: string;
 }
 
 export type PhdStatus = "AWARDED" | "PURSUING";
@@ -866,7 +809,10 @@ export interface AwardEntry {
 }
 
 export interface FacultyProfileFields {
-  // Module 1 — Academic Qualification
+  // Module 1 — Academic Qualification (Engineering/Degree/Polytechnic/Pharmacy/
+  // Dental colleges). School-type colleges use schoolQualifications instead -
+  // UG/PG/PhD and the PhD-specific fields below don't apply to school teachers
+  // (see College.type and src/lib/designations/config.ts).
   highestQualification: string;
   highSchoolDetails?: DegreeDetail; // 10th
   intermediateDetails?: DegreeDetail; // 12th
@@ -881,6 +827,8 @@ export interface FacultyProfileFields {
   gateQualifiedYear?: number;
   gateScore?: number;
   netSletQualificationYear?: number;
+  // School-type colleges only - see SCHOOL_TEACHING_QUALIFICATION_LEVELS.
+  schoolQualifications?: StaffQualification[];
 
   // Previous Institutions Worked / Current Teaching Assignment
   teachingAssignment?: TeachingAssignmentSummary; // omitted for PRINCIPAL / VICE_PRINCIPAL

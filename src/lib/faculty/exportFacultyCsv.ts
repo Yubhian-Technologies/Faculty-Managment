@@ -1,7 +1,8 @@
 // Full-detail faculty CSV export - flattens a FacultyMember (+ academicProfile)
-// into the same column set the bulk-import template accepts (src/lib/faculty/csvColumns.ts),
-// so import and export stay round-trippable for every field except the
-// relational "Current Teaching" summary (informational only, not re-importable).
+// into the full column set (src/lib/faculty/csvColumns.ts's COLUMNS/HINTS).
+// Export-only: the bulk-import template accepts a much smaller column set
+// (IMPORT_COLUMNS - core identity/employment fields), so this isn't
+// round-trippable back through import.
 
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
@@ -24,6 +25,14 @@ function yesNo(v: boolean | undefined): string {
 function degreeCells(d: DegreeDetail | undefined): [string, string, string, string, string] {
   if (!d) return ["", "", "", "", ""];
   return [d.degree ?? "", d.branch ?? "", d.universityOrInstitute ?? "", d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
+}
+
+// PhD entries take Specialization instead of Branch/Percentage-CGPA (see
+// DegreeFields in ProfileFieldPrimitives.tsx) - a dedicated shape rather than
+// reusing degreeCells so the export reflects what the form actually collects.
+function phdDegreeCells(d: DegreeDetail | undefined): [string, string, string, string] {
+  if (!d) return ["", "", "", ""];
+  return [d.degree ?? "", d.specialization ?? "", d.universityOrInstitute ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
 }
 
 function courseCells(courses: CourseAssignment[] | undefined, i: number): [string, string, string] {
@@ -106,7 +115,7 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
   const p: Partial<FacultyProfileFields> = faculty.academicProfile ?? {};
   const [ugDegree, ugBranch, ugUniv, ugPct, ugYear] = degreeCells(p.ugDetails);
   const [pgDegree, pgBranch, pgUniv, pgPct, pgYear] = degreeCells(p.pgDetails);
-  const [phdDegree, phdBranch, phdUniv, phdPct, phdYear] = degreeCells(p.phdDetails);
+  const [phdDegree, phdSpecialization, phdUniv, phdYear] = phdDegreeCells(p.phdDetails);
   const [postdocDegree, postdocBranch, postdocUniv, postdocPct, postdocYear] = degreeCells(p.postDoctoralDetails);
 
   const row: Record<string, string> = {
@@ -161,7 +170,7 @@ function buildRow(faculty: FacultyMember, teachingSummary: string): Record<strin
     highestQualification: s(p.highestQualification),
     ug_degree: ugDegree, ug_branch: ugBranch, ug_university: ugUniv, ug_percentage: ugPct, ug_year: ugYear,
     pg_degree: pgDegree, pg_branch: pgBranch, pg_university: pgUniv, pg_percentage: pgPct, pg_year: pgYear,
-    phd_degree: phdDegree, phd_branch: phdBranch, phd_university: phdUniv, phd_percentage: phdPct, phd_year: phdYear,
+    phd_degree: phdDegree, phd_specialization: phdSpecialization, phd_university: phdUniv, phd_year: phdYear,
     postdoc_degree: postdocDegree, postdoc_branch: postdocBranch, postdoc_university: postdocUniv, postdoc_percentage: postdocPct, postdoc_year: postdocYear,
     phdStatus: s(p.phdStatus),
     phdMode: s(p.phdMode),

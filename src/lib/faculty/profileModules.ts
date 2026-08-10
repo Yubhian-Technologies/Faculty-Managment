@@ -1,10 +1,8 @@
 import {
   IdCard, GraduationCap, Briefcase, FlaskConical, HandCoins,
-  Users, Wallet, FileQuestion, BookOpen, Wrench,
+  Users, Wallet, FileQuestion, BookOpen,
   type LucideIcon,
 } from "lucide-react";
-import { TECHNICAL_STAFF_DESIGNATIONS } from "@/types";
-import type { Designation } from "@/types";
 
 // One tile/route per module a faculty member's details are broken into on the
 // View pages (see FacultyProfileHub / FacultyProfileModuleContent) - lets HOD/
@@ -13,8 +11,7 @@ import type { Designation } from "@/types";
 // (/hod/faculty/[id]/[module]).
 export type ProfileModuleKey =
   | "personal" | "qualification" | "experience" | "research" | "grants"
-  | "mentorship" | "financial" | "others" | "teaching-load"
-  | "technical";
+  | "mentorship" | "financial" | "others" | "teaching-load";
 
 export interface ProfileModuleDef {
   key: ProfileModuleKey;
@@ -32,7 +29,6 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
   financial: { key: "financial", label: "Financial Standing", icon: Wallet },
   others: { key: "others", label: "Others", icon: FileQuestion },
   "teaching-load": { key: "teaching-load", label: "Teaching Load", icon: BookOpen },
-  technical: { key: "technical", label: "Technical Profile", icon: Wrench },
 };
 
 // Self-profile modules a person never edits themselves - financial standing
@@ -41,23 +37,17 @@ export const PROFILE_MODULES: Record<ProfileModuleKey, ProfileModuleDef> = {
 // feature).
 export const SELF_EDIT_DISABLED_MODULES: ProfileModuleKey[] = ["financial", "teaching-load", "research"];
 
-function isTechnicalDesignation(designation: Designation | string | undefined): boolean {
-  return !!designation && (TECHNICAL_STAFF_DESIGNATIONS as string[]).includes(designation);
-}
-
-// designation is undefined for HOD/Principal/VP self-profiles (no FacultyMember
-// record - see resolveEmployeeIdentity) - treated as non-technical, same as
-// every other self-profile field on those accounts.
+// Faculty is teaching staff only now (Technical designations - Lab
+// Assistant/Programmer/System Administrator/Network Engineer - live in the
+// Supporting Staff module instead, see src/lib/designations/config.ts), so
+// every FacultyMember gets the full Academic Profile module set.
 export function getFacultyProfileModules(
-  designation: Designation | string | undefined,
   opts: { hideFinancialModule?: boolean; excludeModules?: ProfileModuleKey[] } = {}
 ): ProfileModuleDef[] {
-  const keys: ProfileModuleKey[] = isTechnicalDesignation(designation)
-    ? ["personal", "technical"]
-    : [
-        "personal", "qualification", "experience", "research", "grants", "mentorship",
-        ...(opts.hideFinancialModule ? [] : (["financial"] as ProfileModuleKey[])),
-        "teaching-load", "others",
-      ];
+  const keys: ProfileModuleKey[] = [
+    "personal", "qualification", "experience", "research", "grants", "mentorship",
+    ...(opts.hideFinancialModule ? [] : (["financial"] as ProfileModuleKey[])),
+    "teaching-load", "others",
+  ];
   return keys.filter((k) => !opts.excludeModules?.includes(k)).map((k) => PROFILE_MODULES[k]);
 }

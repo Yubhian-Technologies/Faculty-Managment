@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
-import { TechnicalStaffProfileFields } from "@/components/faculty/TechnicalStaffProfileFields";
 import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import {
@@ -24,12 +23,10 @@ import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments"
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import {
-  EMPLOYMENT_TYPE_LABELS,
-  TECHNICAL_STAFF_DESIGNATIONS,
-} from "@/types";
-import type { Designation, FacultyProfileFields, TechnicalProfile } from "@/types";
+import { EMPLOYMENT_TYPE_LABELS } from "@/types";
+import type { FacultyProfileFields } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -53,7 +50,7 @@ type FormData = z.infer<typeof schema>;
 
 type WizardStepKey =
   | "core" | "personal" | "qualification" | "experience" | "research" | "grants"
-  | "mentorship" | "financial" | "others" | "technical" | "teaching-load" | "review";
+  | "mentorship" | "financial" | "others" | "teaching-load" | "review";
 
 interface WizardStep {
   key: WizardStepKey;
@@ -62,8 +59,8 @@ interface WizardStep {
 
 export default function NewFacultyPage() {
   const router = useRouter();
+  const { collegeType } = useCollegeType();
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
-  const [technicalProfile, setTechnicalProfile] = useState<Partial<TechnicalProfile>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
@@ -80,34 +77,27 @@ export default function NewFacultyPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "ASSISTANT_PROFESSOR", employmentType: "PERMANENT", password: "", aicteEligible: false },
+    defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", aicteEligible: false },
   });
 
   const designation = watch("designation");
   const employmentType = watch("employmentType");
   const aicteEligible = watch("aicteEligible");
   const name = watch("name");
-  const isTechnical = TECHNICAL_STAFF_DESIGNATIONS.includes(designation as Designation);
 
-  const steps: WizardStep[] = useMemo(() => {
-    const base: WizardStep[] = [{ key: "core", label: "Identity & Employment" }, { key: "personal", label: PROFILE_MODULES.personal.label }];
-    if (isTechnical) {
-      base.push({ key: "technical", label: PROFILE_MODULES.technical.label });
-    } else {
-      base.push(
-        { key: "qualification", label: PROFILE_MODULES.qualification.label },
-        { key: "experience", label: PROFILE_MODULES.experience.label },
-        { key: "research", label: PROFILE_MODULES.research.label },
-        { key: "grants", label: PROFILE_MODULES.grants.label },
-        { key: "mentorship", label: PROFILE_MODULES.mentorship.label },
-        { key: "financial", label: PROFILE_MODULES.financial.label },
-        { key: "teaching-load", label: PROFILE_MODULES["teaching-load"].label },
-        { key: "others", label: PROFILE_MODULES.others.label },
-      );
-    }
-    base.push({ key: "review", label: "Review & Submit" });
-    return base;
-  }, [isTechnical]);
+  const steps: WizardStep[] = useMemo(() => [
+    { key: "core", label: "Identity & Employment" },
+    { key: "personal", label: PROFILE_MODULES.personal.label },
+    { key: "qualification", label: PROFILE_MODULES.qualification.label },
+    { key: "experience", label: PROFILE_MODULES.experience.label },
+    { key: "research", label: PROFILE_MODULES.research.label },
+    { key: "grants", label: PROFILE_MODULES.grants.label },
+    { key: "mentorship", label: PROFILE_MODULES.mentorship.label },
+    { key: "financial", label: PROFILE_MODULES.financial.label },
+    { key: "teaching-load", label: PROFILE_MODULES["teaching-load"].label },
+    { key: "others", label: PROFILE_MODULES.others.label },
+    { key: "review", label: "Review & Submit" },
+  ], []);
 
   const step = steps[stepIndex];
 
@@ -131,7 +121,7 @@ export default function NewFacultyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
-          ...(isTechnical ? { technicalProfile } : { academicProfile }),
+          academicProfile,
           ...personalDetails,
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
         }),
@@ -248,7 +238,7 @@ export default function NewFacultyPage() {
                     <Label>Designation *</Label>
                     <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                      <SelectContent><DesignationOptions /></SelectContent>
+                      <SelectContent><DesignationOptions collegeType={collegeType} kind="teaching" /></SelectContent>
                     </Select>
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
@@ -310,8 +300,7 @@ export default function NewFacultyPage() {
             )}
 
             {step.key === "personal" && <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />}
-            {step.key === "technical" && <TechnicalStaffProfileFields value={technicalProfile} onChange={setTechnicalProfile} />}
-            {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} />}
+            {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}
             {step.key === "experience" && <ExperienceFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "research" && <ResearchFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "grants" && <GrantsFields value={academicProfile} onChange={setAcademicProfile} />}

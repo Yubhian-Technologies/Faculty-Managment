@@ -11,9 +11,8 @@ import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import type { StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { TECHNICAL_STAFF_DESIGNATIONS } from "@/types";
-import type { Designation } from "@/types";
 
 export default function HodFacultyModuleEditPage() {
   const router = useRouter();
@@ -21,11 +20,11 @@ export default function HodFacultyModuleEditPage() {
   const facultyId = params.id;
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
+  const { collegeType } = useCollegeType();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
-  const [designation, setDesignation] = useState<Designation | undefined>(undefined);
   const [record, setRecord] = useState<FacultyEditRecord>({});
   const [teachingRows, setTeachingRows] = useState<StagedTeachingRow[]>([]);
   const [originalTeachingRows, setOriginalTeachingRows] = useState<StagedTeachingRow[]>([]);
@@ -41,7 +40,6 @@ export default function HodFacultyModuleEditPage() {
         }
         const m = data.faculty;
         setName((m.name as string) ?? "");
-        setDesignation(m.designation as Designation | undefined);
         setRecord({
           gender: (m.gender as string) ?? "",
           dateOfBirth: (m.dateOfBirth as string) ?? undefined,
@@ -68,7 +66,6 @@ export default function HodFacultyModuleEditPage() {
           permanentAddress: (m.permanentAddress as string) ?? "",
           bloodGroup: (m.bloodGroup as string) ?? "",
           academicProfile: (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {},
-          technicalProfile: (m.technicalProfile as FacultyEditRecord["technicalProfile"]) ?? {},
           joiningLetterUrl: (m.joiningLetterUrl as string) ?? "",
           appointmentLetterUrl: (m.appointmentLetterUrl as string) ?? "",
           resumeUrl: (m.resumeUrl as string) ?? "",
@@ -128,8 +125,6 @@ export default function HodFacultyModuleEditPage() {
                 temporaryAddress: record.temporaryAddress, permanentSameAsTemporary: record.permanentSameAsTemporary,
                 permanentAddress: record.permanentAddress, bloodGroup: record.bloodGroup,
               }
-            : moduleKey === "technical"
-            ? { technicalProfile: record.technicalProfile }
             : { academicProfile: record.academicProfile };
 
         const res = await fetch(`/api/college/faculty/${facultyId}`, {
@@ -173,9 +168,9 @@ export default function HodFacultyModuleEditPage() {
               record={record}
               onChange={patch}
               facultyId={facultyId}
-              includeTeachingAssignment={!TECHNICAL_STAFF_DESIGNATIONS.includes(designation as never)}
               teachingRows={teachingRows}
               onTeachingRowsChange={setTeachingRows}
+              collegeType={collegeType}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`/hod/faculty/${facultyId}/${moduleKey}`)}>Cancel</Button>

@@ -12,13 +12,14 @@ export async function GET(request: Request) {
     );
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).get();
-    const data = snap.data() as { name?: string; phone?: string; email?: string; address?: string } | undefined;
+    const data = snap.data() as { name?: string; phone?: string; email?: string; address?: string; type?: string } | undefined;
 
     return NextResponse.json({
       name: data?.name ?? "Sri Vishnu Educational Society",
       phone: data?.phone ?? "",
       email: data?.email ?? "",
       address: data?.address ?? "",
+      type: data?.type,
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
