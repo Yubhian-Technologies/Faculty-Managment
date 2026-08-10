@@ -115,7 +115,7 @@ export async function PATCH(
         type: "FACULTY_ACCOUNT_REQUEST_COMPLETED",
         title: "Faculty Account Created",
         message: `The faculty account for ${reqData.candidateName ?? "the candidate"} has been created.`,
-        link: `/college-office/offers`,
+        link: `/college-office/documents`,
         read: false,
         createdAt: now,
       });

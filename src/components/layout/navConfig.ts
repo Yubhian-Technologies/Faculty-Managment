@@ -88,7 +88,6 @@ export const NAV_ITEMS: NavItem[] = [
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
   { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline" },
-  { label: "Interviews & Decisions", href: "/principal/interviews", iconName: "CalendarCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Panel Scoring", href: "/panel/interviews", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Appointment Letters", href: "/principal/appointment-letters", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
@@ -130,7 +129,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Hiring Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"], section: "Hiring" },
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
   { label: "Panel Scoring", href: "/panel/interviews", iconName: "ClipboardCheck", roles: ["HOD"] },
-  { label: "Past Hirings", href: "/hod/past-hirings", iconName: "History", roles: ["HOD"] },
   { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "My Work" },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
   { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"] },
@@ -144,8 +142,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   { label: "Hiring Pipeline", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
-  { label: "Official Emails", href: "/college-office/email-requests", iconName: "AtSign", roles: ["COLLEGE_OFFICE"] },
-  { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
   { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], section: "Personal" },
 
   // College Staff (generic fallback for titles that don't warrant their own role)
@@ -403,7 +399,6 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
     { label: "Hiring Pipeline", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"] },
     { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
-    { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
   ],
   COLLEGE_STAFF: [
     { label: "Home", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },

@@ -100,6 +100,17 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid phase" }, { status: 400 });
     }
 
+    // Every explicit client-driven phase jump this route actually receives
+    // (grepped: only hod/batches/[id]/page.tsx sends these three) must move
+    // forward exactly one step and only by the batch's own HOD - otherwise
+    // any authenticated HOD/Panel/Office account with PATCH access to this
+    // route for their own legitimate fields could jump straight to COMPLETED.
+    const HOD_PHASE_TRANSITIONS: Record<string, string> = {
+      HOD_FINAL_SETUP: "INTERVIEW_READY",
+      IN_PROGRESS: "PANEL_INTERVIEW",
+      PANEL_INTERVIEW: "PRINCIPAL_FINAL_REVIEW",
+    };
+
     const db = getAdminDb();
     const actorName = await getUserName(db, session.collegeId, session.uid);
     const now = new Date();
@@ -122,7 +133,72 @@ export async function PATCH(
       department: string;
       demoComplete?: boolean;
       applicationIds?: string[];
+      currentPhase?: string;
+      coordinatorUid?: string | null;
     };
+
+    const isPrincipalRole = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"].includes(session.role);
+    const isOwnerHod = session.role === "HOD" && session.uid === batchData.hodUid;
+    const isCollegeOffice = session.role === "COLLEGE_OFFICE";
+    const isAssignedCoordinator = !!batchData.coordinatorUid && session.uid === batchData.coordinatorUid;
+
+    // Principal's decision on the proposal itself - only a Principal/VP, and
+    // only while the batch is actually sitting in PRINCIPAL_REVIEW. Without
+    // this, any HOD/Panel/Office account with legitimate PATCH access to this
+    // route for their own fields could flip status:"APPROVED" on their own
+    // (or anyone else's) proposal and self-approve it.
+    if (body.status !== undefined) {
+      if (!isPrincipalRole) {
+        return NextResponse.json({ error: "Only the Principal can approve, reject, or modify this proposal" }, { status: 403 });
+      }
+      if (batchData.currentPhase !== "PRINCIPAL_REVIEW") {
+        return NextResponse.json({ error: `Cannot decide on this proposal - it is already at ${batchData.currentPhase}` }, { status: 409 });
+      }
+    }
+
+    // Explicit phase jumps this route ever receives from a client are HOD
+    // actions on their own batch (see HOD_PHASE_TRANSITIONS above) - each must
+    // move exactly one step forward from the batch's current phase, or a
+    // client could otherwise skip straight to COMPLETED.
+    if (body.currentPhase !== undefined) {
+      if (!isPrincipalRole) {
+        if (!isOwnerHod) {
+          return NextResponse.json({ error: "Only this batch's HOD can advance its phase" }, { status: 403 });
+        }
+        if (HOD_PHASE_TRANSITIONS[batchData.currentPhase ?? ""] !== body.currentPhase) {
+          return NextResponse.json({ error: `Cannot move from ${batchData.currentPhase} to ${body.currentPhase}` }, { status: 409 });
+        }
+      }
+    }
+
+    if (
+      (body.interviewVenue !== undefined || body.requiredDocuments !== undefined || body.setupComplete !== undefined) &&
+      !isCollegeOffice && !isPrincipalRole
+    ) {
+      return NextResponse.json({ error: "Only College Office can set this up" }, { status: 403 });
+    }
+
+    if (
+      (body.demoClassroom !== undefined || body.meetingLink !== undefined || body.coordinatorFacultyId !== undefined ||
+        body.panelMemberUids !== undefined || body.applicationIds !== undefined ||
+        body.interviewDate !== undefined || body.interviewTime !== undefined) &&
+      !isOwnerHod && !isPrincipalRole
+    ) {
+      return NextResponse.json({ error: "Only this batch's HOD can edit this" }, { status: 403 });
+    }
+
+    // Demo-complete is the coordinator's own call (or the owning HOD/Principal
+    // as a fallback), and only makes sense once the interview is actually set
+    // up and ready - setting it earlier would let panel scoring open before
+    // candidates have even arrived.
+    if (body.demoComplete === true) {
+      if (!isAssignedCoordinator && !isOwnerHod && !isPrincipalRole) {
+        return NextResponse.json({ error: "Only the assigned coordinator can mark the demo complete" }, { status: 403 });
+      }
+      if (batchData.currentPhase !== "INTERVIEW_READY" && batchData.currentPhase !== "IN_PROGRESS") {
+        return NextResponse.json({ error: `Cannot mark demo complete from ${batchData.currentPhase}` }, { status: 409 });
+      }
+    }
 
     const updates: Record<string, unknown> = { updatedAt: now };
 

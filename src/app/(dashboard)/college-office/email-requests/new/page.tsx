@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import type { EmailCreationRequest, FacultyMember } from "@/types";
 
 export default function NewEmailRequestPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const presetFacultyId = searchParams.get("facultyId");
   const [faculty, setFaculty] = useState<FacultyMember[]>([]);
   const [existingRequests, setExistingRequests] = useState<EmailCreationRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,6 +51,12 @@ export default function NewEmailRequestPage() {
   );
   const selected = eligibleFaculty.find((f) => f.id === facultyId);
 
+  useEffect(() => {
+    if (presetFacultyId && !facultyId && eligibleFaculty.some((f) => f.id === presetFacultyId)) {
+      setFacultyId(presetFacultyId);
+    }
+  }, [presetFacultyId, facultyId, eligibleFaculty]);
+
   async function submit() {
     if (!facultyId) {
       toast({ variant: "destructive", title: "Select a faculty member" });
@@ -70,7 +78,7 @@ export default function NewEmailRequestPage() {
         throw new Error(err.error ?? "Failed to submit request");
       }
       toast({ variant: "success", title: "Request sent to Webmaster" });
-      router.push("/college-office/email-requests");
+      router.push("/college-office/documents");
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to submit request", description: err instanceof Error ? err.message : undefined });
     } finally {

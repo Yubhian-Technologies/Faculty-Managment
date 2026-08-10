@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
-import { getCurrentStage, stateForStage, type PipelineStage } from "@/lib/hiringPipeline";
+import { getCurrentStage, stateForStage, getApprovedDetailedStatuses, getOnboardingSummary, getDetailedHiringStatus, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import type { VacancyRequest, Candidate, CandidateApplication, InterviewMode, HiringBatch } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, CandidateStatus, CandidateStage, InterviewMode, HiringBatch, OfferLetter, FacultyAccountRequestStatus } from "@/types";
 import { BATCH_PHASE_LABELS } from "@/types";
+
+type OfferStatus = "SENT" | "ACCEPTED" | "REJECTED";
 
 // Joined view: application (per-hiring-request pipeline state) + candidate
 // (person) fields. `id` is the applicationId.
@@ -22,6 +24,10 @@ type PipelineCandidateView = {
   email: string;
   isShortlisted: boolean;
   interviewMode?: InterviewMode;
+  status: CandidateStatus;
+  currentStage: CandidateStage;
+  notifiedPrincipalDocsReady?: boolean;
+  joiningLetterUrl?: string;
 };
 
 type PipelineEntry = {
@@ -62,7 +68,17 @@ function getNextAction(entry: PipelineEntry): NextAction {
   return { label: "Awaiting HOD / Panel", href: "#", disabled: true };
 }
 
-function PipelineCard({ entry }: { entry: PipelineEntry }) {
+function PipelineCard({
+  entry,
+  offerStatusByCandidate,
+  appointmentCandidateIds,
+  accountRequestStatusByCandidate,
+}: {
+  entry: PipelineEntry;
+  offerStatusByCandidate: Record<string, OfferStatus>;
+  appointmentCandidateIds: Set<string>;
+  accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>;
+}) {
   const { vacancy, candidates, batch } = entry;
   const [expanded, setExpanded] = useState(false);
 
@@ -89,10 +105,15 @@ function PipelineCard({ entry }: { entry: PipelineEntry }) {
   const stage3Sub = batch ? BATCH_PHASE_LABELS[batch.currentPhase] : "Not started";
 
   const stage4Sub =
-    batch?.currentPhase === "COMPLETED"
-      ? "Process complete"
-      : batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
+    batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
       ? "Awaiting your decision"
+      : batch?.currentPhase === "COMPLETED"
+      ? "Decision made"
+      : "-";
+
+  const stage5Sub =
+    batch?.currentPhase === "COMPLETED"
+      ? getOnboardingSummary(getApprovedDetailedStatuses(candidates, batch.currentPhase, offerStatusByCandidate, appointmentCandidateIds, accountRequestStatusByCandidate))
       : "-";
 
   const accentColor =
@@ -132,13 +153,14 @@ function PipelineCard({ entry }: { entry: PipelineEntry }) {
         </div>
       </div>
 
-      {/* 4-step pipeline - vertical on mobile, horizontal on sm+ */}
+      {/* 5-step pipeline - vertical on mobile, horizontal on sm+ */}
       <div className="px-5 py-3">
         <div className="flex flex-col sm:flex-row sm:items-start gap-0 sm:gap-0">
           <Step step={1} label="Request" sub={stage1Sub} state={stateFor(1)} />
           <Step step={2} label="Candidates" sub={stage2Sub} state={stateFor(2)} />
           <Step step={3} label="Interview" sub={stage3Sub} state={stateFor(3)} />
-          <Step step={4} label="Hiring Results" sub={stage4Sub} state={stateFor(4)} isLast />
+          <Step step={4} label="Decision" sub={stage4Sub} state={stateFor(4)} />
+          <Step step={5} label="Onboarding" sub={stage5Sub} state={stateFor(5)} isLast />
         </div>
       </div>
 
@@ -207,6 +229,23 @@ function PipelineCard({ entry }: { entry: PipelineEntry }) {
                       ) : (
                         <Badge variant="secondary" className="text-[10px] py-0 px-1.5">Added</Badge>
                       )}
+                      {(() => {
+                        const detailedStatus = getDetailedHiringStatus({
+                          applicationStatus: c.status,
+                          currentStage: c.currentStage,
+                          batchPhase: batch?.currentPhase,
+                          notifiedPrincipalDocsReady: c.notifiedPrincipalDocsReady,
+                          joiningLetterUrl: c.joiningLetterUrl,
+                          offerStatus: offerStatusByCandidate[c.candidateId],
+                          appointmentLetterExists: appointmentCandidateIds.has(c.candidateId),
+                          accountRequestStatus: accountRequestStatusByCandidate[c.candidateId],
+                        });
+                        return detailedStatus ? (
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-blue-700 border-blue-300 bg-blue-50">
+                            {DETAILED_HIRING_STATUS_LABELS[detailedStatus]}
+                          </Badge>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -257,6 +296,9 @@ function PipelineCard({ entry }: { entry: PipelineEntry }) {
 
 export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }) {
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
+  const [offerStatusByCandidate, setOfferStatusByCandidate] = useState<Record<string, OfferStatus>>({});
+  const [appointmentCandidateIds, setAppointmentCandidateIds] = useState<Set<string>>(new Set());
+  const [accountRequestStatusByCandidate, setAccountRequestStatusByCandidate] = useState<Record<string, FacultyAccountRequestStatus>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   function load() {
@@ -273,8 +315,31 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
       fetch("/api/college/hiring-batches")
         .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
         .then((d) => d.batches ?? []),
+      fetch("/api/college/offer-letters")
+        .then((r) => r.json() as Promise<{ letters: OfferLetter[] }>)
+        .then((d) => d.letters ?? []),
+      fetch("/api/college/appointment-letters")
+        .then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>)
+        .then((d) => d.letters ?? [])
+        .catch(() => []),
+      fetch("/api/college/faculty-account-requests")
+        .then((r) => r.json() as Promise<{ requests: { candidateId: string; status: FacultyAccountRequestStatus }[] }>)
+        .then((d) => d.requests ?? [])
+        .catch(() => []),
     ])
-      .then(([vacancies, applications, candidates, batches]) => {
+      .then(([vacancies, applications, candidates, batches, letters, appointmentLetters, accountRequests]) => {
+        // Prefer a non-rejected offer per candidate — mirrors HOD's board.
+        const offerMap: Record<string, OfferStatus> = {};
+        for (const letter of letters) {
+          if (letter.status === "REJECTED") continue;
+          if (!offerMap[letter.candidateId]) offerMap[letter.candidateId] = letter.status as OfferStatus;
+        }
+        setOfferStatusByCandidate(offerMap);
+        setAppointmentCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
+        setAccountRequestStatusByCandidate(
+          Object.fromEntries(accountRequests.map((r) => [r.candidateId, r.status]))
+        );
+
         const candidateMap = new Map(candidates.map((c) => [c.id, c]));
         const viewsByVacancy = new Map<string, PipelineCandidateView[]>();
         for (const a of applications) {
@@ -286,6 +351,10 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
             email: person?.email ?? "",
             isShortlisted: a.isShortlisted,
             interviewMode: a.interviewMode,
+            status: a.status,
+            currentStage: a.currentStage,
+            notifiedPrincipalDocsReady: !!a.documentVerification?.notifiedPrincipalAt,
+            joiningLetterUrl: a.joiningLetterUrl,
           };
           const list = viewsByVacancy.get(a.vacancyRequestId);
           if (list) list.push(view);
@@ -350,7 +419,13 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
   return (
     <div className="space-y-3">
       {visible.map((e) => (
-        <PipelineCard key={e.vacancy.id} entry={e} />
+        <PipelineCard
+          key={e.vacancy.id}
+          entry={e}
+          offerStatusByCandidate={offerStatusByCandidate}
+          appointmentCandidateIds={appointmentCandidateIds}
+          accountRequestStatusByCandidate={accountRequestStatusByCandidate}
+        />
       ))}
     </div>
   );
