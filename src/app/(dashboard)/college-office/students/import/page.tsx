@@ -55,7 +55,7 @@ export default function OfficeStudentImportPage() {
   const lockedDepartment = searchParams.get("department") ?? "";
   const lockedYear = searchParams.get("year") ?? "";
   const isLocked = !!(sectionId && lockedSection && lockedDepartment && lockedYear);
-  const backHref = "/college-office/students";
+  const backHref = "/college-office";
 
   const columns = isLocked ? COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key)) : COLUMNS;
 
@@ -178,7 +178,7 @@ export default function OfficeStudentImportPage() {
           : "Bulk upload the student roster - across every department - from a CSV/Excel file"}
         actions={
           <Button variant="outline" asChild>
-            <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Students</Link>
+            <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to Dashboard</Link>
           </Button>
         }
       />
@@ -336,7 +336,7 @@ export default function OfficeStudentImportPage() {
             )}
             {result.created > 0 && (
               <Button asChild variant="outline" size="sm">
-                <Link href={backHref}>Back to Students</Link>
+                <Link href={backHref}>Back to Dashboard</Link>
               </Button>
             )}
           </CardContent>
