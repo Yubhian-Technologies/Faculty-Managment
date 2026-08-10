@@ -1,9 +1,9 @@
-// Supporting Staff (Non-Technical) CSV column definitions - used by the
-// College Office bulk-import template/preview, mirroring
-// src/lib/faculty/csvColumns.ts for the Faculty import. Technical staff moved
-// to the Faculty module (see TECHNICAL_STAFF_DESIGNATIONS in core.ts) - this
-// module only ever covers Non-Technical staff now, so there's no per-category
-// composition here anymore.
+// Supporting Staff CSV column definitions - used by the College Office
+// bulk-import template/preview, mirroring src/lib/faculty/csvColumns.ts for
+// the Faculty import. Designation is free text, per-college-type (see
+// College.type and src/lib/designations/config.ts) - covers both the
+// original Non-Technical roles and, for Engineering/Pharmacy/Dental
+// colleges, the Technical roles migrated back in from the Faculty module.
 
 export interface SupportingStaffCsvColumn {
   key: string;
@@ -20,7 +20,7 @@ const PERSONAL_COLUMNS: SupportingStaffCsvColumn[] = [
   { key: "email",              label: "Personal Email",               required: false, sample: "ramesh@gmail.com", aliases: ["Email", "Email ID", "Personal Email ID"] },
   { key: "password",          label: "Login Password (min 8 characters, optional)", required: false, sample: "", aliases: ["Password", "Login Password"] },
   { key: "phone",              label: "Phone",                        required: false, sample: "9876543210", aliases: ["Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
-  { key: "designation",        label: "Designation",                  required: false, sample: "Office Staff" },
+  { key: "designation",        label: "Designation",                  required: true,  sample: "Office Staff" },
   { key: "otherDesignationTitle", label: "Designation Title (if Other)", required: false, sample: "" },
   { key: "department",        label: "Department",                   required: false, sample: "CSE", aliases: ["Dept", "Department Code"] },
   { key: "employmentType",     label: "Employment Type",              required: false, sample: "Permanent", aliases: ["Employment", "Type of Employment"] },
@@ -100,7 +100,7 @@ export function getSupportingStaffColumns(): SupportingStaffCsvColumn[] {
 
 export function getSupportingStaffHints(): string[] {
   return [
-    "Designation: Office Staff, Accountant, Librarian, Clerk, Attender, Office Assistant, Other",
+    "Designation: any supporting-staff title used by your college (e.g. Office Staff, Accountant, Clerk, Attender, Office Assistant, Lab Assistant, Programmer, System Administrator, Network Engineer for Engineering/Pharmacy/Dental; AO, Librarian, Trainee etc. for Degree; A.A.O, Lab Technician etc. for Polytechnic; AO, Receptionist etc. for School) - use \"Other\" with a Designation Title if none of these fit",
     "Employment Type: Permanent, Contract, Visiting, Part-Time (defaults to Permanent if left blank or unrecognized)",
     "Status: Active, On Leave, Resigned, Retired (defaults to Active if left blank)",
     "Gender: Male, Female, Other",

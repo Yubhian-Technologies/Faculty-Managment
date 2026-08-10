@@ -49,6 +49,7 @@ export default function NewUserPage() {
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
   const [saving, setSaving] = useState(false);
+  const collegeType = colleges.find((c) => c.id === collegeId)?.type;
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -235,7 +236,7 @@ export default function NewUserPage() {
           <Card className="mt-6">
             <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
             <CardContent>
-              <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} />
+              <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} collegeType={collegeType} />
             </CardContent>
           </Card>
         </>

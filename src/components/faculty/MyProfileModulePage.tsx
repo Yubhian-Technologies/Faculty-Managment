@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import type { FacultyMember, TeachingAssignment } from "@/types";
 
 type MyFaculty = Partial<FacultyMember> & { id: string; isActive?: boolean };
@@ -21,6 +22,7 @@ export function MyProfileModulePage({ basePath }: { basePath: string }) {
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
   const moduleDef = PROFILE_MODULES[moduleKey];
+  const { collegeType } = useCollegeType();
 
   const [faculty, setFaculty] = useState<MyFaculty | null>(null);
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
@@ -60,7 +62,7 @@ export function MyProfileModulePage({ basePath }: { basePath: string }) {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : faculty ? (
-        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} />
+        <FacultyProfileModuleContent moduleKey={moduleKey} faculty={faculty} teachingAssignments={teachingAssignments} collegeType={collegeType} />
       ) : (
         <p className="text-sm text-muted-foreground">No profile record found.</p>
       )}
