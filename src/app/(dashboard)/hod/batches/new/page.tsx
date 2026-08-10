@@ -13,7 +13,7 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { ShieldCheck, KeyRound } from "lucide-react";
 import { ROLE_LABELS } from "@/types";
-import type { VacancyRequest, Candidate, CandidateApplication, FMSUser } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, FMSUser, HiringBatch } from "@/types";
 
 const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL"] as const;
 const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
@@ -70,15 +70,27 @@ export default function NewBatchPage() {
         .then((r) => r.json() as Promise<{ faculty: FacultyRecord[] }>)
         .then((d) => d.faculty ?? [])
         .catch(() => [] as FacultyRecord[]),
+      fetch("/api/college/hiring-batches")
+        .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
+        .then((d) => d.batches ?? [])
+        .catch(() => [] as HiringBatch[]),
     ])
-      .then(([v, apps, candidates, s, f]) => {
-        setVacancies(v);
+      .then(([v, apps, candidates, s, f, batches]) => {
+        // A vacancy's own status stays APPROVED forever - whether its hiring
+        // has actually finished is tracked on the batch instead, so a past
+        // (COMPLETED) hiring must be excluded here explicitly or it stays
+        // pickable as if it were still open. Mirrors AttachToVacancyDialog's filter.
+        const completedVacancyIds = new Set(
+          batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
+        );
+        const openVacancies = v.filter((vac) => vac.requiredCount > 0 && !completedVacancyIds.has(vac.id));
+        setVacancies(openVacancies);
         setApplications(apps);
         setCandidatesById(new Map(candidates.map((c) => [c.id, c])));
         setLoginlessFaculty(f.filter((rec) => !rec.userUid));
 
         // Auto-select if vacancyId was passed from pipeline
-        if (prefilledVacancyId && v.find((vac) => vac.id === prefilledVacancyId)) {
+        if (prefilledVacancyId && openVacancies.find((vac) => vac.id === prefilledVacancyId)) {
           setSelectedVacancyId(prefilledVacancyId);
         }
 
@@ -122,7 +134,7 @@ export default function NewBatchPage() {
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
   const filteredApplications = selectedVacancy
-    ? applications.filter((a) => !a.batchId && a.vacancyRequestId === selectedVacancyId)
+    ? applications.filter((a) => !a.batchId && a.vacancyRequestId === selectedVacancyId && a.status !== "REJECTED")
     : [];
 
   function toggleApplication(id: string) {

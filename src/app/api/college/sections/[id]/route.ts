@@ -3,17 +3,19 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 
-// A parent department's HOD has full (not just view-only) access to their
-// own sub-departments' sections - same edit/delete rights as the sub-HOD who
-// owns that sub-department day to day. Only a section belonging to a
-// genuinely unrelated department (reached solely via `secondaryDepartments`
-// cross-listing) stays out of reach here. Firestore security rules aren't in
-// play here (admin SDK), so this is the only enforcement point.
+// A parent department's HOD has full (not just view-only) access to their own
+// sub-departments' sections, and a sub-HOD has the same over every branch
+// grouped/managed under them (e.g. a Basic Science sub-HOD who runs CSE's
+// first-year sections) - same edit/delete rights as on their own department.
+// canHodEditDepartment centralizes that rule (own + child + managed); only a
+// section reached solely via `secondaryDepartments` cross-listing stays
+// view-only. Firestore security rules aren't in play here (admin SDK), so this
+// is the only enforcement point.
 async function assertHodOwnsSection(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
@@ -21,8 +23,7 @@ async function assertHodOwnsSection(
   sectionDepartment: string
 ): Promise<boolean> {
   const scope = await getHodDepartmentScope(db, collegeId, uid);
-  if (scope.departmentName && scope.departmentName === sectionDepartment) return true;
-  return scope.childDepartmentNames.includes(sectionDepartment);
+  return canHodEditDepartment(scope, sectionDepartment);
 }
 
 export async function PATCH(
@@ -56,9 +57,7 @@ export async function PATCH(
     let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
     if (session.role === "HOD") {
       hodScope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const owns = !!hodScope.departmentName
-        && (hodScope.departmentName === sectionDept || hodScope.childDepartmentNames.includes(sectionDept));
-      if (!owns) {
+      if (!canHodEditDepartment(hodScope, sectionDept)) {
         return NextResponse.json({ error: "You can only edit sections in your own department" }, { status: 403 });
       }
     }
@@ -92,11 +91,8 @@ export async function PATCH(
       const targetDept = targetDeptSnap.data() as { name?: string; parentDepartmentId?: string; assignedYears?: number[]; secondaryDepartments?: string[] };
       const targetDeptName = targetDept.name ?? "";
 
-      if (hodScope) {
-        const allowed = body.departmentId === hodScope.departmentId || hodScope.childDepartmentIds.includes(body.departmentId);
-        if (!allowed) {
-          return NextResponse.json({ error: "You can only move sections within your own department or its sub-departments" }, { status: 403 });
-        }
+      if (hodScope && !canHodEditDepartmentId(hodScope, body.departmentId)) {
+        return NextResponse.json({ error: "You can only move sections within your own department or its sub-departments" }, { status: 403 });
       }
 
       if (course && course.departmentId !== body.departmentId && course.departmentId !== targetDept.parentDepartmentId) {
@@ -125,6 +121,38 @@ export async function PATCH(
         : null;
     }
     if (body.facultyInchargeName != null) updates.facultyInchargeName = body.facultyInchargeName;
+
+    // Same identity rule as create (sections/route.ts POST): renaming or moving
+    // a section must not land it on top of an existing one - department + course
+    // + year + name + cross-listed branch. Skips itself.
+    const finalDepartment = (updates.department as string | undefined) ?? sectionDept;
+    const finalName = (updates.name as string | undefined) ?? (oldSection.name ?? "");
+    const finalYear = (updates.year as number | undefined) ?? (oldSection.year ?? 0);
+    const finalCourseId = (updates.courseId as string | undefined) ?? (snap.data() as { courseId?: string }).courseId ?? "";
+    const finalSecondary = (
+      "secondaryDepartments" in updates
+        ? (updates.secondaryDepartments as string[])
+        : ((snap.data() as { secondaryDepartments?: string[] }).secondaryDepartments ?? [])
+    )[0]?.toLowerCase() ?? "";
+    if (finalDepartment && finalCourseId && finalName) {
+      const siblingSnap = await db.collection("colleges").doc(session.collegeId).collection("sections")
+        .where("department", "==", finalDepartment)
+        .where("courseId", "==", finalCourseId)
+        .where("year", "==", finalYear)
+        .get();
+      const clash = siblingSnap.docs.some((d) => {
+        if (d.id === id) return false;
+        const s = d.data() as { name?: string; secondaryDepartments?: string[] };
+        return (s.name ?? "").toUpperCase() === finalName
+          && (s.secondaryDepartments?.[0] ?? "").toLowerCase() === finalSecondary;
+      });
+      if (clash) {
+        return NextResponse.json(
+          { error: `Section ${finalName} already exists for ${finalDepartment} Year ${finalYear}.` },
+          { status: 409 }
+        );
+      }
+    }
 
     const batch = new ChunkedBatch(db);
     batch.update(ref, updates);
@@ -179,7 +207,7 @@ export async function DELETE(
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const data = snap.data() as { department?: string; name?: string; year?: number };
+    const data = snap.data() as { department?: string; name?: string; year?: number; courseId?: string; secondaryDepartments?: string[] };
 
     if (session.role === "HOD") {
       if (!(await assertHodOwnsSection(db, session.collegeId, session.uid, data.department ?? ""))) {
@@ -187,16 +215,34 @@ export async function DELETE(
       }
     }
 
-    const enrolledSnap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("students")
-      .where("department", "==", data.department ?? "")
-      .where("section", "==", data.name ?? "")
-      .where("year", "==", data.year ?? 0)
-      .limit(1)
-      .get();
-    if (!enrolledSnap.empty) {
+    const [enrolledSnap, siblingSnap] = await Promise.all([
+      db.collection("colleges").doc(session.collegeId).collection("students")
+        .where("department", "==", data.department ?? "")
+        .where("section", "==", data.name ?? "")
+        .where("year", "==", data.year ?? 0)
+        .limit(1)
+        .get(),
+      db.collection("colleges").doc(session.collegeId).collection("sections")
+        .where("department", "==", data.department ?? "")
+        .where("courseId", "==", data.courseId ?? "")
+        .where("year", "==", data.year ?? 0)
+        .get(),
+    ]);
+
+    // A section with students normally can't be deleted (it looks like dropping
+    // an in-use class). The exception is an EXACT duplicate: students are keyed
+    // by (department, section name, year), not this doc id, so an identical twin
+    // still covers them - deleting the extra copy orphans nobody. So block only
+    // when the section has students AND no identical twin exists. This is what
+    // lets a mistakenly-created duplicate be cleaned up from the UI.
+    const secondary = (data.secondaryDepartments?.[0] ?? "").toLowerCase();
+    const hasTwin = siblingSnap.docs.some((d) => {
+      if (d.id === id) return false;
+      const s = d.data() as { name?: string; secondaryDepartments?: string[] };
+      return (s.name ?? "").toUpperCase() === (data.name ?? "").toUpperCase()
+        && (s.secondaryDepartments?.[0] ?? "").toLowerCase() === secondary;
+    });
+    if (!enrolledSnap.empty && !hasTwin) {
       return NextResponse.json(
         { error: "Cannot delete a section that has students. Remove all students first." },
         { status: 409 }

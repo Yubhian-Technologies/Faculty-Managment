@@ -4,8 +4,8 @@ import { CheckCircle2 } from "lucide-react";
 
 export type StepState = "done" | "current" | "upcoming";
 
-// One step in the 4-stage hiring pipeline stepper (Request → Candidates →
-// Interview → Hiring Results) - shared between HOD's pipeline board
+// One step in the 5-stage hiring pipeline stepper (Request → Candidates →
+// Interview → Decision → Onboarding) - shared between HOD's pipeline board
 // (hod/pipeline/PipelineBoard.tsx) and Principal's (principal/vacancies).
 export function Step({
   step,

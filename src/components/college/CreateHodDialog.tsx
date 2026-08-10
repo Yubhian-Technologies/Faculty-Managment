@@ -75,7 +75,15 @@ export function CreateHodDialog({ department, onCreated }: CreateHodDialogProps)
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm">+ Create HOD</Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!department}
+          title={department ? undefined : "Enter the department name first — it's saved onto this HOD's own profile the moment the account is created"}
+        >
+          + Create HOD
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

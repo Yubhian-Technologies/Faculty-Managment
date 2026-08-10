@@ -15,7 +15,7 @@ import { DocumentTypeCombobox } from "@/components/shared/DocumentTypeCombobox";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
-import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
+import { DOCUMENT_TYPE_GROUPS, EDUCATION_DOCUMENT_TEMPLATES } from "@/lib/documentTypes";
 import { Trash2, Plus, CheckCircle2 } from "lucide-react";
 import type { CandidateBioData, AcademicQualification, WorkExperienceEntry, RelativeInSociety } from "@/types";
 
@@ -48,14 +48,26 @@ function newCertRow(): CertRow {
   return { key: Math.random().toString(36).slice(2), label: "", file: null };
 }
 
-type QualificationRow = AcademicQualification & { file: File | null };
+// sourceLabel marks a row auto-created from one of the HOD's required
+// education documents (e.g. "10th Certificate & Marks Memo") — the degree
+// tile is prefilled/locked from EDUCATION_DOCUMENT_TEMPLATES and the row
+// can't be removed, since it stands in for that required-document upload.
+type QualificationRow = AcademicQualification & { file: File | null; sourceLabel?: string };
 
-function newQualificationRow(): QualificationRow {
+function newQualificationRow(sourceLabel?: string, degree?: string): QualificationRow {
   return {
     id: Math.random().toString(36).slice(2),
-    degree: "", institution: "", yearOfPassing: "", percentageOrCGPA: "",
+    degree: degree ?? "", institution: "", yearOfPassing: "", percentageOrCGPA: "",
     file: null,
+    sourceLabel,
   };
+}
+
+function institutionPlaceholderFor(sourceLabel?: string): string {
+  if (!sourceLabel) return "College / University name";
+  if (sourceLabel.startsWith("10th")) return "School name";
+  if (sourceLabel.startsWith("Intermediate")) return "Junior College name";
+  return "College / University name";
 }
 
 function newExperienceRow(): WorkExperienceEntry {
@@ -95,7 +107,13 @@ export default function CandidateFormPage() {
         setCandidate(d.candidate);
         const required = d.requiredDocuments ?? [];
         setRequiredDocuments(required);
-        setRequiredFiles(Object.fromEntries(required.map((label) => [label, null])));
+        const templatedLabels = required.filter((label) => EDUCATION_DOCUMENT_TEMPLATES[label]);
+        setRequiredFiles(
+          Object.fromEntries(required.filter((label) => !EDUCATION_DOCUMENT_TEMPLATES[label]).map((label) => [label, null]))
+        );
+        if (templatedLabels.length > 0) {
+          setQualifications(templatedLabels.map((label) => newQualificationRow(label, EDUCATION_DOCUMENT_TEMPLATES[label])));
+        }
         if (d.candidate.bioDataSubmitted) setSubmitted(true);
       })
       .catch(() => {})
@@ -148,7 +166,13 @@ export default function CandidateFormPage() {
 
   function handleSubmitClick(e: React.FormEvent) {
     e.preventDefault();
-    const missing = requiredDocuments.filter((label) => !requiredFiles[label]);
+    const missingOther = requiredDocuments
+      .filter((label) => !EDUCATION_DOCUMENT_TEMPLATES[label])
+      .filter((label) => !requiredFiles[label]);
+    const missingTemplated = qualifications
+      .filter((q) => q.sourceLabel && !q.file)
+      .map((q) => q.sourceLabel as string);
+    const missing = [...missingOther, ...missingTemplated];
     if (missing.length > 0) {
       toast({
         variant: "destructive",
@@ -164,7 +188,7 @@ export default function CandidateFormPage() {
     setSaving(true);
     try {
       const certificates: Array<{ name: string; url: string }> = [];
-      for (const label of requiredDocuments) {
+      for (const label of requiredDocuments.filter((l) => !EDUCATION_DOCUMENT_TEMPLATES[l])) {
         const file = requiredFiles[label];
         if (!file) continue;
         const fileRef = ref(
@@ -189,7 +213,7 @@ export default function CandidateFormPage() {
       const qualifications_: AcademicQualification[] = [];
       for (const row of qualifications) {
         if (!row.degree.trim() && !row.institution.trim()) continue;
-        const { file, ...rest } = row;
+        const { file, sourceLabel, ...rest } = row;
         let certificateUrl = rest.certificateUrl;
         let certificateName = rest.certificateName;
         if (file) {
@@ -200,6 +224,9 @@ export default function CandidateFormPage() {
           await uploadBytes(fileRef, file);
           certificateUrl = await getDownloadURL(fileRef);
           certificateName = file.name;
+          // Also surface a source-labeled entry so office/HOD document review
+          // (which lists Candidate.certificates flat) still shows this file.
+          if (sourceLabel) certificates.push({ name: sourceLabel, url: certificateUrl });
         }
         qualifications_.push({ ...rest, certificateUrl, certificateName });
       }
@@ -367,10 +394,16 @@ export default function CandidateFormPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">Academic Qualifications</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {qualifications.map((row, i) => (
-                <div key={row.id} className="rounded-lg border p-3 space-y-3">
+                <div key={row.id} className={`rounded-lg border p-3 space-y-3 ${row.sourceLabel ? "border-primary/40 bg-primary/5" : ""}`}>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-muted-foreground">Qualification {i + 1}</p>
-                    {qualifications.length > 1 && (
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {row.sourceLabel ? (
+                        <>Required: {row.sourceLabel} <span className="text-destructive">*</span></>
+                      ) : (
+                        `Qualification ${i + 1}`
+                      )}
+                    </p>
+                    {!row.sourceLabel && qualifications.filter((q) => !q.sourceLabel).length > 1 && (
                       <Button type="button" variant="ghost" size="icon" aria-label="Remove qualification" onClick={() => removeQualificationRow(row.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -379,11 +412,11 @@ export default function CandidateFormPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor={`qual-degree-${row.id}`}>Degree / Course</Label>
-                      <Input id={`qual-degree-${row.id}`} value={row.degree} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="e.g. M.Tech" />
+                      <Input id={`qual-degree-${row.id}`} value={row.degree} disabled={!!row.sourceLabel} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="e.g. M.Tech" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`qual-institution-${row.id}`}>Institution</Label>
-                      <Input id={`qual-institution-${row.id}`} value={row.institution} onChange={(e) => updateQualificationRow(row.id, { institution: e.target.value })} placeholder="College / University name" />
+                      <Input id={`qual-institution-${row.id}`} value={row.institution} onChange={(e) => updateQualificationRow(row.id, { institution: e.target.value })} placeholder={institutionPlaceholderFor(row.sourceLabel)} />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -400,7 +433,7 @@ export default function CandidateFormPage() {
                     accept=".pdf,.png,.jpg,.jpeg"
                     maxSizeMB={5}
                     onFileSelect={(file) => updateQualificationRow(row.id, { file })}
-                    label="Upload Certificate"
+                    label={row.sourceLabel ? `Upload ${row.sourceLabel}` : "Upload Certificate"}
                   />
                 </div>
               ))}
@@ -618,7 +651,7 @@ export default function CandidateFormPage() {
             </CardContent>
           </Card>
 
-          {groupRequiredDocuments(requiredDocuments).map(({ category, labels }) => (
+          {groupRequiredDocuments(requiredDocuments.filter((l) => !EDUCATION_DOCUMENT_TEMPLATES[l])).map(({ category, labels }) => (
             <Card key={category}>
               <CardHeader className="pb-3"><CardTitle className="text-base">{category}</CardTitle></CardHeader>
               <CardContent className="space-y-4">

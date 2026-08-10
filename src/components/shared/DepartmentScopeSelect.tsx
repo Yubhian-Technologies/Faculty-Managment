@@ -5,12 +5,13 @@ import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/authStore";
 import type { Department } from "@/types";
 
-// Lets a parent department's HOD file a new section / subject / faculty member
-// under their own department or any of its sub-departments.
+// Lets an HOD file a new section / subject / faculty member under their own
+// department, any of its sub-departments, or any branch grouped/managed under
+// it (a sub-HOD who manages IT + CSBS can create sections directly under IT).
 //
-// Renders NOTHING when the signed-in HOD has no sub-departments, which is the
-// common case - so ordinary departments and sub-HODs see no extra field at all,
-// and the parent's own department stays the default everywhere.
+// Renders NOTHING when the signed-in HOD has neither sub-departments nor managed
+// branches, which is the common case - so ordinary departments see no extra
+// field at all and their own department stays the default everywhere.
 //
 // The value is a department NAME (what section/subject/faculty docs store);
 // `departmentId` is reported alongside because the sections API keys off the id.
@@ -52,10 +53,18 @@ export function DepartmentScopeSelect({
         .filter((d) => d.parentDepartmentId === own.id)
         .sort((a, b) => a.name.localeCompare(b.name))
     : [];
+  // Branches grouped under this (sub-)department - the sub-HOD manages them
+  // fully, so they can create sections directly under IT/CSBS.
+  const managedNames = new Set((own?.managedDepartments ?? []));
+  const managed = own
+    ? departments
+        .filter((d) => managedNames.has(d.name))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
 
-  if (!own || children.length === 0) return null;
+  if (!own || (children.length === 0 && managed.length === 0)) return null;
 
-  const options = [own, ...children];
+  const options = [own, ...children, ...managed];
   const selectedName = value || ownName;
 
   return (
@@ -74,12 +83,13 @@ export function DepartmentScopeSelect({
       >
         {options.map((d) => (
           <option key={d.id} value={d.name}>
-            {d.name}{d.id === own.id ? " (your department)" : ""}
+            {d.name}
+            {d.id === own.id ? " (your department)" : managedNames.has(d.name) ? " (managed branch)" : ""}
           </option>
         ))}
       </select>
       <p className="text-xs text-muted-foreground">
-        {hint ?? "You manage this department and its sub-departments."}
+        {hint ?? "You manage this department, its sub-departments, and any grouped branches."}
       </p>
     </div>
   );

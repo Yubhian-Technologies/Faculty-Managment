@@ -41,8 +41,11 @@ export async function GET(request: Request) {
         primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
         secondaryDeptQuery = withCommonFilters(sectionsColl.where("secondaryDepartments", "array-contains", scope.departmentName));
       }
-      if (scope.childDepartmentNames.length > 0) {
-        childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", scope.childDepartmentNames));
+      // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
+      // both fully-owned - one `in` query covers both, tagged primary below.
+      const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
+      if (ownedDeptNames.length > 0) {
+        childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
       }
     } else if (session.role === "PANEL_MEMBER") {
       const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
@@ -266,6 +269,36 @@ export async function POST(request: Request) {
       }
     }
 
+    // Reject an exact duplicate. Within a program a class section is identified
+    // by department + course + year + section name, plus its cross-listed branch
+    // (a shared first-year department may legitimately run two same-named
+    // sections feeding different branches - e.g. Basic Science "A" -> CSE and
+    // another "A" -> ECE). Batch is deliberately NOT part of the identity: only
+    // one batch occupies a given year at a time, and leaving it out also stops
+    // inconsistent batch text ("2025-26" vs "2025-2026") from slipping a real
+    // duplicate past this check.
+    const sectionName = body.name.trim().toUpperCase();
+    const chosenSecondary = (secondaryDepartments[0] ?? "").toLowerCase();
+    const siblingSnap = await db.collection("colleges").doc(session.collegeId).collection("sections")
+      .where("department", "==", dept)
+      .where("courseId", "==", body.courseId)
+      .where("year", "==", Number(body.year))
+      .get();
+    const isDuplicate = siblingSnap.docs.some((d) => {
+      const s = d.data() as { name?: string; secondaryDepartments?: string[] };
+      return (s.name ?? "").toUpperCase() === sectionName
+        && (s.secondaryDepartments?.[0] ?? "").toLowerCase() === chosenSecondary;
+    });
+    if (isDuplicate) {
+      return NextResponse.json(
+        {
+          error: `Section ${sectionName} already exists for ${dept} Year ${body.year}`
+            + `${secondaryDepartments[0] ? ` (feeding ${secondaryDepartments[0]})` : ""}.`,
+        },
+        { status: 409 }
+      );
+    }
+
     // The Class Incharge picker supplies a FacultyMember doc id, but this field
     // is read by comparing against the login uid — resolve it now so the two
     // stay in sync (see resolveFacultyMemberId.ts).
@@ -282,7 +315,7 @@ export async function POST(request: Request) {
       ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
       courseId: body.courseId,
       courseName: course.name,
-      name: body.name.trim().toUpperCase(),
+      name: sectionName,
       year: Number(body.year),
       batch: body.batch.trim(),
       facultyInchargeUid,

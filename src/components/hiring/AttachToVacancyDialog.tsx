@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/useToast";
-import type { VacancyRequest, CandidateApplication } from "@/types";
+import type { VacancyRequest, CandidateApplication, HiringBatch } from "@/types";
 
 interface AttachToVacancyDialogProps {
   candidateId: string;
@@ -48,9 +48,20 @@ export function AttachToVacancyDialog({
       fetch(`/api/college/candidate-applications?candidateId=${candidateId}`)
         .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
         .then((d) => d.applications ?? []),
+      fetch("/api/college/hiring-batches")
+        .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
+        .then((d) => d.batches ?? [])
+        .catch(() => []),
     ])
-      .then(([allVacancies, applications]) => {
-        setVacancies(allVacancies.filter((v) => v.requiredCount > 0));
+      .then(([allVacancies, applications, batches]) => {
+        // A vacancy's own status stays APPROVED forever - whether its hiring
+        // has actually finished is tracked on the batch instead, so a past
+        // (COMPLETED) hiring must be excluded here explicitly or it stays
+        // pickable as if it were still open. Mirrors hod/candidates/new's filter.
+        const completedVacancyIds = new Set(
+          batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
+        );
+        setVacancies(allVacancies.filter((v) => v.requiredCount > 0 && !completedVacancyIds.has(v.id)));
         setAttachedVacancyIds(
           new Set(applications.filter((a) => a.status !== "REJECTED").map((a) => a.vacancyRequestId))
         );
