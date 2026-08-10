@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import type { EmploymentType } from "@/types";
 
 export type ProvisionResult =
   | { status: "created"; facultyId: string; employeeId: string; generatedPassword: string }
@@ -26,7 +27,12 @@ export async function provisionFacultyFromOffer(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
   offerId: string,
-  credentials?: { collegeEmail: string; password: string }
+  credentials?: { collegeEmail: string; password: string },
+  // Office-supplied extras from a faculty-account request (see
+  // facultyAccountRequests) — fill in exactly the fields this function used
+  // to always leave blank/wrong (qualification/specialization were always
+  // "", employmentType was the invalid literal "FULL_TIME").
+  profileFields?: { employmentType?: EmploymentType; qualification?: string; specialization?: string }
 ): Promise<ProvisionResult> {
   const letterSnap = await db.collection("colleges").doc(collegeId).collection("offerLetters").doc(offerId).get();
   if (!letterSnap.exists) return { status: "not_found" };
@@ -132,11 +138,11 @@ export async function provisionFacultyFromOffer(
     phone: candidate.phone ?? "",
     department,
     designation: letter.designation ?? "Assistant Professor",
-    qualification: "",
-    specialization: "",
+    qualification: profileFields?.qualification ?? "",
+    specialization: profileFields?.specialization ?? "",
     experienceYears: 0,
     joiningDate,
-    employmentType: "FULL_TIME",
+    employmentType: profileFields?.employmentType ?? "PERMANENT",
     // Account creation is normally deferred until after the candidate accepts
     // (see Request Credentials on college-office/offers, fulfilled via
     // webmaster/credential-requests), so the accept-time flip in

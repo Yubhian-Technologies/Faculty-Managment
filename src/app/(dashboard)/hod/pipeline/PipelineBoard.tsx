@@ -20,10 +20,10 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
 import { ShortlistDialog } from "@/components/hiring/ShortlistDialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { getCurrentStage, stateForStage, type PipelineStage } from "@/lib/hiringPipeline";
+import { getCurrentStage, stateForStage, getDetailedHiringStatus, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import type { VacancyRequest, Candidate, CandidateApplication, CandidateStatus, CandidateStage, InterviewMode, HiringBatch, OfferLetter } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, CandidateStatus, CandidateStage, InterviewMode, HiringBatch, OfferLetter, FacultyAccountRequestStatus } from "@/types";
 import { BATCH_PHASE_LABELS } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,6 +41,8 @@ type PipelineCandidateView = {
   bioDataSubmitted?: boolean;
   status: CandidateStatus;
   currentStage: CandidateStage;
+  notifiedPrincipalDocsReady?: boolean;
+  joiningLetterUrl?: string;
 };
 
 type PipelineEntry = {
@@ -128,9 +130,9 @@ function getNextAction(
     const pendingBioData = sessionCandidates.filter((c) => !c.bioDataSubmitted);
     if (pendingBioData.length > 0) {
       return {
-        label: `Waiting on Bio Data (${pendingBioData.length} pending)`,
-        href: "#",
-        disabled: true,
+        label: `Send Call Letter (${pendingBioData.length} pending) →`,
+        href: `/hod/batches/${batch.id}#call-letters`,
+        variant: "outline",
       };
     }
     return { label: "Open Interview Session →", href: `/coordinator/${batch.id}` };
@@ -150,6 +152,7 @@ function PipelineCard({
   offerStatusByCandidate,
   appointmentCandidateIds,
   loginGeneratedCandidateIds,
+  accountRequestStatusByCandidate,
   onDeleted,
   onRefresh,
 }: {
@@ -157,6 +160,7 @@ function PipelineCard({
   offerStatusByCandidate: Record<string, OfferStatus>;
   appointmentCandidateIds: Set<string>;
   loginGeneratedCandidateIds: Set<string>;
+  accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>;
   onDeleted: (vacancyId: string) => void;
   onRefresh: () => void;
 }) {
@@ -362,6 +366,23 @@ function PipelineCard({
                           {candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds)}
                         </Badge>
                       )}
+                      {(() => {
+                        const detailedStatus = getDetailedHiringStatus({
+                          applicationStatus: c.status,
+                          currentStage: c.currentStage,
+                          batchPhase: batch?.currentPhase,
+                          notifiedPrincipalDocsReady: c.notifiedPrincipalDocsReady,
+                          joiningLetterUrl: c.joiningLetterUrl,
+                          offerStatus: offerStatusByCandidate[c.candidateId],
+                          appointmentLetterExists: appointmentCandidateIds.has(c.candidateId),
+                          accountRequestStatus: accountRequestStatusByCandidate[c.candidateId],
+                        });
+                        return detailedStatus ? (
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-blue-700 border-blue-300 bg-blue-50">
+                            {DETAILED_HIRING_STATUS_LABELS[detailedStatus]}
+                          </Badge>
+                        ) : null;
+                      })()}
                       {c.status === "REJECTED" && (
                         <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-red-700 border-red-300 bg-red-50">
                           Rejected
@@ -453,6 +474,7 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
   const [offerStatusByCandidate, setOfferStatusByCandidate] = useState<Record<string, OfferStatus>>({});
   const [appointmentCandidateIds, setAppointmentCandidateIds] = useState<Set<string>>(new Set());
   const [loginGeneratedCandidateIds, setLoginGeneratedCandidateIds] = useState<Set<string>>(new Set());
+  const [accountRequestStatusByCandidate, setAccountRequestStatusByCandidate] = useState<Record<string, FacultyAccountRequestStatus>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   function load() {
@@ -476,8 +498,12 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         .then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>)
         .then((d) => d.letters ?? [])
         .catch(() => []),
+      fetch("/api/college/faculty-account-requests")
+        .then((r) => r.json() as Promise<{ requests: { candidateId: string; status: FacultyAccountRequestStatus }[] }>)
+        .then((d) => d.requests ?? [])
+        .catch(() => []),
     ])
-      .then(([vacancies, applications, candidates, batches, letters, appointmentLetters]) => {
+      .then(([vacancies, applications, candidates, batches, letters, appointmentLetters, accountRequests]) => {
         // Prefer a non-rejected offer per candidate — mirrors the office dashboard's logic.
         const offerMap: Record<string, OfferStatus> = {};
         for (const letter of letters) {
@@ -487,7 +513,14 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         setOfferStatusByCandidate(offerMap);
         setAppointmentCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
         setLoginGeneratedCandidateIds(
-          new Set(letters.filter((l) => l.credentialsFulfilledAt).map((l) => l.candidateId))
+          new Set(
+            accountRequests
+              .filter((r) => r.status === "CREDENTIALS_CREATED" || r.status === "COMPLETED")
+              .map((r) => r.candidateId)
+          )
+        );
+        setAccountRequestStatusByCandidate(
+          Object.fromEntries(accountRequests.map((r) => [r.candidateId, r.status]))
         );
 
         const candidateMap = new Map(candidates.map((c) => [c.id, c]));
@@ -504,6 +537,8 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
             bioDataSubmitted: person?.bioDataSubmitted,
             status: a.status,
             currentStage: a.currentStage,
+            notifiedPrincipalDocsReady: !!a.documentVerification?.notifiedPrincipalAt,
+            joiningLetterUrl: a.joiningLetterUrl,
           };
           const list = viewsByVacancy.get(a.vacancyRequestId);
           if (list) list.push(view);
@@ -581,6 +616,7 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
           offerStatusByCandidate={offerStatusByCandidate}
           appointmentCandidateIds={appointmentCandidateIds}
           loginGeneratedCandidateIds={loginGeneratedCandidateIds}
+          accountRequestStatusByCandidate={accountRequestStatusByCandidate}
           onDeleted={(vacancyId) => setEntries((prev) => prev.filter((entry) => entry.vacancy.id !== vacancyId))}
           onRefresh={load}
         />

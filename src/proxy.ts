@@ -17,6 +17,7 @@ const PUBLIC_PATHS = [
   "/api/auth",
   "/location-interview",
   "/candidate-form",
+  "/offer-acceptance",
   "/about-team-illustration.png",
 ];
 

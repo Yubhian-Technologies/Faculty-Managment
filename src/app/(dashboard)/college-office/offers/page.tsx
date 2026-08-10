@@ -8,14 +8,24 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
+import { RequestFacultyAccountDialog } from "@/components/hiring/RequestFacultyAccountDialog";
+import { MarkOfferAcceptedDialog } from "@/components/hiring/MarkOfferAcceptedDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
-import { Plus, FileText, CheckCircle2, XCircle, Send, ChevronDown, ChevronUp, KeyRound, Clock, Download, PenLine } from "lucide-react";
-import type { OfferLetter } from "@/types";
+import { Plus, FileText, CheckCircle2, XCircle, Send, ChevronDown, ChevronUp, KeyRound, Clock, Download, PenLine, Copy } from "lucide-react";
+import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
+import type { OfferLetter, FacultyAccountRequest } from "@/types";
 
 type OfferRow = OfferLetter & { id: string };
+
+const REQUEST_STATUS_COLOR: Record<FacultyAccountRequest["status"], string> = {
+  SUBMITTED: "text-amber-700 border-amber-300 bg-amber-50",
+  IN_PROGRESS: "text-blue-700 border-blue-300 bg-blue-50",
+  CREDENTIALS_CREATED: "text-green-700 border-green-300 bg-green-50",
+  COMPLETED: "text-green-700 border-green-300 bg-green-50",
+};
 
 const STATUS_CONFIG: Record<string, { label: string; color: "default" | "secondary" | "outline" | "destructive"; icon: typeof Send }> = {
   SENT: { label: "Sent", color: "outline", icon: Send },
@@ -32,22 +42,26 @@ export default function CollegeOfficeOffersPage() {
   const [letters, setLetters] = useState<OfferRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [actionTarget, setActionTarget] = useState<{ id: string; action: "ACCEPTED" | "REJECTED" } | null>(null);
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
   const [isActing, setIsActing] = useState(false);
-  const [requestingId, setRequestingId] = useState<string | null>(null);
+  const [acceptDialogLetter, setAcceptDialogLetter] = useState<OfferRow | null>(null);
+  const [requestDialogOffer, setRequestDialogOffer] = useState<OfferRow | null>(null);
   const [appointmentLetterCandidateIds, setAppointmentLetterCandidateIds] = useState<Set<string>>(new Set());
+  const [accountRequestsByOfferId, setAccountRequestsByOfferId] = useState<Record<string, FacultyAccountRequest>>({});
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [collegeInfo, setCollegeInfo] = useState<{ name: string; address: string }>({ name: "", address: "" });
 
   async function load() {
     setIsLoading(true);
     try {
-      const [letters, appointmentLetters] = await Promise.all([
+      const [letters, appointmentLetters, accountRequests] = await Promise.all([
         fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferRow[] }>).then((d) => d.letters ?? []),
         fetch("/api/college/appointment-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>).then((d) => d.letters ?? []).catch(() => []),
+        fetch("/api/college/faculty-account-requests").then((r) => r.json() as Promise<{ requests: FacultyAccountRequest[] }>).then((d) => d.requests ?? []).catch(() => []),
       ]);
       setLetters(letters);
       setAppointmentLetterCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
+      setAccountRequestsByOfferId(Object.fromEntries(accountRequests.map((r) => [r.offerId, r])));
     } catch {
       toast({ variant: "destructive", title: "Failed to load" });
     } finally {
@@ -63,33 +77,18 @@ export default function CollegeOfficeOffersPage() {
       .catch(() => {});
   }, []);
 
-  async function requestCredentials(letter: OfferRow) {
-    setRequestingId(letter.id);
-    try {
-      const res = await fetch(`/api/college/offer-letters/${letter.id}/request-credentials`, { method: "POST" });
-      const data = await res.json() as { ok?: boolean; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast({ variant: "success", title: "Credentials requested", description: "The Webmaster has been notified." });
-      void load();
-    } catch (err) {
-      toast({ variant: "destructive", title: "Failed to request credentials", description: err instanceof Error ? err.message : undefined });
-    } finally {
-      setRequestingId(null);
-    }
-  }
-
-  async function handleAction() {
-    if (!actionTarget) return;
+  async function handleReject() {
+    if (!rejectTargetId) return;
     setIsActing(true);
     try {
-      const res = await fetch(`/api/college/offer-letters/${actionTarget.id}`, {
+      const res = await fetch(`/api/college/offer-letters/${rejectTargetId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: actionTarget.action }),
+        body: JSON.stringify({ status: "REJECTED" }),
       });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: `Status updated to ${actionTarget.action.toLowerCase()}` });
-      setActionTarget(null);
+      toast({ variant: "success", title: "Status updated to rejected" });
+      setRejectTargetId(null);
       void load();
     } catch {
       toast({ variant: "destructive", title: "Action failed" });
@@ -175,6 +174,7 @@ export default function CollegeOfficeOffersPage() {
       );
 
       const institution = collegeInfo.name || "the institution";
+      const acceptanceUrl = `${window.location.origin}/offer-acceptance/${letter.collegeId}/${letter.id}`;
       const subject = `Offer Letter – ${letter.designation} | ${institution}`;
       const body = `Dear ${letter.candidateName ?? "Candidate"},
 
@@ -183,6 +183,9 @@ Greetings from ${institution}.
 We are pleased to offer you the position of ${letter.designation} in the ${letter.department} department, effective from ${formatDate(letter.joiningDate as Parameters<typeof formatDate>[0])}.
 
 The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+
+Please review the Terms & Conditions and confirm your acceptance and date of joining here:
+${acceptanceUrl}
 
 Congratulations, and welcome aboard!
 
@@ -196,6 +199,12 @@ ${institution}`;
     } finally {
       setDownloadingId(null);
     }
+  }
+
+  function copyAcceptanceLink(letter: OfferRow) {
+    const url = `${window.location.origin}/offer-acceptance/${letter.collegeId}/${letter.id}`;
+    void navigator.clipboard.writeText(url);
+    toast({ variant: "success", title: "Acceptance link copied" });
   }
 
   const counts = {
@@ -306,42 +315,56 @@ ${institution}`;
                         <PenLine className="h-3.5 w-3.5 mr-1" />
                         Compose Email
                       </Button>
-                      {letter.status === "ACCEPTED" && (
-                        letter.credentialsFulfilledAt ? (
-                          <Badge variant="default" className="bg-green-600 hover:bg-green-600">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Account Created
-                          </Badge>
-                        ) : letter.credentialsRequestedAt ? (
-                          <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
-                            <Clock className="h-3 w-3 mr-1" />
-                            Requested — awaiting Webmaster
-                          </Badge>
-                        ) : appointmentLetterCandidateIds.has(letter.candidateId) ? (
+                      {letter.status === "SENT" && (
+                        <Button size="sm" variant="ghost" onClick={() => copyAcceptanceLink(letter)}>
+                          <Copy className="h-3.5 w-3.5 mr-1" />
+                          Copy Acceptance Link
+                        </Button>
+                      )}
+                      {letter.status === "ACCEPTED" && (() => {
+                        const accountRequest = accountRequestsByOfferId[letter.id];
+                        if (accountRequest) {
+                          return (
+                            <Badge variant="outline" className={REQUEST_STATUS_COLOR[accountRequest.status]}>
+                              {accountRequest.status === "COMPLETED" ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                              {FACULTY_ACCOUNT_REQUEST_STATUS_LABELS[accountRequest.status]}
+                            </Badge>
+                          );
+                        }
+                        if (!appointmentLetterCandidateIds.has(letter.candidateId)) {
+                          return (
+                            <Badge variant="secondary" title="The Principal needs to generate the appointment letter first">
+                              Awaiting Appointment Letter
+                            </Badge>
+                          );
+                        }
+                        if (!letter.candidateConfirmedJoiningDate) {
+                          return (
+                            <Badge variant="secondary" title="The candidate hasn't confirmed a date of joining yet">
+                              Awaiting Candidate Confirmation
+                            </Badge>
+                          );
+                        }
+                        return (
                           <Button
                             size="sm"
                             variant="outline"
                             className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                            loading={requestingId === letter.id}
-                            onClick={() => void requestCredentials(letter)}
+                            onClick={() => setRequestDialogOffer(letter)}
                             title="Ask the Webmaster to create the candidate's login"
                           >
                             <KeyRound className="h-3.5 w-3.5 mr-1" />
-                            Request Credentials
+                            Request Faculty Account
                           </Button>
-                        ) : (
-                          <Badge variant="secondary" title="The Principal needs to generate the appointment letter first">
-                            Awaiting Appointment Letter
-                          </Badge>
-                        )
-                      )}
+                        );
+                      })()}
                       {letter.status === "SENT" && (
                         <>
-                          <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setActionTarget({ id: letter.id, action: "ACCEPTED" })}>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setAcceptDialogLetter(letter)}>
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                             Mark Accepted
                           </Button>
-                          <Button size="sm" variant="destructive" onClick={() => setActionTarget({ id: letter.id, action: "REJECTED" })}>
+                          <Button size="sm" variant="destructive" onClick={() => setRejectTargetId(letter.id)}>
                             <XCircle className="h-3.5 w-3.5 mr-1" />
                             Mark Rejected
                           </Button>
@@ -357,15 +380,36 @@ ${institution}`;
       )}
 
       <ConfirmDialog
-        open={!!actionTarget}
-        onOpenChange={(o) => { if (!o) setActionTarget(null); }}
-        title={actionTarget?.action === "ACCEPTED" ? "Mark as Accepted?" : "Mark as Rejected?"}
-        description={actionTarget?.action === "ACCEPTED" ? "This will mark the candidate as approved and finalize their hiring." : "Confirm this status change."}
-        confirmLabel={actionTarget?.action === "ACCEPTED" ? "Mark Accepted" : "Mark Rejected"}
-        variant={actionTarget?.action === "REJECTED" ? "destructive" : "default"}
-        onConfirm={handleAction}
+        open={!!rejectTargetId}
+        onOpenChange={(o) => { if (!o) setRejectTargetId(null); }}
+        title="Mark as Rejected?"
+        description="Confirm this status change."
+        confirmLabel="Mark Rejected"
+        variant="destructive"
+        onConfirm={handleReject}
         loading={isActing}
       />
+
+      {acceptDialogLetter && (
+        <MarkOfferAcceptedDialog
+          offerId={acceptDialogLetter.id}
+          candidateName={acceptDialogLetter.candidateName ?? ""}
+          defaultJoiningDate={acceptDialogLetter.joiningDate}
+          open={!!acceptDialogLetter}
+          onOpenChange={(open) => { if (!open) setAcceptDialogLetter(null); }}
+          onAccepted={() => { setAcceptDialogLetter(null); void load(); }}
+        />
+      )}
+
+      {requestDialogOffer && (
+        <RequestFacultyAccountDialog
+          offerId={requestDialogOffer.id}
+          candidateName={requestDialogOffer.candidateName ?? ""}
+          open={!!requestDialogOffer}
+          onOpenChange={(open) => { if (!open) setRequestDialogOffer(null); }}
+          onSubmitted={() => { setRequestDialogOffer(null); void load(); }}
+        />
+      )}
     </div>
   );
 }

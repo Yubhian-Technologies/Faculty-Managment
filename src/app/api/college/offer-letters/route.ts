@@ -69,6 +69,20 @@ export async function POST(request: Request) {
 
     const { ccEmails: uniqueCcEmails, hodUid, position } = await resolveOfferLetterCcEmails(db, session.collegeId, batchId);
 
+    // Snapshot the Principal-selected terms (see /principal/negotiate) for the
+    // candidate acceptance form - a snapshot, not a live reference, so it never
+    // changes after the offer is sent even if the application record is edited later.
+    // Filters batchId in-memory (matching the GET /candidate-applications route's
+    // convention) rather than a second .where(), to avoid needing a new composite index.
+    const applicationSnap = await db
+      .collection("colleges")
+      .doc(session.collegeId)
+      .collection("candidateApplications")
+      .where("candidateId", "==", candidateId)
+      .get();
+    const matchingApplication = applicationSnap.docs.find((d) => (d.data() as { batchId?: string }).batchId === batchId);
+    const offeredTerms = (matchingApplication?.data() as { termsAndConditions?: string[] } | undefined)?.termsAndConditions ?? [];
+
     const docRef = db.collection("colleges").doc(session.collegeId).collection("offerLetters").doc();
     const letter = {
       id: docRef.id,
@@ -82,6 +96,7 @@ export async function POST(request: Request) {
       ctcAnnual,
       subjects: body.subjects ?? [],
       ...(body.termsAndConditions?.trim() ? { termsAndConditions: body.termsAndConditions.trim() } : {}),
+      offeredTerms,
       // No separate draft/review step - HOD sends the offer in the same action.
       status: "SENT",
       generatedBy: actorName,

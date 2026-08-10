@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveOfferLetterCcEmails } from "@/lib/firestore/offerLetterCc";
+import { applyOfferDecision } from "@/lib/firestore/offerLetterDecision";
 
 // Recomputes the CC list live rather than trusting the value stored at send
 // time - covers letters sent before ccEmails was persisted at all, and stays
@@ -43,52 +44,40 @@ export async function PATCH(
     const { id } = await params;
     const body = (await request.json()) as {
       status?: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED";
+      confirmedDateOfJoining?: string;
     };
 
     const db = getAdminDb();
-    const now = new Date();
-    const updates: Record<string, unknown> = { updatedAt: now };
 
-    if (body.status) updates.status = body.status;
+    // ACCEPTED/REJECTED is a terminal decision the candidate may also submit
+    // themselves via the public acceptance form - route both through the same
+    // transactional helper so a staff override can never race a candidate
+    // submission into a double-write. This button is now a manual override
+    // for phone/paper confirmations, not a separate code path. confirmedDateOfJoining
+    // must come from this override too - without it, a phone-accepted candidate
+    // would never satisfy the faculty-account-request gate that requires it.
+    if (body.status === "ACCEPTED" || body.status === "REJECTED") {
+      const result = await applyOfferDecision(db, session.collegeId, id, {
+        decision: body.status,
+        respondedBy: session.uid,
+        confirmedDateOfJoining: body.status === "ACCEPTED" ? body.confirmedDateOfJoining : undefined,
+      });
+      if (result === "not_found") {
+        return NextResponse.json({ error: "Offer letter not found" }, { status: 404 });
+      }
+      if (result === "already_responded") {
+        return NextResponse.json({ error: "This offer has already been responded to" }, { status: 409 });
+      }
+      return NextResponse.json({ ok: true });
+    }
 
-    await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("offerLetters")
-      .doc(id)
-      .update(updates);
-
-    // When candidate formally accepts, mark them APPROVED and flip the faculty
-    // record (provisioned as INTERVIEW_DONE when the offer was sent) to ACTIVE -
-    // they've now actually confirmed and are expected to join on the date already
-    // recorded on that record.
-    if (body.status === "ACCEPTED") {
-      const letterSnap = await db
+    if (body.status) {
+      await db
         .collection("colleges")
         .doc(session.collegeId)
         .collection("offerLetters")
         .doc(id)
-        .get();
-      const candidateId = (letterSnap.data() as { candidateId?: string }).candidateId;
-      if (candidateId) {
-        await db
-          .collection("colleges")
-          .doc(session.collegeId)
-          .collection("candidates")
-          .doc(candidateId)
-          .update({ status: "APPROVED", updatedAt: now });
-
-        const facultySnap = await db
-          .collection("colleges")
-          .doc(session.collegeId)
-          .collection("facultyMembers")
-          .where("candidateId", "==", candidateId)
-          .limit(1)
-          .get();
-        if (!facultySnap.empty) {
-          await facultySnap.docs[0].ref.update({ status: "ACTIVE", updatedAt: now });
-        }
-      }
+        .update({ status: body.status, updatedAt: new Date() });
     }
 
     return NextResponse.json({ ok: true });

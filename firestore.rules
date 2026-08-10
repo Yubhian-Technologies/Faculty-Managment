@@ -341,6 +341,20 @@ service cloud.firestore {
         allow delete: if isSuperAdmin();
       }
 
+      match /hiringTermsTemplates/{templateId} {
+        allow read: if isStaff(collegeId);
+        allow create, update: if isPrincipal(collegeId);
+        allow delete: if isSuperAdmin();
+      }
+
+      // Office → Webmaster faculty-account handoff. Written exclusively via
+      // Admin SDK API routes (see /api/college/faculty-account-requests) —
+      // this rule is a read-guard for the dashboard pages, not enforcement.
+      match /facultyAccountRequests/{requestId} {
+        allow read: if isStaff(collegeId);
+        allow write: if false;
+      }
+
       // ─── [ LEAVE MODULE ] ───────────────────────────────────────────────────
 
       match /leaveApplications/{appId} {

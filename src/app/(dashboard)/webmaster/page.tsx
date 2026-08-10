@@ -5,7 +5,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { KeyRound, Users } from "lucide-react";
-import type { OfferLetter, FMSUser } from "@/types";
+import type { FacultyAccountRequest, FMSUser } from "@/types";
 
 export default function WebmasterDashboardPage() {
   const [pendingRequests, setPendingRequests] = useState(0);
@@ -14,11 +14,11 @@ export default function WebmasterDashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferLetter[] }>),
+      fetch("/api/college/faculty-account-requests").then((r) => r.json() as Promise<{ requests: FacultyAccountRequest[] }>),
       fetch("/api/college/users?includeAll=true").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
     ])
-      .then(([offersRes, usersRes]) => {
-        const pending = (offersRes.letters ?? []).filter((l) => l.credentialsRequestedAt && !l.credentialsFulfilledAt).length;
+      .then(([requestsRes, usersRes]) => {
+        const pending = (requestsRes.requests ?? []).filter((r) => r.status !== "COMPLETED").length;
         setPendingRequests(pending);
         setTotalAccounts((usersRes.users ?? []).length);
       })
