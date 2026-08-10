@@ -10,7 +10,7 @@ import {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "EXAM_CELL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "EXAM_CELL", "DEAN");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
     const year = searchParams.get("year");
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
 // no course link). Branch on which fields the caller sent.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "DEAN");
     const body = (await request.json()) as {
       courseId?: string;
       year?: number;
@@ -116,6 +116,15 @@ export async function POST(request: Request) {
         if (!ownsDirectly && !ownsViaParent) {
           return NextResponse.json({ error: "Course does not belong to your department" }, { status: 403 });
         }
+      } else {
+        // Non-HOD callers (Principal/VP/Super Admin/Dean) aren't scoped to
+        // one department - derive the canonical department name from the
+        // course's own departmentId rather than trusting a client-supplied
+        // string, so it can never drift from what the course actually
+        // belongs to.
+        const courseDeptSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("departments").doc(course.departmentId).get();
+        dept = (courseDeptSnap.data() as { name?: string } | undefined)?.name ?? "";
       }
 
       const ref = await db

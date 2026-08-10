@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { History, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import type { Department } from "@/types";
 
@@ -17,6 +18,16 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
       fetch("/api/college/departments")
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
         .then((d) => d.departments ?? []),
+  });
+
+  // Keyed by department name (how LeaveRequest.department is stored, same
+  // string the HOD-scoped queries elsewhere in the leave module match on).
+  const { data: absentToday = {} } = useQuery({
+    queryKey: ["principal-leave-history-absent-today"],
+    queryFn: () =>
+      fetch("/api/college/leave-history-report/absent-today")
+        .then((r) => r.json() as Promise<{ counts: Record<string, number> }>)
+        .then((d) => d.counts ?? {}),
   });
 
   return (
@@ -51,9 +62,16 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
                   <div>
                     <p className="font-medium">{d.name}</p>
                     <p className="text-xs text-muted-foreground">{d.code}</p>
-                    <p className={`text-xs mt-0.5 ${d.hodName ? "text-muted-foreground" : "text-orange-500"}`}>
-                      {d.hodName ? `HOD: ${d.hodName}` : "No HOD assigned"}
-                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <p className={`text-xs ${d.hodName ? "text-muted-foreground" : "text-orange-500"}`}>
+                        {d.hodName ? `HOD: ${d.hodName}` : "No HOD assigned"}
+                      </p>
+                      {!!absentToday[d.name] && (
+                        <Badge variant="modified" className="text-[10px] px-1.5 py-0">
+                          {absentToday[d.name]} absent today
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
