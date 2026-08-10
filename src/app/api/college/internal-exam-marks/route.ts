@@ -5,7 +5,67 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { countEntered } from "@/lib/exams/internalExamMarks";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
 import type { ExamConfiguration, InternalExamMarkEntry, InternalExamMarksBatch, Section, StudentRecord, TeachingAssignment } from "@/types";
+
+// HOD/Principal/VP/Super Admin oversight — view-only for everyone here (write
+// access, for Principal/VP/Super Admin only, is on PATCH /[id] below). HOD is
+// scoped to SUBMITTED marks within their own department + sub-departments,
+// same as before. Principal/VP/Super Admin get every batch institution-wide
+// regardless of status, so the dashboard can also surface a "Pending" (not
+// yet submitted) count — they still can't act on a DRAFT batch since editing
+// is gated to status === 'SUBMITTED' in the PATCH handler either way.
+// Each batch is enriched with its subject's courseId/courseName (read from
+// the Exam Cell's ExamConfiguration, which every batch requires to exist) so
+// callers can filter/display by Course without a schema change to the batch.
+export async function GET() {
+  try {
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const coll = collegeRef.collection("internalExamMarks");
+
+    let query: FirebaseFirestore.Query = coll;
+
+    if (session.role === "HOD") {
+      query = query.where("status", "==", "SUBMITTED");
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const departments = editableDepartmentNames(scope);
+      if (departments.length === 0) {
+        return NextResponse.json({ batches: [] });
+      }
+      query = query.where("department", "in", departments);
+    }
+
+    const snap = await query.get();
+    const rawBatches = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InternalExamMarksBatch));
+
+    const subjectIds = [...new Set(rawBatches.map((b) => b.subjectId))];
+    const configSnaps = await Promise.all(
+      subjectIds.map((sid) => collegeRef.collection("examConfigurations").doc(sid).get())
+    );
+    const courseBySubjectId = new Map(
+      configSnaps
+        .filter((s) => s.exists)
+        .map((s) => {
+          const c = s.data() as ExamConfiguration;
+          return [s.id, { courseId: c.courseId, courseName: c.courseName }];
+        })
+    );
+
+    const batches = rawBatches
+      .map((b) => ({ ...b, ...(courseBySubjectId.get(b.subjectId) ?? { courseId: "", courseName: "" }) }))
+      .sort((a, b) => (a.subjectName ?? "").localeCompare(b.subjectName ?? ""));
+
+    return NextResponse.json({ batches });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/internal-exam-marks GET]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
 
 export async function POST(request: Request) {
   try {
