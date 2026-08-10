@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Plus, GraduationCap, UserCog, Eye, Trash2, Pencil } from "lucide-react";
+import { Users, Plus, GraduationCap, UserCog, Eye, Trash2, Pencil, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -87,6 +87,16 @@ export default function OfficeSectionsPage() {
     }
   }
 
+  function importUrlForSection(sec: SectionRow) {
+    const params = new URLSearchParams({
+      sectionId: sec.id,
+      section: sec.name,
+      department: sec.department,
+      year: String(sec.year),
+    });
+    return `/college-office/students/import?${params.toString()}`;
+  }
+
   function openCreate() {
     const params = new URLSearchParams();
     if (activeDepartmentId !== "all") params.set("departmentId", activeDepartmentId);
@@ -143,16 +153,9 @@ export default function OfficeSectionsPage() {
         title="Sections"
         description="Class sections across every department - create sections and manage student rosters"
         actions={
-          <div className="flex gap-2">
-            {/* Import Students - temporarily hidden, not removed. Re-enable by
-                uncommenting this button. */}
-            {/* <Button variant="outline" asChild>
-              <Link href="/college-office/students/import"><Upload className="h-4 w-4 mr-2" />Import Students</Link>
-            </Button> */}
-            <Button onClick={openCreate} disabled={courses.length === 0}>
-              <Plus className="h-4 w-4 mr-2" />Add Section
-            </Button>
-          </div>
+          <Button onClick={openCreate} disabled={courses.length === 0}>
+            <Plus className="h-4 w-4 mr-2" />Add Section
+          </Button>
         }
       />
 
@@ -344,6 +347,13 @@ export default function OfficeSectionsPage() {
                           </span>
                         </div>
                       )}
+
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(importUrlForSection(sec)); }}
+                        className="mt-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-current/20 bg-black/5 px-3 py-1.5 text-sm font-medium hover:bg-black/10 transition-colors self-start"
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />Add Students
+                      </button>
                     </Link>
                           ))}
                         </div>

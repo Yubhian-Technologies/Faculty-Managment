@@ -13,9 +13,23 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { ExternalLink, FileText, Users, Calendar, Briefcase } from "lucide-react";
-import type { HiringBatch, Candidate } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, CandidateSource, CandidateStatus } from "@/types";
 
 type BatchRow = Record<string, unknown> & HiringBatch;
+
+// Joined view: application (per-hiring-request pipeline state) + candidate
+// (person) fields.
+type DetailCandidateView = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  position: string;
+  department: string;
+  source: CandidateSource;
+  status: CandidateStatus;
+  resumeUrl?: string;
+};
 
 export default function InterviewDetailPage() {
   const router = useRouter();
@@ -24,7 +38,7 @@ export default function InterviewDetailPage() {
 
   const [detailBatch, setDetailBatch] = useState<BatchRow | null>(null);
   const [loadingBatch, setLoadingBatch] = useState(true);
-  const [detailCandidates, setDetailCandidates] = useState<Candidate[]>([]);
+  const [detailCandidates, setDetailCandidates] = useState<DetailCandidateView[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
 
   const initialAction = searchParams.get("action");
@@ -55,9 +69,33 @@ export default function InterviewDetailPage() {
     if (!id) return;
     setDetailCandidates([]);
     setLoadingCandidates(true);
-    fetch(`/api/college/candidates?batchId=${id}`)
-      .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
-      .then((d) => setDetailCandidates(d.candidates ?? []))
+    Promise.all([
+      fetch(`/api/college/candidate-applications?batchId=${id}`)
+        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
+        .then((d) => d.applications ?? []),
+      fetch(`/api/college/candidates`)
+        .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
+        .then((d) => d.candidates ?? []),
+    ])
+      .then(([applications, candidates]) => {
+        const candidateMap = new Map(candidates.map((c) => [c.id, c]));
+        setDetailCandidates(
+          applications.map((a) => {
+            const person = candidateMap.get(a.candidateId);
+            return {
+              id: a.candidateId,
+              name: person?.name ?? "Unknown",
+              email: person?.email ?? "",
+              phone: person?.phone ?? "",
+              position: a.position,
+              department: a.department,
+              source: person?.source ?? "CAREERS_PAGE",
+              status: a.status,
+              resumeUrl: person?.resumeUrl,
+            };
+          })
+        );
+      })
       .catch(() => {})
       .finally(() => setLoadingCandidates(false));
   }, [id]);
@@ -139,7 +177,7 @@ export default function InterviewDetailPage() {
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <Users className="h-4 w-4 shrink-0" />
-              <span><strong className="text-foreground">Candidates:</strong> {(detailBatch?.candidateIds as string[] | undefined)?.length ?? 0}</span>
+              <span><strong className="text-foreground">Candidates:</strong> {(detailBatch?.applicationIds as string[] | undefined)?.length ?? 0}</span>
             </div>
           </div>
 

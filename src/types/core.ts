@@ -1145,12 +1145,15 @@ export interface AppNotification {
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 
 export type AuditAction =
-  // Recruitment module
+  // Recruitment module. CANDIDATE_SHORTLISTED/CANDIDATE_ARRIVED/CANDIDATE_STAGE_ADVANCED/
+  // HIRING_DECISION_MADE/DOCUMENTS_VERIFIED/JOINING_LETTER_UPLOADED all log targetId as
+  // the CandidateApplication id (not the Candidate id) since that's where this state lives.
   | "VACANCY_REQUEST_CREATED"
   | "VACANCY_REQUEST_APPROVED"
   | "VACANCY_REQUEST_REJECTED"
   | "VACANCY_REQUEST_DELETED"
   | "CANDIDATE_ADDED"
+  | "CANDIDATE_APPLICATION_CREATED" // candidate attached to a VacancyRequest; targetId is the CandidateApplication id
   | "CANDIDATE_SHORTLISTED"
   | "CANDIDATE_ARRIVED"
   | "CANDIDATE_STAGE_ADVANCED"

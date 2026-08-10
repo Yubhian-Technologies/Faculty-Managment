@@ -71,24 +71,46 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       batchId: string;
       candidateId: string;
-      ratings: {
+      // Demo-day module
+      demoRatings?: {
+        planningAndOrganizing: string;
+        effectiveUseOfTime: string;
+        communicativeAbility: string;
+        ensuringStudentAttention: string;
+        chalkBoardWork: string;
+        studentParticipation: string;
+      };
+      demoOverallScore?: number;
+      demoComments?: string;
+      // Panel-interview module
+      ratings?: {
         technicalKnowledge: number;
         communicationSkills: number;
         teachingMethodology: number;
+      };
+      remarksByCategory?: {
+        subjectKnowledge?: string;
+        communication?: string;
+        presentationSkills?: string;
+        research?: string;
+        specificAttributes?: string;
+        others?: string;
       };
       subjectsTested?: string[];
       salaryNegotiated?: number;
       noticePeriod?: string;
       strengths?: string;
       weaknesses?: string;
-      recommendation: "ACCEPT" | "REJECT" | "MAYBE";
+      recommendation?: "ACCEPT" | "REJECT" | "MAYBE";
       comments?: string;
     };
 
-    const { batchId, candidateId, ratings, recommendation } = body;
-    if (!batchId || !candidateId || !ratings || !recommendation) {
+    const { batchId, candidateId, demoRatings, demoOverallScore, ratings, recommendation } = body;
+    const hasDemo = !!demoRatings && demoOverallScore != null;
+    const hasInterview = !!ratings && !!recommendation;
+    if (!batchId || !candidateId || (!hasDemo && !hasInterview)) {
       return NextResponse.json(
-        { error: "batchId, candidateId, ratings, recommendation required" },
+        { error: "batchId, candidateId, and either demoRatings+demoOverallScore or ratings+recommendation are required" },
         { status: 400 }
       );
     }
@@ -104,35 +126,45 @@ export async function POST(request: Request) {
       .doc(batchId)
       .collection("panelFeedback");
 
-    // Upsert: one submission per panel member per candidate
+    // Upsert: one doc per panel member per candidate, shared across the demo
+    // and panel-interview modules — a later submission merges in rather than
+    // overwriting whichever module was already saved.
     const existingSnap = await feedbackCol
       .where("candidateId", "==", candidateId)
       .where("panelUid", "==", session.uid)
       .get();
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       collegeId: session.collegeId,
       batchId,
       candidateId,
       panelUid: session.uid,
       panelName,
-      ratings,
-      subjectsTested: body.subjectsTested ?? [],
-      ...(body.salaryNegotiated != null ? { salaryNegotiated: body.salaryNegotiated } : {}),
-      noticePeriod: body.noticePeriod ?? "",
-      strengths: body.strengths ?? "",
-      weaknesses: body.weaknesses ?? "",
-      recommendation,
-      comments: body.comments ?? "",
-      submittedAt: now,
+      updatedAt: now,
     };
+    if (hasDemo) {
+      payload.demoRatings = demoRatings;
+      payload.demoOverallScore = demoOverallScore;
+      payload.demoComments = body.demoComments ?? "";
+    }
+    if (hasInterview) {
+      payload.ratings = ratings;
+      payload.recommendation = recommendation;
+      payload.remarksByCategory = body.remarksByCategory ?? {};
+      payload.subjectsTested = body.subjectsTested ?? [];
+      if (body.salaryNegotiated != null) payload.salaryNegotiated = body.salaryNegotiated;
+      payload.noticePeriod = body.noticePeriod ?? "";
+      payload.strengths = body.strengths ?? "";
+      payload.weaknesses = body.weaknesses ?? "";
+      payload.comments = body.comments ?? "";
+    }
 
     let docId: string;
     if (!existingSnap.empty) {
-      await existingSnap.docs[0].ref.update(payload);
+      await existingSnap.docs[0].ref.set(payload, { merge: true });
       docId = existingSnap.docs[0].id;
     } else {
-      const ref = await feedbackCol.add(payload);
+      const ref = await feedbackCol.add({ ...payload, submittedAt: now });
       docId = ref.id;
     }
 
@@ -142,7 +174,7 @@ export async function POST(request: Request) {
       performedBy: session.uid,
       performedByName: panelName,
       targetId: docId,
-      details: { batchId, candidateId, recommendation },
+      details: { batchId, candidateId, module: hasDemo ? "DEMO" : "PANEL_INTERVIEW", ...(recommendation ? { recommendation } : {}) },
       timestamp: now,
     });
 

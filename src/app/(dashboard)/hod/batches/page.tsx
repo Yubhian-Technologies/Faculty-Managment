@@ -42,9 +42,9 @@ export default function HODBatchesPage() {
       render: (row) => formatDate(row.interviewDate as Parameters<typeof formatDate>[0]),
     },
     {
-      key: "candidateIds",
+      key: "applicationIds",
       header: "Candidates",
-      render: (row) => (row.candidateIds as string[]).length,
+      render: (row) => ((row.applicationIds as string[] | undefined) ?? []).length,
     },
     {
       key: "panelMemberUids",

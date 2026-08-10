@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
 import type { Firestore } from "firebase-admin/firestore";
 
 async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
@@ -15,16 +16,9 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS");
-    const { searchParams } = new URL(request.url);
-    const batchId = searchParams.get("batchId");
-    const vacancyId = searchParams.get("vacancyId");
-    const isShortlisted = searchParams.get("isShortlisted");
-    const status = searchParams.get("status");
-    const stage = searchParams.get("stage");
-    const department = searchParams.get("department");
 
     const db = getAdminDb();
     const snap = await db
@@ -36,15 +30,27 @@ export async function GET(request: Request) {
 
     let candidates = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    if (batchId) candidates = candidates.filter((c) => (c as { batchId?: string }).batchId === batchId);
-    if (vacancyId) candidates = candidates.filter((c) => (c as { vacancyId?: string }).vacancyId === vacancyId);
-    if (isShortlisted !== null && isShortlisted !== undefined) {
-      const val = isShortlisted === "true";
-      candidates = candidates.filter((c) => (c as { isShortlisted?: boolean }).isShortlisted === val);
+    // Candidate has no department of its own (see src/types/recruitment.ts) -
+    // it's only attached to a department via CandidateApplication, and a
+    // candidate can be attached to several departments over time. An HOD
+    // must still see the shared, not-yet-attached pool (so they can attach
+    // new candidates to their own hiring requests), but not a candidate that
+    // has only ever been attached to a *different* department's vacancy -
+    // otherwise every HOD sees every other department's applicant list.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const ownDepartments = new Set([scope.departmentName, ...scope.childDepartmentNames].filter(Boolean));
+      const appsSnap = await db.collection("colleges").doc(session.collegeId).collection("candidateApplications").get();
+      const attachedToOwnDept = new Set<string>();
+      const attachedToOtherDept = new Set<string>();
+      for (const doc of appsSnap.docs) {
+        const a = doc.data() as { candidateId?: string; department?: string };
+        if (!a.candidateId) continue;
+        if (a.department && ownDepartments.has(a.department)) attachedToOwnDept.add(a.candidateId);
+        else attachedToOtherDept.add(a.candidateId);
+      }
+      candidates = candidates.filter((c) => attachedToOwnDept.has(c.id) || !attachedToOtherDept.has(c.id));
     }
-    if (status) candidates = candidates.filter((c) => (c as { status?: string }).status === status);
-    if (stage) candidates = candidates.filter((c) => (c as { currentStage?: string }).currentStage === stage);
-    if (department) candidates = candidates.filter((c) => (c as { department?: string }).department === department);
 
     return NextResponse.json({ candidates });
   } catch (err) {
@@ -63,18 +69,8 @@ export async function POST(request: Request) {
       name: string;
       email: string;
       phone: string;
-      department: string;
-      position: string;
-      courseId?: string;
-      courseName?: string;
-      year?: number;
-      preferredSubjectIds?: string[];
-      preferredSubjectNames?: string[];
       resumeUrl?: string;
       source?: string;
-      interviewMode?: string;
-      vacancyId?: string;
-      batchId?: string;
       referralType?: string;
       referralName?: string;
       referralPhone?: string;
@@ -87,9 +83,9 @@ export async function POST(request: Request) {
       permanentAddress?: string;
     };
 
-    const { name, email, phone, department, position, courseId, courseName, year, preferredSubjectIds, preferredSubjectNames, resumeUrl, source, interviewMode, vacancyId, batchId, referralType, referralName, referralPhone, referralDescription, referralCollege, referralDesignation, referralInfluenceType, referralInfluenceOther, residenceAddress, permanentAddress } = body;
-    if (!name || !email || !phone || !department || !position) {
-      return NextResponse.json({ error: "name, email, phone, department, position required" }, { status: 400 });
+    const { name, email, phone, resumeUrl, source, referralType, referralName, referralPhone, referralDescription, referralCollege, referralDesignation, referralInfluenceType, referralInfluenceOther, residenceAddress, permanentAddress } = body;
+    if (!name || !email || !phone) {
+      return NextResponse.json({ error: "name, email, phone required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -105,16 +101,8 @@ export async function POST(request: Request) {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
-        department: department.trim(),
-        position: position.trim(),
-        ...(courseId ? { courseId, courseName: courseName ?? "" } : {}),
-        ...(year ? { year: Number(year) } : {}),
-        ...(preferredSubjectIds?.length ? { preferredSubjectIds, preferredSubjectNames: preferredSubjectNames ?? [] } : {}),
         resumeUrl: resumeUrl ?? "",
         source: source ?? "WALK_IN",
-        interviewMode: interviewMode ?? "OFFLINE",
-        vacancyId: vacancyId ?? "",
-        batchId: batchId ?? "",
         ...(residenceAddress ? { residenceAddress: residenceAddress.trim() } : {}),
         ...(permanentAddress ? { permanentAddress: permanentAddress.trim() } : {}),
         ...(source === "REFERRAL" ? {
@@ -133,10 +121,6 @@ export async function POST(request: Request) {
               : {}),
           } : {}),
         } : {}),
-        currentStage: "DEMO",
-        status: "PENDING",
-        isShortlisted: false,
-        hasArrived: false,
         addedByUid: session.uid,
         addedByName,
         createdAt: now,
@@ -149,7 +133,7 @@ export async function POST(request: Request) {
       performedBy: session.uid,
       performedByName: addedByName,
       targetId: ref.id,
-      details: { name, email, position, department },
+      details: { name, email },
       timestamp: now,
     });
 

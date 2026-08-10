@@ -1,20 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, MapPin, Monitor, UserCheck, UserX } from "lucide-react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ExternalLink, Plus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AttachToVacancyDialog } from "@/components/hiring/AttachToVacancyDialog";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { Candidate } from "@/types";
 
 type CandidateRow = Record<string, unknown> & Candidate;
 
 export default function HODCandidatesPage() {
+  const router = useRouter();
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [toggling, setToggling] = useState<string | null>(null);
+  const [attachTarget, setAttachTarget] = useState<CandidateRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CandidateRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   function load() {
     setIsLoading(true);
@@ -27,36 +34,20 @@ export default function HODCandidatesPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function toggleShortlist(candidate: CandidateRow) {
-    setToggling(candidate.id);
-    const newVal = !candidate.isShortlisted;
+  async function deleteCandidate() {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
     try {
-      const res = await fetch(`/api/college/candidates/${candidate.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isShortlisted: newVal }),
-      });
-      if (!res.ok) throw new Error();
-      toast({ variant: "success", title: newVal ? "Candidate shortlisted" : "Removed from shortlist" });
-      setCandidates((prev) =>
-        prev.map((c) => c.id === candidate.id ? { ...c, isShortlisted: newVal } : c)
-      );
-    } catch {
-      toast({ variant: "destructive", title: "Action failed" });
-    } finally {
-      setToggling(null);
-    }
-  }
-
-  async function deleteCandidate(candidate: CandidateRow) {
-    if (!confirm(`Remove ${candidate.name as string}?`)) return;
-    try {
-      const res = await fetch(`/api/college/candidates/${candidate.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      const res = await fetch(`/api/college/candidates/${deleteTarget.id}`, { method: "DELETE" });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error);
       toast({ variant: "success", title: "Candidate removed" });
-      setCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
-    } catch {
-      toast({ variant: "destructive", title: "Failed to remove candidate" });
+      setCandidates((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Failed to remove candidate", description: e instanceof Error ? e.message : undefined });
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -86,24 +77,6 @@ export default function HODCandidatesPage() {
       ),
     },
     {
-      key: "position",
-      header: "Position",
-      render: (row) => (
-        <div>
-          <p className="text-sm">{row.position as string}</p>
-          <p className="text-xs text-muted-foreground">{row.department as string}</p>
-        </div>
-      ),
-    },
-    {
-      key: "interviewMode",
-      header: "Mode",
-      hideOnMobile: true,
-      render: (row) => row.interviewMode === "ONLINE"
-        ? <span className="flex items-center gap-1 text-xs font-medium text-blue-600"><Monitor className="h-3.5 w-3.5" /> Online</span>
-        : <span className="flex items-center gap-1 text-xs font-medium text-gray-600"><MapPin className="h-3.5 w-3.5" /> Offline</span>,
-    },
-    {
       key: "source",
       header: "Source",
       hideOnMobile: true,
@@ -126,21 +99,6 @@ export default function HODCandidatesPage() {
       },
     },
     {
-      key: "isShortlisted",
-      header: "Shortlisted",
-      render: (row) => (
-        <Badge variant={(row.isShortlisted as boolean) ? "default" : "secondary"}>
-          {(row.isShortlisted as boolean) ? "Yes" : "No"}
-        </Badge>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      hideOnMobile: true,
-      render: (row) => <Badge variant="outline">{row.status as string}</Badge>,
-    },
-    {
       key: "actions",
       header: "",
       render: (row) => (
@@ -148,19 +106,14 @@ export default function HODCandidatesPage() {
           <Button
             variant="ghost"
             size="sm"
-            loading={toggling === (row.id as string)}
-            onClick={(e) => { e.stopPropagation(); void toggleShortlist(row); }}
+            onClick={(e) => { e.stopPropagation(); setAttachTarget(row); }}
           >
-            {(row.isShortlisted as boolean) ? (
-              <><UserX className="h-4 w-4" /><span className="ml-1 hidden sm:inline">Unshortlist</span></>
-            ) : (
-              <><UserCheck className="h-4 w-4 text-green-600" /><span className="ml-1 hidden sm:inline text-green-600">Shortlist</span></>
-            )}
+            <Plus className="h-4 w-4" /><span className="ml-1 hidden sm:inline">Attach</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => { e.stopPropagation(); void deleteCandidate(row); }}
+            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}
             className="text-destructive hover:text-destructive"
           >
             Remove
@@ -174,7 +127,14 @@ export default function HODCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Manage and shortlist candidates for interview"
+        description="Manage candidates and attach them to hiring requests they're applying for"
+        actions={
+          <Button asChild>
+            <Link href="/hod/candidates/new">
+              <Plus className="h-4 w-4 mr-1" /> Add Candidate
+            </Link>
+          </Button>
+        }
       />
 
       <DataTable
@@ -183,10 +143,31 @@ export default function HODCandidatesPage() {
         isLoading={isLoading}
         keyExtractor={(r) => r.id as string}
         searchPlaceholder="Search candidates..."
-        searchKeys={["name", "email", "position", "department"] as (keyof CandidateRow)[]}
+        searchKeys={["name", "email"] as (keyof CandidateRow)[]}
         emptyTitle="No candidates yet"
-        emptyDescription="Add a candidate from a hiring request in the pipeline, or they will appear automatically from the careers page"
+        emptyDescription="Add a candidate to the pool, or they will appear automatically from the careers page"
         csvFilename="candidates"
+        onRowClick={(row) => router.push(`/hod/candidates/${row.id as string}`)}
+      />
+
+      {attachTarget && (
+        <AttachToVacancyDialog
+          candidateId={attachTarget.id as string}
+          candidateName={attachTarget.name as string}
+          open={!!attachTarget}
+          onOpenChange={(open) => { if (!open) setAttachTarget(null); }}
+          onAttached={() => setAttachTarget(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title={`Remove ${(deleteTarget?.name as string) ?? ""}?`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => void deleteCandidate()}
+        loading={isDeleting}
       />
     </div>
   );
