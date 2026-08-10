@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  AlertTriangle, ArrowLeft, Coffee, Info, Lock, PencilLine, Plus, Sparkles, Trash2, Upload, Utensils, X,
+  ArrowLeft, Coffee, Lock, PencilLine, Plus, Trash2, Upload, Utensils, X,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -16,23 +16,13 @@ import { toast } from "@/hooks/useToast";
 import { buildRows } from "@/lib/timetable/buildGrid";
 import type {
   Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
-  TeachingAssignment, TimetableRules,
+  TeachingAssignment,
 } from "@/types";
-import { DAY_LABELS } from "@/types";
+import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
-}
-
-interface PreflightIssue { severity: "error" | "warning"; message: string }
-interface PreflightResponse {
-  ready: boolean;
-  issues: PreflightIssue[];
-  requiredPeriods: number;
-  availablePeriods: number;
-  pinnedCount: number;
-  rules?: TimetableRules;
 }
 
 /** What the grid is currently showing. */
@@ -47,13 +37,12 @@ export default function HODTimetableGridPage() {
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [draft, setDraft] = useState<TimetableDraft | null>(null);
-  const [pre, setPre] = useState<PreflightResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [mode, setMode] = useState<Mode>("published");
   const [isEditing, setIsEditing] = useState(false);
   const [selected, setSelected] = useState<DraftSlot | null>(null);
-  const [busy, setBusy] = useState<null | "generate" | "publish" | "discard" | "move" | "blank">(null);
+  const [busy, setBusy] = useState<null | "publish" | "discard" | "move" | "blank">(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // Manual timetabling: the section's assignments feed the add-subject picker,
@@ -65,7 +54,7 @@ export default function HODTimetableGridPage() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [coursesData, sectionsData, timingsData, slotsData, draftData, preData, assignData] = await Promise.all([
+      const [coursesData, sectionsData, timingsData, slotsData, draftData, assignData] = await Promise.all([
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
         fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
           .then((r) => r.json() as Promise<{ sections: Section[] }>),
@@ -75,8 +64,6 @@ export default function HODTimetableGridPage() {
           .then((r) => r.json() as Promise<{ slots: TimetableSlot[] }>),
         fetch(`/api/college/timetable/draft?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ draft: TimetableDraft | null }>),
-        fetch(`/api/college/timetable/preflight?sectionId=${encodeURIComponent(sectionId)}`)
-          .then((r) => r.json() as Promise<PreflightResponse>),
         fetch(`/api/college/teaching-assignments?sectionId=${encodeURIComponent(sectionId)}`)
           .then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>),
       ]);
@@ -86,7 +73,6 @@ export default function HODTimetableGridPage() {
       setTiming((timingsData.timings ?? []).find((t) => t.year === Number(year)) ?? null);
       setSlots(slotsData.slots ?? []);
       setDraft(draftData.draft ?? null);
-      setPre(preData ?? null);
       setAssignments((assignData.assignments ?? []).filter((a) => !a.isPast));
       // An unpublished draft is what the HOD most likely came here to act on.
       if (draftData.draft && draftData.draft.status === "DRAFT") setMode("draft");
@@ -120,31 +106,6 @@ export default function HODTimetableGridPage() {
   /** Pinned slots stay visible in draft mode - the generator scheduled around them. */
   function pinnedSlotFor(day: DayOfWeek, period: number) {
     return slots.find((s) => s.day === day && s.periodNumber === period && s.source !== "GENERATED");
-  }
-
-  async function handleGenerate() {
-    setBusy("generate");
-    try {
-      const res = await fetch("/api/college/timetable/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionId }),
-      });
-      const json = (await res.json()) as { issues?: string[]; error?: string; placedCount?: number };
-      if (!res.ok) {
-        toast({
-          variant: "destructive",
-          title: json.error ?? "Generation failed",
-          description: json.issues?.slice(0, 3).join(" "),
-        });
-        return;
-      }
-      toast({ variant: "success", title: `Generated ${json.placedCount ?? 0} periods`, description: "Review, edit if needed, then publish." });
-      await loadAll();
-      setMode("draft");
-    } finally {
-      setBusy(null);
-    }
   }
 
   /** Starts an empty draft so the whole timetable can be built by hand. */
@@ -296,9 +257,6 @@ export default function HODTimetableGridPage() {
     }
   }
 
-  const errors = pre?.issues.filter((i) => i.severity === "error") ?? [];
-  const warnings = pre?.issues.filter((i) => i.severity === "warning") ?? [];
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -313,47 +271,14 @@ export default function HODTimetableGridPage() {
             <Button variant="outline" onClick={() => router.push(`/hod/timetable/${courseId}/${year}`)}>
               <ArrowLeft className="h-4 w-4 mr-2" />Back
             </Button>
-            {/* Manual route: needs only the period grid, not a passing preflight,
-                so an HOD can always build a timetable by hand. */}
             {!hasDraft && (
               <Button variant="outline" onClick={handleStartBlank} loading={busy === "blank"} disabled={busy !== null}>
                 <PencilLine className="h-4 w-4 mr-2" />Build manually
               </Button>
             )}
-            <Button
-              onClick={handleGenerate}
-              loading={busy === "generate"}
-              disabled={!pre?.ready || busy !== null}
-              title={pre?.ready ? undefined : "Resolve the issues below first"}
-            >
-              <Sparkles className="h-4 w-4 mr-2" />
-              {draftHasSlots ? "Regenerate" : "Generate"}
-            </Button>
           </div>
         }
       />
-
-      {/* ── Readiness ─────────────────────────────────────────────────────── */}
-      {!isLoading && errors.length > 0 && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
-            <AlertTriangle className="h-4 w-4" /> Not ready to generate
-          </p>
-          <ul className="mt-2 space-y-1 text-sm text-muted-foreground list-disc pl-5">
-            {errors.map((i, n) => <li key={n}>{i.message}</li>)}
-          </ul>
-        </div>
-      )}
-      {!isLoading && errors.length === 0 && warnings.length > 0 && (
-        <div className="rounded-lg border border-amber-300/60 bg-amber-50 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold text-amber-800">
-            <Info className="h-4 w-4" /> Worth checking
-          </p>
-          <ul className="mt-2 space-y-1 text-sm text-amber-900/80 list-disc pl-5">
-            {warnings.map((i, n) => <li key={n}>{i.message}</li>)}
-          </ul>
-        </div>
-      )}
 
       {/* ── Draft toolbar ─────────────────────────────────────────────────── */}
       {hasDraft && (
@@ -540,7 +465,7 @@ export default function HODTimetableGridPage() {
             </DialogTitle>
             <DialogDescription>
               Pick a subject assigned to this section. Its faculty comes along automatically;
-              labs take {pre?.rules?.labBlockSize ?? 3} continuous periods.
+              labs take {DEFAULT_TIMETABLE_RULES.labBlockSize} continuous periods.
             </DialogDescription>
           </DialogHeader>
 

@@ -37,6 +37,8 @@ interface Props {
   onChange: (next: Partial<FacultyProfileFields>) => void;
   includeTeachingAssignment?: boolean;
   hideFinancialModule?: boolean;
+  hideResearchModule?: boolean;
+  hidePromotionHistory?: boolean;
   collegeType?: CollegeType;
 }
 
@@ -51,7 +53,7 @@ const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
 const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COORDINATOR", description: "" };
 const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", title: "", awardingBody: "", year: new Date().getFullYear() };
 
-export function AcademicProfileFields({ value, onChange, includeTeachingAssignment = true, hideFinancialModule = false, collegeType }: Props) {
+export function AcademicProfileFields({ value, onChange, includeTeachingAssignment = true, hideFinancialModule = false, hideResearchModule = false, hidePromotionHistory = false, collegeType }: Props) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
@@ -141,27 +143,29 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           </>
         )}
       />
-      <RepeatingGroup
-        title="Promotion History"
-        items={value.promotionHistory}
-        empty={EMPTY_PROMOTION}
-        onChange={(v) => set("promotionHistory", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
-            <TextInput label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
-            <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
-            <div className="sm:col-span-2">
-              <Label className="text-xs">Promotion Order</Label>
-              <CertificateUploadField
-                value={item.orderUrl}
-                onUploaded={(url) => update({ orderUrl: url })}
-                onRemoved={() => update({ orderUrl: "" })}
-              />
-            </div>
-          </>
-        )}
-      />
+      {!hidePromotionHistory && (
+        <RepeatingGroup
+          title="Promotion History"
+          items={value.promotionHistory}
+          empty={EMPTY_PROMOTION}
+          onChange={(v) => set("promotionHistory", v)}
+          renderRow={(item, update) => (
+            <>
+              <TextInput label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
+              <TextInput label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
+              <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
+              <div className="sm:col-span-2">
+                <Label className="text-xs">Promotion Order</Label>
+                <CertificateUploadField
+                  value={item.orderUrl}
+                  onUploaded={(url) => update({ orderUrl: url })}
+                  onRemoved={() => update({ orderUrl: "" })}
+                />
+              </div>
+            </>
+          )}
+        />
+      )}
 
       {includeTeachingAssignment && (
         <div className="space-y-3 rounded-lg border p-3">
@@ -178,29 +182,33 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       )}
 
       {/* Module 3 */}
-      <SectionTitle>Module 3 - Research Publications</SectionTitle>
-      <p className="text-xs text-muted-foreground">
-        Individual publication records are maintained by the R&amp;D office - view them on the Research Publications module.
-        The fields below are self-reported summary metrics.
-      </p>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <NumInput label="First/Corresponding Author Pubs" value={value.publicationsFirstOrCorrespondingAuthor} onChange={(v) => set("publicationsFirstOrCorrespondingAuthor", v)} />
-        <NumInput label="Q1 / IF > 4.0 Pubs" value={value.publicationsQ1OrHighImpact} onChange={(v) => set("publicationsQ1OrHighImpact", v)} />
-        <NumInput label="SCI/Scopus Count" value={value.sciScopusCount} onChange={(v) => set("sciScopusCount", v)} />
-        <NumInput label="WoS (SCIE/ESCI) Count" value={value.wosCount} onChange={(v) => set("wosCount", v)} />
-        <NumInput label="Conference Papers" value={value.conferencePapersCount} onChange={(v) => set("conferencePapersCount", v)} />
-        <NumInput label="Book Chapters" value={value.bookChaptersCount} onChange={(v) => set("bookChaptersCount", v)} />
-        <NumInput label="Review Publications" value={value.reviewPublicationsCount} onChange={(v) => set("reviewPublicationsCount", v)} />
-        <NumInput label="Total Publications" value={value.totalPublications} onChange={(v) => set("totalPublications", v)} />
-        <NumInput label="Total Citations" value={value.totalCitations} onChange={(v) => set("totalCitations", v)} />
-        <NumInput label="H-Index" value={value.hIndex} onChange={(v) => set("hIndex", v)} />
-        <NumInput label="i10-Index" value={value.i10Index} onChange={(v) => set("i10Index", v)} />
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <TextInput label="Google Scholar ID" value={value.googleScholarId} onChange={(v) => set("googleScholarId", v)} />
-        <TextInput label="Scopus Author ID" value={value.scopusAuthorId} onChange={(v) => set("scopusAuthorId", v)} />
-        <TextInput label="ORCID iD" value={value.orcidId} onChange={(v) => set("orcidId", v)} />
-      </div>
+      {!hideResearchModule && (
+        <>
+          <SectionTitle>Module 3 - Research Publications</SectionTitle>
+          <p className="text-xs text-muted-foreground">
+            Individual publication records are maintained by the R&amp;D office - view them on the Research Publications module.
+            The fields below are self-reported summary metrics.
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <NumInput label="First/Corresponding Author Pubs" value={value.publicationsFirstOrCorrespondingAuthor} onChange={(v) => set("publicationsFirstOrCorrespondingAuthor", v)} />
+            <NumInput label="Q1 / IF > 4.0 Pubs" value={value.publicationsQ1OrHighImpact} onChange={(v) => set("publicationsQ1OrHighImpact", v)} />
+            <NumInput label="SCI/Scopus Count" value={value.sciScopusCount} onChange={(v) => set("sciScopusCount", v)} />
+            <NumInput label="WoS (SCIE/ESCI) Count" value={value.wosCount} onChange={(v) => set("wosCount", v)} />
+            <NumInput label="Conference Papers" value={value.conferencePapersCount} onChange={(v) => set("conferencePapersCount", v)} />
+            <NumInput label="Book Chapters" value={value.bookChaptersCount} onChange={(v) => set("bookChaptersCount", v)} />
+            <NumInput label="Review Publications" value={value.reviewPublicationsCount} onChange={(v) => set("reviewPublicationsCount", v)} />
+            <NumInput label="Total Publications" value={value.totalPublications} onChange={(v) => set("totalPublications", v)} />
+            <NumInput label="Total Citations" value={value.totalCitations} onChange={(v) => set("totalCitations", v)} />
+            <NumInput label="H-Index" value={value.hIndex} onChange={(v) => set("hIndex", v)} />
+            <NumInput label="i10-Index" value={value.i10Index} onChange={(v) => set("i10Index", v)} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <TextInput label="Google Scholar ID" value={value.googleScholarId} onChange={(v) => set("googleScholarId", v)} />
+            <TextInput label="Scopus Author ID" value={value.scopusAuthorId} onChange={(v) => set("scopusAuthorId", v)} />
+            <TextInput label="ORCID iD" value={value.orcidId} onChange={(v) => set("orcidId", v)} />
+          </div>
+        </>
+      )}
 
       {/* Module 4 */}
       <SectionTitle>Module 4 - Grants, Consultancy &amp; IP</SectionTitle>

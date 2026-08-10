@@ -96,41 +96,65 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const hodName = await getUserName(db, session.collegeId, session.uid);
     const now = new Date();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    const ref = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("hiringBatches")
-      .add({
-        collegeId: session.collegeId,
-        vacancyId,
-        department,
-        position,
-        hodUid: session.uid,
-        hodName,
-        panelMemberUids,
-        applicationIds,
-        interviewDate: new Date(interviewDate),
-        interviewTime: interviewTime ?? "",
-        interviewVenue: "",
-        demoClassroom: "",
-        coordinatorName: "",
-        requiredDocuments: [],
-        status: "PENDING",
-        currentPhase: "PRINCIPAL_REVIEW",
-        principalApprovalStatus: "PENDING",
-        setupComplete: false,
-        createdAt: now,
-        updatedAt: now,
+    const batchRef = collegeRef.collection("hiringBatches").doc();
+    const appRefs = applicationIds.map((aid) => collegeRef.collection("candidateApplications").doc(aid));
+
+    // Transactional create + re-check: without this, two HODs (or two tabs)
+    // batching the same shortlisted candidate at nearly the same time could
+    // both read "unbatched" and both succeed, silently double-booking the
+    // candidate into two interview batches at once.
+    try {
+      await db.runTransaction(async (tx) => {
+        const appSnaps = await Promise.all(appRefs.map((r) => tx.get(r)));
+        for (let i = 0; i < appSnaps.length; i++) {
+          if (!appSnaps[i].exists) {
+            throw new Error(`APPLICATION_NOT_FOUND:${applicationIds[i]}`);
+          }
+          const existingBatchId = (appSnaps[i].data() as { batchId?: string }).batchId;
+          if (existingBatchId) {
+            throw new Error(`ALREADY_BATCHED:${applicationIds[i]}`);
+          }
+        }
+
+        tx.set(batchRef, {
+          collegeId: session.collegeId,
+          vacancyId,
+          department,
+          position,
+          hodUid: session.uid,
+          hodName,
+          panelMemberUids,
+          applicationIds,
+          interviewDate: new Date(interviewDate),
+          interviewTime: interviewTime ?? "",
+          interviewVenue: "",
+          demoClassroom: "",
+          coordinatorName: "",
+          requiredDocuments: [],
+          status: "PENDING",
+          currentPhase: "PRINCIPAL_REVIEW",
+          principalApprovalStatus: "PENDING",
+          setupComplete: false,
+          createdAt: now,
+          updatedAt: now,
+        });
+        for (const r of appRefs) {
+          tx.update(r, { batchId: batchRef.id, isShortlisted: true, status: "SHORTLISTED", updatedAt: now });
+        }
       });
-
-    // Update all applications with this batchId
-    const writeBatch = db.batch();
-    for (const aid of applicationIds) {
-      const aRef = db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid);
-      writeBatch.update(aRef, { batchId: ref.id, isShortlisted: true, status: "SHORTLISTED", updatedAt: now });
+    } catch (txErr) {
+      if (txErr instanceof Error && txErr.message.startsWith("ALREADY_BATCHED:")) {
+        return NextResponse.json({ error: "One or more candidates have already been added to another interview batch" }, { status: 409 });
+      }
+      if (txErr instanceof Error && txErr.message.startsWith("APPLICATION_NOT_FOUND:")) {
+        return NextResponse.json({ error: "One or more selected candidates could not be found" }, { status: 404 });
+      }
+      throw txErr;
     }
-    await writeBatch.commit();
+
+    const ref = batchRef;
 
     // Notify Principal
     const principalsSnap = await db

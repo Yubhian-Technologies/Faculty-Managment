@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ChevronDown, ChevronUp, Clock, GitBranch, XCircle, MapPin, Monitor, UserCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronUp, GitBranch, XCircle, MapPin, Monitor, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
@@ -36,34 +34,9 @@ type PipelineEntry = {
   batch: HiringBatch | null;
 };
 
-type NextAction = { label: string; href: string; disabled?: boolean; variant?: "default" | "outline" };
-
-function getNextAction(entry: PipelineEntry): NextAction {
-  const { vacancy, batch } = entry;
-
-  if (vacancy.status === "PENDING") {
-    return { label: "Review Request →", href: `/principal/vacancies/${vacancy.id}/approve` };
-  }
-  if (vacancy.status === "REJECTED") {
-    return { label: "Request Rejected", href: "#", disabled: true };
-  }
-  if (!batch) {
-    return { label: "Awaiting HOD to add candidates", href: "#", disabled: true };
-  }
-
-  const p = batch.currentPhase;
-  if (p === "PRINCIPAL_REVIEW") {
-    return { label: "Review Interview Plan →", href: `/principal/interviews/${batch.id}` };
-  }
-  if (p === "PRINCIPAL_FINAL_REVIEW") {
-    return { label: "Make Decision →", href: `/principal/negotiate/${batch.id}` };
-  }
-  if (p === "COMPLETED") {
-    return { label: "View Results", href: `/principal/decisions/${batch.id}`, variant: "outline" };
-  }
-  return { label: "Awaiting HOD / Panel", href: "#", disabled: true };
-}
-
+// View-only card - no next-action button, no reject/delete/shortlist actions.
+// Otherwise identical to PrincipalPipelineBoard's PipelineCard (5-step
+// stepper + expandable candidate/session detail).
 function PipelineCard({
   entry,
   offerStatusByCandidate,
@@ -80,7 +53,6 @@ function PipelineCard({
 
   const currentStage = getCurrentStage(vacancy, batch);
   const shortlisted = candidates.filter((c) => c.isShortlisted).length;
-  const nextAction = getNextAction(entry);
 
   function stateFor(stage: PipelineStage) {
     return stateForStage(stage, currentStage);
@@ -91,7 +63,7 @@ function PipelineCard({
       ? "Approved ✓"
       : vacancy.status === "REJECTED"
       ? "Rejected"
-      : "Awaiting your approval";
+      : "Awaiting Principal approval";
 
   const stage2Sub =
     candidates.length === 0
@@ -102,7 +74,7 @@ function PipelineCard({
 
   const stage4Sub =
     batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
-      ? "Awaiting your decision"
+      ? "Awaiting Principal's decision"
       : batch?.currentPhase === "COMPLETED"
       ? "Decision made"
       : "-";
@@ -160,29 +132,12 @@ function PipelineCard({
         </div>
       </div>
 
-      {/* Action bar */}
-      <div className="px-5 pb-4 flex items-center justify-between gap-3 flex-wrap border-t pt-3">
-        {nextAction.disabled ? (
-          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4 shrink-0" />
-            {nextAction.label}
-          </span>
-        ) : (
-          <Button size="sm" variant={nextAction.variant ?? "default"} asChild>
-            <Link href={nextAction.href}>{nextAction.label}</Link>
-          </Button>
-        )}
-        {vacancy.status === "PENDING" && (
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="destructive" asChild>
-              <Link href={`/principal/vacancies/${vacancy.id}/reject`}>Reject</Link>
-            </Button>
-          </div>
-        )}
+      {/* Expand/collapse only - no actions, this view is read-only */}
+      <div className="px-5 pb-4 flex items-center justify-end border-t pt-3">
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-auto"
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           {expanded ? (
             <><ChevronUp className="h-4 w-4" /> Hide details</>
@@ -290,7 +245,7 @@ function PipelineCard({
   );
 }
 
-export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }) {
+export function AccountsPipelineBoard({ scope }: { scope: "active" | "closed" }) {
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
   const [offerStatusByCandidate, setOfferStatusByCandidate] = useState<Record<string, OfferStatus>>({});
   const [appointmentCandidateIds, setAppointmentCandidateIds] = useState<Set<string>>(new Set());
@@ -324,7 +279,7 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
         .catch(() => []),
     ])
       .then(([vacancies, applications, candidates, batches, letters, appointmentLetters, accountRequests]) => {
-        // Prefer a non-rejected offer per candidate — mirrors HOD's board.
+        // Prefer a non-rejected offer per candidate — mirrors HOD's/Principal's boards.
         const offerMap: Record<string, OfferStatus> = {};
         for (const letter of letters) {
           if (letter.status === "REJECTED") continue;
@@ -366,14 +321,12 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
         );
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
   }
 
   useEffect(() => {
     load();
-    // This is the primary Principal dashboard, likely to stay open longest
-    // through a multi-actor pipeline — refetch on refocus so it doesn't go stale.
     function onFocus() { load(); }
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
@@ -412,7 +365,7 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
         <p className="text-sm text-muted-foreground/60 mt-1">
           {scope === "closed"
             ? "Completed and rejected requests will show up here."
-            : "Requests submitted by HODs will show up here."}
+            : "Requests raised by HODs will show up here."}
         </p>
       </div>
     );

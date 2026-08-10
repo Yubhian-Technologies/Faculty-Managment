@@ -121,7 +121,7 @@ export async function PATCH(
           "OFFICIAL_EMAIL_CREATED",
           "Official email created",
           `${webmasterName} created the official email for ${reqData.candidateName ?? "your candidate"}: ${assignedEmail}`,
-          "/college-office/email-requests"
+          "/college-office/documents"
         );
       }
 

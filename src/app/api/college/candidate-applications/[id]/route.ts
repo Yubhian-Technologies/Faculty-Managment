@@ -78,8 +78,48 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const updates: Record<string, unknown> = { updatedAt: now };
+    const isPrincipalRole = session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL" || session.role === "SUPER_ADMIN";
+    const isHodRole = session.role === "HOD";
+    const isCollegeOfficeRole = session.role === "COLLEGE_OFFICE";
+
     const { isShortlisted, hasArrived, status, stage, batchId, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining, termsAndConditions, committeeRecommendation, notifyPrincipalDocsReady } = body;
+
+    // Field-level role gating - each field group is only ever written by one
+    // stage's UI, so an unrelated role sending it (by mistake or a crafted
+    // request) is rejected outright rather than silently accepted.
+    if (isShortlisted !== undefined && !isHodRole && !isPrincipalRole) {
+      return NextResponse.json({ error: "Only the HOD or Principal can update the shortlist" }, { status: 403 });
+    }
+    if (hasArrived !== undefined && session.role !== "HOD" && session.role !== "PANEL_MEMBER" && !isPrincipalRole) {
+      return NextResponse.json({ error: "Only the HOD or panel can mark a candidate as arrived" }, { status: 403 });
+    }
+    if (batchId !== undefined && !isHodRole && !isPrincipalRole) {
+      return NextResponse.json({ error: "Only the HOD or Principal can reassign a candidate's batch" }, { status: 403 });
+    }
+    if ((status !== undefined || stage !== undefined || committeeRecommendation !== undefined) && !isPrincipalRole) {
+      return NextResponse.json({ error: "Only the Principal can record a hiring decision" }, { status: 403 });
+    }
+    if (
+      (expectedSalary !== undefined || negotiatedSalary !== undefined || dateOfJoining !== undefined || termsAndConditions !== undefined) &&
+      !isPrincipalRole
+    ) {
+      return NextResponse.json({ error: "Only the Principal can set negotiation terms" }, { status: 403 });
+    }
+    if (
+      (documentVerification !== undefined || joiningLetterUrl !== undefined || notifyPrincipalDocsReady) &&
+      !isCollegeOfficeRole && !isPrincipalRole
+    ) {
+      return NextResponse.json({ error: "Only the College Office can update documents" }, { status: 403 });
+    }
+
+    // A Principal decision is terminal - once APPROVED/REJECTED, it can't be
+    // silently flipped by a later request (e.g. a stale tab resubmitting).
+    const existingStatus = (applicationSnap.data() as { status?: string }).status;
+    if (status !== undefined && (existingStatus === "APPROVED" || existingStatus === "REJECTED") && status !== existingStatus) {
+      return NextResponse.json({ error: `This candidate's decision is already final (${existingStatus})` }, { status: 409 });
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: now };
 
     if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
     if (hasArrived !== undefined) {
@@ -134,11 +174,24 @@ export async function PATCH(
 
     await collegeRef.collection("candidateApplications").doc(id).update(updates);
 
-    const applicationData = applicationSnap.data() as { candidateId?: string; batchId?: string };
+    const applicationData = applicationSnap.data() as { candidateId?: string; batchId?: string; vacancyRequestId?: string };
     const candidateSnap = applicationData.candidateId
       ? await collegeRef.collection("candidates").doc(applicationData.candidateId).get()
       : null;
     const candidateName = (candidateSnap?.data() as { name?: string } | undefined)?.name;
+
+    // A Principal APPROVED decision fills one of the vacancy's open posts -
+    // requiredCount otherwise stays frozen at its original value forever, so
+    // every "N posts open" picker keeps offering posts that are already filled.
+    // The re-decision guard above ensures this only ever fires once per application.
+    if (status === "APPROVED" && applicationData.vacancyRequestId) {
+      const vacancyRef = collegeRef.collection("vacancyRequests").doc(applicationData.vacancyRequestId);
+      const vacancySnap = await vacancyRef.get();
+      const currentRequired = (vacancySnap.data() as { requiredCount?: number } | undefined)?.requiredCount ?? 0;
+      if (currentRequired > 0) {
+        await vacancyRef.update({ requiredCount: currentRequired - 1, updatedAt: now });
+      }
+    }
 
     // If candidate arrived, notify panel members and college office
     if (hasArrived) {

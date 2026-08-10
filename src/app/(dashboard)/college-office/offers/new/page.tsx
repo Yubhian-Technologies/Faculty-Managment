@@ -360,7 +360,7 @@ ${institution}`;
         </CardContent>
       </Card>
 
-      <Dialog open={!!sentConfirm} onOpenChange={(o) => { if (!o) { setSentConfirm(null); router.push("/college-office/offers"); } }}>
+      <Dialog open={!!sentConfirm} onOpenChange={(o) => { if (!o) { setSentConfirm(null); router.push("/college-office/documents"); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Offer Letter Generated</DialogTitle>
@@ -368,11 +368,11 @@ ${institution}`;
               {sentConfirm?.emailedTo
                 ? <>The offer letter PDF has been downloaded, and a Gmail draft to <strong>{sentConfirm?.name}</strong> at <strong>{sentConfirm.emailedTo}</strong> (CC: Principal, Vice Principal, panel members, HOD, and Accounts) has opened in a new tab — attach the PDF and review before sending.</>
                 : <>The offer letter PDF has been downloaded. <strong>{sentConfirm?.name}</strong> has no email on file, so you&apos;ll need to send it manually.</>}
-              {" "}Once they accept, mark it from this list, then Request Credentials — the Webmaster will provision their account.
+              {" "}Once they accept, mark it from the Hiring Pipeline, then Request Faculty Account — the Webmaster will provision their account.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={() => { setSentConfirm(null); router.push("/college-office/offers"); }}>Done</Button>
+            <Button onClick={() => { setSentConfirm(null); router.push("/college-office/documents"); }}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -20,7 +20,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
 import { ShortlistDialog } from "@/components/hiring/ShortlistDialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { getCurrentStage, stateForStage, getDetailedHiringStatus, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
+import { getCurrentStage, stateForStage, getDetailedHiringStatus, getApprovedDetailedStatuses, getOnboardingSummary, isHiringClosed, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import type { VacancyRequest, Candidate, CandidateApplication, CandidateStatus, CandidateStage, InterviewMode, HiringBatch, OfferLetter, FacultyAccountRequestStatus } from "@/types";
@@ -51,47 +51,7 @@ type PipelineEntry = {
   batch: HiringBatch | null;
 };
 
-function isClosed(e: PipelineEntry): boolean {
-  return e.vacancy.status === "REJECTED" || e.batch?.currentPhase === "COMPLETED";
-}
-
 type OfferStatus = "SENT" | "ACCEPTED" | "REJECTED";
-
-// Once the Principal decides, the candidate's hiring status keeps moving through
-// office/Principal-owned steps (offer → acceptance → appointment letter →
-// webmaster login provisioning) that this dashboard has no action for — but it
-// should still show where each one stands.
-function candidateProgressLabel(
-  candidate: PipelineCandidateView,
-  offerStatusByCandidate: Record<string, OfferStatus>,
-  appointmentCandidateIds: Set<string>,
-  loginGeneratedCandidateIds: Set<string>
-): string {
-  if (loginGeneratedCandidateIds.has(candidate.candidateId)) return "Login Generated";
-  if (appointmentCandidateIds.has(candidate.candidateId)) return "Appointment Letter Sent";
-  const offerStatus = offerStatusByCandidate[candidate.candidateId];
-  if (offerStatus === "ACCEPTED") return "Offer Accepted";
-  if (offerStatus === "SENT") return "Offer Sent";
-  return "Awaiting Offer Letter";
-}
-
-const PROGRESS_ORDER = ["Awaiting Offer Letter", "Offer Sent", "Offer Accepted", "Appointment Letter Sent", "Login Generated"];
-
-function hiringResultsSummary(
-  candidates: PipelineCandidateView[],
-  offerStatusByCandidate: Record<string, OfferStatus>,
-  appointmentCandidateIds: Set<string>,
-  loginGeneratedCandidateIds: Set<string>
-): string {
-  const approved = candidates.filter((c) => c.status === "APPROVED" && c.currentStage === "DECISION");
-  if (approved.length === 0) return "Awaiting hiring results";
-  const labels = approved.map((c) => candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds));
-  const counts = PROGRESS_ORDER.map((label) => labels.filter((l) => l === label).length);
-  const leastAdvancedIdx = counts.findIndex((n) => n > 0);
-  const label = PROGRESS_ORDER[leastAdvancedIdx];
-  const count = counts[leastAdvancedIdx];
-  return approved.length > 1 ? `${label} (${count}/${approved.length})` : label;
-}
 
 type NextAction = { label: string; href: string; disabled?: boolean; variant?: "default" | "outline" };
 
@@ -99,7 +59,7 @@ function getNextAction(
   entry: PipelineEntry,
   offerStatusByCandidate: Record<string, OfferStatus>,
   appointmentCandidateIds: Set<string>,
-  loginGeneratedCandidateIds: Set<string>
+  accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>
 ): NextAction {
   const { vacancy, candidates, batch } = entry;
 
@@ -137,10 +97,17 @@ function getNextAction(
     }
     return { label: "Open Interview Session →", href: `/coordinator/${batch.id}` };
   }
-  if (p === "PRINCIPAL_FINAL_REVIEW" || p === "COMPLETED") {
+  if (p === "PRINCIPAL_FINAL_REVIEW") {
+    return { label: "Awaiting Principal's decision", href: "#", disabled: true };
+  }
+  if (p === "COMPLETED") {
     // Offer letters, acceptance, and the appointment letter are all handled by
     // the office/Principal now — HOD has nothing left to do here but track status.
-    return { label: hiringResultsSummary(candidates, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds), href: "#", disabled: true };
+    return {
+      label: getOnboardingSummary(getApprovedDetailedStatuses(candidates, batch.currentPhase, offerStatusByCandidate, appointmentCandidateIds, accountRequestStatusByCandidate)),
+      href: "#",
+      disabled: true,
+    };
   }
   return { label: "View Details", href: `/hod/batches/${batch.id}`, variant: "outline" };
 }
@@ -151,7 +118,6 @@ function PipelineCard({
   entry,
   offerStatusByCandidate,
   appointmentCandidateIds,
-  loginGeneratedCandidateIds,
   accountRequestStatusByCandidate,
   onDeleted,
   onRefresh,
@@ -159,7 +125,6 @@ function PipelineCard({
   entry: PipelineEntry;
   offerStatusByCandidate: Record<string, OfferStatus>;
   appointmentCandidateIds: Set<string>;
-  loginGeneratedCandidateIds: Set<string>;
   accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>;
   onDeleted: (vacancyId: string) => void;
   onRefresh: () => void;
@@ -188,7 +153,7 @@ function PipelineCard({
 
   const currentStage = getCurrentStage(vacancy, batch);
   const shortlisted = candidates.filter((c) => c.isShortlisted).length;
-  const nextAction = getNextAction(entry, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds);
+  const nextAction = getNextAction(entry, offerStatusByCandidate, appointmentCandidateIds, accountRequestStatusByCandidate);
 
   function stateFor(stage: PipelineStage) {
     return stateForStage(stage, currentStage);
@@ -211,8 +176,15 @@ function PipelineCard({
     : "Not started";
 
   const stage4Sub =
-    batch?.currentPhase === "COMPLETED" || batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
-      ? hiringResultsSummary(candidates, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds)
+    batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW"
+      ? "Awaiting Principal's decision"
+      : batch?.currentPhase === "COMPLETED"
+      ? "Decision made"
+      : "-";
+
+  const stage5Sub =
+    batch?.currentPhase === "COMPLETED"
+      ? getOnboardingSummary(getApprovedDetailedStatuses(candidates, batch.currentPhase, offerStatusByCandidate, appointmentCandidateIds, accountRequestStatusByCandidate))
       : "-";
 
   const accentColor =
@@ -259,13 +231,14 @@ function PipelineCard({
         </div>
       </div>
 
-      {/* 4-step pipeline - vertical on mobile, horizontal on sm+ */}
+      {/* 5-step pipeline - vertical on mobile, horizontal on sm+ */}
       <div className="px-5 py-3">
         <div className="flex flex-col sm:flex-row sm:items-start gap-0 sm:gap-0">
           <Step step={1} label="Request" sub={stage1Sub} state={stateFor(1)} />
           <Step step={2} label="Candidates" sub={stage2Sub} state={stateFor(2)} />
           <Step step={3} label="Interview" sub={stage3Sub} state={stateFor(3)} />
-          <Step step={4} label="Hiring Results" sub={stage4Sub} state={stateFor(4)} isLast />
+          <Step step={4} label="Decision" sub={stage4Sub} state={stateFor(4)} />
+          <Step step={5} label="Onboarding" sub={stage5Sub} state={stateFor(5)} isLast />
         </div>
       </div>
 
@@ -359,11 +332,6 @@ function PipelineCard({
                       {(batch?.applicationIds ?? []).includes(c.id) && !c.bioDataSubmitted && (
                         <Badge variant="secondary" className="text-[10px] py-0 px-1.5 text-amber-700 bg-amber-100">
                           Bio Data Pending
-                        </Badge>
-                      )}
-                      {c.status === "APPROVED" && c.currentStage === "DECISION" && (
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5">
-                          {candidateProgressLabel(c, offerStatusByCandidate, appointmentCandidateIds, loginGeneratedCandidateIds)}
                         </Badge>
                       )}
                       {(() => {
@@ -473,7 +441,6 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
   const [offerStatusByCandidate, setOfferStatusByCandidate] = useState<Record<string, OfferStatus>>({});
   const [appointmentCandidateIds, setAppointmentCandidateIds] = useState<Set<string>>(new Set());
-  const [loginGeneratedCandidateIds, setLoginGeneratedCandidateIds] = useState<Set<string>>(new Set());
   const [accountRequestStatusByCandidate, setAccountRequestStatusByCandidate] = useState<Record<string, FacultyAccountRequestStatus>>({});
   const [isLoading, setIsLoading] = useState(true);
 
@@ -512,13 +479,6 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         }
         setOfferStatusByCandidate(offerMap);
         setAppointmentCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
-        setLoginGeneratedCandidateIds(
-          new Set(
-            accountRequests
-              .filter((r) => r.status === "CREDENTIALS_CREATED" || r.status === "COMPLETED")
-              .map((r) => r.candidateId)
-          )
-        );
         setAccountRequestStatusByCandidate(
           Object.fromEntries(accountRequests.map((r) => [r.candidateId, r.status]))
         );
@@ -574,7 +534,13 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visible = entries.filter((e) => (scope === "closed" ? isClosed(e) : !isClosed(e)));
+  function closedFor(e: PipelineEntry): boolean {
+    const approvedCandidateIds = e.candidates
+      .filter((c) => c.status === "APPROVED" && c.currentStage === "DECISION")
+      .map((c) => c.candidateId);
+    return isHiringClosed(e.vacancy.status, e.batch?.currentPhase, approvedCandidateIds, accountRequestStatusByCandidate);
+  }
+  const visible = entries.filter((e) => (scope === "closed" ? closedFor(e) : !closedFor(e)));
 
   if (isLoading) {
     return (
@@ -615,7 +581,6 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
           entry={e}
           offerStatusByCandidate={offerStatusByCandidate}
           appointmentCandidateIds={appointmentCandidateIds}
-          loginGeneratedCandidateIds={loginGeneratedCandidateIds}
           accountRequestStatusByCandidate={accountRequestStatusByCandidate}
           onDeleted={(vacancyId) => setEntries((prev) => prev.filter((entry) => entry.vacancy.id !== vacancyId))}
           onRefresh={load}
