@@ -144,13 +144,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   { label: "Hiring Pipeline", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
+  { label: "Official Emails", href: "/college-office/email-requests", iconName: "AtSign", roles: ["COLLEGE_OFFICE"] },
   { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
   { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], section: "Personal" },
-
-  // Webmaster
-  { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
-  { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Accounts" },
-  { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"] },
 
   // College Staff (generic fallback for titles that don't warrant their own role)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
@@ -179,6 +175,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
   { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work" },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
+  { label: "Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"] },
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
@@ -211,6 +208,13 @@ export const NAV_ITEMS: NavItem[] = [
   // Class Leader
   { label: "Dashboard", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },
   { label: "Timetable", href: "/class-leader/timetable", iconName: "CalendarDays", roles: ["CLASS_LEADER"] },
+
+  // Webmaster
+  { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
+  { label: "Email Requests", href: "/webmaster/requests", iconName: "AtSign", roles: ["WEBMASTER"], section: "Email Provisioning" },
+  { label: "History", href: "/webmaster/history", iconName: "History", roles: ["WEBMASTER"] },
+  { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Accounts" },
+  { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"] },
 
   // Purchase Department
   { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
@@ -400,11 +404,6 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
     { label: "Offer Letters", href: "/college-office/offers", iconName: "FileText", roles: ["COLLEGE_OFFICE"] },
   ],
-  WEBMASTER: [
-    { label: "Home", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
-    { label: "Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"] },
-    { label: "Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"] },
-  ],
   COLLEGE_STAFF: [
     { label: "Home", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
   ],
@@ -447,6 +446,12 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Pending", href: "/purchase/pending", iconName: "Clock", roles: ["PURCHASE_DEPT"] },
     { label: "Browse", href: "/purchase/browse", iconName: "MapPin", roles: ["PURCHASE_DEPT"] },
     { label: "Indents", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
+  ],
+  WEBMASTER: [
+    { label: "Home", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
+    { label: "Credentials", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"] },
+    { label: "Emails", href: "/webmaster/requests", iconName: "AtSign", roles: ["WEBMASTER"] },
+    { label: "Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"] },
   ],
   STUDENT: [],
   CLASS_LEADER: [

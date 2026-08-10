@@ -19,7 +19,7 @@ const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD"];
 // College Office may only create Class Leader logins - one per Section, bound
 // via `sectionId` below (see college-office/sections/new and .../[id]/edit).
 const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
-// One holder per role per college - same rule as administration/college-staff route.
+// One holder per role per college — same rule as administration/college-staff route.
 const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
 
 export async function GET(request: Request) {

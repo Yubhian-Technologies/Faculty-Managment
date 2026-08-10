@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       "ACCOUNTS",
       "FINANCE",
       "PURCHASE_DEPT",
+      "WEBMASTER",
       "ADMINISTRATION",
       "SUPER_ADMIN"
     );

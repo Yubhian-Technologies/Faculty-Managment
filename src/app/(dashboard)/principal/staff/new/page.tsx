@@ -20,7 +20,7 @@ const CREATABLE_ROLES: UserRole[] = [
   "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER",
 ];
 
-// One holder per college - matches COLLEGE_SINGLETON_ROLES on the API route.
+// One holder per college — matches COLLEGE_SINGLETON_ROLES on the API route.
 const SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
 
 export default function NewStaffPage() {
