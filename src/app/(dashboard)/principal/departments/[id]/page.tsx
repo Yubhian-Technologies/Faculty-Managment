@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,10 @@ export default function DepartmentDetailPage() {
   const { id } = useParams<{ id: string }>();
 
   const [department, setDepartment] = useState<Department | null>(null);
+  // Sub-departments of this one, plus its parent when this IS a sub-department -
+  // both come free from the departments list already fetched below.
+  const [subDepartments, setSubDepartments] = useState<Department[]>([]);
+  const [parentDepartment, setParentDepartment] = useState<Department | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [academicYears, setAcademicYears] = useState<CourseAcademicYear[]>([]);
@@ -30,8 +34,19 @@ export default function DepartmentDetailPage() {
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch(`/api/college/courses?departmentId=${encodeURIComponent(id)}`).then((r) => r.json() as Promise<{ courses: Course[] }>),
       ]);
-      const dept = (deptRes.departments ?? []).find((d) => d.id === id) ?? null;
+      const allDepts = deptRes.departments ?? [];
+      const dept = allDepts.find((d) => d.id === id) ?? null;
       setDepartment(dept);
+      setSubDepartments(
+        allDepts
+          .filter((d) => d.parentDepartmentId === id)
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setParentDepartment(
+        dept?.parentDepartmentId
+          ? allDepts.find((d) => d.id === dept.parentDepartmentId) ?? null
+          : null
+      );
       const sortedCourses = (coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name));
       setCourses(sortedCourses);
 
@@ -60,7 +75,11 @@ export default function DepartmentDetailPage() {
     }
   }, [id]);
 
-  useEffect(() => { void load(); }, [load]);
+  // Awaited in a wrapper so load()'s setState calls aren't reachable
+  // synchronously from the effect body (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    void (async () => { await load(); })();
+  }, [load]);
 
   function getTiming(courseId: string, year: number): CourseYearTiming | undefined {
     return timings.find((t) => t.courseId === courseId && t.year === year);
@@ -89,10 +108,25 @@ export default function DepartmentDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={department?.name ?? "Department"}
-        description={department ? `${department.code} · Manage courses and their timings` : "Loading…"}
+        description={
+          department
+            ? `${department.code}${parentDepartment ? ` · Sub-department of ${parentDepartment.name}` : ""} · Manage courses and their timings`
+            : "Loading…"
+        }
         actions={
-          <Button variant="outline" onClick={() => router.push("/principal/departments")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />Back to Departments
+          <Button
+            variant="outline"
+            onClick={() =>
+              router.push(
+                // From a sub-department, "back" means its parent, not the top list.
+                parentDepartment
+                  ? `/principal/departments/${parentDepartment.id}`
+                  : "/principal/departments"
+              )
+            }
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {parentDepartment ? `Back to ${parentDepartment.name}` : "Back to Departments"}
           </Button>
         }
       />
@@ -102,6 +136,44 @@ export default function DepartmentDetailPage() {
           {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-lg border bg-muted/30 animate-pulse" />)}
         </div>
       ) : (
+        <>
+        {subDepartments.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Layers className="h-4 w-4" />Sub-Departments
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {subDepartments.map((sub) => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => router.push(`/principal/departments/${sub.id}`)}
+                    className="rounded-lg border p-3 text-left transition-colors hover:border-primary/50"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="secondary" className="text-xs font-mono shrink-0">{sub.code}</Badge>
+                      {!sub.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
+                    </div>
+                    <p className="font-semibold text-sm leading-tight">{sub.name}</p>
+                    {sub.hodName ? (
+                      <p className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+                        <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                        HOD: {sub.hodName}
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-orange-500">No HOD assigned</p>
+                    )}
+                    <p className="mt-2 text-xs text-primary">Open &amp; add courses →</p>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
@@ -188,6 +260,7 @@ export default function DepartmentDetailPage() {
             )}
           </CardContent>
         </Card>
+        </>
       )}
 
       <ConfirmDialog
