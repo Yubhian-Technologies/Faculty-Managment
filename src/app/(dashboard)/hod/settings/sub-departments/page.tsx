@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Network, Plus, Users, BookMarked, UserCog, Trash2 } from "lucide-react";
+import { Network, Plus, Users, BookMarked, UserCog, Trash2, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,11 +53,16 @@ export default function SubDepartmentsSettingsPage() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [hodUid, setHodUid] = useState("");
-  const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
+  const [managedDepartments, setManagedDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [editTarget, setEditTarget] = useState<Department | null>(null);
+  const [editHodUid, setEditHodUid] = useState("");
+  const [editManagedDepartments, setEditManagedDepartments] = useState<string[]>([]);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     if (!department) {
@@ -112,11 +117,11 @@ export default function SubDepartmentsSettingsPage() {
     setName("");
     setCode("");
     setHodUid("");
-    setSecondaryDepartments([]);
+    setManagedDepartments([]);
   }
 
-  function toggleSecondaryDepartment(deptName: string, checked: boolean) {
-    setSecondaryDepartments((prev) => (checked ? [...prev, deptName] : prev.filter((n) => n !== deptName)));
+  function toggleManagedDepartment(deptName: string, checked: boolean) {
+    setManagedDepartments((prev) => (checked ? [...prev, deptName] : prev.filter((n) => n !== deptName)));
   }
 
   async function handleHodCreated(uid: string) {
@@ -144,7 +149,7 @@ export default function SubDepartmentsSettingsPage() {
           hodUid: hodUid || "",
           hodName: selectedHod?.name ?? "",
           parentDepartmentId: ownDept.id,
-          secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
+          managedDepartments: managedDepartments.length > 0 ? managedDepartments : undefined,
         }),
       });
       const json = await res.json() as { error?: string };
@@ -158,6 +163,51 @@ export default function SubDepartmentsSettingsPage() {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add sub-department" });
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function openEditDialog(dept: Department) {
+    setEditTarget(dept);
+    setEditHodUid(dept.hodUid ?? "");
+    setEditManagedDepartments(dept.managedDepartments ?? []);
+  }
+
+  function toggleEditManagedDepartment(deptName: string, checked: boolean) {
+    setEditManagedDepartments((prev) => (checked ? [...prev, deptName] : prev.filter((n) => n !== deptName)));
+  }
+
+  async function handleEditHodCreated(uid: string) {
+    const res = await fetch("/api/college/users?role=HOD&allDepts=true");
+    const data = await res.json() as { users: FMSUser[] };
+    setHods(data.users ?? []);
+    setEditHodUid(uid);
+  }
+
+  async function handleSaveEdit() {
+    if (!editTarget) return;
+    setIsEditSubmitting(true);
+    try {
+      const selectedHod = hods.find((h) => h.uid === editHodUid);
+      const res = await fetch("/api/college/departments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deptId: editTarget.id,
+          hodUid: editHodUid || "",
+          hodName: editHodUid ? (selectedHod?.name ?? "") : "",
+          managedDepartments: editManagedDepartments,
+        }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to update sub-department");
+
+      toast({ variant: "success", title: "Sub-department updated" });
+      setEditTarget(null);
+      void load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update sub-department" });
+    } finally {
+      setIsEditSubmitting(false);
     }
   }
 
@@ -237,7 +287,7 @@ export default function SubDepartmentsSettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Sub-Departments"
-        description={`Add sub-departments under ${ownDept.name} and assign each one its own Sub-HOD - you keep view-only access to their students, sections, and assigned faculty.`}
+        description={`Add sub-departments under ${ownDept.name}, assign each its own Sub-HOD, and group whole branches under them - the Sub-HOD then fully manages those branches' students and sections.`}
         actions={
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
@@ -295,11 +345,11 @@ export default function SubDepartmentsSettingsPage() {
                 </div>
                 <p className="text-xs text-muted-foreground rounded-md border p-2.5">
                   This Sub-HOD gets full edit rights (overview, sections, assign faculty) over{" "}
-                  <strong className="text-foreground">{name || "this sub-department"}</strong>. You&apos;ll only be
-                  able to view its students, sections, and assigned faculty.
+                  <strong className="text-foreground">{name || "this sub-department"}</strong> and every department
+                  grouped under it below.
                 </p>
                 <div className="space-y-2">
-                  <Label>Secondary Departments</Label>
+                  <Label>Managed Departments</Label>
                   {(() => {
                     const options = allDepartments.filter(
                       (d) => !d.parentDepartmentId && d.name !== ownDept.name && d.name !== name
@@ -309,8 +359,8 @@ export default function SubDepartmentsSettingsPage() {
                         {options.map((d) => (
                           <label key={d.id} className="flex items-center gap-1.5 text-sm">
                             <Checkbox
-                              checked={secondaryDepartments.includes(d.name)}
-                              onCheckedChange={(checked) => toggleSecondaryDepartment(d.name, !!checked)}
+                              checked={managedDepartments.includes(d.name)}
+                              onCheckedChange={(checked) => toggleManagedDepartment(d.name, !!checked)}
                             />
                             {d.name}
                           </label>
@@ -323,9 +373,9 @@ export default function SubDepartmentsSettingsPage() {
                     );
                   })()}
                   <p className="text-xs text-muted-foreground">
-                    Optional - every section created under this sub-department will be cross-listed to all selected
-                    departments, so each one&apos;s HOD gets automatic view-only access to its students, roster, and
-                    assigned faculty (e.g. this sub-department feeds both CSE and ECE after 1st year).
+                    Optional - group whole branches (e.g. IT and CSBS) under this sub-department. Its Sub-HOD then gets
+                    full control of those branches&apos; students, sections, and academics - so they can create
+                    sections and divide students across them.
                   </p>
                 </div>
               </div>
@@ -358,13 +408,22 @@ export default function SubDepartmentsSettingsPage() {
                     <p className="font-semibold">{dept.name}</p>
                     <Badge variant="secondary" className="text-xs mt-1">{dept.code}</Badge>
                   </div>
-                  <button
-                    onClick={() => setDeleteTarget(dept)}
-                    className="p-1.5 rounded-md hover:bg-destructive/10 transition-colors text-destructive"
-                    title="Delete sub-department"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openEditDialog(dept)}
+                      className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                      title="Edit Sub-HOD and grouped departments"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(dept)}
+                      className="p-1.5 rounded-md hover:bg-destructive/10 transition-colors text-destructive"
+                      title="Delete sub-department"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -380,9 +439,9 @@ export default function SubDepartmentsSettingsPage() {
                   <BookMarked className="h-4 w-4 shrink-0" />
                   <span><strong className="text-foreground">{sectionCount}</strong> sections</span>
                 </div>
-                {dept.secondaryDepartments && dept.secondaryDepartments.length > 0 && (
+                {dept.managedDepartments && dept.managedDepartments.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Cross-listed with <span className="text-foreground">{dept.secondaryDepartments.join(", ")}</span>
+                    Manages <span className="text-foreground">{dept.managedDepartments.join(", ")}</span>
                   </p>
                 )}
               </CardContent>
@@ -390,6 +449,79 @@ export default function SubDepartmentsSettingsPage() {
           ))}
         </div>
       )}
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {editTarget?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground rounded-md border p-2.5">
+              Name and code can only be changed by your Principal. You can reassign the Sub-HOD and change which
+              branches this sub-department manages here.
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Assign Sub-HOD</Label>
+                <CreateHodDialog department={editTarget?.name} onCreated={handleEditHodCreated} />
+              </div>
+              {hods.length > 0 ? (
+                <Select value={editHodUid || "none"} onValueChange={(v) => setEditHodUid(v === "none" ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Sub-HOD (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">- No Sub-HOD -</SelectItem>
+                    {hods.map((h) => (
+                      <SelectItem key={h.uid} value={h.uid}>
+                        {h.name} {h.department ? `(${h.department})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                  No HODs yet - create one above
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Managed Departments</Label>
+              {(() => {
+                const options = allDepartments.filter(
+                  (d) => !d.parentDepartmentId && d.name !== ownDept?.name && d.name !== editTarget?.name
+                );
+                return options.length > 0 ? (
+                  <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+                    {options.map((d) => (
+                      <label key={d.id} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox
+                          checked={editManagedDepartments.includes(d.name)}
+                          onCheckedChange={(checked) => toggleEditManagedDepartment(d.name, !!checked)}
+                        />
+                        {d.name}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                    No other top-level departments yet
+                  </p>
+                );
+              })()}
+              <p className="text-xs text-muted-foreground">
+                {editTarget?.name ?? "This sub-department"}&apos;s Sub-HOD fully manages the branches checked here -
+                e.g. group IT and CSBS so the Sub-HOD can see all their students, create sections, and divide students
+                across them.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button onClick={() => void handleSaveEdit()} loading={isEditSubmitting}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={!!deleteTarget}

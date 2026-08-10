@@ -77,6 +77,7 @@ export async function POST(request: Request) {
       hasSubDepartments?: boolean;
       parentDepartmentId?: string;
       secondaryDepartments?: string[];
+      managedDepartments?: string[];
     };
 
     const { name, code, hodUid, hodName } = body;
@@ -115,6 +116,31 @@ export async function POST(request: Request) {
       secondaryDepartments = names;
     }
 
+    // Grouped/managed branches: the top-level departments this (sub-)department's
+    // HOD gets FULL control of. Same validation as secondaryDepartments - the
+    // target must be an existing top-level department, never a sub-department -
+    // but a different field with different meaning (full management vs view-only
+    // cross-listing), so it's resolved into the sub-HOD's editable scope.
+    let managedDepartments: string[] = [];
+    if (body.managedDepartments && body.managedDepartments.length > 0) {
+      const names = Array.from(new Set(body.managedDepartments.map((s) => s.trim()).filter(Boolean)));
+      if (names.includes(name.trim())) {
+        return NextResponse.json({ error: "Managed department must be different from this department" }, { status: 400 });
+      }
+      const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+      const byName = new Map(deptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }]));
+      for (const mName of names) {
+        const mDept = byName.get(mName);
+        if (!mDept) {
+          return NextResponse.json({ error: `Managed department "${mName}" not found` }, { status: 400 });
+        }
+        if (mDept.parentDepartmentId) {
+          return NextResponse.json({ error: `"${mName}" is a sub-department and can't be used as a managed department` }, { status: 400 });
+        }
+      }
+      managedDepartments = names;
+    }
+
     // An HOD may only create a sub-department under their own department,
     // and only when their Principal has enabled sub-departments for it -
     // this is what "sub-HOD" management looks like: it's just this same
@@ -146,6 +172,7 @@ export async function POST(request: Request) {
         ...(parentDepartmentId ? { parentDepartmentId } : {}),
         ...(session.role !== "HOD" && body.hasSubDepartments ? { hasSubDepartments: true } : {}),
         ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
+        ...(managedDepartments.length > 0 ? { managedDepartments } : {}),
         createdAt: now,
         updatedAt: now,
       });
@@ -276,6 +303,7 @@ export async function PATCH(request: Request) {
       assignedYears?: number[];
       hasSubDepartments?: boolean;
       secondaryDepartments?: string[];
+      managedDepartments?: string[];
     };
 
     const { deptId, ...rawUpdates } = body;
@@ -303,6 +331,7 @@ export async function PATCH(request: Request) {
       if ("hodUid" in rawUpdates) restricted.hodUid = rawUpdates.hodUid;
       if ("hodName" in rawUpdates) restricted.hodName = rawUpdates.hodName;
       if ("secondaryDepartments" in rawUpdates) restricted.secondaryDepartments = rawUpdates.secondaryDepartments;
+      if ("managedDepartments" in rawUpdates) restricted.managedDepartments = rawUpdates.managedDepartments;
       updates = restricted;
     }
 
@@ -328,6 +357,30 @@ export async function PATCH(request: Request) {
         }
       }
       updates.secondaryDepartments = names;
+    }
+
+    if (updates.managedDepartments !== undefined) {
+      const names = Array.from(new Set(updates.managedDepartments.map((s) => s.trim()).filter(Boolean)));
+      if (names.length > 0) {
+        const currentSnap = await deptRef.get();
+        const currentData = currentSnap.data() as { name?: string; parentDepartmentId?: string } | undefined;
+        const currentName = updates.name?.trim() ?? currentData?.name ?? "";
+        if (names.includes(currentName)) {
+          return NextResponse.json({ error: "Managed department must be different from this department" }, { status: 400 });
+        }
+        const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+        const byName = new Map(deptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }]));
+        for (const mName of names) {
+          const mDept = byName.get(mName);
+          if (!mDept) {
+            return NextResponse.json({ error: `Managed department "${mName}" not found` }, { status: 400 });
+          }
+          if (mDept.parentDepartmentId) {
+            return NextResponse.json({ error: `"${mName}" is a sub-department and can't be used as a managed department` }, { status: 400 });
+          }
+        }
+      }
+      updates.managedDepartments = names;
     }
 
     // Assigned years must be a subset of the years this college has actually

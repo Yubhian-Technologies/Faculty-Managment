@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -13,10 +13,22 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const isExistingApp = getApps().length > 0;
+const app = isExistingApp ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Auto-detect long-polling: Firestore's default streaming (WebChannel)
+// transport gets silently blocked by some corporate proxies, firewalls, VPNs
+// and antivirus, surfacing as "[code=unavailable] Could not reach Cloud
+// Firestore backend". Letting the SDK detect that and fall back to long-polling
+// keeps the connection alive in those environments. initializeFirestore must
+// run exactly once per app, so on HMR/re-import (app already created) reuse the
+// existing instance instead of re-initializing.
+export const db: Firestore = isExistingApp
+  ? getFirestore(app)
+  : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+
 export const storage = getStorage(app);
 
 // Analytics is browser-only - lazy load to avoid SSR errors

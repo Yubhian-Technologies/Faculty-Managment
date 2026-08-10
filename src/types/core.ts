@@ -407,6 +407,13 @@ export interface Department {
   // Science" department feeds students on to both CSE and ECE, so both
   // HODs need visibility into its sections ahead of promotion.
   secondaryDepartments?: string[];
+  // Grouped/managed branches: on a sub-department, the top-level departments
+  // (e.g. IT, CSBS) whose students, sections and academics its Sub-HOD fully
+  // manages. Distinct from `secondaryDepartments` (view-only cross-listing) -
+  // these grant full control, resolved into the Sub-HOD's editable scope via
+  // getHodDepartmentScope (src/lib/departments/scope.ts). Set by the parent
+  // department's HOD on the Sub-Departments settings page.
+  managedDepartments?: string[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
