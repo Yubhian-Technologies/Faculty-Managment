@@ -9,6 +9,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { MobileCard } from "@/components/shared/MobileCard";
 import { FacultyRequirementPanel } from "@/components/shared/FacultyRequirementPanel";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { formatDate } from "@/lib/utils";
 import { useMobile } from "@/hooks/useMobile";
 import type { VacancyRequest } from "@/types";
@@ -22,6 +23,7 @@ export default function HODVacancyPage() {
   const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<VacancyRequest | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -36,8 +38,9 @@ export default function HODVacancyPage() {
     ]).finally(() => setIsLoading(false));
   }, []);
 
-  async function deleteVacancy(v: VacancyRequest) {
-    if (!confirm(`Delete the hiring request for ${v.position}? This cannot be undone.`)) return;
+  async function deleteVacancy() {
+    if (!deleteTarget) return;
+    const v = deleteTarget;
     setDeletingId(v.id);
     try {
       const res = await fetch(`/api/college/vacancy-requests/${v.id}`, { method: "DELETE" });
@@ -45,6 +48,7 @@ export default function HODVacancyPage() {
       if (!res.ok) throw new Error(json.error ?? "Failed to delete");
       toast({ variant: "success", title: "Hiring request deleted" });
       setVacancies((prev) => prev.filter((r) => r.id !== v.id));
+      setDeleteTarget(null);
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to delete", description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -96,7 +100,7 @@ export default function HODVacancyPage() {
                     variant="ghost"
                     size="sm"
                     loading={deletingId === v.id}
-                    onClick={() => void deleteVacancy(v)}
+                    onClick={() => setDeleteTarget(v)}
                     className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4 mr-1" /> Delete
@@ -147,7 +151,7 @@ export default function HODVacancyPage() {
                     variant="ghost"
                     size="sm"
                     loading={deletingId === v.id}
-                    onClick={(e) => { e.stopPropagation(); void deleteVacancy(v); }}
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(v); }}
                     className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -158,6 +162,17 @@ export default function HODVacancyPage() {
           ]}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title={`Delete the hiring request for ${deleteTarget?.position ?? ""}?`}
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => void deleteVacancy()}
+        loading={deletingId === deleteTarget?.id}
+      />
     </div>
   );
 }

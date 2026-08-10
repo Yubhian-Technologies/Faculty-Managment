@@ -7,11 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { COLLEGE_TYPE_LABELS } from "@/types";
+import type { CollegeType } from "@/types";
+
+const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
 type CollegeRow = {
   id: string;
   name: string;
+  type?: CollegeType;
   address: string;
   contactEmail: string;
   contactPhone: string;
@@ -25,7 +31,7 @@ export default function EditCollegePage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", address: "", contactEmail: "", contactPhone: "" });
+  const [form, setForm] = useState<{ name: string; type: CollegeType | ""; address: string; contactEmail: string; contactPhone: string }>({ name: "", type: "", address: "", contactEmail: "", contactPhone: "" });
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -39,6 +45,7 @@ export default function EditCollegePage() {
         }
         setForm({
           name: college.name ?? "",
+          type: college.type ?? "",
           address: college.address ?? "",
           contactEmail: college.contactEmail ?? "",
           contactPhone: college.contactPhone ?? "",
@@ -63,7 +70,14 @@ export default function EditCollegePage() {
       const res = await fetch("/api/admin/colleges", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collegeId, ...form }),
+        body: JSON.stringify({
+          collegeId,
+          name: form.name,
+          address: form.address,
+          contactEmail: form.contactEmail,
+          contactPhone: form.contactPhone,
+          ...(form.type ? { type: form.type } : {}),
+        }),
       });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "College updated" });
@@ -101,6 +115,19 @@ export default function EditCollegePage() {
                 onChange={(e) => set({ name: e.target.value })}
                 placeholder="College name"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-type">College Type</Label>
+              <Select value={form.type} onValueChange={(v) => set({ type: v as CollegeType })}>
+                <SelectTrigger id="edit-type">
+                  <SelectValue placeholder="Select type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {COLLEGE_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>{COLLEGE_TYPE_LABELS[t]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-address">Address</Label>

@@ -5,8 +5,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RELIGION_LABELS, CASTE_LABELS } from "@/types";
+import { PHONE_REGEX } from "@/lib/validations";
+import type { Religion, Caste } from "@/types";
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
+const GENDER_OPTIONS = ["Male", "Female"];
 
 export interface PersonalDetailsValue {
   gender?: string;
@@ -14,8 +18,9 @@ export interface PersonalDetailsValue {
   legalName?: string;
   fatherName?: string;
   motherName?: string;
-  religion?: string;
-  caste?: string;
+  religion?: Religion | string; // string covers a typed-in value when "Other" is picked
+  caste?: Caste | string;
+  subCaste?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
@@ -49,7 +54,10 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Gender</Label>
-          <Select value={value.gender ?? ""} onValueChange={(v) => set("gender", v)}>
+          <Select
+            value={value.gender && !GENDER_OPTIONS.includes(value.gender) ? "Other" : (value.gender ?? "")}
+            onValueChange={(v) => set("gender", v === "Other" ? "Other" : v)}
+          >
             <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="Male">Male</SelectItem>
@@ -57,6 +65,13 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
               <SelectItem value="Other">Other</SelectItem>
             </SelectContent>
           </Select>
+          {value.gender && !GENDER_OPTIONS.includes(value.gender) && (
+            <Input
+              value={value.gender === "Other" ? "" : value.gender}
+              onChange={(e) => set("gender", e.target.value || "Other")}
+              placeholder="Please specify"
+            />
+          )}
         </div>
         <div className="space-y-2">
           <Label>Date of Birth</Label>
@@ -85,11 +100,45 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
         </div>
         <div className="space-y-2">
           <Label>Religion</Label>
-          <Input value={value.religion ?? ""} onChange={(e) => set("religion", e.target.value)} placeholder="e.g. Hindu" />
+          <Select
+            value={value.religion && !(value.religion in RELIGION_LABELS) ? "OTHER" : (value.religion ?? "")}
+            onValueChange={(v) => set("religion", v)}
+          >
+            <SelectTrigger><SelectValue placeholder="Select religion" /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(RELIGION_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {value.religion && (value.religion === "OTHER" || !(value.religion in RELIGION_LABELS)) && (
+            <Input
+              value={value.religion === "OTHER" ? "" : value.religion}
+              onChange={(e) => set("religion", e.target.value || "OTHER")}
+              placeholder="Please specify"
+            />
+          )}
         </div>
         <div className="space-y-2">
           <Label>Caste</Label>
-          <Input value={value.caste ?? ""} onChange={(e) => set("caste", e.target.value)} placeholder="e.g. OC, BC-B" />
+          <Select
+            value={value.caste && !(value.caste in CASTE_LABELS) ? "OTHER" : (value.caste ?? "")}
+            onValueChange={(v) => set("caste", v)}
+          >
+            <SelectTrigger><SelectValue placeholder="Select caste" /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(CASTE_LABELS).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {value.caste && (value.caste === "OTHER" || !(value.caste in CASTE_LABELS)) && (
+            <Input
+              value={value.caste === "OTHER" ? "" : value.caste}
+              onChange={(e) => set("caste", e.target.value || "OTHER")}
+              placeholder="Please specify"
+            />
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>Sub Caste</Label>
+          <Input value={value.subCaste ?? ""} onChange={(e) => set("subCaste", e.target.value)} placeholder="e.g. BC-B" />
         </div>
         <div className="space-y-2">
           <Label>Aadhar No</Label>
@@ -203,6 +252,9 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
         <div className="space-y-2">
           <Label>Emergency Contact Phone</Label>
           <Input value={value.emergencyContactPhone ?? ""} onChange={(e) => set("emergencyContactPhone", e.target.value)} placeholder="+91 98765 43210" />
+          {!!value.emergencyContactPhone && !PHONE_REGEX.test(value.emergencyContactPhone) && (
+            <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid phone number</p>
+          )}
         </div>
       </div>
 

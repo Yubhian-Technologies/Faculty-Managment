@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
 // Sections a PANEL_MEMBER (faculty) is in charge of - students are only visible/
@@ -14,11 +15,12 @@ async function getInchargeSections(
   collegeId: string,
   uid: string
 ): Promise<Section[]> {
+  const candidateIds = await getFacultyIdCandidates(db, collegeId, uid);
   const snap = await db
     .collection("colleges")
     .doc(collegeId)
     .collection("sections")
-    .where("facultyInchargeUid", "==", uid)
+    .where("facultyInchargeUid", "in", candidateIds)
     .get();
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Section);
 }
@@ -59,8 +61,34 @@ export async function GET(request: Request) {
       if (sections.length === 0) {
         return NextResponse.json({ students: [] });
       }
-      // Firestore `in` filters cap at 30 values - faculty are realistically in charge of a handful of sections.
-      primaryQuery = primaryQuery.where("section", "in", sections.map((s) => s.name).slice(0, 30));
+      // Section *names* aren't unique across years or departments (e.g. "A" exists
+      // in both Year 1 and Year 2, and independently in both CSE and AIDS) - a
+      // single `where("section", "in", names)` would silently pull in every other
+      // year's/department's same-named section too. Match each in-charge section
+      // by its exact (department, name, year) triple instead, one query per
+      // section, then merge. This is also what implicitly pins the student to the
+      // right *course*: StudentRecord has no courseId of its own, so a student's
+      // course is only ever determined by which Section (department+courseId+
+      // name+year) they're enrolled in - matching that exact triple is matching
+      // the exact section, and therefore the exact course.
+      const sectionSnaps = await Promise.all(
+        sections.slice(0, 30).map((s) =>
+          withCommonFilters(
+            studentsColl.where("department", "==", s.department).where("section", "==", s.name).where("year", "==", s.year)
+          ).get()
+        )
+      );
+      const seen = new Set<string>();
+      const students: (Omit<StudentRecord, "id"> & { id: string; accessLevel: "primary" | "secondary" })[] = [];
+      for (const snap of sectionSnaps) {
+        for (const d of snap.docs) {
+          if (seen.has(d.id)) continue;
+          seen.add(d.id);
+          students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "primary" });
+        }
+      }
+      students.sort((a, b) => (a.rollNumber ?? "").localeCompare(b.rollNumber ?? ""));
+      return NextResponse.json({ students });
     } else if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.departmentName) {
@@ -106,9 +134,11 @@ export async function GET(request: Request) {
   }
 }
 
+// Faculty (PANEL_MEMBER) can view their sections' rosters but cannot add
+// students - that stays with HOD/Office/above.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const body = (await request.json()) as {
       rollNumber: string;
       name: string;
@@ -136,9 +166,6 @@ export async function POST(request: Request) {
     }
     const sectionDoc = sectionsSnap.docs[0].data() as Section;
 
-    if (session.role === "PANEL_MEMBER" && sectionDoc.facultyInchargeUid !== session.uid) {
-      return NextResponse.json({ error: "You are not in charge of this section" }, { status: 403 });
-    }
     if (session.role === "HOD") {
       const dept = await getHodDept(db, session.collegeId, session.uid);
       if (dept && sectionDoc.department !== dept) {

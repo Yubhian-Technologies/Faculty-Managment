@@ -215,7 +215,7 @@ export default function FacultyDashboard() {
                           {b.interviewVenue && ` · ${b.interviewVenue}`}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {b.candidateIds.length} candidate{b.candidateIds.length !== 1 ? "s" : ""}
+                          {(b.applicationIds ?? []).length} candidate{(b.applicationIds ?? []).length !== 1 ? "s" : ""}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

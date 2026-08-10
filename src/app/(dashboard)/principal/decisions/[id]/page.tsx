@@ -2,10 +2,10 @@
 
 import { use, useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -21,20 +21,68 @@ import {
   Star,
   Clock,
   Mail,
+  PenLine,
 } from "lucide-react";
-import type { HiringBatch, Candidate } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, DemoRatingLevel } from "@/types";
+
+// Joined view: application (per-hiring-request decision state) + candidate
+// (person) fields. `id` is the applicationId (used for PATCHes to
+// candidate-applications); `candidateId` is the real Candidate id.
+type DecisionCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+  phone: string;
+  status: string;
+  negotiatedSalary?: number;
+  dateOfJoining?: string;
+  termsAndConditions?: string[];
+  committeeRecommendation?: string;
+  bioData?: Candidate["bioData"];
+};
 
 type PanelFeedbackItem = {
   id: string;
   candidateId: string;
   panelName: string;
-  recommendation: "ACCEPT" | "REJECT" | "MAYBE";
-  ratings: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
+  recommendation?: "ACCEPT" | "REJECT" | "MAYBE";
+  ratings?: { technicalKnowledge: number; communicationSkills: number; teachingMethodology: number };
+  remarksByCategory?: Record<string, string | undefined>;
+  demoRatings?: Record<string, DemoRatingLevel>;
+  demoOverallScore?: number;
   salaryNegotiated?: number;
   noticePeriod?: string;
   strengths?: string;
   weaknesses?: string;
   comments?: string;
+};
+
+const DEMO_LEVEL_SCORE: Record<DemoRatingLevel, number> = { POOR: 1, AVERAGE: 2, GOOD: 3, EXCELLENT: 4 };
+
+const REMARK_CATEGORY_LABELS: Record<string, string> = {
+  subjectKnowledge: "Subject Knowledge",
+  communication: "Communication",
+  presentationSkills: "Presentation Skills",
+  research: "Research",
+  specificAttributes: "Specific Attributes",
+  others: "Others",
+};
+
+const RESEARCH_PROFILE_LABELS: Record<string, string> = {
+  firstAuthorPublications: "Publications (first/corresponding author)",
+  publicationsQ1OrHighIF: "Publications in Q1 or IF > 4.0",
+  reviewPublications: "Review Publications",
+  totalPublicationsInclCoAuthor: "Total Publications (incl. co-author)",
+  patentsPublished: "Patents Published",
+  patentsGranted: "Patents Granted",
+  hIndex: "H-Index",
+  i10Index: "i10-Index",
+  fundingReceived: "Funding Projects Received",
+  fundingApplied: "Funding Projects Applied",
+  nationalExposure: "National Exposure",
+  internationalExposure: "International Exposure",
+  keyResearchSkills: "Key Research Skills",
 };
 
 type StudentFeedbackSummary = {
@@ -61,13 +109,11 @@ function avg(vals: number[]) {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-const emptyHireTerms = { expectedSalary: "", negotiatedSalary: "", dateOfJoining: "" };
-
 export default function PrincipalDecisionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candidates, setCandidates] = useState<DecisionCandidateView[]>([]);
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
   const [studentFeedback, setStudentFeedback] = useState<StudentFeedbackSummary[]>([]);
   const [offerLetterCandidateIds, setOfferLetterCandidateIds] = useState<Set<string>>(new Set());
@@ -76,19 +122,36 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
   // Per-candidate decision state
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
-  const [hireTerms, setHireTerms] = useState<Record<string, { expectedSalary: string; negotiatedSalary: string; dateOfJoining: string }>>({});
-  const [confirmFor, setConfirmFor] = useState<{ candidateId: string; action: "APPROVED" | "REJECTED" } | null>(null);
+  const [committeeRecs, setCommitteeRecs] = useState<Record<string, string>>({});
+  const [confirmFor, setConfirmFor] = useState<{ applicationId: string; action: "APPROVED" | "REJECTED" } | null>(null);
   const [isSaving, setIsSaving] = useState<string | null>(null);
 
   async function load() {
     try {
-      const [batchRes, candidatesRes] = await Promise.all([
+      const [batchRes, applicationsRes, candidatesRes] = await Promise.all([
         fetch(`/api/college/hiring-batches/${id}`).then((r) => r.json() as Promise<{ batch: HiringBatch }>),
-        fetch(`/api/college/candidates?batchId=${id}`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
+        fetch(`/api/college/candidate-applications?batchId=${id}`).then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
+        fetch(`/api/college/candidates`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
       ]);
       const b = batchRes.batch;
       setBatch(b);
-      const cands = candidatesRes.candidates ?? [];
+      const candidateMap = new Map((candidatesRes.candidates ?? []).map((c) => [c.id, c]));
+      const cands: DecisionCandidateView[] = (applicationsRes.applications ?? []).map((a) => {
+        const person = candidateMap.get(a.candidateId);
+        return {
+          id: a.id,
+          candidateId: a.candidateId,
+          name: person?.name ?? "Unknown",
+          email: person?.email ?? "",
+          phone: person?.phone ?? "",
+          status: a.status,
+          negotiatedSalary: a.negotiatedSalary,
+          dateOfJoining: a.dateOfJoining,
+          termsAndConditions: a.termsAndConditions,
+          committeeRecommendation: a.committeeRecommendation,
+          bioData: person?.bioData,
+        };
+      });
       setCandidates(cands);
 
       const [pfRes, sfRes, olRes] = await Promise.all([
@@ -125,11 +188,14 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
 
       // Pre-populate already-made decisions from candidate status
       const pre: Record<string, Decision> = {};
+      const recs: Record<string, string> = {};
       for (const c of cands) {
         if (c.status === "APPROVED") pre[c.id] = { action: "APPROVED", remarks: "" };
         else if (c.status === "REJECTED") pre[c.id] = { action: "REJECTED", remarks: "" };
+        if (c.committeeRecommendation) recs[c.id] = c.committeeRecommendation;
       }
       setDecisions(pre);
+      setCommitteeRecs(recs);
     } catch {
       toast({ variant: "destructive", title: "Failed to load batch" });
     } finally {
@@ -153,48 +219,34 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  async function applyDecision(candidateId: string, action: "APPROVED" | "REJECTED") {
-    setIsSaving(candidateId);
+  async function applyDecision(applicationId: string, action: "APPROVED" | "REJECTED") {
+    setIsSaving(applicationId);
     try {
-      const remark = remarks[candidateId] ?? "";
+      const remark = remarks[applicationId] ?? "";
       const stage = action === "APPROVED" ? "DECISION" : undefined;
-      const terms = hireTerms[candidateId];
 
-      const res = await fetch(`/api/college/candidates/${candidateId}`, {
+      // Negotiated salary, date of joining, and terms & conditions are captured
+      // earlier on /principal/negotiate/[id] — this step only records the decision.
+      const res = await fetch(`/api/college/candidate-applications/${applicationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: action,
           ...(stage ? { stage } : {}),
-          ...(action === "APPROVED" && terms ? {
-            negotiatedSalary: Number(terms.negotiatedSalary),
-            dateOfJoining: terms.dateOfJoining,
-            ...(terms.expectedSalary ? { expectedSalary: Number(terms.expectedSalary) } : {}),
-          } : {}),
+          committeeRecommendation: committeeRecs[applicationId] ?? "",
         }),
       });
       if (!res.ok) throw new Error();
 
-      setDecisions((prev) => ({ ...prev, [candidateId]: { action, remarks: remark } }));
+      setDecisions((prev) => ({ ...prev, [applicationId]: { action, remarks: remark } }));
       toast({
         variant: "success",
         title: action === "APPROVED" ? "Candidate approved" : "Candidate rejected",
         description: action === "APPROVED" ? "You can now send the offer letter." : "Candidate has been rejected.",
       });
       setConfirmFor(null);
-
-      // Check if all candidates have decisions → mark batch COMPLETED
-      const allDone = candidates.every(
-        (c) => c.id === candidateId || decisions[c.id]
-      );
-      if (allDone) {
-        await fetch(`/api/college/hiring-batches/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ currentPhase: "COMPLETED", status: "COMPLETED" }),
-        });
-        toast({ title: "All decisions made", description: "Batch marked as completed." });
-      }
+      // Batch auto-completion (once every candidate has a decision) is handled
+      // authoritatively server-side in this same PATCH — see candidates/[id]/route.ts.
     } catch {
       toast({ variant: "destructive", title: "Failed to save decision" });
     } finally {
@@ -231,18 +283,38 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
 
       <div className="space-y-4">
         {candidates.map((candidate) => {
-          const pf = panelFeedback.filter((f) => f.candidateId === candidate.id);
-          const sf = studentFeedback.find((f) => f.candidateId === candidate.id);
+          const pf = panelFeedback.filter((f) => f.candidateId === candidate.candidateId);
+          const sf = studentFeedback.find((f) => f.candidateId === candidate.candidateId);
           const decision = decisions[candidate.id];
 
-          const panelAccepts = pf.filter((f) => f.recommendation === "ACCEPT").length;
-          const panelRejects = pf.filter((f) => f.recommendation === "REJECT").length;
-          const panelMaybe = pf.filter((f) => f.recommendation === "MAYBE").length;
+          const interviewPf = pf.filter((f) => f.ratings);
+          const panelAccepts = interviewPf.filter((f) => f.recommendation === "ACCEPT").length;
+          const panelRejects = interviewPf.filter((f) => f.recommendation === "REJECT").length;
+          const panelMaybe = interviewPf.filter((f) => f.recommendation === "MAYBE").length;
 
-          const avgTechnical = avg(pf.map((f) => f.ratings.technicalKnowledge));
-          const avgCommunication = avg(pf.map((f) => f.ratings.communicationSkills));
-          const avgTeaching = avg(pf.map((f) => f.ratings.teachingMethodology));
+          const avgTechnical = avg(interviewPf.map((f) => f.ratings!.technicalKnowledge));
+          const avgCommunication = avg(interviewPf.map((f) => f.ratings!.communicationSkills));
+          const avgTeaching = avg(interviewPf.map((f) => f.ratings!.teachingMethodology));
           const panelOverall = avg([avgTechnical, avgCommunication, avgTeaching]);
+
+          const demoPf = pf.filter((f) => f.demoRatings);
+          const demoRubricKeys = [
+            "planningAndOrganizing",
+            "effectiveUseOfTime",
+            "communicativeAbility",
+            "ensuringStudentAttention",
+            "chalkBoardWork",
+            "studentParticipation",
+          ] as const;
+          const demoRubricAverages = demoRubricKeys.map((key) =>
+            avg(demoPf.map((f) => DEMO_LEVEL_SCORE[f.demoRatings![key]]).filter((v) => v != null))
+          );
+          const demoOverallAvg = avg(demoPf.map((f) => f.demoOverallScore ?? 0));
+
+          const researchProfile = candidate.bioData?.researchProfile;
+          const researchEntries = researchProfile
+            ? Object.entries(researchProfile).filter(([, v]) => v)
+            : [];
 
           return (
             <Card
@@ -281,13 +353,46 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
               </CardHeader>
 
               <CardContent className="space-y-4">
+                {/* Demo day evaluation summary */}
+                {demoPf.length > 0 && (
+                  <div className="space-y-2 pb-2 border-b">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Demo Evaluation ({demoPf.length} observer{demoPf.length !== 1 ? "s" : ""})
+                    </p>
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {demoRubricKeys.map((key, i) => (
+                        <div key={key} className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">
+                            {{
+                              planningAndOrganizing: "Planning & Organizing",
+                              effectiveUseOfTime: "Use of Time",
+                              communicativeAbility: "Communicative Ability",
+                              ensuringStudentAttention: "Student Attention",
+                              chalkBoardWork: "Chalk Board Work",
+                              studentParticipation: "Student Participation",
+                            }[key]}
+                          </span>
+                          <ScoreDots value={demoRubricAverages[i]} max={4} />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="pt-1 flex justify-between items-center text-sm font-medium">
+                      <span>Overall Performance</span>
+                      <div className="flex items-center gap-1">
+                        <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
+                        <span>{demoOverallAvg.toFixed(1)} / 10</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Panel feedback summary */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <Users className="h-3 w-3" />Panel Evaluation ({pf.length} member{pf.length !== 1 ? "s" : ""})
+                      <Users className="h-3 w-3" />Panel Evaluation ({interviewPf.length} member{interviewPf.length !== 1 ? "s" : ""})
                     </p>
-                    {pf.length === 0 ? (
+                    {interviewPf.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No panel feedback yet</p>
                     ) : (
                       <div className="space-y-1.5">
@@ -354,26 +459,63 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   </div>
                 </div>
 
-                {/* Panel member comments */}
-                {pf.some((f) => f.strengths || f.weaknesses || f.comments) && (
+                {/* Research profile (self-reported by candidate) */}
+                {researchEntries.length > 0 && (
                   <div className="space-y-2 pt-2 border-t">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Panel Notes</p>
-                    {pf.filter((f) => f.strengths || f.weaknesses || f.comments).map((f) => (
-                      <div key={f.id} className="text-xs bg-muted/40 rounded-lg p-2 space-y-0.5">
-                        <p className="font-medium">{f.panelName}</p>
-                        {f.strengths && <p className="text-green-700">+ {f.strengths}</p>}
-                        {f.weaknesses && <p className="text-red-700">− {f.weaknesses}</p>}
-                        {f.comments && <p className="text-muted-foreground">{f.comments}</p>}
-                      </div>
-                    ))}
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Research Profile</p>
+                    <div className="grid gap-1 sm:grid-cols-2 text-xs">
+                      {researchEntries.map(([key, value]) => (
+                        <div key={key} className="flex justify-between gap-2">
+                          <span className="text-muted-foreground">{RESEARCH_PROFILE_LABELS[key] ?? key}</span>
+                          <span className="font-medium text-right">{value}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+
+                {/* Panel member comments */}
+                {interviewPf.some((f) => f.strengths || f.weaknesses || f.comments || f.remarksByCategory) && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Panel Notes</p>
+                    {interviewPf
+                      .filter((f) => f.strengths || f.weaknesses || f.comments || f.remarksByCategory)
+                      .map((f) => (
+                        <div key={f.id} className="text-xs bg-muted/40 rounded-lg p-2 space-y-0.5">
+                          <p className="font-medium">{f.panelName}</p>
+                          {f.strengths && <p className="text-green-700">+ {f.strengths}</p>}
+                          {f.weaknesses && <p className="text-red-700">− {f.weaknesses}</p>}
+                          {f.comments && <p className="text-muted-foreground">{f.comments}</p>}
+                          {f.remarksByCategory &&
+                            Object.entries(f.remarksByCategory)
+                              .filter(([, v]) => v)
+                              .map(([key, value]) => (
+                                <p key={key} className="text-muted-foreground">
+                                  <span className="font-medium">{REMARK_CATEGORY_LABELS[key] ?? key}:</span> {value}
+                                </p>
+                              ))}
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {/* Recruiting committee recommendation */}
+                <div className="space-y-1.5 pt-2 border-t">
+                  <Label className="text-xs">Recruiting Committee Recommendation (optional)</Label>
+                  <Textarea
+                    value={committeeRecs[candidate.id] ?? ""}
+                    onChange={(e) => setCommitteeRecs((prev) => ({ ...prev, [candidate.id]: e.target.value }))}
+                    placeholder="Written recommendation of the recruiting committee..."
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
 
                 {/* Decision area */}
                 {decision ? (
                   decision.action === "APPROVED" ? (
                     <div className="pt-3 border-t flex items-center justify-between gap-3">
-                      {offerLetterCandidateIds.has(candidate.id) ? (
+                      {offerLetterCandidateIds.has(candidate.candidateId) ? (
                         <span className="text-sm text-green-600 font-medium flex items-center gap-1.5">
                           <CheckCircle2 className="h-4 w-4" />Offer letter sent
                         </span>
@@ -394,47 +536,26 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                   </div>
                 ) : (
                   <div className="pt-3 border-t space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Expected Salary (₹/yr)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={hireTerms[candidate.id]?.expectedSalary ?? ""}
-                          onChange={(e) => setHireTerms((prev) => ({
-                            ...prev,
-                            [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], expectedSalary: e.target.value },
-                          }))}
-                          placeholder="e.g. 600000"
-                          className="text-sm"
-                        />
+                    <div className="flex items-start justify-between gap-3 rounded-lg border p-3 bg-muted/20">
+                      <div className="space-y-1 text-sm">
+                        {candidate.negotiatedSalary != null && candidate.dateOfJoining ? (
+                          <>
+                            <p><span className="text-muted-foreground">Negotiated Salary:</span> <strong>₹{candidate.negotiatedSalary.toLocaleString("en-IN")}/yr</strong></p>
+                            <p><span className="text-muted-foreground">Date of Joining:</span> <strong>{formatDate(new Date(candidate.dateOfJoining))}</strong></p>
+                            {candidate.termsAndConditions && candidate.termsAndConditions.length > 0 && (
+                              <p className="text-muted-foreground">{candidate.termsAndConditions.length} term{candidate.termsAndConditions.length !== 1 ? "s" : ""} & conditions attached</p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-amber-700">Negotiated salary and date of joining haven&apos;t been entered yet.</p>
+                        )}
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Negotiated Salary (₹/yr) *</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={hireTerms[candidate.id]?.negotiatedSalary ?? ""}
-                          onChange={(e) => setHireTerms((prev) => ({
-                            ...prev,
-                            [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], negotiatedSalary: e.target.value },
-                          }))}
-                          placeholder="e.g. 650000"
-                          className="text-sm"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Date of Joining *</Label>
-                        <Input
-                          type="date"
-                          value={hireTerms[candidate.id]?.dateOfJoining ?? ""}
-                          onChange={(e) => setHireTerms((prev) => ({
-                            ...prev,
-                            [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], dateOfJoining: e.target.value },
-                          }))}
-                          className="text-sm"
-                        />
-                      </div>
+                      <Button size="sm" variant="outline" asChild className="shrink-0">
+                        <Link href={`/principal/negotiate/${id}`}>
+                          <PenLine className="h-3.5 w-3.5 mr-1.5" />
+                          {candidate.negotiatedSalary != null ? "Edit Terms" : "Enter Terms"}
+                        </Link>
+                      </Button>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Remarks (optional)</Label>
@@ -450,12 +571,11 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                       <Button
                         className="flex-1"
                         onClick={() => {
-                          const terms = hireTerms[candidate.id];
-                          if (!terms?.negotiatedSalary || !terms.dateOfJoining) {
+                          if (candidate.negotiatedSalary == null || !candidate.dateOfJoining) {
                             toast({ variant: "destructive", title: "Enter negotiated salary and date of joining before approving" });
                             return;
                           }
-                          setConfirmFor({ candidateId: candidate.id, action: "APPROVED" });
+                          setConfirmFor({ applicationId: candidate.id, action: "APPROVED" });
                         }}
                         disabled={!!isSaving}
                       >
@@ -465,7 +585,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                       <Button
                         variant="destructive"
                         className="flex-1"
-                        onClick={() => setConfirmFor({ candidateId: candidate.id, action: "REJECTED" })}
+                        onClick={() => setConfirmFor({ applicationId: candidate.id, action: "REJECTED" })}
                         disabled={!!isSaving}
                       >
                         <XCircle className="h-4 w-4 mr-1.5" />
@@ -492,7 +612,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
         confirmLabel={confirmFor?.action === "APPROVED" ? "Yes, Approve" : "Yes, Reject"}
         variant={confirmFor?.action === "REJECTED" ? "destructive" : "default"}
         onConfirm={() => {
-          if (confirmFor) void applyDecision(confirmFor.candidateId, confirmFor.action);
+          if (confirmFor) void applyDecision(confirmFor.applicationId, confirmFor.action);
         }}
         loading={!!isSaving}
       />

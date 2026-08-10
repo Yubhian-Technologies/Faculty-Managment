@@ -9,13 +9,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import type { Location } from "@/types";
+import { COLLEGE_TYPE_LABELS } from "@/types";
+import type { CollegeType, Location } from "@/types";
+
+const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
 export default function NewCollegePage() {
   const router = useRouter();
   const [locations, setLocations] = useState<Location[]>([]);
   const [name, setName] = useState("");
   const [locationId, setLocationId] = useState("");
+  const [type, setType] = useState<CollegeType | "">("");
   const [address, setAddress] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -28,7 +32,7 @@ export default function NewCollegePage() {
       .catch(() => {});
   }, []);
 
-  const isValid = name.trim().length >= 2 && !!locationId;
+  const isValid = name.trim().length >= 2 && !!locationId && !!type;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,7 +42,7 @@ export default function NewCollegePage() {
       const res = await fetch("/api/admin/colleges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, locationId, address, contactEmail, contactPhone }),
+        body: JSON.stringify({ name, locationId, type, address, contactEmail, contactPhone }),
       });
       const json = await res.json() as { collegeId?: string; error?: string };
       if (!res.ok) {
@@ -97,6 +101,20 @@ export default function NewCollegePage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Vishnu Institute of Technology"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>College Type <span className="text-destructive">*</span></Label>
+              <Select value={type} onValueChange={(v) => setType(v as CollegeType)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {COLLEGE_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>{COLLEGE_TYPE_LABELS[t]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

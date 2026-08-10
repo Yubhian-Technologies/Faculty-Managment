@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Section, StudentRecord } from "@/types";
 
 // Move a single student to a different section (roster-management fix-up -
@@ -52,7 +53,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const targetSection = { id: targetSnap.id, ...(targetSnap.data() as object) } as Section;
 
     if (session.role === "PANEL_MEMBER") {
-      if (targetSection.facultyInchargeUid !== session.uid) {
+      const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
+      if (!targetSection.facultyInchargeUid || !candidateIds.includes(targetSection.facultyInchargeUid)) {
         return NextResponse.json({ error: "You are not in charge of the target section" }, { status: 403 });
       }
       const currentSectionSnap = await collegeRef.collection("sections")
@@ -61,7 +63,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         .where("year", "==", student.year)
         .limit(1)
         .get();
-      if (currentSectionSnap.empty || currentSectionSnap.docs[0].data().facultyInchargeUid !== session.uid) {
+      const currentInchargeUid = currentSectionSnap.docs[0]?.data().facultyInchargeUid;
+      if (currentSectionSnap.empty || !currentInchargeUid || !candidateIds.includes(currentInchargeUid)) {
         return NextResponse.json({ error: "You are not in charge of this student's current section" }, { status: 403 });
       }
     }
@@ -144,13 +147,15 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const student = studentSnap.data() as StudentRecord;
 
     if (session.role === "PANEL_MEMBER") {
+      const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
       const currentSectionSnap = await collegeRef.collection("sections")
         .where("department", "==", student.department)
         .where("name", "==", student.section)
         .where("year", "==", student.year)
         .limit(1)
         .get();
-      if (currentSectionSnap.empty || currentSectionSnap.docs[0].data().facultyInchargeUid !== session.uid) {
+      const currentInchargeUid = currentSectionSnap.docs[0]?.data().facultyInchargeUid;
+      if (currentSectionSnap.empty || !currentInchargeUid || !candidateIds.includes(currentInchargeUid)) {
         return NextResponse.json({ error: "You are not in charge of this student's section" }, { status: 403 });
       }
     }

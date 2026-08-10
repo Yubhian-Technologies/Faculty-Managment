@@ -21,7 +21,6 @@ export default function WebmasterCredentialRequestsPage() {
   const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string; employeeId?: string } | null>(null);
 
   async function load() {
-    setIsLoading(true);
     try {
       const letters = await fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferRow[] }>).then((d) => d.letters ?? []);
       const pending = letters
@@ -39,7 +38,18 @@ export default function WebmasterCredentialRequestsPage() {
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    // Office raises new credential requests from a different session —
+    // refetch on refocus so this queue doesn't sit stale.
+    function onFocus() { void load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, []);
 
   async function fulfill(letter: OfferRow) {
     setProvisioning(letter.id);

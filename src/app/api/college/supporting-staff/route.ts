@@ -17,7 +17,7 @@ function designationLabel(designation: SupportingStaffDesignation): string {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL");
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
     const categoryFilter = SUPPORTING_STAFF_ROLE_CATEGORY[session.role] ?? searchParams.get("staffCategory");

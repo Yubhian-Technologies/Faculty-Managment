@@ -49,6 +49,10 @@ service cloud.firestore {
       return isCollegeMember(collegeId) && hasAnyRole(['ACCOUNTS', 'SUPER_ADMIN']);
     }
 
+    function isExamCell(collegeId) {
+      return isCollegeMember(collegeId) && hasAnyRole(['EXAM_CELL', 'SUPER_ADMIN']);
+    }
+
     function isFinance(collegeId) {
       return isCollegeMember(collegeId) && hasAnyRole(['FINANCE', 'SUPER_ADMIN']);
     }
@@ -281,7 +285,17 @@ service cloud.firestore {
       match /candidates/{candidateId} {
         allow read: if isStaff(collegeId);
         allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId);
+        allow update: if isHODorAbove(collegeId);
+        allow delete: if isHOD(collegeId) || isSuperAdmin();
+      }
+
+      // Join entity: candidate <-> vacancyRequest. Carries all per-hiring-cycle
+      // state (stage/documents/salary/committee recommendation) so Candidate
+      // itself stays a reusable, decoupled person record.
+      match /candidateApplications/{applicationId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) || isPanelMember(collegeId);
         allow delete: if isHOD(collegeId) || isSuperAdmin();
       }
 
@@ -447,6 +461,16 @@ service cloud.firestore {
         allow write: if isHODorAbove(collegeId);
       }
 
+      // Exam Cell's Internal/External marks configuration for a subject —
+      // the single source of truth the Faculty Dashboard's Internal Exam
+      // module reads from. Only Exam Cell (or Super Admin) may write it;
+      // every other staff role may read it (Faculty needs to read their own
+      // assigned subject's config; Principal/HOD get oversight visibility).
+      match /examConfigurations/{configId} {
+        allow read: if isStaff(collegeId) || isExamCell(collegeId);
+        allow write: if isExamCell(collegeId);
+      }
+
       match /teachingAssignments/{assignmentId} {
         allow read: if isStaff(collegeId);
         allow write: if isHODorAbove(collegeId);
@@ -455,6 +479,17 @@ service cloud.firestore {
       match /timetableSlots/{slotId} {
         allow read: if isStaff(collegeId);
         allow write: if isHODorAbove(collegeId);
+      }
+
+      // Faculty's own internal-exam marks batch (owner can create/edit while
+      // DRAFT; locked once SUBMITTED — mirrors leaveApplications below).
+      match /internalExamMarks/{markId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isPanelMember(collegeId) && request.resource.data.facultyId == request.auth.uid;
+        allow update: if isHODorAbove(collegeId) ||
+          (isPanelMember(collegeId) && resource.data.facultyId == request.auth.uid
+            && resource.data.status == 'DRAFT');
+        allow delete: if isHODorAbove(collegeId);
       }
 
       match /workloadSummaries/{summaryId} {

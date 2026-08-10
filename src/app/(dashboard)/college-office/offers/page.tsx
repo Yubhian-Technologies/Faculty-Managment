@@ -82,11 +82,12 @@ export default function CollegeOfficeOffersPage() {
     if (!actionTarget) return;
     setIsActing(true);
     try {
-      await fetch(`/api/college/offer-letters/${actionTarget.id}`, {
+      const res = await fetch(`/api/college/offer-letters/${actionTarget.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: actionTarget.action }),
       });
+      if (!res.ok) throw new Error();
       toast({ variant: "success", title: `Status updated to ${actionTarget.action.toLowerCase()}` });
       setActionTarget(null);
       void load();

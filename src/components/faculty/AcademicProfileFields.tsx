@@ -18,6 +18,7 @@ import type {
   PromotionRecord,
   TrainingEntry,
   TrainingEntryType,
+  TrainingParticipationRole,
   ProfessionalMembership,
   ProfessionalBody,
   AdminResponsibilityEntry,
@@ -27,7 +28,7 @@ import type {
   CourseFileEntry,
 } from "@/types";
 import {
-  TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
+  TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, PROFESSIONAL_BODY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
 } from "@/types";
 
@@ -43,7 +44,7 @@ const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", gran
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
 const EMPTY_BOOK: AuthoredBook = { title: "", publisher: "", year: new Date().getFullYear() };
-const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "", yearsWorked: 0 };
+const EMPTY_PREVIOUS_INSTITUTION: PreviousInstitution = { institutionName: "", designation: "", fromYear: new Date().getFullYear(), toYear: new Date().getFullYear() };
 const EMPTY_PROMOTION: PromotionRecord = { fromDesignation: "", toDesignation: "", effectiveYear: new Date().getFullYear() };
 const EMPTY_TRAINING: TrainingEntry = { type: "FDP", title: "", organizer: "", year: new Date().getFullYear() };
 const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
@@ -66,10 +67,12 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       {/* Module 1 */}
       <SectionTitle>Module 1 - General &amp; Academic Profile</SectionTitle>
       <TextInput label="Highest Qualification Earned" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
-      <DegreeFields label="UG Details" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
-      <DegreeFields label="PG Details" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
-      <DegreeFields label="PhD Details" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
-      <DegreeFields label="Post-Doctoral Details" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
+      <DegreeFields label="High School (10th) Details" level="HIGH_SCHOOL" value={value.highSchoolDetails} onChange={(v) => set("highSchoolDetails", v)} />
+      <DegreeFields label="Intermediate (12th) Details" level="INTERMEDIATE" value={value.intermediateDetails} onChange={(v) => set("intermediateDetails", v)} />
+      <DegreeFields label="UG Details" level="UG" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
+      <DegreeFields label="PG Details" level="PG" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
+      <DegreeFields label="PhD Details" level="DOCTORAL" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
+      <DegreeFields label="Post-Doctoral Details" level="POST_DOCTORAL" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Ph.D. Status</Label>
@@ -112,7 +115,8 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           <>
             <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
             <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
-            <NumInput label="Years Worked" value={item.yearsWorked} onChange={(v) => update({ yearsWorked: v })} />
+            <NumInput label="From Year" value={item.fromYear} onChange={(v) => update({ fromYear: v })} />
+            <NumInput label="To Year" value={item.toYear} onChange={(v) => update({ toYear: v })} />
             <div className="sm:col-span-2">
               <Label className="text-xs">Experience Certificate</Label>
               <CertificateUploadField
@@ -336,6 +340,17 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Participated or Conducted</Label>
+              <Select value={item.role ?? ""} onValueChange={(v) => update({ role: v as TrainingParticipationRole })}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TRAINING_PARTICIPATION_ROLE_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={k}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
             <TextInput label="Organizer" value={item.organizer} onChange={(v) => update({ organizer: v })} />
             <NumInput label="Year" value={item.year} onChange={(v) => update({ year: v })} />
@@ -478,22 +493,6 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
             <TextInput label="Course Code" value={item.courseCode} onChange={(v) => update({ courseCode: v })} />
             <TextInput label="Course Name" value={item.courseName} onChange={(v) => update({ courseName: v })} />
             <TextInput label="Academic Year" value={item.academicYear} onChange={(v) => update({ academicYear: v })} placeholder="e.g. 2025-26" />
-            <div className="space-y-1">
-              <Label className="text-xs">Course File</Label>
-              <CertificateUploadField
-                value={item.courseFileUrl}
-                onUploaded={(url) => update({ courseFileUrl: url })}
-                onRemoved={() => update({ courseFileUrl: "" })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">CO-PO Mapping</Label>
-              <CertificateUploadField
-                value={item.coPoMappingUrl}
-                onUploaded={(url) => update({ coPoMappingUrl: url })}
-                onRemoved={() => update({ coPoMappingUrl: "" })}
-              />
-            </div>
           </>
         )}
       />

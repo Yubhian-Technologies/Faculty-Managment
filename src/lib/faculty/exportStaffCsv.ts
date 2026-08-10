@@ -5,8 +5,8 @@
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
 import { STAFF_COLUMNS } from "@/lib/faculty/staffCsvColumns";
-import { ROLE_LABELS } from "@/types";
-import type { FMSUser, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook } from "@/types";
+import { ROLE_LABELS, RELIGION_LABELS, CASTE_LABELS } from "@/types";
+import type { FMSUser, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution, FundedProject, ConsultancyProject, LabEstablished, AuthoredBook, Religion, Caste } from "@/types";
 
 function s(v: unknown): string {
   return v === null || v === undefined ? "" : String(v);
@@ -18,7 +18,8 @@ function yesNo(v: boolean | undefined): string {
 
 function degreeCells(d: DegreeDetail | undefined): [string, string, string, string] {
   if (!d) return ["", "", "", ""];
-  return [d.degreeAndBranch ?? "", d.universityOrInstitute ?? "", d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
+  const degreeAndBranch = [d.degree, d.branch].filter(Boolean).join(" ");
+  return [degreeAndBranch, d.universityOrInstitute ?? "", d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
 }
 
 function courseCells(courses: CourseAssignment[] | undefined, i: number): [string, string, string] {
@@ -28,7 +29,9 @@ function courseCells(courses: CourseAssignment[] | undefined, i: number): [strin
 
 function previousInstitutionCells(items: PreviousInstitution[] | undefined, i: number): [string, string, string] {
   const p = items?.[i];
-  return p ? [p.institutionName ?? "", p.designation ?? "", p.yearsWorked ? String(p.yearsWorked) : ""] : ["", "", ""];
+  if (!p) return ["", "", ""];
+  const years = p.fromYear || p.toYear ? `${p.fromYear ?? ""}-${p.toYear ?? ""}` : "";
+  return [p.institutionName ?? "", p.designation ?? "", years];
 }
 
 function publicationCells(items: Publication[] | undefined, i: number): [string, string, string, string, string] {
@@ -83,8 +86,9 @@ function buildRow(user: FMSUser): Record<string, string> {
     legalName: s(user.legalName),
     fatherName: s(user.fatherName),
     motherName: s(user.motherName),
-    religion: s(user.religion),
-    caste: s(user.caste),
+    religion: user.religion ? (RELIGION_LABELS[user.religion as Religion] ?? s(user.religion)) : "",
+    caste: user.caste ? (CASTE_LABELS[user.caste as Caste] ?? s(user.caste)) : "",
+    subCaste: s(user.subCaste),
     aadharNo: s(user.aadharNo),
     panNo: s(user.panNo),
     passportNumber: s(user.passportNumber),

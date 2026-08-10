@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 
 export async function GET(request: Request) {
   try {
@@ -44,7 +45,8 @@ export async function GET(request: Request) {
         childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", scope.childDepartmentNames));
       }
     } else if (session.role === "PANEL_MEMBER") {
-      primaryQuery = primaryQuery.where("facultyInchargeUid", "==", session.uid);
+      const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
+      primaryQuery = primaryQuery.where("facultyInchargeUid", "in", candidateIds);
     }
 
     primaryQuery = withCommonFilters(primaryQuery);
@@ -264,6 +266,13 @@ export async function POST(request: Request) {
       }
     }
 
+    // The Class Incharge picker supplies a FacultyMember doc id, but this field
+    // is read by comparing against the login uid — resolve it now so the two
+    // stay in sync (see resolveFacultyMemberId.ts).
+    const facultyInchargeUid = body.facultyInchargeUid
+      ? await resolveLoginUidForFacultyMember(db, session.collegeId, body.facultyInchargeUid)
+      : null;
+
     const now = new Date();
     const ref = db.collection("colleges").doc(session.collegeId).collection("sections").doc();
 
@@ -276,7 +285,7 @@ export async function POST(request: Request) {
       name: body.name.trim().toUpperCase(),
       year: Number(body.year),
       batch: body.batch.trim(),
-      facultyInchargeUid: body.facultyInchargeUid ?? null,
+      facultyInchargeUid,
       facultyInchargeName: body.facultyInchargeName ?? "",
       studentCount: body.studentCount != null ? Math.max(0, Number(body.studentCount)) : 0,
       createdAt: now,

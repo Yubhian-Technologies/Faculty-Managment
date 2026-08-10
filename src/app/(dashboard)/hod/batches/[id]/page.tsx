@@ -30,8 +30,27 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
 import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
-import type { HiringBatch, Candidate, FacultyMember, FMSUser } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, CandidateBioData, InterviewMode, FacultyMember, FMSUser } from "@/types";
 import { useAuthStore } from "@/store/authStore";
+
+// Joined view for this batch's roster: person fields come from Candidate,
+// batch-cycle fields (arrival, interview mode) come from CandidateApplication.
+// `id` is the applicationId (used for arrival PATCHes / call letter links);
+// `candidateId` is the real Candidate id (used wherever panel feedback keys
+// by candidate, since that schema wasn't changed by the decoupling).
+type BatchCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+  phone: string;
+  resumeUrl?: string;
+  hasArrived: boolean;
+  interviewMode?: InterviewMode;
+  bioData?: CandidateBioData;
+  certificates?: Array<{ name: string; url: string }>;
+  bioDataSubmitted?: boolean;
+};
 
 type PanelFeedbackItem = {
   id: string;
@@ -104,9 +123,10 @@ function RatingDots({ value, max = 5 }: { value: number; max?: number }) {
 export default function HODBatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const myUid = useAuthStore((s) => s.user?.uid ?? "");
+  const myDepartment = useAuthStore((s) => s.user?.department ?? "");
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candidates, setCandidates] = useState<BatchCandidateView[]>([]);
   const [facultyList, setFacultyList] = useState<FacultyMember[]>([]);
   const [panelFeedback, setPanelFeedback] = useState<PanelFeedbackItem[]>([]);
   const [studentFeedbackSummary, setStudentFeedbackSummary] = useState<StudentFeedbackSummary[]>([]);
@@ -121,6 +141,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [editPanel, setEditPanel] = useState<string[]>([]);
   const [editInterviewDate, setEditInterviewDate] = useState("");
   const [isSavingCommittee, setIsSavingCommittee] = useState(false);
+  const [arrivingId, setArrivingId] = useState<string | null>(null);
 
   const [demoClassroom, setDemoClassroom] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
@@ -134,15 +155,16 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [isSubmittingForReview, setIsSubmittingForReview] = useState(false);
 
   // HOD's own panel assessment (when HOD is also a panel member)
-  const [hodSelectedCandidate, setHodSelectedCandidate] = useState<Candidate | null>(null);
+  const [hodSelectedCandidate, setHodSelectedCandidate] = useState<BatchCandidateView | null>(null);
   const [hodForm, setHodForm] = useState<FeedbackForm>(defaultFeedback());
   const [isSubmittingHodFeedback, setIsSubmittingHodFeedback] = useState(false);
 
   async function load() {
     try {
-      const [batchRes, candidatesRes, facultyRes, usersRes, infoRes] = await Promise.all([
+      const [batchRes, applicationsRes, candidatesRes, facultyRes, usersRes, infoRes] = await Promise.all([
         fetch(`/api/college/hiring-batches/${id}`).then((r) => r.json() as Promise<{ batch: HiringBatch }>),
-        fetch(`/api/college/candidates?batchId=${id}`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
+        fetch(`/api/college/candidate-applications?batchId=${id}`).then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
+        fetch(`/api/college/candidates`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
         fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>),
         fetch("/api/college/users?allDepts=true&includeAll=true").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
         fetch("/api/college/info").then((r) => r.json() as Promise<{ name?: string }>),
@@ -150,7 +172,23 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setCollegeName(infoRes.name ?? "");
       const b = batchRes.batch;
       setBatch(b);
-      const cands = candidatesRes.candidates ?? [];
+      const candidateMap = new Map((candidatesRes.candidates ?? []).map((c) => [c.id, c]));
+      const cands: BatchCandidateView[] = (applicationsRes.applications ?? []).map((a) => {
+        const person = candidateMap.get(a.candidateId);
+        return {
+          id: a.id,
+          candidateId: a.candidateId,
+          name: person?.name ?? "Unknown",
+          email: person?.email ?? "",
+          phone: person?.phone ?? "",
+          resumeUrl: person?.resumeUrl,
+          hasArrived: a.hasArrived,
+          interviewMode: a.interviewMode,
+          bioData: person?.bioData,
+          certificates: person?.certificates,
+          bioDataSubmitted: person?.bioDataSubmitted,
+        };
+      });
       setCandidates(cands);
       setFacultyList(facultyRes.faculty ?? []);
       const map: Record<string, FMSUser> = {};
@@ -336,16 +374,21 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  async function markArrived(candidateId: string) {
+  async function markArrived(applicationId: string) {
+    if (arrivingId) return;
+    setArrivingId(applicationId);
     try {
-      await fetch(`/api/college/candidates/${candidateId}`, {
+      const res = await fetch(`/api/college/candidate-applications/${applicationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hasArrived: true }),
       });
-      setCandidates((prev) => prev.map((c) => c.id === candidateId ? { ...c, hasArrived: true } : c));
+      if (!res.ok) throw new Error();
+      setCandidates((prev) => prev.map((c) => c.id === applicationId ? { ...c, hasArrived: true } : c));
     } catch {
       toast({ variant: "destructive", title: "Failed to update" });
+    } finally {
+      setArrivingId(null);
     }
   }
 
@@ -363,7 +406,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           batchId: id,
-          candidateId: hodSelectedCandidate.id,
+          candidateId: hodSelectedCandidate.candidateId,
           ratings: hodForm.ratings,
           strengths: hodForm.strengths,
           weaknesses: hodForm.weaknesses,
@@ -383,16 +426,16 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  function candidateFormUrl(candidate: Candidate) {
-    return `${window.location.origin}/candidate-form/${batch?.collegeId}/${candidate.id}`;
+  function candidateFormUrl(candidate: BatchCandidateView) {
+    return `${window.location.origin}/candidate-form/${batch?.collegeId}/${candidate.candidateId}?applicationId=${candidate.id}`;
   }
 
-  function copyFormLink(candidate: Candidate) {
+  function copyFormLink(candidate: BatchCandidateView) {
     void navigator.clipboard.writeText(candidateFormUrl(candidate));
     toast({ variant: "success", title: "Link copied" });
   }
 
-  function sendCallLetter(candidate: Candidate) {
+  function sendCallLetter(candidate: BatchCandidateView) {
     if (!batch) return;
 
     const institution = collegeName || "Sri Vishnu Educational Society";
@@ -603,6 +646,7 @@ ${institution}`;
                       <button
                         type="button"
                         onClick={() => setRequiredDocuments((prev) => prev.filter((d) => d !== doc))}
+                        aria-label={`Remove ${doc}`}
                         className="ml-0.5 text-muted-foreground hover:text-destructive text-base leading-none"
                       >
                         ×
@@ -818,7 +862,7 @@ ${institution}`;
                         <CheckCircle2 className="h-3 w-3" />Arrived
                       </span>
                     ) : (
-                      <Button size="sm" variant="outline" onClick={() => void markArrived(c.id)}>
+                      <Button size="sm" variant="outline" loading={arrivingId === c.id} disabled={!!arrivingId} onClick={() => void markArrived(c.id)}>
                         Mark Arrived
                       </Button>
                     )}
@@ -871,7 +915,18 @@ ${institution}`;
                   {allUsers.length === 0 ? (
                     <p className="text-sm text-muted-foreground p-2">No staff found</p>
                   ) : (
-                    allUsers.map((u) => (
+                    allUsers
+                      // Hide other departments' faculty from the picker - keep
+                      // Principal/VP (college-wide defaults) and anyone already
+                      // on this batch's panel (so existing picks don't vanish).
+                      .filter(
+                        (u) =>
+                          u.role === "PRINCIPAL" ||
+                          u.role === "VICE_PRINCIPAL" ||
+                          u.department === myDepartment ||
+                          editPanel.includes(u.uid)
+                      )
+                      .map((u) => (
                       <div key={u.uid} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/40">
                         <Checkbox
                           id={`ep-${u.uid}`}
@@ -951,7 +1006,7 @@ ${institution}`;
             ) : (
               <div className="space-y-4">
                 {candidates.map((c) => {
-                  const sf = studentFeedbackSummary.find((s) => s.candidateId === c.id);
+                  const sf = studentFeedbackSummary.find((s) => s.candidateId === c.candidateId);
                   if (!sf) return (
                     <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
                       <p className="text-sm font-medium">{c.name}</p>
@@ -1006,7 +1061,7 @@ ${institution}`;
       {/* ── HOD's own assessment — shown when HOD is also a panel member ──────── */}
       {batch.currentPhase === "PANEL_INTERVIEW" && (batch.panelMemberUids as string[]).includes(myUid) && (() => {
         const hodSubmittedFor = panelFeedback.filter((f) => f.panelUid === myUid).map((f) => f.candidateId);
-        const allDone = candidates.length > 0 && candidates.every((c) => hodSubmittedFor.includes(c.id));
+        const allDone = candidates.length > 0 && candidates.every((c) => hodSubmittedFor.includes(c.candidateId));
         return (
           <Card className="border-primary/30">
             <CardHeader>
@@ -1026,7 +1081,7 @@ ${institution}`;
                   {/* Candidate picker */}
                   <div className="space-y-2">
                     {candidates.map((c) => {
-                      const done = hodSubmittedFor.includes(c.id);
+                      const done = hodSubmittedFor.includes(c.candidateId);
                       const selected = hodSelectedCandidate?.id === c.id;
                       return (
                         <div
@@ -1037,12 +1092,22 @@ ${institution}`;
                               setHodForm(defaultFeedback());
                             }
                           }}
-                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                          onKeyDown={(e) => {
+                            if (done) return;
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setHodSelectedCandidate(c);
+                              setHodForm(defaultFeedback());
+                            }
+                          }}
+                          role={done ? undefined : "button"}
+                          tabIndex={done ? undefined : 0}
+                          className={`p-3 rounded-lg border transition-colors ${
                             done
                               ? "bg-green-50 border-green-200 cursor-default"
                               : selected
-                              ? "border-primary bg-primary/5"
-                              : "hover:bg-muted"
+                              ? "border-primary bg-primary/5 cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
+                              : "hover:bg-muted cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
                           }`}
                         >
                           <div className="flex items-center justify-between">
@@ -1162,7 +1227,7 @@ ${institution}`;
               {candidates.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No candidates.</p>
               ) : candidates.map((c) => {
-                const feedbacks = panelFeedback.filter((f) => f.candidateId === c.id);
+                const feedbacks = panelFeedback.filter((f) => f.candidateId === c.candidateId);
                 const accepts = feedbacks.filter((f) => f.recommendation === "ACCEPT").length;
                 const rejects = feedbacks.filter((f) => f.recommendation === "REJECT").length;
                 const maybes = feedbacks.filter((f) => f.recommendation === "MAYBE").length;

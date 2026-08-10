@@ -1,4 +1,6 @@
 import { formatDate } from "@/lib/utils";
+import { RELIGION_LABELS, CASTE_LABELS } from "@/types";
+import type { Religion, Caste } from "@/types";
 import type { Timestamp } from "firebase/firestore";
 
 export interface PersonalDetailsSource {
@@ -7,8 +9,9 @@ export interface PersonalDetailsSource {
   legalName?: string;
   fatherName?: string;
   motherName?: string;
-  religion?: string;
-  caste?: string;
+  religion?: Religion | string; // string fallback - legacy free-text values pre-dating the dropdown
+  caste?: Caste | string;
+  subCaste?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
@@ -51,8 +54,9 @@ export function PersonalDetailsView({ value }: Props) {
         <Field label="Legal Name (as per SSC)" value={p.legalName} />
         <Field label="Father / Husband Name" value={p.fatherName} />
         <Field label="Mother Name" value={p.motherName} />
-        <Field label="Religion" value={p.religion} />
-        <Field label="Caste" value={p.caste} />
+        <Field label="Religion" value={p.religion ? (RELIGION_LABELS[p.religion as Religion] ?? p.religion) : undefined} />
+        <Field label="Caste" value={p.caste ? (CASTE_LABELS[p.caste as Caste] ?? p.caste) : undefined} />
+        <Field label="Sub Caste" value={p.subCaste} />
         <Field label="Aadhar No" value={p.aadharNo} />
         <Field label="PAN No" value={p.panNo} />
         <Field label="Passport No" value={p.passportNumber} />

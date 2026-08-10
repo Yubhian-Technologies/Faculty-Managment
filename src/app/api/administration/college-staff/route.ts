@@ -9,7 +9,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 // per role per college (see ROLE_SCOPE in src/types/core.ts). Mirrors
 // administration/principals/route.ts, kept as its own route so the working
 // Principal/Vice Principal flow is untouched.
-const COLLEGE_STAFF_ROLES = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+const COLLEGE_STAFF_ROLES = ["PLACEMENT_DEPT", "EXAM_CELL"];
 
 export async function GET(request: Request) {
   try {

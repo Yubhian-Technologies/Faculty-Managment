@@ -11,14 +11,27 @@ import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor, Ar
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useAuthStore } from "@/store/authStore";
-import type { HiringBatch, Candidate } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, InterviewMode } from "@/types";
+
+// Joined view: person fields from Candidate, per-cycle fields (arrival,
+// interview mode, bio-data submission) from CandidateApplication. `id` is
+// the applicationId; `candidateId` is the real Candidate id, used for the
+// student-feedback QR link since StudentFeedback still keys by candidateId.
+type CoordinatorCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+  bioDataSubmitted?: boolean;
+  interviewMode?: InterviewMode;
+};
 
 export default function CoordinatorQRPage({ params }: { params: Promise<{ batchId: string }> }) {
   const { batchId } = use(params);
   const role = useAuthStore((s) => s.user?.role);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candidates, setCandidates] = useState<CoordinatorCandidateView[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -27,25 +40,55 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-  useEffect(() => {
+  function load() {
     Promise.all([
       fetch(`/api/college/hiring-batches/${batchId}`)
         .then((r) => r.json() as Promise<{ batch: HiringBatch }>)
         .then((d) => d.batch),
-      fetch(`/api/college/candidates?batchId=${batchId}`)
+      fetch(`/api/college/candidate-applications?batchId=${batchId}`)
+        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
+        .then((d) => d.applications ?? []),
+      fetch(`/api/college/candidates`)
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
     ])
-      .then(([b, cands]) => {
+      .then(([b, applications, people]) => {
+        const personMap = new Map(people.map((p) => [p.id, p]));
+        const cands: CoordinatorCandidateView[] = applications.map((a) => {
+          const person = personMap.get(a.candidateId);
+          return {
+            id: a.id,
+            candidateId: a.candidateId,
+            name: person?.name ?? "Unknown",
+            email: person?.email ?? "",
+            bioDataSubmitted: person?.bioDataSubmitted,
+            interviewMode: a.interviewMode,
+          };
+        });
         setBatch(b);
         setCandidates(cands);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load session" }))
       .finally(() => setIsLoading(false));
+  }
+
+  useEffect(() => {
+    load();
+    // Candidates' bio-data-submitted status changes server-side while this
+    // page sits open — refetch on refocus so the "not open yet" gate clears
+    // without a manual reload.
+    function onFocus() { load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchId]);
 
   const candidate = candidates[selectedIndex];
-  const feedbackUrl = candidate && batch ? `${origin}/feedback/${batch.collegeId}/${batchId}/${candidate.id}` : "";
+  const feedbackUrl = candidate && batch ? `${origin}/feedback/${batch.collegeId}/${batchId}/${candidate.candidateId}` : "";
 
   function prev() { setSelectedIndex((i) => Math.max(0, i - 1)); }
   function next() { setSelectedIndex((i) => Math.min(candidates.length - 1, i + 1)); }
@@ -91,6 +134,31 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
           <CardContent className="p-8 text-center text-muted-foreground">
             <p>No candidates in this batch yet.</p>
             <p className="text-sm mt-1">Candidates will appear once they are added to this session.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const pendingBioData = candidates.filter((c) => !c.bioDataSubmitted);
+  if (pendingBioData.length > 0) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Demo QR Display"
+          description={`${batch.position} · ${batch.department}`}
+        />
+        <Card>
+          <CardContent className="p-8 text-center space-y-3">
+            <p className="font-medium">Interview session isn&apos;t open yet</p>
+            <p className="text-sm text-muted-foreground">
+              Waiting on the bio-data form from {pendingBioData.length} candidate{pendingBioData.length !== 1 ? "s" : ""}:
+            </p>
+            <ul className="text-sm inline-block text-left">
+              {pendingBioData.map((c) => (
+                <li key={c.id}>• {c.name}</li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       </div>
@@ -249,7 +317,10 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
               <div
                 key={c.id}
                 onClick={() => setSelectedIndex(i)}
-                className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedIndex(i); } }}
+                role="button"
+                tabIndex={0}
+                className={`p-3 rounded-lg border cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2 ${
                   i === selectedIndex
                     ? "border-primary bg-primary/5"
                     : "hover:bg-muted"

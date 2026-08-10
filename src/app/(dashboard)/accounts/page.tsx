@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
-import type { SalaryStructure, Candidate } from "@/types";
+import type { SalaryStructure, CandidateApplication } from "@/types";
 
 export default function AccountsDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -19,14 +19,9 @@ export default function AccountsDashboard() {
       fetch("/api/college/salary-structures")
         .then((r) => r.json() as Promise<{ salaryStructures: SalaryStructure[] }>)
         .then((d) => setStructureCount((d.salaryStructures ?? []).length)),
-      fetch("/api/college/candidates")
-        .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
-        .then((d) => {
-          const pending = (d.candidates ?? []).filter(
-            (c) => (c as unknown as { currentStage?: string }).currentStage === "DECISION"
-          );
-          setPendingOffers(pending.length);
-        }),
+      fetch("/api/college/candidate-applications?stage=DECISION")
+        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
+        .then((d) => setPendingOffers((d.applications ?? []).filter((a) => a.status !== "REJECTED").length)),
     ]).catch(() => {});
   }, []);
 
@@ -51,7 +46,7 @@ export default function AccountsDashboard() {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/accounts/offers">
+        <Link href="/accounts/hiring">
           <Card className="hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-blue-600 bg-blue-50">

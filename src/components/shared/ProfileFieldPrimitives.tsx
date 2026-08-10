@@ -5,9 +5,57 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
-import { Plus, Trash2, ExternalLink, X } from "lucide-react";
+import { Trash2, ExternalLink, X } from "lucide-react";
+import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import type { DegreeDetail } from "@/types";
+
+// Education level a DegreeFields block represents. Graduation/Post Graduation/
+// Doctoral go through the Domain -> Course cascade below; Post-Doctoral,
+// Intermediate (12th) and High School (10th) don't have a "domain" in the
+// same sense, so they keep a flat list (or plain text for the two school
+// levels, which have no fixed course catalogue to offer).
+export type DegreeLevel = "UG" | "PG" | "DOCTORAL" | "POST_DOCTORAL" | "INTERMEDIATE" | "HIGH_SCHOOL";
+const DOMAIN_LEVELS: DegreeLevel[] = ["UG", "PG", "DOCTORAL"];
+const FLAT_OPTIONS_BY_LEVEL: Partial<Record<DegreeLevel, string[]>> = {
+  POST_DOCTORAL: ["Post-Doctoral Fellowship", "D.Sc"],
+};
+
+// Domain shown ahead of Course for Graduation/Post Graduation/Doctoral
+// entries - picking a domain narrows the Course dropdown to that domain's
+// catalogue (deduplicated across every college type this FMS serves:
+// Engineering, Management, Arts & Science, Medicine, Law).
+export type EducationDomain = "MANAGEMENT" | "ENGINEERING" | "ARTS_SCIENCE" | "MEDICINE" | "LAW" | "OTHERS";
+export const EDUCATION_DOMAIN_LABELS: Record<EducationDomain, string> = {
+  MANAGEMENT: "Management",
+  ENGINEERING: "Engineering",
+  ARTS_SCIENCE: "Arts and Science",
+  MEDICINE: "Medicine",
+  LAW: "Law",
+  OTHERS: "Others",
+};
+const COURSES_BY_DOMAIN: Record<EducationDomain, string[]> = {
+  ENGINEERING: [
+    "B.Tech/BE", "M.Tech/ME", "B.Tech - M.Tech Integrated/Dual Degree", "BCA",
+    "MCA (2-Year)", "MCA (3-Year)", "MCM", "Diploma in Engineering",
+  ],
+  MANAGEMENT: [
+    "BBA", "B.Com", "M.Com", "BHM", "CA", "CS", "PGDM", "1-Year MBA", "2-Year MBA",
+    "Executive MBA", "IPM",
+  ],
+  ARTS_SCIENCE: [
+    "B.Sc.", "M.Sc.", "B.A.", "M.A.", "BS", "MS", "B.Ed", "M.Ed", "B.El.Ed", "B.P.Ed",
+    "B.Des.", "M.Des.", "B.Arch.", "M.Arch.", "B.F.Tech.", "M.F.Tech.", "B.Plan", "M.Plan",
+    "BFA", "MFA",
+  ],
+  MEDICINE: [
+    "B.Pharma", "M.Pharma", "Pharma. D", "BUMS", "BAMS", "BDS", "BHMS", "MBBS",
+    "BVSC", "MVSC", "MS/MD", "MDS", "DM",
+  ],
+  LAW: ["LLB", "LLM"],
+  OTHERS: [],
+};
 
 // Shared building blocks for the NBA/AICTE-style profile forms (Teaching Faculty's
 // AcademicProfileFields/ProfileFieldsView and Supporting Staff's SupportingStaffProfileFields/
@@ -15,9 +63,21 @@ import type { DegreeDetail } from "@/types";
 // repeating-list UI instead of maintaining two near-duplicate copies.
 
 export const EMPTY_DEGREE: DegreeDetail = {
-  degreeAndBranch: "", universityOrInstitute: "", percentageOrDivision: "",
+  degree: "", branch: "", specialization: "", universityOrInstitute: "", percentageOrDivision: "",
   yearOfCompletion: new Date().getFullYear(), certificateUrl: "",
 };
+
+// A record fetched from Firestore may still have the pre-split shape
+// (`degreeAndBranch` combined, no `degree`/`branch` yet) if it hasn't been
+// re-saved since the split - auto-split it for display/editing here rather
+// than in every caller, so the fallback applies wherever DegreeFields/
+// DegreeView are used.
+function resolveDegree(v: DegreeDetail | undefined): DegreeDetail {
+  const raw = (v ?? EMPTY_DEGREE) as DegreeDetail & { degreeAndBranch?: string };
+  if ((raw.degree || raw.branch) || !raw.degreeAndBranch) return { ...EMPTY_DEGREE, ...raw };
+  const { degree, branch } = splitDegreeAndBranch(raw.degreeAndBranch);
+  return { ...EMPTY_DEGREE, ...raw, degree, branch };
+}
 
 // ── Editable primitives ─────────────────────────────────────────────────────
 
@@ -29,7 +89,7 @@ export function NumInput({ label, value, onChange }: { label: string; value: num
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Input type="number" value={value ?? 0} onChange={(e) => onChange(Number(e.target.value))} />
+      <Input type="number" value={value ?? 0} onFocus={(e) => e.target.select()} onChange={(e) => onChange(Number(e.target.value))} />
     </div>
   );
 }
@@ -43,15 +103,72 @@ export function TextInput({ label, value, onChange, placeholder }: { label: stri
   );
 }
 
-export function DegreeFields({ label, value, onChange }: { label: string; value: DegreeDetail | undefined; onChange: (v: DegreeDetail) => void }) {
-  const v = value ?? EMPTY_DEGREE;
+export function DegreeFields({ label, level, value, onChange }: { label: string; level: DegreeLevel; value: DegreeDetail | undefined; onChange: (v: DegreeDetail) => void }) {
+  const v = resolveDegree(value);
+  const hasDomain = DOMAIN_LEVELS.includes(level);
+  const domain = v.domain as EducationDomain | undefined;
+  const courseOptions = hasDomain ? (domain ? (COURSES_BY_DOMAIN[domain] ?? []) : []) : (FLAT_OPTIONS_BY_LEVEL[level] ?? []);
+  const degreeIsOther = !!v.degree && !courseOptions.includes(v.degree);
+  // Intermediate (12th) and High School (10th) have no fixed course
+  // catalogue to offer - just let the qualification name be typed directly.
+  const isSchoolLevel = level === "INTERMEDIATE" || level === "HIGH_SCHOOL";
+  // Doctoral entries have no Course catalogue of their own (that's what the
+  // UG/PG Course dropdowns are for) - they take a free-text Specialization
+  // instead, and skip Branch/Percentage-CGPA which don't apply to a PhD.
+  const isDoctoral = level === "DOCTORAL";
+
   return (
     <div className="space-y-3 rounded-lg border p-3">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <TextInput label="Degree & Branch" value={v.degreeAndBranch} onChange={(x) => onChange({ ...v, degreeAndBranch: x })} />
+        {hasDomain && (
+          <div className="space-y-2">
+            <Label>Domain</Label>
+            <Select
+              value={domain ?? ""}
+              onValueChange={(x) => onChange({ ...v, domain: x, degree: "" })}
+            >
+              <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(EDUCATION_DOMAIN_LABELS).map(([k, lbl]) => <SelectItem key={k} value={k}>{lbl}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {isSchoolLevel ? (
+          <TextInput label="Qualification" value={v.degree} onChange={(x) => onChange({ ...v, degree: x })} placeholder={level === "HIGH_SCHOOL" ? "e.g. SSC / State Board" : "e.g. MPC, State Board"} />
+        ) : isDoctoral ? (
+          <TextInput label="Specialization" value={v.specialization} onChange={(x) => onChange({ ...v, specialization: x })} placeholder="e.g. Machine Learning" />
+        ) : (
+          <div className="space-y-2">
+            <Label>Course</Label>
+            <Select
+              value={degreeIsOther ? "Other" : v.degree}
+              onValueChange={(x) => onChange({ ...v, degree: x })}
+              disabled={hasDomain && !domain}
+            >
+              <SelectTrigger><SelectValue placeholder={hasDomain && !domain ? "Select domain first" : "Select course"} /></SelectTrigger>
+              <SelectContent>
+                {courseOptions.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            {degreeIsOther && (
+              <Input
+                value={v.degree === "Other" ? "" : v.degree}
+                onChange={(e) => onChange({ ...v, degree: e.target.value || "Other" })}
+                placeholder="Please specify"
+              />
+            )}
+          </div>
+        )}
+        {!isSchoolLevel && !isDoctoral && (
+          <TextInput label="Branch" value={v.branch} onChange={(x) => onChange({ ...v, branch: x })} placeholder="e.g. CSE" />
+        )}
         <TextInput label="University / Institute" value={v.universityOrInstitute} onChange={(x) => onChange({ ...v, universityOrInstitute: x })} />
-        <TextInput label="Percentage / Division" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
+        {!isDoctoral && (
+          <TextInput label="Percentage / CGPA" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
+        )}
         <NumInput label="Year of Completion" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
       </div>
       <CertificateUploadField
@@ -64,7 +181,7 @@ export function DegreeFields({ label, value, onChange }: { label: string; value:
 }
 
 export function RepeatingGroup<T>({
-  title, items, empty, onChange, renderRow, addLabel = "Add",
+  title, items, empty, onChange, renderRow, addLabel = "Add More",
 }: {
   title: string;
   items: T[] | undefined;
@@ -79,7 +196,7 @@ export function RepeatingGroup<T>({
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
         <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, empty])}>
-          <Plus className="h-3.5 w-3.5 mr-1" />{addLabel}
+          {addLabel}
         </Button>
       </div>
       {list.length === 0 && <p className="text-xs text-muted-foreground">None added yet.</p>}
@@ -198,13 +315,21 @@ export function Field({ label, value }: { label: string; value: string | number 
   );
 }
 
-export function DegreeView({ label, degree }: { label: string; degree: DegreeDetail | undefined }) {
+export function DegreeView({ label, degree: degreeInput, level }: { label: string; degree: DegreeDetail | undefined; level?: DegreeLevel }) {
+  const degree = resolveDegree(degreeInput);
+  const isDoctoral = level === "DOCTORAL";
   return (
     <div className="rounded-lg border bg-muted/20 shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
       <p className="col-span-2 sm:col-span-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-      <Field label="Degree & Branch" value={degree?.degreeAndBranch} />
+      {degree?.domain && <Field label="Domain" value={EDUCATION_DOMAIN_LABELS[degree.domain as EducationDomain] ?? degree.domain} />}
+      <Field label="Degree" value={degree?.degree} />
+      {isDoctoral ? (
+        <Field label="Specialization" value={degree?.specialization} />
+      ) : (
+        <Field label="Branch" value={degree?.branch} />
+      )}
       <Field label="University / Institute" value={degree?.universityOrInstitute} />
-      <Field label="Percentage / Division" value={degree?.percentageOrDivision} />
+      {!isDoctoral && <Field label="Percentage / CGPA" value={degree?.percentageOrDivision} />}
       <Field label="Year of Completion" value={degree?.yearOfCompletion} />
       {degree?.certificateUrl && (
         <div className="col-span-2 sm:col-span-4">

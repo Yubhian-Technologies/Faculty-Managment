@@ -10,6 +10,7 @@ export async function GET() {
     await requireRole(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
       "SUPER_ADMIN"
     );
 

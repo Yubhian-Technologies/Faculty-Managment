@@ -79,7 +79,7 @@ export default function PrincipalStaffPage() {
   }
 
   // Group by role for a scannable layout - order roughly follows seniority/function.
-  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
   const grouped = ROLE_ORDER
     .map((role) => ({ role, users: staff.filter((u) => u.role === role) }))
     .filter((g) => g.users.length > 0);

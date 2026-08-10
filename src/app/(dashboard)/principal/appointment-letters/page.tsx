@@ -10,15 +10,28 @@ import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
-import { auth } from "@/lib/firebase/client";
-import { downloadAppointmentLetterPdf, getAppointmentLetterPdfBase64 } from "@/lib/pdf/downloadAppointmentLetter";
+import { downloadAppointmentLetterPdf } from "@/lib/pdf/downloadAppointmentLetter";
 import { ChevronDown, ChevronUp, FileText, Download, Mail, CheckCircle2 } from "lucide-react";
-import type { Candidate, OfferLetter } from "@/types";
+import type { Candidate, CandidateApplication, OfferLetter } from "@/types";
 
 type FormState = { designation: string; department: string; joiningDate: string };
 
+// Joined view: application (per-hiring-request document/decision state) +
+// candidate (person) fields. `id` is the applicationId; `candidateId` is the
+// real Candidate id (OfferLetter/AppointmentLetter are still keyed by it).
+type AppointmentCandidateView = {
+  id: string;
+  candidateId: string;
+  batchId: string;
+  name: string;
+  email: string;
+  position: string;
+  department: string;
+  dateOfJoining?: string;
+};
+
 export default function PrincipalAppointmentLettersPage() {
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candidates, setCandidates] = useState<AppointmentCandidateView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [forms, setForms] = useState<Record<string, FormState>>({});
@@ -29,18 +42,37 @@ export default function PrincipalAppointmentLettersPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const [candidatesRes, offersRes, appointmentsRes] = await Promise.all([
+      const [applicationsRes, candidatesRes, offersRes, appointmentsRes] = await Promise.all([
+        fetch("/api/college/candidate-applications").then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
         fetch("/api/college/candidates").then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
         fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferLetter[] }>),
-        fetch("/api/college/appointment-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>),
+        fetch("/api/college/appointment-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string; batchId: string }[] }>),
       ]);
-      const acceptedCandidateIds = new Set(
-        (offersRes.letters ?? []).filter((l) => l.status === "ACCEPTED").map((l) => l.candidateId)
+      // Offer/appointment letters are still keyed by (candidateId, batchId) directly
+      // (unchanged schema) — match on that pair since one candidate can have
+      // independent applications/offers across multiple hiring batches.
+      const acceptedKeys = new Set(
+        (offersRes.letters ?? []).filter((l) => l.status === "ACCEPTED").map((l) => `${l.candidateId}:${l.batchId}`)
       );
-      const alreadyGenerated = new Set((appointmentsRes.letters ?? []).map((l) => l.candidateId));
-      const eligible = (candidatesRes.candidates ?? []).filter(
-        (c) => c.joiningLetterUrl && acceptedCandidateIds.has(c.id) && !alreadyGenerated.has(c.id)
+      const alreadyGeneratedKeys = new Set(
+        (appointmentsRes.letters ?? []).map((l) => `${l.candidateId}:${l.batchId}`)
       );
+      const candidateMap = new Map((candidatesRes.candidates ?? []).map((c) => [c.id, c]));
+      const eligible: AppointmentCandidateView[] = (applicationsRes.applications ?? [])
+        .filter((a) => a.joiningLetterUrl && a.batchId && acceptedKeys.has(`${a.candidateId}:${a.batchId}`) && !alreadyGeneratedKeys.has(`${a.candidateId}:${a.batchId}`))
+        .map((a) => {
+          const person = candidateMap.get(a.candidateId);
+          return {
+            id: a.id,
+            candidateId: a.candidateId,
+            batchId: a.batchId ?? "",
+            name: person?.name ?? "Unknown",
+            email: person?.email ?? "",
+            position: a.position,
+            department: a.department,
+            dateOfJoining: a.dateOfJoining,
+          };
+        });
       setCandidates(eligible);
       setForms(
         Object.fromEntries(
@@ -66,7 +98,7 @@ export default function PrincipalAppointmentLettersPage() {
       .catch(() => {});
   }, []);
 
-  async function generateAndRelease(candidate: Candidate) {
+  async function generateAndRelease(candidate: AppointmentCandidateView) {
     const form = forms[candidate.id];
     if (!form?.designation || !form.department || !form.joiningDate) {
       toast({ variant: "destructive", title: "Fill in designation, department, and joining date" });
@@ -78,8 +110,8 @@ export default function PrincipalAppointmentLettersPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          candidateId: candidate.id,
-          batchId: candidate.batchId ?? "",
+          candidateId: candidate.candidateId,
+          batchId: candidate.batchId,
           candidateName: candidate.name,
           designation: form.designation,
           department: form.department,
@@ -99,33 +131,31 @@ export default function PrincipalAppointmentLettersPage() {
         letterDate: formatDate(new Date()),
       };
 
-      let emailed = false;
+      // Principal reviews and sends the mail themselves (Gmail compose draft) rather
+      // than the backend sending it directly — the PDF is downloaded for them to attach.
+      await downloadAppointmentLetterPdf(letterFields, candidate.name);
+
+      let composed = false;
       if (candidate.email) {
-        try {
-          const token = await auth.currentUser?.getIdToken();
-          if (token) {
-            const pdfBase64 = await getAppointmentLetterPdfBase64(letterFields);
-            const emailRes = await fetch("/api/email/send", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                type: "APPOINTMENT_LETTER",
-                to: candidate.email,
-                data: letterFields,
-                pdfBase64,
-              }),
-            });
-            emailed = emailRes.ok;
-          }
-        } catch {
-          // Letter is already generated - email failure is surfaced via the toast below, not a hard error.
-        }
+        const institution = collegeInfo.name || "the institution";
+        const subject = `Appointment Letter – ${form.designation} | ${institution}`;
+        const body = `Dear ${candidate.name},
+
+Congratulations! Please find attached your formal appointment letter for the position of ${form.designation} in the ${form.department} department, effective from ${formatDate(new Date(form.joiningDate))}.
+
+The appointment letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+
+Warm regards,
+${institution}`;
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.open(gmailUrl, "_blank");
+        composed = true;
       }
 
       toast({
         variant: "success",
-        title: "Appointment letter released",
-        description: emailed ? `Emailed to ${candidate.email}` : "Could not email automatically - download and send it manually.",
+        title: "Appointment letter generated",
+        description: composed ? `Gmail draft opened for ${candidate.email} — attach the downloaded PDF and send.` : "Candidate has no email on file - download and send it manually.",
       });
       setGeneratedIds((prev) => new Set(prev).add(candidate.id));
     } catch (err) {
@@ -135,7 +165,7 @@ export default function PrincipalAppointmentLettersPage() {
     }
   }
 
-  async function downloadPdf(candidate: Candidate) {
+  async function downloadPdf(candidate: AppointmentCandidateView) {
     const form = forms[candidate.id];
     if (!form) return;
     await downloadAppointmentLetterPdf(
@@ -228,7 +258,7 @@ export default function PrincipalAppointmentLettersPage() {
                       </Button>
                       <Button size="sm" loading={isGenerating} disabled={isDone} onClick={() => void generateAndRelease(candidate)}>
                         <Mail className="h-3.5 w-3.5 mr-1" />
-                        {isDone ? "Released" : "Generate & Release"}
+                        {isDone ? "Released" : "Generate & Compose Email"}
                       </Button>
                     </div>
                   </CardContent>

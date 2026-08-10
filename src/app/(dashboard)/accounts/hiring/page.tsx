@@ -8,11 +8,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { FileText, Wand2, CheckCircle2 } from "lucide-react";
-import type { Candidate, HiringBatch } from "@/types";
+import { collegeFetch } from "@/lib/api/collegeFetch";
+import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
+import { formatDate } from "@/lib/utils";
+import { FileText, CheckCircle2 } from "lucide-react";
+import type { Candidate, CandidateApplication } from "@/types";
+
+// Joined view: pipeline/offer fields (department, position, negotiatedSalary,
+// dateOfJoining, termsAndConditions, expectedSalary, batchId) come from the
+// Principal-approved CandidateApplication; person fields (name, email,
+// address) come from the Candidate. `id` is the applicationId; `candidateId`
+// is the real Candidate id (what OfferLetter.candidateId expects).
+type DecisionCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+  permanentAddress?: string;
+  residenceAddress?: string;
+  department: string;
+  position: string;
+  batchId?: string;
+  expectedSalary?: number;
+  negotiatedSalary?: number;
+  dateOfJoining?: string;
+  termsAndConditions?: string[];
+};
 
 type CreateForm = {
   candidateId: string;
@@ -22,63 +46,101 @@ type CreateForm = {
   joiningDate: string;
   ctcAnnual: string;
   subjects: string;
-  collegeEmail: string;
-  facultyPassword: string;
+  termsAndConditions: string;
 };
-
-function randomPassword(): string {
-  return Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6).toUpperCase();
-}
 
 const emptyForm = (): CreateForm => ({
   candidateId: "", batchId: "", designation: "", department: "",
-  joiningDate: "", ctcAnnual: "", subjects: "", collegeEmail: "", facultyPassword: "",
+  joiningDate: "", ctcAnnual: "", subjects: "", termsAndConditions: "",
 });
 
 export default function AccountsHiringPage() {
   const router = useRouter();
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [batches, setBatches] = useState<HiringBatch[]>([]);
+  const [candidates, setCandidates] = useState<DecisionCandidateView[]>([]);
   const [existingLetterIds, setExistingLetterIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
-  const [selected, setSelected] = useState<Candidate | null>(null);
+  const [selected, setSelected] = useState<DecisionCandidateView | null>(null);
   const [form, setForm] = useState<CreateForm>(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
-  const [sentConfirm, setSentConfirm] = useState<{ name: string; email: string } | null>(null);
+  const [sentConfirm, setSentConfirm] = useState<{ name: string; emailedTo?: string } | null>(null);
+  const [collegeInfo, setCollegeInfo] = useState<{ name: string; address: string }>({ name: "", address: "" });
 
-  useEffect(() => {
+  function load() {
     Promise.all([
+      fetch("/api/college/candidate-applications?stage=DECISION").then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
       fetch("/api/college/candidates").then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
-      fetch("/api/college/hiring-batches").then((r) => r.json() as Promise<{ batches: HiringBatch[] }>),
-      fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>),
+      fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string; status?: string }[] }>),
     ])
-      .then(([cRes, bRes, lRes]) => {
-        const pending = (cRes.candidates ?? []).filter(
-          (c) => (c as unknown as { currentStage?: string }).currentStage === "DECISION"
-        );
+      .then(([appsRes, candsRes, lRes]) => {
+        const personMap = new Map((candsRes.candidates ?? []).map((c) => [c.id, c]));
+        const pending = (appsRes.applications ?? [])
+          .filter((a) => a.status !== "REJECTED")
+          .map((a): DecisionCandidateView => {
+            const person = personMap.get(a.candidateId);
+            return {
+              id: a.id,
+              candidateId: a.candidateId,
+              name: person?.name ?? "Unknown",
+              email: person?.email ?? "",
+              permanentAddress: person?.permanentAddress,
+              residenceAddress: person?.residenceAddress,
+              department: a.department,
+              position: a.position,
+              batchId: a.batchId,
+              expectedSalary: a.expectedSalary,
+              negotiatedSalary: a.negotiatedSalary,
+              dateOfJoining: a.dateOfJoining,
+              termsAndConditions: a.termsAndConditions,
+            };
+          });
         setCandidates(pending);
-        setBatches(bRes.batches ?? []);
-        setExistingLetterIds(new Set((lRes.letters ?? []).map((l) => l.candidateId)));
+        // A REJECTED offer shouldn't block a fresh one being sent.
+        setExistingLetterIds(new Set((lRes.letters ?? []).filter((l) => l.status !== "REJECTED").map((l) => l.candidateId)));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
       .finally(() => setIsLoading(false));
+  }
+
+  useEffect(() => {
+    load();
+    // College Office can also send offers for the same candidates from a
+    // different session — refetch on refocus so this list doesn't go stale
+    // and risk a duplicate offer.
+    function onFocus() { load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
   }, []);
 
-  function openForm(c: Candidate) {
-    const batch = batches.find((b) => b.id === (c as unknown as { batchId?: string }).batchId);
+  useEffect(() => {
+    collegeFetch("/api/college/info")
+      .then((r) => r.json() as Promise<{ name: string; address: string }>)
+      .then((d) => setCollegeInfo({ name: d.name, address: d.address }))
+      .catch(() => {});
+  }, []);
+
+  function openForm(c: DecisionCandidateView) {
     setSelected(c);
     setForm({
       ...emptyForm(),
-      candidateId: c.id,
-      batchId: batch?.id ?? "",
-      designation: batch?.position ?? "",
-      department: c.department ?? batch?.department ?? "",
+      candidateId: c.candidateId,
+      batchId: c.batchId ?? "",
+      designation: c.position,
+      department: c.department,
+      // Negotiated salary, joining date, and terms are captured by the Principal
+      // at decision time — auto-fill here rather than re-asking for them.
+      ctcAnnual: c.negotiatedSalary != null ? String(c.negotiatedSalary) : "",
+      joiningDate: c.dateOfJoining ?? "",
+      termsAndConditions: c.termsAndConditions?.length ? c.termsAndConditions.join("\n") : "",
     });
   }
 
   async function handleSend() {
-    const { candidateId, batchId, designation, department, joiningDate, ctcAnnual, collegeEmail, facultyPassword } = form;
-    if (!candidateId || !designation || !department || !joiningDate || !ctcAnnual || !collegeEmail || !facultyPassword) {
+    const { candidateId, batchId, designation, department, joiningDate, ctcAnnual } = form;
+    if (!candidateId || !designation || !department || !joiningDate || !ctcAnnual) {
       toast({ variant: "destructive", title: "Fill in all required fields" });
       return;
     }
@@ -96,15 +158,52 @@ export default function AccountsHiringPage() {
           joiningDate,
           ctcAnnual: Number(ctcAnnual),
           subjects: form.subjects.split(",").map((s) => s.trim()).filter(Boolean),
-          collegeEmail,
-          facultyPassword,
+          termsAndConditions: form.termsAndConditions,
         }),
       });
-      const data = await res.json() as { error?: string };
+      const data = await res.json() as { error?: string; ccEmails?: string[] };
       if (!res.ok) throw new Error(data.error ?? "Failed to send offer");
-      setSentConfirm({ name: selected?.name ?? "the candidate", email: collegeEmail });
+
+      const letterFields = {
+        candidateName: selected?.name ?? "",
+        candidateAddress: selected?.permanentAddress || selected?.residenceAddress,
+        designation,
+        department,
+        collegeName: collegeInfo.name,
+        collegeAddress: collegeInfo.address,
+        joiningDate,
+        letterDate: new Date().toLocaleDateString("en-IN"),
+        termsAndConditions: form.termsAndConditions,
+      };
+
+      // Accounts reviews and sends the mail themselves (Gmail compose draft) rather
+      // than the backend sending it directly — the PDF is downloaded for them to attach.
+      await downloadOfferLetterPdf(letterFields, selected?.name ?? candidateId);
+
+      if (selected?.email) {
+        const institution = collegeInfo.name || "the institution";
+        const subject = `Offer Letter – ${designation} | ${institution}`;
+        const body = `Dear ${selected.name},
+
+Greetings from ${institution}.
+
+We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}.
+
+The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+
+Congratulations, and welcome aboard!
+
+Warm regards,
+${institution}`;
+        const cc = (data.ccEmails ?? []).join(",");
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(selected.email)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.open(gmailUrl, "_blank");
+      }
+
+      setSentConfirm({ name: selected?.name ?? "the candidate", emailedTo: selected?.email });
       setExistingLetterIds((prev) => new Set([...prev, candidateId]));
-      setCandidates((prev) => prev.filter((c) => c.id !== candidateId));
+      setCandidates((prev) => prev.filter((c) => c.candidateId !== candidateId));
+      setSelected(null);
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -112,14 +211,14 @@ export default function AccountsHiringPage() {
     }
   }
 
-  const pendingOffer = candidates.filter((c) => !existingLetterIds.has(c.id));
-  const offered = candidates.filter((c) => existingLetterIds.has(c.id));
+  const pendingOffer = candidates.filter((c) => !existingLetterIds.has(c.candidateId));
+  const offered = candidates.filter((c) => existingLetterIds.has(c.candidateId));
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Hiring - Offer Letters"
-        description="Send offer letters to Principal-approved candidates and create their faculty accounts"
+        description="Send offer letters to Principal-approved candidates"
       />
 
       {isLoading ? (
@@ -140,21 +239,18 @@ export default function AccountsHiringPage() {
                 <CardTitle className="text-base">Pending Offer Letters ({pendingOffer.length})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {pendingOffer.map((c) => {
-                  const batch = batches.find((b) => b.id === (c as unknown as { batchId?: string }).batchId);
-                  return (
-                    <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div>
-                        <p className="font-medium text-sm">{c.name}</p>
-                        <p className="text-xs text-muted-foreground">{c.email} · {batch?.position ?? c.department}</p>
-                      </div>
-                      <Button size="sm" onClick={() => openForm(c)}>
-                        <FileText className="h-3.5 w-3.5 mr-1.5" />
-                        Send Offer
-                      </Button>
+                {pendingOffer.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border">
+                    <div>
+                      <p className="font-medium text-sm">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.email} · {c.position}</p>
                     </div>
-                  );
-                })}
+                    <Button size="sm" onClick={() => openForm(c)}>
+                      <FileText className="h-3.5 w-3.5 mr-1.5" />
+                      Send Offer
+                    </Button>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
@@ -187,7 +283,7 @@ export default function AccountsHiringPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Send Offer Letter - {selected?.name}</DialogTitle>
-            <DialogDescription>Fill in employment details. A faculty login account will be created automatically.</DialogDescription>
+            <DialogDescription>Fill in employment details, then review and send the composed email.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -218,28 +314,23 @@ export default function AccountsHiringPage() {
               <Input value={form.subjects} onChange={(e) => setForm((f) => ({ ...f, subjects: e.target.value }))} placeholder="e.g. Data Structures, Algorithms" />
             </div>
 
-            <div className="border-t pt-3 space-y-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Faculty Login Account</p>
-              <div className="space-y-1.5">
-                <Label>College Email *</Label>
-                <Input type="email" value={form.collegeEmail} onChange={(e) => setForm((f) => ({ ...f, collegeEmail: e.target.value }))} placeholder="name@vishnu.edu.in" />
-                <p className="text-xs text-muted-foreground">This becomes their login - not the candidate's personal email.</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Password *</Label>
-                <div className="flex gap-2">
-                  <Input value={form.facultyPassword} onChange={(e) => setForm((f) => ({ ...f, facultyPassword: e.target.value }))} placeholder="Set a login password" />
-                  <Button type="button" variant="outline" size="icon" onClick={() => setForm((f) => ({ ...f, facultyPassword: randomPassword() }))}>
-                    <Wand2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+            <div className="space-y-1.5">
+              <Label>Terms &amp; Conditions</Label>
+              <Textarea
+                value={form.termsAndConditions}
+                onChange={(e) => setForm((f) => ({ ...f, termsAndConditions: e.target.value }))}
+                placeholder={"One per line, e.g.\nThis appointment is on a probationary basis for one year."}
+                rows={3}
+              />
             </div>
+            <p className="text-xs text-muted-foreground border-t pt-3">
+              Once the candidate accepts, College Office can request their login credentials — the Webmaster provisions the account from there.
+            </p>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { setSelected(null); setForm(emptyForm()); }} disabled={isSaving}>Cancel</Button>
-            <Button onClick={handleSend} loading={isSaving}>Send Offer Letter</Button>
+            <Button onClick={handleSend} loading={isSaving}>Generate &amp; Compose Email</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -248,9 +339,11 @@ export default function AccountsHiringPage() {
       <Dialog open={!!sentConfirm} onOpenChange={(o) => { if (!o) setSentConfirm(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Offer Sent & Faculty Account Created</DialogTitle>
+            <DialogTitle>Offer Letter Generated</DialogTitle>
             <DialogDescription>
-              <strong>{sentConfirm?.name}</strong> can now log in with <strong>{sentConfirm?.email}</strong> and the password you set.
+              {sentConfirm?.emailedTo
+                ? <>The offer letter PDF has been downloaded, and a Gmail draft to <strong>{sentConfirm?.name}</strong> at <strong>{sentConfirm.emailedTo}</strong> has opened in a new tab — attach the PDF and review before sending.</>
+                : <>The offer letter PDF has been downloaded. <strong>{sentConfirm?.name}</strong> has no email on file, so you&apos;ll need to send it manually.</>}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

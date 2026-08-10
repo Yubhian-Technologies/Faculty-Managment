@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,28 +16,13 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { FileText, MapPin, Monitor, UploadCloud, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import type { VacancyRequest, Candidate } from "@/types";
-
-const ALL_DESIGNATIONS = [
-  "Professor",
-  "Associate Professor",
-  "Assistant Professor",
-  "Senior Lecturer",
-  "Lecturer",
-  "Technical",
-  "Non-Technical",
-  "Others",
-] as const;
+import type { VacancyRequest, CandidateApplication } from "@/types";
 
 const schema = z.object({
   name: z.string().min(2, "Name required"),
   email: z.string().email("Valid email required"),
   phone: z.string().min(6, "Phone required"),
-  department: z.string().min(1, "Department required"),
-  position: z.string().min(1, "Position required"),
   source: z.enum(["WALK_IN", "CAREERS_PAGE", "ADVERTISEMENT", "REFERRAL"]),
-  interviewMode: z.enum(["ONLINE", "OFFLINE"]),
-  vacancyId: z.string().min(1, "Select an approved hiring request to link this candidate to"),
   referralType: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
   referralName: z.string().optional(),
   referralPhone: z.string().optional(),
@@ -63,11 +47,11 @@ export default function NewCandidatePage() {
 
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [isLoadingVacancies, setIsLoadingVacancies] = useState(true);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [vacancyIdByBatchId, setVacancyIdByBatchId] = useState<Map<string, string>>(new Map());
-  const [selectedVacancyId, setSelectedVacancyId] = useState<string>("");
-  const [selectedDesignation, setSelectedDesignation] = useState("");
-  const [customPosition, setCustomPosition] = useState("");
+  const [applications, setApplications] = useState<CandidateApplication[]>([]);
+  const [candidateNames, setCandidateNames] = useState<Map<string, string>>(new Map());
+  const [selectedVacancyId, setSelectedVacancyId] = useState<string>(prefilledVacancyId);
+  const [vacancySearch, setVacancySearch] = useState("");
+  const [interviewMode, setInterviewMode] = useState<"OFFLINE" | "ONLINE">("OFFLINE");
   const [sameAddress, setSameAddress] = useState(false);
 
   // Resume upload state
@@ -88,12 +72,16 @@ export default function NewCandidatePage() {
         .then((r) => r.json() as Promise<{ batches: { id: string; vacancyId: string; currentPhase: string }[] }>)
         .then((d) => d.batches ?? [])
         .catch(() => [] as { id: string; vacancyId: string; currentPhase: string }[]),
+      fetch("/api/college/candidate-applications")
+        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
+        .then((d) => d.applications ?? [])
+        .catch(() => [] as CandidateApplication[]),
       fetch("/api/college/candidates")
-        .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
+        .then((r) => r.json() as Promise<{ candidates: { id: string; name: string }[] }>)
         .then((d) => d.candidates ?? [])
-        .catch(() => [] as Candidate[]),
+        .catch(() => [] as { id: string; name: string }[]),
     ])
-      .then(([allVacancies, batches, allCandidates]) => {
+      .then(([allVacancies, batches, allApplications, allCandidates]) => {
         const completedVacancyIds = new Set(
           batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
         );
@@ -108,30 +96,18 @@ export default function NewCandidatePage() {
           !completedVacancyIds.has(v.id)
         );
         setVacancies(filtered);
-        setCandidates(allCandidates);
-        setVacancyIdByBatchId(new Map(batches.map((b) => [b.id, b.vacancyId])));
-
-        // Auto-select if vacancyId was passed in URL
-        if (prefilledVacancyId) {
-          const match = filtered.find((v) => v.id === prefilledVacancyId);
-          if (match) {
-            setSelectedVacancyId(match.id);
-            setValue("vacancyId", match.id);
-            syncDesignationFromVacancy(match.position);
-          }
-        }
+        setApplications(allApplications);
+        setCandidateNames(new Map(allCandidates.map((c) => [c.id, c.name])));
       })
       .catch(() => {})
       .finally(() => setIsLoadingVacancies(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.department]);
 
-  function linkedCandidatesFor(v: VacancyRequest): Candidate[] {
-    return candidates.filter((c) => {
-      if (c.vacancyId) return c.vacancyId === v.id;
-      if (c.batchId) return vacancyIdByBatchId.get(c.batchId) === v.id;
-      return c.position === v.position && c.department === v.department;
-    });
+  function attachedCandidateNamesFor(v: VacancyRequest): string[] {
+    return applications
+      .filter((a) => a.vacancyRequestId === v.id)
+      .map((a) => candidateNames.get(a.candidateId) ?? "Unknown")
+      .filter((name, i, arr) => arr.indexOf(name) === i);
   }
 
   const {
@@ -143,9 +119,7 @@ export default function NewCandidatePage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      department: user?.department ?? "",
       source: "WALK_IN",
-      interviewMode: "OFFLINE",
       referralType: "INTERNAL",
       referralInfluenceType: "NONE",
     },
@@ -196,27 +170,6 @@ export default function NewCandidatePage() {
     }
   }
 
-  function handleDesignationChange(val: string) {
-    setSelectedDesignation(val);
-    if (val !== "Others") {
-      setCustomPosition("");
-      setValue("position", val, { shouldValidate: true });
-    }
-    // "Others": position stays empty until user types in the custom field
-  }
-
-  function syncDesignationFromVacancy(position: string) {
-    const known = ALL_DESIGNATIONS.find((d) => d !== "Others" && d === position);
-    if (known) {
-      setSelectedDesignation(known);
-      setCustomPosition("");
-    } else {
-      setSelectedDesignation("Others");
-      setCustomPosition(position);
-    }
-    setValue("position", position, { shouldValidate: true });
-  }
-
   const onSubmit = async (data: FormData) => {
     if (!resumeFile && !resumeUrl) {
       toast({ variant: "destructive", title: "Resume required", description: "Please upload the candidate's resume (PDF)" });
@@ -243,77 +196,84 @@ export default function NewCandidatePage() {
         }),
       });
       const json = await res.json() as { id?: string; error?: string };
-      if (!res.ok) {
+      if (!res.ok || !json.id) {
         toast({ variant: "destructive", title: "Failed to add candidate", description: json.error });
         return;
       }
+
+      // Candidate creation always succeeds standalone — attaching to a hiring
+      // request is a separate step, done here only if the HOD picked one.
+      if (selectedVacancyId) {
+        const attachRes = await fetch("/api/college/candidate-applications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ candidateId: json.id, vacancyRequestId: selectedVacancyId, interviewMode }),
+        });
+        if (!attachRes.ok) {
+          const attachJson = await attachRes.json() as { error?: string };
+          toast({
+            variant: "destructive",
+            title: "Candidate added, but could not attach to the hiring request",
+            description: attachJson.error,
+          });
+          router.push(`/hod/candidates/${json.id}`);
+          return;
+        }
+      }
+
       toast({ variant: "success", title: "Candidate added" });
-      router.push("/hod/candidates");
+      router.push(selectedVacancyId ? "/hod/pipeline" : `/hod/candidates/${json.id}`);
     } catch {
       toast({ variant: "destructive", title: "Network error" });
     }
   };
 
   const source = watch("source");
-  const interviewMode = watch("interviewMode");
   const referralType = watch("referralType");
   const referralInfluenceType = watch("referralInfluenceType");
-  const positionValue = watch("position");
   const isBusy = isSubmitting || isUploading;
 
-  // Filter hiring requests by the typed position value
-  const matchedVacancies = positionValue?.trim()
-    ? vacancies.filter((v) =>
-        v.position.toLowerCase().includes(positionValue.trim().toLowerCase())
-      )
+  const matchedVacancies = vacancySearch.trim()
+    ? vacancies.filter((v) => v.position.toLowerCase().includes(vacancySearch.trim().toLowerCase()))
     : vacancies;
 
-  // Auto-select when exactly one match; clear when the selected card no longer matches
-  useEffect(() => {
-    if (matchedVacancies.length === 1) {
-      const only = matchedVacancies[0];
-      if (selectedVacancyId !== only.id) {
-        setSelectedVacancyId(only.id);
-        setValue("vacancyId", only.id);
-      }
-    } else if (selectedVacancyId && !matchedVacancies.find((v) => v.id === selectedVacancyId)) {
-      setSelectedVacancyId("");
-      setValue("vacancyId", "");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchedVacancies.length, positionValue]);
+  // Candidates can only be added while there's an active (approved, open-post,
+  // not-yet-completed) hiring request to receive them - otherwise the pool
+  // grows with nothing to attach them to.
+  if (!isLoadingVacancies && vacancies.length === 0) {
+    return (
+      <div className="max-w-3xl">
+        <PageHeader title="Add Candidate" description="Add a candidate to the pool — attach them to a hiring request now or later" />
+        <Card>
+          <CardContent className="py-10 text-center space-y-3">
+            <p className="font-medium">No active hiring request</p>
+            <p className="text-sm text-muted-foreground">
+              Candidates can only be added while your department has an approved hiring request with open posts. Raise or wait for one to be approved first.
+            </p>
+            <Button variant="outline" onClick={() => router.back()}>Back</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-xl">
-      <PageHeader title="Add Candidate" description="Manually add a candidate to the hiring pipeline" />
+    <div className="max-w-3xl">
+      <PageHeader title="Add Candidate" description="Add a candidate to the pool — attach them to a hiring request now or later" />
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Candidate Details</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoadingVacancies ? (
-            <p className="text-sm text-muted-foreground">Loading hiring requests...</p>
-          ) : vacancies.length === 0 && !prefilledVacancyId ? (
-            <div className="text-center py-10 space-y-3">
-              <p className="text-sm font-semibold">No approved hiring request available</p>
-              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                Candidates can only be added against an approved hiring request. Raise a hiring
-                request first - once the Principal approves it, you can add candidates here.
-              </p>
-              <Button asChild size="sm">
-                <Link href="/hod/vacancy/new">Create Hiring Request</Link>
-              </Button>
-            </div>
-          ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
-              <Input id="name" {...register("name")} placeholder="Dr. Ananya Sharma" />
-              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="name">Full Name *</Label>
+                <Input id="name" {...register("name")} placeholder="Dr. Ananya Sharma" />
+                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+              </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="email">Email *</Label>
                 <Input id="email" type="email" {...register("email")} placeholder="candidate@email.com" />
@@ -324,58 +284,24 @@ export default function NewCandidatePage() {
                 <Input id="phone" {...register("phone")} placeholder="+91 98765 43210" />
                 {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Department</Label>
-                <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
-                  {user?.department || "-"}
-                </div>
-                {errors.department && <p className="text-sm text-destructive">{errors.department.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label>Designation *</Label>
-                <Select value={selectedDesignation} onValueChange={handleDesignationChange}>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Source *</Label>
+                <Select
+                  defaultValue="WALK_IN"
+                  onValueChange={(v) => setValue("source", v as FormData["source"], { shouldValidate: true })}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select designation..." />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ALL_DESIGNATIONS.map((d) => (
-                      <SelectItem key={d} value={d}>{d}</SelectItem>
-                    ))}
+                    <SelectItem value="WALK_IN">Walk-in</SelectItem>
+                    <SelectItem value="CAREERS_PAGE">Careers Page</SelectItem>
+                    <SelectItem value="ADVERTISEMENT">Advertisement</SelectItem>
+                    <SelectItem value="REFERRAL">Referral</SelectItem>
                   </SelectContent>
                 </Select>
-                {selectedDesignation === "Others" && (
-                  <Input
-                    placeholder="Enter designation..."
-                    value={customPosition}
-                    onChange={(e) => {
-                      setCustomPosition(e.target.value);
-                      setValue("position", e.target.value, { shouldValidate: true });
-                    }}
-                  />
-                )}
-                {errors.position && <p className="text-sm text-destructive">{errors.position.message}</p>}
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Source *</Label>
-              <Select
-                defaultValue="WALK_IN"
-                onValueChange={(v) => setValue("source", v as FormData["source"], { shouldValidate: true })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="WALK_IN">Walk-in</SelectItem>
-                  <SelectItem value="CAREERS_PAGE">Careers Page</SelectItem>
-                  <SelectItem value="ADVERTISEMENT">Advertisement</SelectItem>
-                  <SelectItem value="REFERRAL">Referral</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             {/* Referral details */}
@@ -490,184 +416,179 @@ export default function NewCandidatePage() {
               </div>
             )}
 
-            {/* Interview Mode */}
+            {/* Optional: attach to a hiring request now */}
             <div className="space-y-2">
-              <Label>Interview Mode *</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {(["OFFLINE", "ONLINE"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setValue("interviewMode", mode, { shouldValidate: true })}
-                    className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all ${
-                      interviewMode === mode
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    {mode === "OFFLINE"
-                      ? <MapPin className="h-5 w-5 shrink-0" />
-                      : <Monitor className="h-5 w-5 shrink-0" />
-                    }
-                    <div>
-                      <p className="text-sm font-medium">{mode === "OFFLINE" ? "Offline" : "Online"}</p>
-                      <p className="text-xs opacity-70">{mode === "OFFLINE" ? "In-person demo class" : "Video call / meet"}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
+              <Label>Attach to Hiring Request <span className="text-xs font-normal text-muted-foreground">(optional — can be done later)</span></Label>
 
-            {vacancies.length > 0 && (
-              <div className="space-y-2">
-                <Label>Link to Hiring Request</Label>
-
-                {/* Locked: came from pipeline - just show the linked card, no picker */}
-                {prefilledVacancyId ? (
-                  (() => {
-                    const linked = vacancies.find((v) => v.id === prefilledVacancyId);
-                    if (!linked) {
-                      return (
-                        <p className="text-sm text-destructive">
-                          This hiring request isn&rsquo;t available to link — it may not be approved yet,
-                          have no open posts left, or belong to a different HOD account. Go back and pick
-                          a hiring request from the list below instead.
-                        </p>
-                      );
-                    }
-                    const alreadyLinked = linkedCandidatesFor(linked);
+              {isLoadingVacancies ? (
+                <p className="text-sm text-muted-foreground">Loading hiring requests...</p>
+              ) : prefilledVacancyId ? (
+                (() => {
+                  const linked = vacancies.find((v) => v.id === prefilledVacancyId);
+                  if (!linked) {
                     return (
-                      <div className="rounded-lg border-2 border-primary bg-primary/5 px-4 py-3 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-primary">{linked.position}</p>
-                            {linked.qualification && (
-                              <p className="text-xs text-muted-foreground">{linked.qualification}</p>
-                            )}
-                            <p className="text-xs text-muted-foreground/60 mt-0.5">{linked.department}</p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
-                              {linked.requiredCount} post{linked.requiredCount !== 1 ? "s" : ""} open
-                            </span>
-                            <p className="text-[10px] text-primary font-medium mt-1">Auto-linked ✓</p>
-                          </div>
-                        </div>
-                        {alreadyLinked.length > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Already added: {alreadyLinked.map((c) => c.name).join(", ")}
-                          </p>
-                        )}
-                      </div>
+                      <p className="text-sm text-destructive">
+                        This hiring request isn&rsquo;t available to attach — it may not be approved
+                        anymore or have no open posts left. The candidate will still be created; attach
+                        them from the candidates list instead.
+                      </p>
                     );
-                  })()
-                ) : (
-                <div className="flex items-center justify-between">
-                  <span />
-                  {selectedVacancyId && (
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedVacancyId(""); setValue("vacancyId", ""); }}
-                      className="text-xs text-muted-foreground hover:text-destructive"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-                )}
-                {!prefilledVacancyId && <div className="space-y-0">
-
-                {/* Filtered hint */}
-                {positionValue?.trim() && (
-                  <p className="text-xs text-muted-foreground">
-                    {matchedVacancies.length === 0
-                      ? `No hiring requests found for "${positionValue.trim()}"`
-                      : `${matchedVacancies.length} hiring request${matchedVacancies.length !== 1 ? "s" : ""} for "${positionValue.trim()}"`}
-                  </p>
-                )}
-
+                  }
+                  const alreadyAttached = attachedCandidateNamesFor(linked);
+                  return (
+                    <div className="rounded-lg border-2 border-primary bg-primary/5 px-4 py-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-primary">{linked.position}</p>
+                          {linked.qualification && (
+                            <p className="text-xs text-muted-foreground">{linked.qualification}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground/60 mt-0.5">{linked.department}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
+                            {linked.requiredCount} post{linked.requiredCount !== 1 ? "s" : ""} open
+                          </span>
+                          <p className="text-[10px] text-primary font-medium mt-1">Auto-attached ✓</p>
+                        </div>
+                      </div>
+                      {alreadyAttached.length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Already attached: {alreadyAttached.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : (
                 <div className="space-y-2">
-                  {(matchedVacancies.length > 0 ? matchedVacancies : vacancies).map((v) => {
-                    const isSelected = selectedVacancyId === v.id;
-                    const isFiltered = positionValue?.trim() && matchedVacancies.length > 0;
-                    const alreadyLinked = linkedCandidatesFor(v);
-                    return (
+                  <div className="flex items-center justify-between gap-2">
+                    <Input
+                      value={vacancySearch}
+                      onChange={(e) => setVacancySearch(e.target.value)}
+                      placeholder="Search by position..."
+                      className="h-9"
+                    />
+                    {selectedVacancyId && (
                       <button
-                        key={v.id}
                         type="button"
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedVacancyId("");
-                            setValue("vacancyId", "");
-                          } else {
-                            setSelectedVacancyId(v.id);
-                            setValue("vacancyId", v.id);
-                            syncDesignationFromVacancy(v.position);
-                          }
-                        }}
-                        className={`w-full text-left rounded-lg border-2 px-4 py-3 transition-all ${
-                          isSelected
-                            ? "border-primary bg-primary/5"
-                            : isFiltered
-                            ? "border-muted hover:border-primary/50"
-                            : "border-muted hover:border-muted-foreground/40"
+                        onClick={() => setSelectedVacancyId("")}
+                        className="text-xs text-muted-foreground hover:text-destructive shrink-0"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {matchedVacancies.map((v) => {
+                      const isSelected = selectedVacancyId === v.id;
+                      const alreadyAttached = attachedCandidateNamesFor(v);
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => setSelectedVacancyId(isSelected ? "" : v.id)}
+                          className={`w-full text-left rounded-lg border-2 px-4 py-3 transition-all ${
+                            isSelected ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/40"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className={`text-sm font-medium ${isSelected ? "text-primary" : ""}`}>
+                                {v.position}
+                              </p>
+                              {v.qualification && (
+                                <p className="text-xs text-muted-foreground mt-0.5">{v.qualification}</p>
+                              )}
+                              <p className="text-xs text-muted-foreground/60 mt-1">
+                                Raised {formatDate(v.createdAt)}
+                              </p>
+                              {alreadyAttached.length > 0 && (
+                                <p className="text-xs text-muted-foreground/80 mt-1">
+                                  {alreadyAttached.length} candidate{alreadyAttached.length !== 1 ? "s" : ""} already attached:{" "}
+                                  {alreadyAttached.join(", ")}
+                                </p>
+                              )}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
+                                {v.requiredCount} post{v.requiredCount !== 1 ? "s" : ""} open
+                              </span>
+                              {isSelected && (
+                                <p className="text-[10px] text-primary font-medium mt-1">Selected ✓</p>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {matchedVacancies.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No hiring requests match &ldquo;{vacancySearch.trim()}&rdquo;</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedVacancyId && (
+                <div className="space-y-2 pt-2">
+                  <Label>Interview Mode</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(["OFFLINE", "ONLINE"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setInterviewMode(mode)}
+                        className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all ${
+                          interviewMode === mode
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className={`text-sm font-medium ${isSelected ? "text-primary" : ""}`}>
-                              {v.position}
-                            </p>
-                            {v.qualification && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{v.qualification}</p>
-                            )}
-                            <p className="text-xs text-muted-foreground/60 mt-1">
-                              Raised {formatDate(v.createdAt)}
-                            </p>
-                            {alreadyLinked.length > 0 && (
-                              <p className="text-xs text-muted-foreground/80 mt-1">
-                                {alreadyLinked.length} candidate{alreadyLinked.length !== 1 ? "s" : ""} already added:{" "}
-                                {alreadyLinked.map((c) => c.name).join(", ")}
-                              </p>
-                            )}
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
-                              {v.requiredCount} post{v.requiredCount !== 1 ? "s" : ""} open
-                            </span>
-                            {isSelected && (
-                              <p className="text-[10px] text-primary font-medium mt-1">Selected ✓</p>
-                            )}
-                          </div>
+                        {mode === "OFFLINE"
+                          ? <MapPin className="h-5 w-5 shrink-0" />
+                          : <Monitor className="h-5 w-5 shrink-0" />
+                        }
+                        <div>
+                          <p className="text-sm font-medium">{mode === "OFFLINE" ? "Offline" : "Online"}</p>
+                          <p className="text-xs opacity-70">{mode === "OFFLINE" ? "In-person demo class" : "Video call / meet"}</p>
                         </div>
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Select a designation above to auto-filter matching hiring requests. Selecting a card also fills the designation.
-                </p>
-                </div>}
-                {errors.vacancyId && <p className="text-sm text-destructive">{errors.vacancyId.message}</p>}
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Address */}
             <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
               <p className="text-sm font-semibold">Address Details</p>
 
-              <div className="space-y-2">
-                <Label htmlFor="residenceAddress">Residence Address</Label>
-                <Textarea
-                  id="residenceAddress"
-                  {...register("residenceAddress")}
-                  placeholder="Current / temporary address where the candidate lives"
-                  rows={2}
-                  onChange={(e) => {
-                    register("residenceAddress").onChange(e);
-                    if (sameAddress) setValue("permanentAddress", e.target.value);
-                  }}
-                />
+              <div className={`grid grid-cols-1 gap-4 ${sameAddress ? "" : "sm:grid-cols-2"}`}>
+                <div className="space-y-2">
+                  <Label htmlFor="residenceAddress">Residence Address</Label>
+                  <Textarea
+                    id="residenceAddress"
+                    {...register("residenceAddress")}
+                    placeholder="Current / temporary address where the candidate lives"
+                    rows={2}
+                    onChange={(e) => {
+                      register("residenceAddress").onChange(e);
+                      if (sameAddress) setValue("permanentAddress", e.target.value);
+                    }}
+                  />
+                </div>
+
+                {!sameAddress && (
+                  <div className="space-y-2">
+                    <Label htmlFor="permanentAddress">Permanent Address</Label>
+                    <Textarea
+                      id="permanentAddress"
+                      {...register("permanentAddress")}
+                      placeholder="Home town / permanent address"
+                      rows={2}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -689,18 +610,6 @@ export default function NewCandidatePage() {
                   Permanent address same as residence
                 </label>
               </div>
-
-              {!sameAddress && (
-                <div className="space-y-2">
-                  <Label htmlFor="permanentAddress">Permanent Address</Label>
-                  <Textarea
-                    id="permanentAddress"
-                    {...register("permanentAddress")}
-                    placeholder="Home town / permanent address"
-                    rows={2}
-                  />
-                </div>
-              )}
             </div>
 
             {/* Resume Upload */}
@@ -728,7 +637,7 @@ export default function NewCandidatePage() {
                         {resumeUrl && <span className="ml-2 text-green-600 font-medium">Uploaded</span>}
                       </p>
                     </div>
-                    <button type="button" onClick={clearResume} className="text-muted-foreground hover:text-destructive">
+                    <button type="button" onClick={clearResume} aria-label="Remove resume" className="text-muted-foreground hover:text-destructive">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -757,7 +666,6 @@ export default function NewCandidatePage() {
               <Button type="submit" loading={isBusy}>Add Candidate</Button>
             </div>
           </form>
-          )}
         </CardContent>
       </Card>
     </div>
