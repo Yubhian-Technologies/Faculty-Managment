@@ -387,9 +387,8 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground -mt-1">
-                  Optional. Generate the whole section&rsquo;s timetable from{" "}
-                  <span className="font-medium">Timetable</span> instead; anything pinned here
-                  is kept and scheduled around.
+                  Optional. Anything pinned here shows as locked when building the rest of the
+                  timetable manually from <span className="font-medium">Timetable</span>.
                 </p>
                 {!timing ? (
                   <p className="text-xs text-amber-600">

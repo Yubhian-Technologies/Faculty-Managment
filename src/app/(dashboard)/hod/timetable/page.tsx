@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import { TimetableRulesPanel } from "@/components/timetable/TimetableRulesPanel";
 import type { Course } from "@/types";
 
 export default function HODTimetableCoursesPage() {
@@ -27,10 +26,8 @@ export default function HODTimetableCoursesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Timetable"
-        description="Pick a course to generate, review and publish its section timetables"
+        description="Pick a course to build and publish its section timetables"
       />
-
-      <TimetableRulesPanel />
 
       {isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
