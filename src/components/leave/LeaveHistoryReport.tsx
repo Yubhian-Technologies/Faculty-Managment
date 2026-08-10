@@ -11,7 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveTypeCode } from "@/types/leave";
-import type { Department } from "@/types";
+import { ROLE_LABELS } from "@/types";
+import type { Department, UserRole } from "@/types";
+
+function roleTag(role: string): string | null {
+  if (role === "HOD") return "HOD";
+  if (role === "PANEL_MEMBER") return null;
+  return ROLE_LABELS[role as UserRole] ?? role;
+}
 
 const CATEGORY_TABS = EFFECTIVE_CATEGORY_ORDER.map((key) => ({ key, label: EFFECTIVE_CATEGORY_LABELS[key] }));
 
@@ -40,7 +47,7 @@ export interface LeaveHistoryReportRow extends PeriodSummary {
   uid: string;
   employeeId: string;
   name: string;
-  role: "HOD" | "PANEL_MEMBER";
+  role: string;
   category: EffectiveLeaveCategory | null;
 }
 
@@ -52,7 +59,7 @@ interface LeaveYearlyReportRow {
   uid: string;
   employeeId: string;
   name: string;
-  role: "HOD" | "PANEL_MEMBER";
+  role: string;
   category: EffectiveLeaveCategory | null;
   months: YearlyMonthSummary[];
   totals: PeriodSummary;
@@ -70,6 +77,12 @@ interface LeaveHistoryReportProps {
   // "/principal/leave-history/{deptId}".
   employeeHrefBase: string;
   emptyTitle?: string;
+  // New Joining/Vacation/Non-Vacation only helps when a roster mixes staff
+  // types (a department's teaching + technical staff). A single college-wide
+  // role's own register (Dean, College Office, ...) is already filtered to
+  // just that role, so the split only hides the one or two people in it
+  // behind an extra click - default true, the role-based registers pass false.
+  showCategoryFilter?: boolean;
 }
 
 function toYearlyApiUrl(apiUrl: string): string {
@@ -149,7 +162,7 @@ const MODE_TABS = [
 // Monthly leave register table: month/year picker + the two-tier-header
 // register itself. Shared by Principal (per department, HOD row included)
 // and HOD (own department only, HOD row excluded - see the API route).
-export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTitle }: LeaveHistoryReportProps) {
+export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTitle, showCategoryFilter = true }: LeaveHistoryReportProps) {
   const now = new Date();
   const [mode, setMode] = useState<"month" | "year">("month");
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -175,7 +188,9 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
   });
 
   const { data, isLoading } = mode === "month" ? monthlyQuery : yearlyQuery;
-  const categoryRows = (data?.rows ?? []).filter((row) => row.category === category);
+  const categoryRows = showCategoryFilter
+    ? (data?.rows ?? []).filter((row) => row.category === category)
+    : (data?.rows ?? []);
   const searchTerm = search.trim().toLowerCase();
   const rows = searchTerm
     ? categoryRows.filter(
@@ -189,7 +204,9 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="flex flex-wrap items-center gap-3">
-          <SegmentedTabs value={category} onChange={(key) => setCategory(key as EffectiveLeaveCategory)} options={CATEGORY_TABS} />
+          {showCategoryFilter && (
+            <SegmentedTabs value={category} onChange={(key) => setCategory(key as EffectiveLeaveCategory)} options={CATEGORY_TABS} />
+          )}
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -263,7 +280,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                             <Link href={`${employeeHrefBase}/${row.uid}`} className="text-primary hover:underline font-medium">
                               {row.name}
                             </Link>
-                            {row.role === "HOD" && <span className="text-xs text-muted-foreground"> (HOD)</span>}
+                            {roleTag(row.role) && <span className="text-xs text-muted-foreground"> ({roleTag(row.role)})</span>}
                           </td>
                           <td className={td}>{row.category ? EFFECTIVE_CATEGORY_LABELS[row.category] : "-"}</td>
                           <PeriodCells period={row} />
@@ -281,7 +298,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                                     <Link href={`${employeeHrefBase}/${row.uid}`} className="text-primary hover:underline font-medium">
                                       {row.name}
                                     </Link>
-                                    {row.role === "HOD" && <span className="text-xs text-muted-foreground"> (HOD)</span>}
+                                    {roleTag(row.role) && <span className="text-xs text-muted-foreground"> ({roleTag(row.role)})</span>}
                                   </td>
                                   <td rowSpan={13} className={td}>{row.category ? EFFECTIVE_CATEGORY_LABELS[row.category] : "-"}</td>
                                 </>
