@@ -1,8 +1,15 @@
 // Resolves an HOD's department-scoping info, including sub-department (child
 // Department) awareness. Centralizes what used to be a duplicated per-route
 // `getHodDept()` - the difference here is `childDepartmentNames`, used to
-// grant a parent department's HOD automatic view-only ("secondary") access
-// to every sub-department's students/sections/assigned faculty.
+// extend a parent department's HOD across every sub-department.
+//
+// A parent department's HOD has FULL control over their own department and all
+// of its sub-departments: they can create sections, add subjects, add faculty,
+// and make teaching assignments in any of them, alongside the sub-HOD who runs
+// each child day to day. A sub-HOD's scope stays limited to their own child
+// department - authority flows down the tree, never up or sideways.
+// Use `canHodEditDepartment` / `editableDepartmentNames` for that check rather
+// than comparing `departmentName` directly, so the rule stays in one place.
 export interface HodDepartmentScope {
   departmentName: string;
   departmentId: string | null;
@@ -13,6 +20,28 @@ export interface HodDepartmentScope {
   // *target* department id (e.g. reassigning a section to a sub-department)
   // rather than just querying by name.
   childDepartmentIds: string[];
+}
+
+/**
+ * Every department name this HOD may WRITE to: their own plus every
+ * sub-department beneath it. For a sub-HOD (no children) this is just their own.
+ */
+export function editableDepartmentNames(scope: HodDepartmentScope): string[] {
+  return scope.departmentName
+    ? [scope.departmentName, ...scope.childDepartmentNames]
+    : [];
+}
+
+/** True when `departmentName` is this HOD's own department or one of its children. */
+export function canHodEditDepartment(scope: HodDepartmentScope, departmentName: string): boolean {
+  if (!departmentName) return false;
+  return editableDepartmentNames(scope).includes(departmentName);
+}
+
+/** Same check by department id, for routes that receive an id rather than a name. */
+export function canHodEditDepartmentId(scope: HodDepartmentScope, departmentId: string): boolean {
+  if (!departmentId) return false;
+  return departmentId === scope.departmentId || scope.childDepartmentIds.includes(departmentId);
 }
 
 export async function getHodDepartmentScope(

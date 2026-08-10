@@ -79,7 +79,7 @@ export default function StudentImportPage() {
       if (parsed.length < 2) { setParseError("File must have a header row and at least one data row."); return; }
 
       const headers = parsed[0].map((h) => h.trim());
-      // Tolerant of case, punctuation, spacing, and alternate wording (e.g. "DOB" for Date of Birth).
+      // Tolerant of case, punctuation, spacing, and alternate wording (e.g. &quot;DOB&quot; for Date of Birth).
       const keyMap = matchHeaders(headers, COLUMNS);
 
       // Check header matching BEFORE counting data rows - if nothing in the
@@ -185,7 +185,7 @@ export default function StudentImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. "DOB" for Date of Birth)</p>
+              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;DOB&quot; for Date of Birth)</p>
             </div>
           </button>
           {parseError && (

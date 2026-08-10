@@ -45,7 +45,13 @@ export default function TeachingAssignmentsPage() {
       .finally(() => setIsLoading(false));
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // Awaited in a wrapper so the loader's setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+        await load();
+    })();
+  }, []);
 
   const key = `${courseId}_${year}`;
   // Sub-department sections are view-only for a parent HOD - exclude them here

@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { getHodDepartmentScope, getRelatedDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, getRelatedDepartmentNames, canHodEditDepartment } from "@/lib/departments/scope";
 import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
@@ -21,9 +21,10 @@ export async function GET(request: Request) {
       statusFilter ? q.where("status", "==", statusFilter) : q;
 
     let primaryQuery: FirebaseFirestore.Query = facultyColl;
-    // A parent department's HOD gets view-only access to its sub-departments'
-    // faculty too - needed so they can pick a sub-department specialist when
-    // assigning faculty to a shared/parent-owned subject (see teaching-assignments).
+    // A parent department's HOD manages its sub-departments' faculty too, so
+    // they are listed alongside their own - needed both to pick a sub-department
+    // specialist when assigning a shared/parent-owned subject, and to administer
+    // those faculty directly (see canHodEditDepartment in lib/departments/scope).
     let secondaryQuery: FirebaseFirestore.Query | null = null;
 
     if (session.role === "HOD") {
@@ -124,9 +125,22 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    // Resolve department from HOD's profile if not provided
+    // Resolve the owning department. A parent HOD may add faculty straight into
+    // one of their sub-departments by naming it; anything else falls back to
+    // their own department. A sub-HOD has no children, so they always land on
+    // their own either way.
     let department = body.department ?? "";
-    if (session.role === "HOD" || !department) {
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, collegeId, session.uid);
+      const requested = body.department?.trim();
+      if (requested && !canHodEditDepartment(scope, requested)) {
+        return NextResponse.json(
+          { error: "That department is not yours or one of your sub-departments" },
+          { status: 403 },
+        );
+      }
+      department = requested || scope.departmentName;
+    } else if (!department) {
       const hodSnap = await db
         .collection("colleges")
         .doc(collegeId)

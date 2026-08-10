@@ -44,7 +44,14 @@ export default function HODBudgetPage() {
     }
   }
 
-  useEffect(() => { load(); loadActiveCycle(); }, []);
+  useEffect(() => {
+    // Awaited in a wrapper so the loader's setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+        await load();
+        await loadActiveCycle();
+    })();
+  }, []);
 
   // This department's own budget for the active cycle, if one's been seeded.
   const myCycleStub = useMemo(

@@ -27,11 +27,15 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeVariants> {}
 
+// Renders a <span>, not a <div>: badges are inline labels and are routinely
+// placed inside <p>, where a <div> is invalid HTML and throws a React hydration
+// error ("<div> cannot be a descendant of <p>"). The base class is already
+// inline-flex, so a span lays out identically - this is purely about validity.
 function Badge({ className, variant, ...props }: BadgeProps) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
+  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
 export { Badge, badgeVariants };

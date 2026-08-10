@@ -382,10 +382,15 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
                   <Label className="text-xs">
-                    Weekly Schedule - pick day &amp; period for this subject/section
+                    Weekly Schedule (optional) - pin a day &amp; period for this subject/section
                     {" "}({row.slots.length}/{row.hoursPerWeek} periods selected)
                   </Label>
                 </div>
+                <p className="text-xs text-muted-foreground -mt-1">
+                  Optional. Generate the whole section&rsquo;s timetable from{" "}
+                  <span className="font-medium">Timetable</span> instead; anything pinned here
+                  is kept and scheduled around.
+                </p>
                 {!timing ? (
                   <p className="text-xs text-amber-600">
                     Timings not configured for {row.courseName} Year {row.year} yet - ask the Principal to set them up before scheduling periods.

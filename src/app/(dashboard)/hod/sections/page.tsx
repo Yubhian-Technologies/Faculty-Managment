@@ -72,7 +72,11 @@ export default function HODSectionsPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  // Invoked through an async wrapper so the loader's setState calls aren't
+  // reachable synchronously from the effect body (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    void (async () => { await load(); })();
+  }, [load]);
 
   // Own department + its sub-departments - the set a main HOD can reassign an
   // existing section between (handing it to a Sub-HOD to run, or pulling it

@@ -1,0 +1,129 @@
+export const dynamic = "force-dynamic";
+
+import { NextResponse } from "next/server";
+import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { getAdminDb } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
+import type { TimetableDraft, TimetableSlot } from "@/types";
+
+// Materialises a draft into `timetableSlots` - the moment it becomes visible to
+// the Principal, Vice Principal, faculty (panel/teaching) and the Class Leader.
+//
+// Replaces only this section's GENERATED slots. Manual/pinned slots survive,
+// because the HOD placed those deliberately and the generator was told to work
+// around them.
+
+export async function POST(request: Request) {
+  try {
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const body = (await request.json()) as { sectionId?: string };
+    const sectionId = body.sectionId;
+    if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const draftRef = collegeRef.collection("timetableDrafts").doc(sectionId);
+
+    const draftSnap = await draftRef.get();
+    if (!draftSnap.exists) return NextResponse.json({ error: "No draft to publish" }, { status: 404 });
+    const draft = { id: draftSnap.id, ...draftSnap.data() } as TimetableDraft;
+    if (!draft.slots?.length) {
+      return NextResponse.json({ error: "This draft has no slots to publish" }, { status: 400 });
+    }
+
+    const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    const section = sectionSnap.data() as { department: string; courseId: string; year: number };
+
+    // Re-check faculty double-booking against live data: another section may have
+    // published since this draft was generated, so the draft's view of who is
+    // free can be stale.
+    const allSlotsSnap = await collegeRef.collection("timetableSlots").get();
+    const allSlots = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
+
+    const conflicts: string[] = [];
+    for (const s of draft.slots) {
+      const clash = allSlots.find(
+        (existing) =>
+          existing.sectionId !== sectionId &&
+          existing.facultyId === s.facultyId &&
+          existing.day === s.day &&
+          existing.periodNumber === s.periodNumber,
+      );
+      if (clash) {
+        conflicts.push(
+          `${s.facultyName} is now booked for another section at ${s.day} period ${s.periodNumber}. Regenerate this timetable.`,
+        );
+      }
+    }
+    if (conflicts.length > 0) {
+      return NextResponse.json(
+        { error: "Conflicts appeared since this draft was generated", issues: [...new Set(conflicts)] },
+        { status: 409 },
+      );
+    }
+
+    const staleGenerated = allSlots.filter((s) => s.sectionId === sectionId && s.source === "GENERATED");
+    const now = FieldValue.serverTimestamp();
+
+    // Chunked to stay clear of Firestore's 500-op batch limit on large sections.
+    const ops: (() => Promise<void>)[] = [];
+    let batch = db.batch();
+    let count = 0;
+    const flush = () => {
+      const b = batch;
+      ops.push(async () => { await b.commit(); });
+      batch = db.batch();
+      count = 0;
+    };
+
+    for (const s of staleGenerated) {
+      batch.delete(collegeRef.collection("timetableSlots").doc(s.id));
+      if (++count >= 400) flush();
+    }
+
+    for (const s of draft.slots) {
+      const ref = collegeRef.collection("timetableSlots").doc();
+      batch.set(ref, {
+        collegeId: session.collegeId,
+        department: section.department,
+        assignmentId: s.assignmentId,
+        facultyId: s.facultyId,
+        facultyName: s.facultyName,
+        courseId: section.courseId,
+        year: Number(section.year),
+        sectionId,
+        subjectId: s.subjectId,
+        subjectName: s.subjectName,
+        day: s.day,
+        periodNumber: s.periodNumber,
+        source: "GENERATED",
+        isPinned: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      if (++count >= 400) flush();
+    }
+
+    batch.update(draftRef, {
+      status: "PUBLISHED",
+      publishedAt: now,
+      publishedByName: session.email,
+    });
+    flush();
+
+    for (const run of ops) await run();
+
+    return NextResponse.json({
+      ok: true,
+      published: draft.slots.length,
+      replaced: staleGenerated.length,
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/timetable/publish POST]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
