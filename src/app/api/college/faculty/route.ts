@@ -30,8 +30,11 @@ export async function GET(request: Request) {
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.departmentName) primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
-      if (scope.childDepartmentNames.length > 0) {
-        childDeptQuery = withStatus(facultyColl.where("department", "in", scope.childDepartmentNames));
+      // Sub-departments AND grouped/managed branches (a Sub-HOD manages IT/CSE's
+      // faculty as their own; a main HOD rolls up its sub-HODs' branches).
+      const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
+      if (ownedDeptNames.length > 0) {
+        childDeptQuery = withStatus(facultyColl.where("department", "in", ownedDeptNames.slice(0, 30)));
       }
     } else if (deptFilter) {
       // Office/Principal/VP picking faculty for a specific department (e.g.

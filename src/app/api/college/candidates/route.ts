@@ -39,7 +39,7 @@ export async function GET(_request: Request) {
     // otherwise every HOD sees every other department's applicant list.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const ownDepartments = new Set([scope.departmentName, ...scope.childDepartmentNames].filter(Boolean));
+      const ownDepartments = new Set([scope.departmentName, ...scope.childDepartmentNames, ...scope.managedDepartmentNames].filter(Boolean));
       const appsSnap = await db.collection("colleges").doc(session.collegeId).collection("candidateApplications").get();
       const attachedToOwnDept = new Set<string>();
       const attachedToOtherDept = new Set<string>();
