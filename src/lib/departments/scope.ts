@@ -20,19 +20,29 @@ export interface HodDepartmentScope {
   // *target* department id (e.g. reassigning a section to a sub-department)
   // rather than just querying by name.
   childDepartmentIds: string[];
+  // Grouped (managed) departments: the top-level branches (e.g. IT, CSBS) a
+  // sub-HOD has been given FULL control of via their own sub-department's
+  // `managedDepartments` list. Unlike `secondaryDepartments` (cross-list /
+  // view-only "incoming" access), these are fully editable - the sub-HOD sees,
+  // sections, and manages those branches' students and academics as if they
+  // were their own. Empty for a plain HOD with no grouping configured.
+  managedDepartmentNames: string[];
+  // Same set, by id (same order) - for routes that validate a target id.
+  managedDepartmentIds: string[];
 }
 
 /**
- * Every department name this HOD may WRITE to: their own plus every
- * sub-department beneath it. For a sub-HOD (no children) this is just their own.
+ * Every department name this HOD may WRITE to: their own, every sub-department
+ * beneath it, and every grouped/managed branch. For a sub-HOD this is their own
+ * sub-department plus whatever branches were grouped under it (often none).
  */
 export function editableDepartmentNames(scope: HodDepartmentScope): string[] {
   return scope.departmentName
-    ? [scope.departmentName, ...scope.childDepartmentNames]
+    ? [scope.departmentName, ...scope.childDepartmentNames, ...scope.managedDepartmentNames]
     : [];
 }
 
-/** True when `departmentName` is this HOD's own department or one of its children. */
+/** True when `departmentName` is this HOD's own department, a child, or a managed branch. */
 export function canHodEditDepartment(scope: HodDepartmentScope, departmentName: string): boolean {
   if (!departmentName) return false;
   return editableDepartmentNames(scope).includes(departmentName);
@@ -41,7 +51,11 @@ export function canHodEditDepartment(scope: HodDepartmentScope, departmentName: 
 /** Same check by department id, for routes that receive an id rather than a name. */
 export function canHodEditDepartmentId(scope: HodDepartmentScope, departmentId: string): boolean {
   if (!departmentId) return false;
-  return departmentId === scope.departmentId || scope.childDepartmentIds.includes(departmentId);
+  return (
+    departmentId === scope.departmentId ||
+    scope.childDepartmentIds.includes(departmentId) ||
+    scope.managedDepartmentIds.includes(departmentId)
+  );
 }
 
 export async function getHodDepartmentScope(
@@ -52,18 +66,27 @@ export async function getHodDepartmentScope(
   const userSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
   const departmentName = (userSnap.data() as { department?: string } | undefined)?.department ?? "";
 
+  const empty: HodDepartmentScope = {
+    departmentName: "",
+    departmentId: null,
+    childDepartmentNames: [],
+    childDepartmentIds: [],
+    managedDepartmentNames: [],
+    managedDepartmentIds: [],
+  };
+
   if (!departmentName) {
-    return { departmentName: "", departmentId: null, childDepartmentNames: [], childDepartmentIds: [] };
+    return empty;
   }
 
   const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
   const deptSnap = await deptsColl.where("name", "==", departmentName).limit(1).get();
   if (deptSnap.empty) {
-    return { departmentName, departmentId: null, childDepartmentNames: [], childDepartmentIds: [] };
+    return { ...empty, departmentName };
   }
 
   const deptDoc = deptSnap.docs[0];
-  const dept = deptDoc.data() as { hasSubDepartments?: boolean };
+  const dept = deptDoc.data() as { hasSubDepartments?: boolean; managedDepartments?: string[] };
 
   let childDepartmentNames: string[] = [];
   let childDepartmentIds: string[] = [];
@@ -78,7 +101,34 @@ export async function getHodDepartmentScope(
     childDepartmentIds = children.map((d) => d.id);
   }
 
-  return { departmentName, departmentId: deptDoc.id, childDepartmentNames, childDepartmentIds };
+  // Grouped/managed branches: resolve this department's `managedDepartments`
+  // names to their department ids (skip any that no longer exist). Capped at 30
+  // to stay within Firestore `in`-query limits at the call sites that use these.
+  const managedDepartmentNames: string[] = [];
+  const managedDepartmentIds: string[] = [];
+  const managedNames = Array.from(
+    new Set((dept.managedDepartments ?? []).map((n) => n.trim()).filter(Boolean))
+  ).slice(0, 30);
+  if (managedNames.length > 0) {
+    const managedSnaps = await Promise.all(
+      managedNames.map((n) => deptsColl.where("name", "==", n).limit(1).get())
+    );
+    for (let i = 0; i < managedNames.length; i++) {
+      const doc = managedSnaps[i].docs[0];
+      if (!doc) continue;
+      managedDepartmentNames.push(managedNames[i]);
+      managedDepartmentIds.push(doc.id);
+    }
+  }
+
+  return {
+    departmentName,
+    departmentId: deptDoc.id,
+    childDepartmentNames,
+    childDepartmentIds,
+    managedDepartmentNames,
+    managedDepartmentIds,
+  };
 }
 
 // Keeps a department's `hodUid`/`hodName` pointer in sync with an HOD-role
