@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, CheckCircle2, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle2, Upload, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,13 @@ export default function DepartmentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [deletingDept, setDeletingDept] = useState<Department | null>(null);
 
+  // Only parents are listed here. A sub-department (e.g. BS-Chemistry under
+  // Basic Science) is not a peer of its parent, so it would be misleading as a
+  // top-level card - it's reached by opening the parent instead.
+  const topLevelDepartments = departments.filter((d) => !d.parentDepartmentId);
+  const childrenOf = (parentId: string) =>
+    departments.filter((d) => d.parentDepartmentId === parentId);
+
   async function loadDepts() {
     setIsLoading(true);
     try {
@@ -30,7 +37,11 @@ export default function DepartmentsPage() {
     }
   }
 
-  useEffect(() => { void loadDepts(); }, []);
+  // Awaited in a wrapper so loadDepts()'s setState calls aren't reachable
+  // synchronously from the effect body (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    void (async () => { await loadDepts(); })();
+  }, []);
 
   async function handleDelete(dept: Department) {
     try {
@@ -75,7 +86,7 @@ export default function DepartmentsPage() {
             <div key={i} className="h-28 rounded-lg border bg-muted/30 animate-pulse" />
           ))}
         </div>
-      ) : departments.length === 0 ? (
+      ) : topLevelDepartments.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <p className="text-muted-foreground mb-4">No departments yet. Add your first department to get started.</p>
@@ -87,7 +98,7 @@ export default function DepartmentsPage() {
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {departments.map((dept) => (
+          {topLevelDepartments.map((dept) => (
             <Card
               key={dept.id}
               className={`cursor-pointer transition-colors hover:border-primary/50 ${!dept.isActive ? "opacity-60" : ""}`}
@@ -124,6 +135,18 @@ export default function DepartmentsPage() {
                       <p className="text-xs text-muted-foreground mt-1.5">
                         Cross-listed with <span className="text-foreground">{dept.secondaryDepartments.join(", ")}</span>
                       </p>
+                    )}
+                    {childrenOf(dept.id).length > 0 && (
+                      <div className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <Layers className="h-3 w-3 mt-0.5 shrink-0" />
+                        <span>
+                          {childrenOf(dept.id).length} sub-department
+                          {childrenOf(dept.id).length !== 1 ? "s" : ""}:{" "}
+                          <span className="text-foreground">
+                            {childrenOf(dept.id).map((c) => c.name).join(", ")}
+                          </span>
+                        </span>
+                      </div>
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
