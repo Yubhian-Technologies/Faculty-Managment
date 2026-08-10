@@ -154,6 +154,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Dean
   { label: "Dashboard", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
+  { label: "Subjects", href: "/dean/subjects", iconName: "Library", roles: ["DEAN"], section: "Academics" },
   { label: "My Leave", href: "/dean/leave", iconName: "CalendarClock", roles: ["DEAN"], section: "Personal" },
 
   // IQAC Coordinator
@@ -409,6 +410,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   DEAN: [
     { label: "Home", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
+    { label: "Subjects", href: "/dean/subjects", iconName: "Library", roles: ["DEAN"] },
   ],
   IQAC_COORDINATOR: [
     { label: "Home", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
