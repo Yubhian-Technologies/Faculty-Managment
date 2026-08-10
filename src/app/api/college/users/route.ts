@@ -17,7 +17,8 @@ const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", 
 // hodUid, which is where the "only within your own department" check lives).
 const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD"];
 // College Office may only create Class Leader logins - one per Section, bound
-// via `sectionId` below (see college-office/sections/new and .../[id]/edit).
+// via `sectionId` below. (The College Office section pages that used to call
+// this were removed; sections are managed from the HOD and Principal views.)
 const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
 // One holder per role per college — same rule as administration/college-staff route.
 const COLLEGE_SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
