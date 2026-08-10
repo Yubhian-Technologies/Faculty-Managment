@@ -14,7 +14,24 @@ import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate } from "@/lib/utils";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
-import type { HiringBatch, Candidate } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
+
+// Dropdown option for a DECISION-stage candidate in this batch. `id` is the
+// real Candidate id (what OfferLetter.candidateId expects) — negotiatedSalary/
+// dateOfJoining/termsAndConditions/expectedSalary come from the candidate's
+// CandidateApplication (Principal-set at decision time), person fields from
+// the Candidate itself.
+type BatchCandidateOption = {
+  id: string;
+  name: string;
+  email: string;
+  permanentAddress?: string;
+  residenceAddress?: string;
+  expectedSalary?: number;
+  negotiatedSalary?: number;
+  dateOfJoining?: string;
+  termsAndConditions?: string[];
+};
 
 type CreateForm = {
   batchId: string;
@@ -38,7 +55,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
   const presetBatchId = searchParams.get("batchId");
   const presetCandidateId = searchParams.get("candidateId");
   const [batches, setBatches] = useState<HiringBatch[]>([]);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candidates, setCandidates] = useState<BatchCandidateOption[]>([]);
   const [existingLetterCandidateIds, setExistingLetterCandidateIds] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
@@ -107,10 +124,28 @@ export default function NewCollegeOfficeOfferLetterPage() {
   async function loadCandidatesForBatch(batchId: string) {
     setLoadingCandidates(true);
     try {
-      const data = await fetch(`/api/college/candidates?batchId=${batchId}&stage=DECISION`)
-        .then((r) => r.json() as Promise<{ candidates: Candidate[] }>);
-      const cands = data.candidates ?? [];
-      setCandidates(cands.filter((c) => !existingLetterCandidateIds.has(c.id)));
+      const [appsData, candsData] = await Promise.all([
+        fetch(`/api/college/candidate-applications?batchId=${batchId}&stage=DECISION`).then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
+        fetch(`/api/college/candidates`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
+      ]);
+      const personMap = new Map((candsData.candidates ?? []).map((c) => [c.id, c]));
+      const opts: BatchCandidateOption[] = (appsData.applications ?? [])
+        .filter((a) => !existingLetterCandidateIds.has(a.candidateId))
+        .map((a) => {
+          const person = personMap.get(a.candidateId);
+          return {
+            id: a.candidateId,
+            name: person?.name ?? "Unknown",
+            email: person?.email ?? "",
+            permanentAddress: person?.permanentAddress,
+            residenceAddress: person?.residenceAddress,
+            expectedSalary: a.expectedSalary,
+            negotiatedSalary: a.negotiatedSalary,
+            dateOfJoining: a.dateOfJoining,
+            termsAndConditions: a.termsAndConditions,
+          };
+        });
+      setCandidates(opts);
     } catch {
       setCandidates([]);
     } finally {

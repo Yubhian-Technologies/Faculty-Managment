@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 import { toCSV, parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+
+// When arriving from a section card's "Add Students" button, the section is
+// already known - those 3 columns are fixed for the whole file instead of
+// being asked of every row.
+const LOCKED_KEYS = ["department", "section", "year"];
 
 // ─── Template definition ───────────────────────────────────────────────────────
 // S.No is a convenience column for the sheet author only (not stored) - every
@@ -44,6 +50,16 @@ type ImportResult = { created: number; failed: { row: number; rollNumber: string
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OfficeStudentImportPage() {
+  const searchParams = useSearchParams();
+  const sectionId = searchParams.get("sectionId") ?? "";
+  const lockedSection = searchParams.get("section") ?? "";
+  const lockedDepartment = searchParams.get("department") ?? "";
+  const lockedYear = searchParams.get("year") ?? "";
+  const isLocked = !!(sectionId && lockedSection && lockedDepartment && lockedYear);
+  const backHref = sectionId ? `/college-office/sections/${sectionId}` : "/college-office/sections";
+
+  const columns = isLocked ? COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key)) : COLUMNS;
+
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
@@ -51,8 +67,8 @@ export default function OfficeStudentImportPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
 
   function downloadTemplate() {
-    const headers = COLUMNS.map((c) => c.label);
-    const sample1 = COLUMNS.map((c) => c.sample);
+    const headers = columns.map((c) => c.label);
+    const sample1 = columns.map((c) => c.sample);
     const csv = toCSV([headers, sample1]);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -84,7 +100,7 @@ export default function OfficeStudentImportPage() {
 
       const headers = parsed[0].map((h) => h.trim());
       // Tolerant of case, punctuation, spacing, and alternate wording (e.g. "DOB" for Date of Birth).
-      const keyMap = matchHeaders(headers, COLUMNS);
+      const keyMap = matchHeaders(headers, columns);
 
       // Check header matching BEFORE counting data rows - if nothing in the
       // header row matched, every row maps to an empty object and would
@@ -125,7 +141,11 @@ export default function OfficeStudentImportPage() {
     setIsImporting(true);
     setResult(null);
     try {
-      const records = rows.map((r) => ({ ...r, year: r.year ? Number(r.year) : undefined }));
+      const records = rows.map((r) => ({
+        ...r,
+        ...(isLocked ? { section: lockedSection, department: lockedDepartment, year: lockedYear } : {}),
+        year: r.year || isLocked ? Number(isLocked ? lockedYear : r.year) : undefined,
+      }));
       const res = await fetch("/api/college/students/import-excel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -145,7 +165,7 @@ export default function OfficeStudentImportPage() {
     }
   }
 
-  const requiredKeys = COLUMNS.filter((c) => c.required).map((c) => c.key);
+  const requiredKeys = columns.filter((c) => c.required).map((c) => c.key);
   const missingRequired = rows.length > 0
     ? rows.some((r) => requiredKeys.some((k) => !r[k]?.trim()))
     : false;
@@ -154,13 +174,17 @@ export default function OfficeStudentImportPage() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Import Students"
-        description="Bulk upload the student roster - across every department - from a CSV/Excel file"
+        description={isLocked
+          ? `Bulk upload students directly into Section ${lockedSection} - from a CSV/Excel file`
+          : "Bulk upload the student roster - across every department - from a CSV/Excel file"}
         actions={
           <Button variant="outline" asChild>
-            <Link href="/college-office/sections"><ArrowLeft className="h-4 w-4 mr-1" />Back to Sections</Link>
+            <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-1" />Back to {sectionId ? "Section" : "Sections"}</Link>
           </Button>
         }
       />
+
+    
 
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
@@ -169,7 +193,9 @@ export default function OfficeStudentImportPage() {
             Download the template, fill in the student roster, and upload it below.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
-            {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
+            {HINTS.filter((h) => !isLocked || (!h.startsWith("Department and Section") && !h.startsWith("A single file"))).map((h) => (
+              <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
+            ))}
           </div>
           <Button onClick={downloadTemplate} className="gap-2">
             <Download className="h-4 w-4" />Download Template (CSV)
@@ -225,7 +251,7 @@ export default function OfficeStudentImportPage() {
                 <thead>
                   <tr className="border-b bg-muted/40">
                     <th className="text-left p-2 font-medium text-muted-foreground w-8">#</th>
-                    {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
+                    {columns.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                       <th key={c.key} className="text-left p-2 font-medium text-muted-foreground whitespace-nowrap">
                         {c.label}{c.required && <span className="text-red-500 ml-0.5">*</span>}
                       </th>
@@ -238,7 +264,7 @@ export default function OfficeStudentImportPage() {
                     return (
                       <tr key={i} className={`border-b ${missing ? "bg-red-50" : i % 2 === 0 ? "" : "bg-muted/20"}`}>
                         <td className="p-2 text-muted-foreground">{i + 2}</td>
-                        {COLUMNS.filter((c) => rows.some((r) => r[c.key])).map((c) => (
+                        {columns.filter((c) => rows.some((r) => r[c.key])).map((c) => (
                           <td key={c.key} className={`p-2 whitespace-nowrap ${c.required && !row[c.key]?.trim() ? "text-red-600 font-medium" : ""}`}>
                             {row[c.key] || <span className="text-muted-foreground/40">-</span>}
                           </td>
@@ -311,7 +337,7 @@ export default function OfficeStudentImportPage() {
             )}
             {result.created > 0 && (
               <Button asChild variant="outline" size="sm">
-                <Link href="/college-office/sections">Back to Sections</Link>
+                <Link href={backHref}>Back to {sectionId ? "Section" : "Sections"}</Link>
               </Button>
             )}
           </CardContent>

@@ -3,17 +3,6 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { Firestore } from "firebase-admin/firestore";
-
-async function getUserName(db: Firestore, collegeId: string, uid: string): Promise<string> {
-  if (!collegeId || !uid) return "Unknown";
-  try {
-    const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-    return (snap.data() as { name?: string } | undefined)?.name ?? "Unknown";
-  } catch {
-    return "Unknown";
-  }
-}
 
 export async function GET(
   _request: Request,
@@ -49,29 +38,16 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE", "ACCOUNTS");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const { id } = await params;
     const body = (await request.json()) as {
-      isShortlisted?: boolean;
-      hasArrived?: boolean;
-      status?: string;
-      stage?: string;
-      batchId?: string;
       resumeUrl?: string;
       name?: string;
       email?: string;
       phone?: string;
-      documentVerification?: { checkedDocs: Record<string, boolean> };
-      joiningLetterUrl?: string;
-      expectedSalary?: number;
-      negotiatedSalary?: number;
-      dateOfJoining?: string;
-      termsAndConditions?: string[];
-      notifyPrincipalDocsReady?: boolean;
     };
 
     const db = getAdminDb();
-    const actorName = await getUserName(db, session.collegeId, session.uid);
     const now = new Date();
 
     const candidateSnap = await db
@@ -86,54 +62,12 @@ export async function PATCH(
     }
 
     const updates: Record<string, unknown> = { updatedAt: now };
-    const { isShortlisted, hasArrived, status, stage, batchId, resumeUrl, name, email, phone, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining, termsAndConditions, notifyPrincipalDocsReady } = body;
+    const { resumeUrl, name, email, phone } = body;
 
-    if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
-    if (hasArrived !== undefined) {
-      updates.hasArrived = hasArrived;
-      if (hasArrived) {
-        updates.arrivedAt = now;
-        updates.status = "ARRIVED";
-      }
-    }
-    if (status !== undefined) updates.status = status;
-    if (stage !== undefined) updates.currentStage = stage;
-    if (batchId !== undefined) updates.batchId = batchId;
-    // A final REJECTED decision means this candidate was not hired — free them
-    // from their batch so they're selectable again for a future interview
-    // round (they remain shortlisted, just no longer tied to this batch).
-    else if (status === "REJECTED") updates.batchId = "";
     if (resumeUrl !== undefined) updates.resumeUrl = resumeUrl;
     if (name !== undefined) updates.name = name;
     if (email !== undefined) updates.email = email;
     if (phone !== undefined) updates.phone = phone;
-    if (documentVerification !== undefined) {
-      const candidateBatchId = (candidateSnap.data() as { batchId?: string }).batchId;
-      let allVerified = Object.keys(documentVerification.checkedDocs).length > 0
-        && Object.values(documentVerification.checkedDocs).every(Boolean);
-      if (candidateBatchId) {
-        const batchSnap = await db.collection("colleges").doc(session.collegeId).collection("hiringBatches").doc(candidateBatchId).get();
-        const requiredDocuments = (batchSnap.data() as { requiredDocuments?: string[] } | undefined)?.requiredDocuments ?? [];
-        allVerified = requiredDocuments.length === 0 || requiredDocuments.every((d) => documentVerification.checkedDocs[d] === true);
-      }
-      updates.documentVerification = {
-        checkedDocs: documentVerification.checkedDocs,
-        verifiedBy: session.uid,
-        verifiedByName: actorName,
-        verifiedAt: now,
-        allVerified,
-      };
-    }
-    if (joiningLetterUrl !== undefined) {
-      updates.joiningLetterUrl = joiningLetterUrl;
-      updates.joiningLetterUploadedAt = now;
-      updates.joiningLetterUploadedByName = actorName;
-    }
-    if (expectedSalary !== undefined) updates.expectedSalary = expectedSalary;
-    if (negotiatedSalary !== undefined) updates.negotiatedSalary = negotiatedSalary;
-    if (dateOfJoining !== undefined) updates.dateOfJoining = dateOfJoining;
-    if (termsAndConditions !== undefined) updates.termsAndConditions = termsAndConditions;
-    if (notifyPrincipalDocsReady) updates["documentVerification.notifiedPrincipalAt"] = now;
 
     await db
       .collection("colleges")
@@ -141,196 +75,6 @@ export async function PATCH(
       .collection("candidates")
       .doc(id)
       .update(updates);
-
-    // If candidate arrived, notify panel members and college office
-    if (hasArrived) {
-      const candidateData = candidateSnap.data() as { name?: string; batchId?: string };
-
-      if (candidateData.batchId) {
-        const batchSnap = await db
-          .collection("colleges")
-          .doc(session.collegeId)
-          .collection("hiringBatches")
-          .doc(candidateData.batchId)
-          .get();
-
-        if (batchSnap.exists) {
-          const batch = batchSnap.data() as { panelMemberUids?: string[]; position?: string };
-          const uidsToNotify = [...(batch.panelMemberUids ?? [])];
-
-          const officeSnap = await db
-            .collection("colleges")
-            .doc(session.collegeId)
-            .collection("users")
-            .where("role", "==", "COLLEGE_OFFICE")
-            .get();
-          for (const d of officeSnap.docs) uidsToNotify.push(d.id);
-
-          const writeBatch = db.batch();
-          for (const uid of uidsToNotify) {
-            const notifRef = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();
-            writeBatch.set(notifRef, {
-              collegeId: session.collegeId,
-              toUid: uid,
-              type: "CANDIDATE_ARRIVED",
-              title: "Candidate Has Arrived",
-              message: `${candidateData.name ?? "A candidate"} has arrived for the ${batch.position ?? "interview"}.`,
-              link: `/panel/interviews/${candidateData.batchId}`,
-              read: false,
-              createdAt: now,
-            });
-          }
-          await writeBatch.commit();
-        }
-      }
-
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "CANDIDATE_ARRIVED",
-        performedBy: session.uid,
-        performedByName: actorName,
-        targetId: id,
-        details: { candidateName: (candidateSnap.data() as { name?: string }).name },
-        timestamp: now,
-      });
-    }
-
-    if (isShortlisted !== undefined) {
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "CANDIDATE_SHORTLISTED",
-        performedBy: session.uid,
-        performedByName: actorName,
-        targetId: id,
-        details: { isShortlisted },
-        timestamp: now,
-      });
-    }
-
-    if (documentVerification !== undefined) {
-      const checkedCount = Object.values(documentVerification.checkedDocs).filter(Boolean).length;
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "DOCUMENTS_VERIFIED",
-        performedBy: session.uid,
-        performedByName: actorName,
-        targetId: id,
-        details: { checkedCount, totalCount: Object.keys(documentVerification.checkedDocs).length },
-        timestamp: now,
-      });
-    }
-
-    if (joiningLetterUrl !== undefined) {
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: "JOINING_LETTER_UPLOADED",
-        performedBy: session.uid,
-        performedByName: actorName,
-        targetId: id,
-        details: {},
-        timestamp: now,
-      });
-    }
-
-    const candidateData = candidateSnap.data() as { name?: string; batchId?: string };
-
-    // Final Principal decision: notify the HOD, log it, and — if every other
-    // candidate in the batch already has a decision — close out the batch
-    // server-side instead of relying on the client to notice and follow up.
-    if ((status === "APPROVED" || status === "REJECTED") && candidateData.batchId) {
-      const batchRef = db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("hiringBatches")
-        .doc(candidateData.batchId);
-      const batchSnap = await batchRef.get();
-
-      if (batchSnap.exists) {
-        const batch = batchSnap.data() as { hodUid?: string; position?: string };
-
-        if (batch.hodUid) {
-          await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
-            collegeId: session.collegeId,
-            toUid: batch.hodUid,
-            type: status === "APPROVED" ? "HIRING_APPROVED" : "HIRING_REJECTED",
-            title: status === "APPROVED" ? "Candidate Approved" : "Candidate Rejected",
-            message: `${candidateData.name ?? "A candidate"} for ${batch.position ?? "the position"} was ${status === "APPROVED" ? "approved" : "rejected"} by the Principal.`,
-            link: `/hod/batches/${candidateData.batchId}`,
-            read: false,
-            createdAt: now,
-          });
-        }
-
-        await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-          collegeId: session.collegeId,
-          action: "HIRING_DECISION_MADE",
-          performedBy: session.uid,
-          performedByName: actorName,
-          targetId: id,
-          details: { status, batchId: candidateData.batchId },
-          timestamp: now,
-        });
-
-        const siblingsSnap = await db
-          .collection("colleges")
-          .doc(session.collegeId)
-          .collection("candidates")
-          .where("batchId", "==", candidateData.batchId)
-          .get();
-        const allDecided = siblingsSnap.docs.every((d) => {
-          if (d.id === id) return true; // just decided above
-          const s = (d.data() as { status?: string }).status;
-          return s === "APPROVED" || s === "REJECTED";
-        });
-        if (allDecided) {
-          await batchRef.update({ currentPhase: "COMPLETED", status: "COMPLETED", updatedAt: now });
-        }
-      }
-    }
-
-    // Candidate approved → notify College Office to send the offer letter
-    if (stage === "DECISION" && status !== "REJECTED") {
-      const officeSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("users")
-        .where("role", "==", "COLLEGE_OFFICE")
-        .get();
-      for (const officeDoc of officeSnap.docs) {
-        await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
-          collegeId: session.collegeId,
-          toUid: officeDoc.id,
-          type: "GENERAL",
-          title: "Candidate Ready for Offer Letter",
-          message: `${candidateData.name ?? "A candidate"} has been approved. Please send the offer letter.`,
-          link: `/college-office/documents`,
-          read: false,
-          createdAt: now,
-        });
-      }
-    }
-
-    // Office has verified documents → notify Principal the appointment letter can go out
-    if (notifyPrincipalDocsReady) {
-      const principalSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("users")
-        .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
-        .get();
-      for (const principalDoc of principalSnap.docs) {
-        await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
-          collegeId: session.collegeId,
-          toUid: principalDoc.id,
-          type: "GENERAL",
-          title: "Documents Verified — Ready for Appointment Letter",
-          message: `${candidateData.name ?? "A candidate"}'s documents have been verified. You can now send the appointment letter.`,
-          link: `/principal/appointment-letters`,
-          read: false,
-          createdAt: now,
-        });
-      }
-    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -350,13 +94,26 @@ export async function DELETE(
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
     const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("candidates")
-      .doc(id)
-      .delete();
+    // Block delete while the candidate has any live (non-REJECTED) applications,
+    // matching the existing vacancy-requests/[id] DELETE guard pattern — avoids
+    // orphaning CandidateApplication docs.
+    const applicationsSnap = await collegeRef
+      .collection("candidateApplications")
+      .where("candidateId", "==", id)
+      .get();
+    const hasActiveApplication = applicationsSnap.docs.some(
+      (d) => (d.data() as { status?: string }).status !== "REJECTED"
+    );
+    if (hasActiveApplication) {
+      return NextResponse.json(
+        { error: "Cannot delete a candidate with active hiring-request applications" },
+        { status: 400 }
+      );
+    }
+
+    await collegeRef.collection("candidates").doc(id).delete();
 
     return NextResponse.json({ ok: true });
   } catch (err) {

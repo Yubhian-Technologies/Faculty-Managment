@@ -285,7 +285,17 @@ service cloud.firestore {
       match /candidates/{candidateId} {
         allow read: if isStaff(collegeId);
         allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
-        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId);
+        allow update: if isHODorAbove(collegeId);
+        allow delete: if isHOD(collegeId) || isSuperAdmin();
+      }
+
+      // Join entity: candidate <-> vacancyRequest. Carries all per-hiring-cycle
+      // state (stage/documents/salary/committee recommendation) so Candidate
+      // itself stays a reusable, decoupled person record.
+      match /candidateApplications/{applicationId} {
+        allow read: if isStaff(collegeId);
+        allow create: if isHOD(collegeId) && hasCollegeId(collegeId);
+        allow update: if isHODorAbove(collegeId) || isCollegeOffice(collegeId) || isPanelMember(collegeId);
         allow delete: if isHOD(collegeId) || isSuperAdmin();
       }
 

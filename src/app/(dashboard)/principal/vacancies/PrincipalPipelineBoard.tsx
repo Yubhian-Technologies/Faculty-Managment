@@ -10,12 +10,23 @@ import { Step } from "@/components/shared/PipelineStep";
 import { getCurrentStage, stateForStage, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import type { VacancyRequest, Candidate, HiringBatch } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, InterviewMode, HiringBatch } from "@/types";
 import { BATCH_PHASE_LABELS } from "@/types";
+
+// Joined view: application (per-hiring-request pipeline state) + candidate
+// (person) fields. `id` is the applicationId.
+type PipelineCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+  isShortlisted: boolean;
+  interviewMode?: InterviewMode;
+};
 
 type PipelineEntry = {
   vacancy: VacancyRequest;
-  candidates: Candidate[];
+  candidates: PipelineCandidateView[];
   batch: HiringBatch | null;
 };
 
@@ -248,11 +259,14 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  function load() {
     void Promise.all([
       fetch("/api/college/vacancy-requests")
         .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
         .then((d) => d.vacancyRequests ?? []),
+      fetch("/api/college/candidate-applications")
+        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
+        .then((d) => d.applications ?? []),
       fetch("/api/college/candidates")
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
@@ -260,15 +274,26 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
         .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
         .then((d) => d.batches ?? []),
     ])
-      .then(([vacancies, candidates, batches]) => {
-        const vacancyIdByBatchId = new Map(batches.map((b) => [b.id, b.vacancyId]));
+      .then(([vacancies, applications, candidates, batches]) => {
+        const candidateMap = new Map(candidates.map((c) => [c.id, c]));
+        const viewsByVacancy = new Map<string, PipelineCandidateView[]>();
+        for (const a of applications) {
+          const person = candidateMap.get(a.candidateId);
+          const view: PipelineCandidateView = {
+            id: a.id,
+            candidateId: a.candidateId,
+            name: person?.name ?? "Unknown",
+            email: person?.email ?? "",
+            isShortlisted: a.isShortlisted,
+            interviewMode: a.interviewMode,
+          };
+          const list = viewsByVacancy.get(a.vacancyRequestId);
+          if (list) list.push(view);
+          else viewsByVacancy.set(a.vacancyRequestId, [view]);
+        }
         const built: PipelineEntry[] = vacancies.map((v) => ({
           vacancy: v,
-          candidates: candidates.filter((c) => {
-            if (c.vacancyId) return c.vacancyId === v.id;
-            if (c.batchId) return vacancyIdByBatchId.get(c.batchId) === v.id;
-            return c.position === v.position && c.department === v.department;
-          }),
+          candidates: viewsByVacancy.get(v.id) ?? [],
           batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
         }));
         built.sort(
@@ -278,6 +303,20 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
       .finally(() => setIsLoading(false));
+  }
+
+  useEffect(() => {
+    load();
+    // This is the primary Principal dashboard, likely to stay open longest
+    // through a multi-actor pipeline — refetch on refocus so it doesn't go stale.
+    function onFocus() { load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const visible = entries.filter((e) => (scope === "closed" ? isClosed(e) : !isClosed(e)));

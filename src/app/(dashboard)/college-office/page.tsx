@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { useAuthStore } from "@/store/authStore";
-import type { Candidate } from "@/types";
+import type { Candidate, CandidateApplication } from "@/types";
 
-type CandidateRow = Record<string, unknown> & Candidate;
+type CandidateRow = { id: string; name: string; position: string; department: string };
 
 export default function CollegeOfficeDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -19,13 +19,19 @@ export default function CollegeOfficeDashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/college/candidates")
-      .then((r) => r.json() as Promise<{ candidates: CandidateRow[] }>)
-      .then((d) => {
-        const relevant = (d.candidates ?? []).filter(
-          (c) => (c as unknown as { currentStage?: string }).currentStage === "DECISION"
-        );
-        setCandidates(relevant as CandidateRow[]);
+    Promise.all([
+      fetch("/api/college/candidate-applications?stage=DECISION").then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
+      fetch("/api/college/candidates").then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
+    ])
+      .then(([appsRes, candsRes]) => {
+        const personMap = new Map((candsRes.candidates ?? []).map((c) => [c.id, c]));
+        const relevant = (appsRes.applications ?? []).map((a) => ({
+          id: a.id,
+          name: personMap.get(a.candidateId)?.name ?? "Unknown",
+          position: a.position,
+          department: a.department,
+        }));
+        setCandidates(relevant);
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));

@@ -213,7 +213,7 @@ export default function HODDashboard() {
                     <div>
                       <p className="font-medium text-sm">{b.position}</p>
                       <p className="text-xs text-muted-foreground">
-                        {b.candidateIds.length} candidate{b.candidateIds.length !== 1 ? "s" : ""} · {formatDate(b.interviewDate)}
+                        {(b.applicationIds ?? []).length} candidate{(b.applicationIds ?? []).length !== 1 ? "s" : ""} · {formatDate(b.interviewDate)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

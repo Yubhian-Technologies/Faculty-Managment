@@ -15,7 +15,28 @@ import { collegeFetch } from "@/lib/api/collegeFetch";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
 import { formatDate } from "@/lib/utils";
 import { FileText, CheckCircle2 } from "lucide-react";
-import type { Candidate, HiringBatch } from "@/types";
+import type { Candidate, CandidateApplication } from "@/types";
+
+// Joined view: pipeline/offer fields (department, position, negotiatedSalary,
+// dateOfJoining, termsAndConditions, expectedSalary, batchId) come from the
+// Principal-approved CandidateApplication; person fields (name, email,
+// address) come from the Candidate. `id` is the applicationId; `candidateId`
+// is the real Candidate id (what OfferLetter.candidateId expects).
+type DecisionCandidateView = {
+  id: string;
+  candidateId: string;
+  name: string;
+  email: string;
+  permanentAddress?: string;
+  residenceAddress?: string;
+  department: string;
+  position: string;
+  batchId?: string;
+  expectedSalary?: number;
+  negotiatedSalary?: number;
+  dateOfJoining?: string;
+  termsAndConditions?: string[];
+};
 
 type CreateForm = {
   candidateId: string;
@@ -35,33 +56,63 @@ const emptyForm = (): CreateForm => ({
 
 export default function AccountsHiringPage() {
   const router = useRouter();
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [batches, setBatches] = useState<HiringBatch[]>([]);
+  const [candidates, setCandidates] = useState<DecisionCandidateView[]>([]);
   const [existingLetterIds, setExistingLetterIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
-  const [selected, setSelected] = useState<Candidate | null>(null);
+  const [selected, setSelected] = useState<DecisionCandidateView | null>(null);
   const [form, setForm] = useState<CreateForm>(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
   const [sentConfirm, setSentConfirm] = useState<{ name: string; emailedTo?: string } | null>(null);
   const [collegeInfo, setCollegeInfo] = useState<{ name: string; address: string }>({ name: "", address: "" });
 
-  useEffect(() => {
+  function load() {
     Promise.all([
+      fetch("/api/college/candidate-applications?stage=DECISION").then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
       fetch("/api/college/candidates").then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
-      fetch("/api/college/hiring-batches").then((r) => r.json() as Promise<{ batches: HiringBatch[] }>),
       fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string; status?: string }[] }>),
     ])
-      .then(([cRes, bRes, lRes]) => {
-        const pending = (cRes.candidates ?? []).filter(
-          (c) => c.currentStage === "DECISION" && c.status !== "REJECTED"
-        );
+      .then(([appsRes, candsRes, lRes]) => {
+        const personMap = new Map((candsRes.candidates ?? []).map((c) => [c.id, c]));
+        const pending = (appsRes.applications ?? [])
+          .filter((a) => a.status !== "REJECTED")
+          .map((a): DecisionCandidateView => {
+            const person = personMap.get(a.candidateId);
+            return {
+              id: a.id,
+              candidateId: a.candidateId,
+              name: person?.name ?? "Unknown",
+              email: person?.email ?? "",
+              permanentAddress: person?.permanentAddress,
+              residenceAddress: person?.residenceAddress,
+              department: a.department,
+              position: a.position,
+              batchId: a.batchId,
+              expectedSalary: a.expectedSalary,
+              negotiatedSalary: a.negotiatedSalary,
+              dateOfJoining: a.dateOfJoining,
+              termsAndConditions: a.termsAndConditions,
+            };
+          });
         setCandidates(pending);
-        setBatches(bRes.batches ?? []);
         // A REJECTED offer shouldn't block a fresh one being sent.
         setExistingLetterIds(new Set((lRes.letters ?? []).filter((l) => l.status !== "REJECTED").map((l) => l.candidateId)));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
       .finally(() => setIsLoading(false));
+  }
+
+  useEffect(() => {
+    load();
+    // College Office can also send offers for the same candidates from a
+    // different session — refetch on refocus so this list doesn't go stale
+    // and risk a duplicate offer.
+    function onFocus() { load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
   }, []);
 
   useEffect(() => {
@@ -71,15 +122,14 @@ export default function AccountsHiringPage() {
       .catch(() => {});
   }, []);
 
-  function openForm(c: Candidate) {
-    const batch = batches.find((b) => b.id === c.batchId);
+  function openForm(c: DecisionCandidateView) {
     setSelected(c);
     setForm({
       ...emptyForm(),
-      candidateId: c.id,
-      batchId: batch?.id ?? "",
-      designation: batch?.position ?? "",
-      department: c.department ?? batch?.department ?? "",
+      candidateId: c.candidateId,
+      batchId: c.batchId ?? "",
+      designation: c.position,
+      department: c.department,
       // Negotiated salary, joining date, and terms are captured by the Principal
       // at decision time — auto-fill here rather than re-asking for them.
       ctcAnnual: c.negotiatedSalary != null ? String(c.negotiatedSalary) : "",
@@ -152,7 +202,7 @@ ${institution}`;
 
       setSentConfirm({ name: selected?.name ?? "the candidate", emailedTo: selected?.email });
       setExistingLetterIds((prev) => new Set([...prev, candidateId]));
-      setCandidates((prev) => prev.filter((c) => c.id !== candidateId));
+      setCandidates((prev) => prev.filter((c) => c.candidateId !== candidateId));
       setSelected(null);
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
@@ -161,8 +211,8 @@ ${institution}`;
     }
   }
 
-  const pendingOffer = candidates.filter((c) => !existingLetterIds.has(c.id));
-  const offered = candidates.filter((c) => existingLetterIds.has(c.id));
+  const pendingOffer = candidates.filter((c) => !existingLetterIds.has(c.candidateId));
+  const offered = candidates.filter((c) => existingLetterIds.has(c.candidateId));
 
   return (
     <div className="space-y-6">
@@ -189,21 +239,18 @@ ${institution}`;
                 <CardTitle className="text-base">Pending Offer Letters ({pendingOffer.length})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {pendingOffer.map((c) => {
-                  const batch = batches.find((b) => b.id === c.batchId);
-                  return (
-                    <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div>
-                        <p className="font-medium text-sm">{c.name}</p>
-                        <p className="text-xs text-muted-foreground">{c.email} · {batch?.position ?? c.department}</p>
-                      </div>
-                      <Button size="sm" onClick={() => openForm(c)}>
-                        <FileText className="h-3.5 w-3.5 mr-1.5" />
-                        Send Offer
-                      </Button>
+                {pendingOffer.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border">
+                    <div>
+                      <p className="font-medium text-sm">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.email} · {c.position}</p>
                     </div>
-                  );
-                })}
+                    <Button size="sm" onClick={() => openForm(c)}>
+                      <FileText className="h-3.5 w-3.5 mr-1.5" />
+                      Send Offer
+                    </Button>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}

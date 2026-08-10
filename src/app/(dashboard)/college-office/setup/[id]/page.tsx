@@ -112,7 +112,7 @@ export default function SetupDetailPage({ params }: { params: Promise<{ id: stri
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Candidates</span>
-            <span>{batch.candidateIds.length}</span>
+            <span>{(batch.applicationIds ?? []).length}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Panel Size</span>
@@ -160,6 +160,7 @@ export default function SetupDetailPage({ params }: { params: Promise<{ id: stri
                   {doc}
                   <button
                     onClick={() => removeDoc(doc)}
+                    aria-label={`Remove ${doc}`}
                     className="ml-1 hover:text-destructive"
                   >
                     <X className="h-3 w-3" />
