@@ -692,6 +692,7 @@ export interface DegreeDetail {
   domain?: string; // Management / Engineering / Arts & Science / Medicine / Law / Others - not applicable to School/Intermediate
   degree: string;
   branch: string;
+  specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
   universityOrInstitute: string;
   percentageOrDivision: string;
   yearOfCompletion: number;

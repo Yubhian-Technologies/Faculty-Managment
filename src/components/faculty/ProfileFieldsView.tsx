@@ -76,7 +76,7 @@ export function QualificationModule({ profile }: { profile: Partial<FacultyProfi
         <DegreeView label="Intermediate (12th)" degree={p.intermediateDetails} />
         <DegreeView label="UG" degree={p.ugDetails} />
         <DegreeView label="PG" degree={p.pgDetails} />
-        <DegreeView label="PhD" degree={p.phdDetails} />
+        <DegreeView label="PhD" degree={p.phdDetails} level="DOCTORAL" />
         <DegreeView label="Post-Doctoral" degree={p.postDoctoralDetails} />
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">

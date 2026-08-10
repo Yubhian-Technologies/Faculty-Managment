@@ -38,16 +38,16 @@ export const EDUCATION_DOMAIN_LABELS: Record<EducationDomain, string> = {
 const COURSES_BY_DOMAIN: Record<EducationDomain, string[]> = {
   ENGINEERING: [
     "B.Tech/BE", "M.Tech/ME", "B.Tech - M.Tech Integrated/Dual Degree", "BCA",
-    "MCA (2-Year)", "MCA (3-Year)", "MCM", "Diploma in Engineering", "Ph.D in Engineering",
+    "MCA (2-Year)", "MCA (3-Year)", "MCM", "Diploma in Engineering",
   ],
   MANAGEMENT: [
     "BBA", "B.Com", "M.Com", "BHM", "CA", "CS", "PGDM", "1-Year MBA", "2-Year MBA",
-    "Executive MBA", "IPM", "Ph.D in Management",
+    "Executive MBA", "IPM",
   ],
   ARTS_SCIENCE: [
     "B.Sc.", "M.Sc.", "B.A.", "M.A.", "BS", "MS", "B.Ed", "M.Ed", "B.El.Ed", "B.P.Ed",
     "B.Des.", "M.Des.", "B.Arch.", "M.Arch.", "B.F.Tech.", "M.F.Tech.", "B.Plan", "M.Plan",
-    "BFA", "MFA", "Ph.D in Arts",
+    "BFA", "MFA",
   ],
   MEDICINE: [
     "B.Pharma", "M.Pharma", "Pharma. D", "BUMS", "BAMS", "BDS", "BHMS", "MBBS",
@@ -63,7 +63,7 @@ const COURSES_BY_DOMAIN: Record<EducationDomain, string[]> = {
 // repeating-list UI instead of maintaining two near-duplicate copies.
 
 export const EMPTY_DEGREE: DegreeDetail = {
-  degree: "", branch: "", universityOrInstitute: "", percentageOrDivision: "",
+  degree: "", branch: "", specialization: "", universityOrInstitute: "", percentageOrDivision: "",
   yearOfCompletion: new Date().getFullYear(), certificateUrl: "",
 };
 
@@ -112,6 +112,10 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
   // Intermediate (12th) and High School (10th) have no fixed course
   // catalogue to offer - just let the qualification name be typed directly.
   const isSchoolLevel = level === "INTERMEDIATE" || level === "HIGH_SCHOOL";
+  // Doctoral entries have no Course catalogue of their own (that's what the
+  // UG/PG Course dropdowns are for) - they take a free-text Specialization
+  // instead, and skip Branch/Percentage-CGPA which don't apply to a PhD.
+  const isDoctoral = level === "DOCTORAL";
 
   return (
     <div className="space-y-3 rounded-lg border p-3">
@@ -133,6 +137,8 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
         )}
         {isSchoolLevel ? (
           <TextInput label="Qualification" value={v.degree} onChange={(x) => onChange({ ...v, degree: x })} placeholder={level === "HIGH_SCHOOL" ? "e.g. SSC / State Board" : "e.g. MPC, State Board"} />
+        ) : isDoctoral ? (
+          <TextInput label="Specialization" value={v.specialization} onChange={(x) => onChange({ ...v, specialization: x })} placeholder="e.g. Machine Learning" />
         ) : (
           <div className="space-y-2">
             <Label>Course</Label>
@@ -156,11 +162,13 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
             )}
           </div>
         )}
-        {!isSchoolLevel && (
+        {!isSchoolLevel && !isDoctoral && (
           <TextInput label="Branch" value={v.branch} onChange={(x) => onChange({ ...v, branch: x })} placeholder="e.g. CSE" />
         )}
         <TextInput label="University / Institute" value={v.universityOrInstitute} onChange={(x) => onChange({ ...v, universityOrInstitute: x })} />
-        <TextInput label="Percentage / Division" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
+        {!isDoctoral && (
+          <TextInput label="Percentage / CGPA" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
+        )}
         <NumInput label="Year of Completion" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
       </div>
       <CertificateUploadField
@@ -307,16 +315,21 @@ export function Field({ label, value }: { label: string; value: string | number 
   );
 }
 
-export function DegreeView({ label, degree: degreeInput }: { label: string; degree: DegreeDetail | undefined }) {
+export function DegreeView({ label, degree: degreeInput, level }: { label: string; degree: DegreeDetail | undefined; level?: DegreeLevel }) {
   const degree = resolveDegree(degreeInput);
+  const isDoctoral = level === "DOCTORAL";
   return (
     <div className="rounded-lg border bg-muted/20 shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
       <p className="col-span-2 sm:col-span-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
       {degree?.domain && <Field label="Domain" value={EDUCATION_DOMAIN_LABELS[degree.domain as EducationDomain] ?? degree.domain} />}
       <Field label="Degree" value={degree?.degree} />
-      <Field label="Branch" value={degree?.branch} />
+      {isDoctoral ? (
+        <Field label="Specialization" value={degree?.specialization} />
+      ) : (
+        <Field label="Branch" value={degree?.branch} />
+      )}
       <Field label="University / Institute" value={degree?.universityOrInstitute} />
-      <Field label="Percentage / Division" value={degree?.percentageOrDivision} />
+      {!isDoctoral && <Field label="Percentage / CGPA" value={degree?.percentageOrDivision} />}
       <Field label="Year of Completion" value={degree?.yearOfCompletion} />
       {degree?.certificateUrl && (
         <div className="col-span-2 sm:col-span-4">
