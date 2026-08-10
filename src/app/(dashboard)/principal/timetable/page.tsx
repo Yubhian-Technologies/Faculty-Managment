@@ -5,6 +5,7 @@ import { Coffee, Utensils } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "@/hooks/useToast";
 import { buildRows } from "@/lib/timetable/buildGrid";
+import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -211,7 +212,11 @@ export default function PrincipalTimetablePage() {
             disabled={sections.length === 0}
           >
             {sections.length === 0 ? <option value="">No sections</option> : null}
-            {sections.map((s) => <option key={s.id} value={s.id}>Section {s.name}</option>)}
+            {/* Department code included: a parent department and its
+                sub-departments each have their own "A". */}
+            {sections.map((s) => (
+              <option key={s.id} value={s.id}>{sectionDisplayLabel(s, departments)}</option>
+            ))}
           </select>
         </div>
       </div>
