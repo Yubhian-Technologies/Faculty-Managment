@@ -26,12 +26,31 @@ export async function GET(request: Request) {
     // specialist when assigning a shared/parent-owned subject, and to administer
     // those faculty directly (see canHodEditDepartment in lib/departments/scope).
     let childDeptQuery: FirebaseFirestore.Query | null = null;
+    // A feeder's faculty pool (e.g. Basic Science, for any department it
+    // feeds via secondaryDepartments - see resolveSubjectDepartment) is
+    // staffable for that department's shared 1st-year subjects - a fed
+    // department's own faculty roster is often empty since the feeder's
+    // faculty already cover it - but stays view-only below: this HOD doesn't
+    // manage the feeder's own faculty records.
+    let feederDeptQuery: FirebaseFirestore.Query | null = null;
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.departmentName) primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
-      if (scope.childDepartmentNames.length > 0) {
-        childDeptQuery = withStatus(facultyColl.where("department", "in", scope.childDepartmentNames));
+
+      // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD)
+      // are both fully-owned, so one query covers both, tagged "primary" below.
+      const ownedNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
+      if (ownedNames.length > 0) {
+        childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
+      }
+
+      if (scope.departmentName) {
+        const relatedNames = await getRelatedDepartmentNames(db, session.collegeId, scope.departmentName);
+        const feederNames = relatedNames.filter((n) => n !== scope.departmentName && !ownedNames.includes(n));
+        if (feederNames.length > 0) {
+          feederDeptQuery = withStatus(facultyColl.where("department", "in", feederNames.slice(0, 30)));
+        }
       }
     } else if (deptFilter) {
       // Office/Principal/VP picking faculty for a specific department (e.g.
@@ -47,9 +66,10 @@ export async function GET(request: Request) {
 
     primaryQuery = withStatus(primaryQuery);
 
-    const [primarySnap, childDeptSnap] = await Promise.all([
+    const [primarySnap, childDeptSnap, feederDeptSnap] = await Promise.all([
       primaryQuery.get(),
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
+      feederDeptQuery ? feederDeptQuery.get() : Promise.resolve(null),
     ]);
 
     const faculty: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] =
@@ -60,6 +80,13 @@ export async function GET(request: Request) {
       // so the UI must not mark them view-only.
       for (const d of childDeptSnap.docs) {
         faculty.push({ id: d.id, ...d.data(), accessLevel: "primary" });
+      }
+    }
+    if (feederDeptSnap) {
+      // "secondary": staffable for a shared subject, but this HOD doesn't
+      // manage the feeder's own faculty records.
+      for (const d of feederDeptSnap.docs) {
+        faculty.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
       }
     }
     faculty.sort((a, b) => {

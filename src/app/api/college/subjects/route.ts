@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { SubjectType } from "@/types";
 import {
-  getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames,
+  getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames, resolveSubjectDepartment,
 } from "@/lib/departments/scope";
 
 export async function GET(request: Request) {
@@ -36,7 +36,15 @@ export async function GET(request: Request) {
         query = query.where("department", "in", names.slice(0, 30));
       }
     } else if (deptFilter) {
-      query = query.where("department", "==", deptFilter);
+      // Same bidirectional visibility as the HOD branch above, for Dean/
+      // Principal/VP: browsing a fed department (e.g. IT) also shows its
+      // feeder's subjects (e.g. Basic Science's shared 1st-year catalog) -
+      // the `year` filter below keeps a feeder's subjects from leaking into
+      // a year it doesn't own.
+      const names = await getRelatedDepartmentNames(db, session.collegeId, deptFilter);
+      query = names.length > 1
+        ? query.where("department", "in", names.slice(0, 30))
+        : query.where("department", "==", deptFilter);
     }
 
     if (courseId) query = query.where("courseId", "==", courseId);
@@ -122,14 +130,25 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "Course does not belong to your department" }, { status: 403 });
         }
       } else {
-        // Non-HOD callers (Principal/VP/Super Admin/Dean) aren't scoped to
-        // one department - derive the canonical department name from the
-        // course's own departmentId rather than trusting a client-supplied
-        // string, so it can never drift from what the course actually
-        // belongs to.
+        // Non-HOD callers (Principal/VP/Super Admin/Dean) aren't scoped to one
+        // department, so the client may name which one it's targeting - but
+        // only the course's own department or one of the departments it feeds
+        // (Department.secondaryDepartments) is accepted, so it can never drift
+        // to an unrelated department.
         const courseDeptSnap = await db.collection("colleges").doc(session.collegeId)
           .collection("departments").doc(course.departmentId).get();
-        dept = (courseDeptSnap.data() as { name?: string } | undefined)?.name ?? "";
+        const courseDept = courseDeptSnap.data() as { name?: string; secondaryDepartments?: string[] } | undefined;
+        const courseDeptName = courseDept?.name ?? "";
+        const requestedDept = body.department?.trim() || courseDeptName;
+        if (requestedDept !== courseDeptName && !(courseDept?.secondaryDepartments ?? []).includes(requestedDept)) {
+          return NextResponse.json({ error: "That department doesn't offer this course" }, { status: 403 });
+        }
+        // A fed department's reserved year (e.g. any secondary department's
+        // 1st year, when Basic Science reserves year 1 via assignedYears)
+        // files under the feeder instead, so every fed department reads from
+        // one shared 1st-year list; other years (2nd year onward) stay filed
+        // under the department actually selected (IT for IT, CS for CS, ...).
+        dept = await resolveSubjectDepartment(db, session.collegeId, requestedDept, Number(year));
       }
 
       const ref = await db

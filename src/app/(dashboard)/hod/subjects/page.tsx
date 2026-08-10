@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
+import { useAuth } from "@/hooks/useAuth";
 import type { Course, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 
@@ -21,6 +22,7 @@ function ordinalYear(year: number) {
 
 export default function HODSubjectsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -157,30 +159,44 @@ export default function HODSubjectsPage() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {subjects.map((s) => (
-                      <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                            <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                    {subjects.map((s) => {
+                      // A subject viewed here that isn't actually filed under
+                      // this HOD's own department (e.g. Basic Science's shared
+                      // 1st-year subject, seen from a fed department like IT)
+                      // is read-only - editing/deleting it from a department
+                      // that doesn't own it would change/remove it for every
+                      // other department sharing it too.
+                      const isOwnDepartment = s.department === user?.department;
+                      return (
+                        <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                              <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                              {!isOwnDepartment && (
+                                <Badge variant="outline" className="text-xs">From {s.department}</Badge>
+                              )}
+                            </div>
+                            <p className="font-medium text-sm">{s.name}</p>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{s.hoursPerWeek} hrs/week</span>
+                              {s.totalHoursPerSemester != null && <span>{s.totalHoursPerSemester} hrs/semester</span>}
+                              {s.credits > 0 && <span>{s.credits} credits</span>}
+                            </div>
                           </div>
-                          <p className="font-medium text-sm">{s.name}</p>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{s.hoursPerWeek} hrs/week</span>
-                            {s.totalHoursPerSemester != null && <span>{s.totalHoursPerSemester} hrs/semester</span>}
-                            {s.credits > 0 && <span>{s.credits} credits</span>}
-                          </div>
+                          {isOwnDepartment && (
+                            <div className="flex gap-1 shrink-0">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/hod/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(s)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex gap-1 shrink-0">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/hod/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(s)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

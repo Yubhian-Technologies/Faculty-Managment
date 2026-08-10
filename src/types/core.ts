@@ -1108,6 +1108,10 @@ export type NotificationType =
   | "CREDENTIAL_REQUESTED"
   | "FACULTY_ACCOUNT_REQUEST_COMPLETED"
   | "COORDINATOR_ASSIGNED"
+  // Teaching (cross-department faculty assignment requests)
+  | "FACULTY_ASSIGNMENT_REQUESTED"
+  | "FACULTY_ASSIGNMENT_ALLOCATED"
+  | "FACULTY_ASSIGNMENT_DECLINED"
   // Webmaster (official email provisioning)
   | "EMAIL_REQUEST_SUBMITTED"
   | "OFFICIAL_EMAIL_CREATED"
@@ -1161,6 +1165,10 @@ export type NotificationType =
   | "PURCHASE_CLEARANCE_FINANCE_REJECTED"
   | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
   | "PURCHASE_CLEARANCE_GRN_UPLOADED"
+  // Teaching (cross-department faculty assignment requests)
+  | "FACULTY_ASSIGNMENT_REQUESTED"
+  | "FACULTY_ASSIGNMENT_ALLOCATED"
+  | "FACULTY_ASSIGNMENT_DECLINED"
   | "GENERAL";
 
 export interface AppNotification {

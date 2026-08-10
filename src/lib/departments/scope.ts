@@ -159,9 +159,13 @@ export async function syncDepartmentHod(
 // For a caller who names one specific department explicitly (Office/Principal/
 // VP picking a department for a section, faculty filter, etc.) rather than
 // resolving their own - returns that department plus its parent (if it's a
-// sub-department) and its children (if it has sub-departments), so a faculty
-// member registered under either the main department or one of its
-// sub-departments shows up as assignable either way.
+// sub-department), its children (if it has sub-departments), and any
+// unrelated top-level department that cross-lists it as a `secondaryDepartments`
+// feeder (e.g. a shared first-year "Basic Science" department feeding CSE/ECE/IT -
+// see the field's doc in types/core.ts) - so a faculty member OR a subject
+// registered under any of those shows up as usable from this department too.
+// A fed department (IT) never defines its own copy of the feeder's first-year
+// subjects, so without this it can see none of them at all.
 export async function getRelatedDepartmentNames(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
@@ -181,6 +185,12 @@ export async function getRelatedDepartmentNames(
     if (parentName) names.add(parentName);
   }
 
+  const feederSnap = await deptsColl.where("secondaryDepartments", "array-contains", departmentName).get();
+  for (const d of feederSnap.docs) {
+    const name = (d.data() as { name?: string }).name;
+    if (name) names.add(name);
+  }
+
   if (dept.hasSubDepartments) {
     const childrenSnap = await deptsColl.where("parentDepartmentId", "==", deptDoc.id).get();
     for (const d of childrenSnap.docs) {
@@ -190,4 +200,61 @@ export async function getRelatedDepartmentNames(
   }
 
   return Array.from(names).slice(0, 30);
+}
+
+/** Id-keyed counterpart of getRelatedDepartmentNames, for callers (course
+ * lookups) that filter by departmentId rather than department name - own id,
+ * parent (if this department is itself a child), and feeder (if this
+ * department is fed by another). Deliberately NOT children: a true
+ * sub-department always borrows its parent's course rather than owning one
+ * of its own, so there's nothing for a parent to gain by reaching down into a
+ * child's own course row - doing so previously surfaced an unrelated stray
+ * course under the parent's own dropdown and broke subject creation there. */
+export async function getRelatedDepartmentIds(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  departmentId: string
+): Promise<string[]> {
+  const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
+  const deptSnap = await deptsColl.doc(departmentId).get();
+  if (!deptSnap.exists) return [departmentId];
+
+  const dept = deptSnap.data() as { name?: string; parentDepartmentId?: string };
+  const ids = new Set<string>([departmentId]);
+
+  if (dept.parentDepartmentId) ids.add(dept.parentDepartmentId);
+
+  if (dept.name) {
+    const feederSnap = await deptsColl.where("secondaryDepartments", "array-contains", dept.name).get();
+    for (const d of feederSnap.docs) ids.add(d.id);
+  }
+
+  return Array.from(ids).slice(0, 30);
+}
+
+// A department fed by another (Department.secondaryDepartments - e.g. a shared
+// first-year "Basic Science" feeding every other department in the college)
+// doesn't own the years the feeder has reserved for itself
+// (Department.assignedYears, e.g. [1]) - a subject filed for one of those
+// years belongs to the feeder instead, so every fed department reads from one
+// shared 1st-year list rather than each re-entering it. Years outside the
+// feeder's assignedYears stay with the target department itself (e.g. IT's
+// own 2nd-year subjects, CSE's own 2nd-year subjects). Picks the first feeder
+// that actually claims the year; a department with no such feeder (or whose
+// feeder doesn't reserve this year) resolves to itself.
+export async function resolveSubjectDepartment(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  targetDepartmentName: string,
+  year: number
+): Promise<string> {
+  const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
+  const feederSnap = await deptsColl.where("secondaryDepartments", "array-contains", targetDepartmentName).get();
+  for (const d of feederSnap.docs) {
+    const data = d.data() as { name?: string; assignedYears?: number[] };
+    if (data.name && (data.assignedYears ?? []).includes(year)) {
+      return data.name;
+    }
+  }
+  return targetDepartmentName;
 }
