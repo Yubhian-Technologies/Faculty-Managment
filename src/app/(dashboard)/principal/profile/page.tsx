@@ -1,18 +1,14 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { ProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABELS } from "@/types";
 
 export default function PrincipalProfilePage() {
-  const router = useRouter();
   const { user } = useAuth();
   if (!user) return null;
 
@@ -21,14 +17,7 @@ export default function PrincipalProfilePage() {
       <PageHeader
         title="My Profile"
         description="Manage your profile photo and account details"
-        actions={
-          <>
-            <ChangePasswordDialog />
-            <Button variant="outline" onClick={() => router.push("/principal/profile/edit")}>
-              <Pencil className="h-4 w-4 mr-2" />Edit
-            </Button>
-          </>
-        }
+        actions={<ChangePasswordDialog />}
       />
       <Card>
         <CardContent className="p-6 space-y-6">

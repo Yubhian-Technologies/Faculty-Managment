@@ -26,7 +26,7 @@ async function loadTargetInScope(
   if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
     // Matches CREATABLE_ROLES in principal/staff/new/page.tsx - every role a
     // Principal/VP can create here, they can also view/edit/deactivate.
-    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER"].includes(target.role)) {
+    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER"].includes(target.role)) {
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
   } else if (session.role === "HOD") {

@@ -48,7 +48,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF"
+      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D"
     );
     const db = getAdminDb();
 
@@ -75,7 +76,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
-      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF"
+      "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D"
     );
     const body = (await request.json()) as {
       action?: "APPROVE" | "REJECT" | "CANCEL";

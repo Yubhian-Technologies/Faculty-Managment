@@ -7,12 +7,18 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
+import { COLLEGE_TYPE_LABELS } from "@/types";
+import type { CollegeType } from "@/types";
+
+const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
 type CollegeRow = {
   id: string;
   name: string;
+  type?: CollegeType;
   locationId?: string;
   locationName?: string;
   address: string;
@@ -26,6 +32,7 @@ export default function CollegesPage() {
   const router = useRouter();
   const [colleges, setColleges] = useState<CollegeRow[]>([]);
   const [locationMap, setLocationMap] = useState<Record<string, string>>({});
+  const [typeFilter, setTypeFilter] = useState<CollegeType | "All">("All");
   const [isLoading, setIsLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -103,6 +110,17 @@ export default function CollegesPage() {
           <p className="font-medium">{row.name}</p>
           <p className="text-xs text-muted-foreground">{row.id}</p>
         </div>
+      ),
+    },
+    {
+      key: "type",
+      header: "Type",
+      render: (row) => (
+        row.type ? (
+          <Badge variant="outline" className="text-xs font-normal">{COLLEGE_TYPE_LABELS[row.type]}</Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground italic">Unspecified</span>
+        )
       ),
     },
     {
@@ -196,12 +214,25 @@ export default function CollegesPage() {
       />
 
       <DataTable
-        data={colleges}
+        data={typeFilter === "All" ? colleges : colleges.filter((c) => c.type === typeFilter)}
         columns={columns}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
         searchPlaceholder="Search colleges..."
         searchKeys={["name", "contactEmail", "address"] as (keyof CollegeRow)[]}
+        filterComponent={
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as CollegeType | "All")}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Types</SelectItem>
+              {COLLEGE_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>{COLLEGE_TYPE_LABELS[t]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
         emptyTitle="No colleges yet"
         emptyDescription="Add your first institution to get started"
         emptyAction={
