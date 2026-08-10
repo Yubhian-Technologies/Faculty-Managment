@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Trash2, Send } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,8 @@ export default function TeachingAssignmentsPage() {
 
   const [assignForm, setAssignForm] = useState({ sectionId: "", subjectId: "", facultyId: "" });
   const [savingAssignment, setSavingAssignment] = useState(false);
+  const [requestTargetId, setRequestTargetId] = useState("");
+  const [sendingRequest, setSendingRequest] = useState(false);
 
   function load() {
     setIsLoading(true);
@@ -151,6 +154,17 @@ export default function TeachingAssignmentsPage() {
     ? subjects.filter((s) => !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id))
     : subjects;
 
+  // Every top-level department in the college is askable, including ones this
+  // HOD can already assign from directly (e.g. a managed branch whose own
+  // faculty are all busy elsewhere) - only the section's own department is
+  // excluded, since requesting from yourself is a no-op. Sub-departments stay
+  // excluded: they don't run their own separate faculty pool to lend from.
+  const requestSection = sections.find((s) => s.id === assignForm.sectionId);
+  const requestableDepartments = useMemo(
+    () => departments.filter((d) => !d.parentDepartmentId && d.name !== requestSection?.department),
+    [departments, requestSection]
+  );
+
   async function handleAssign(e: React.FormEvent) {
     e.preventDefault();
     if (!courseId || !year || !assignForm.sectionId || !assignForm.subjectId || !assignForm.facultyId) return;
@@ -182,6 +196,34 @@ export default function TeachingAssignmentsPage() {
       toast({ variant: "destructive", title: "Network error" });
     } finally {
       setSavingAssignment(false);
+    }
+  }
+
+  async function handleSendRequest() {
+    if (!courseId || !assignForm.sectionId || !assignForm.subjectId || !requestTargetId) return;
+    setSendingRequest(true);
+    try {
+      const res = await fetch("/api/college/faculty-assignment-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId,
+          sectionId: assignForm.sectionId,
+          subjectId: assignForm.subjectId,
+          targetDepartmentId: requestTargetId,
+        }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Failed to send request", description: json.error });
+        return;
+      }
+      toast({ variant: "success", title: "Request sent - track it under Assignment Requests" });
+      setRequestTargetId("");
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setSendingRequest(false);
     }
   }
 
@@ -323,7 +365,7 @@ export default function TeachingAssignmentsPage() {
                   <Label>Section</Label>
                   <Select
                     value={assignForm.sectionId}
-                    onValueChange={(v) => setAssignForm({ sectionId: v, subjectId: "", facultyId: "" })}
+                    onValueChange={(v) => { setAssignForm({ sectionId: v, subjectId: "", facultyId: "" }); setRequestTargetId(""); }}
                   >
                     <SelectTrigger><SelectValue placeholder={sections.length ? "Select section" : "No sections for this year"} /></SelectTrigger>
                     <SelectContent>
@@ -337,7 +379,7 @@ export default function TeachingAssignmentsPage() {
                   <Label>Subject</Label>
                   <Select
                     value={assignForm.subjectId}
-                    onValueChange={(v) => setAssignForm((f) => ({ ...f, subjectId: v }))}
+                    onValueChange={(v) => { setAssignForm((f) => ({ ...f, subjectId: v })); setRequestTargetId(""); }}
                     disabled={!assignForm.sectionId}
                   >
                     <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
@@ -376,6 +418,37 @@ export default function TeachingAssignmentsPage() {
                 <p className="text-xs text-muted-foreground">
                   Periods for this subject are picked afterwards from the faculty member&rsquo;s Edit page.
                 </p>
+
+                {assignForm.sectionId && assignForm.subjectId && (
+                  <div className="pt-3 mt-3 border-t space-y-2">
+                    <Label>Or ask another department to lend a faculty member</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Select value={requestTargetId} onValueChange={setRequestTargetId}>
+                        <SelectTrigger className="flex-1 min-w-48">
+                          <SelectValue placeholder={requestableDepartments.length ? "Select department" : "No other departments"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {requestableDepartments.map((d) => (
+                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        loading={sendingRequest}
+                        disabled={!requestTargetId}
+                        onClick={() => void handleSendRequest()}
+                      >
+                        <Send className="h-4 w-4 mr-2" />Send Request
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      They&rsquo;ll pick one of their own faculty for it - track it under{" "}
+                      <Link href="/hod/assignment-requests" className="text-primary hover:underline">Assignment Requests</Link>.
+                    </p>
+                  </div>
+                )}
               </form>
             )}
           </CardContent>

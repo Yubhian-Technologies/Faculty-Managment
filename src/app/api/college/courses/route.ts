@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getRelatedDepartmentIds } from "@/lib/departments/scope";
 
 export async function GET(request: Request) {
   try {
@@ -35,7 +36,19 @@ export async function GET(request: Request) {
       .doc(session.collegeId)
       .collection("courses") as FirebaseFirestore.Query;
 
-    if (departmentId) query = query.where("departmentId", "==", departmentId);
+    if (departmentId && departmentId !== "__none__") {
+      // A department fed by another (e.g. IT fed by Basic Science's shared
+      // 1st-year course - see resolveSubjectDepartment) never owns a course
+      // of its own for that shared year, so its Course dropdown falls back to
+      // the feeder's course - same relationship subjects/route.ts already
+      // uses for visibility.
+      const relatedIds = await getRelatedDepartmentIds(db, session.collegeId, departmentId);
+      query = relatedIds.length > 1
+        ? query.where("departmentId", "in", relatedIds)
+        : query.where("departmentId", "==", departmentId);
+    } else if (departmentId === "__none__") {
+      query = query.where("departmentId", "==", "__none__");
+    }
 
     const snap = await query.get();
     const courses = snap.docs
