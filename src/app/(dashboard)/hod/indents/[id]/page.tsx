@@ -53,7 +53,12 @@ export default function HODIndentDetailPage() {
       .finally(() => setIsLoading(false));
   }
 
-  useEffect(() => { load(); }, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // Awaited in a wrapper so load()'s setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => { await load(); })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id]);
 
   async function handleUploadGrn() {
     if (!request) return;

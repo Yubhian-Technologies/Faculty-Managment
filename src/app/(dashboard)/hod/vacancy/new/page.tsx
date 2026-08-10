@@ -140,12 +140,18 @@ export default function NewVacancyPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    setReqLoading(true);
-    fetch("/api/college/faculty-requirement")
-      .then(async (r) => (r.ok ? (r.json() as Promise<FacultyRequirementResult>) : null))
-      .then((d) => setRequirement(d))
-      .catch(() => {})
-      .finally(() => setReqLoading(false));
+    // reqLoading already starts true, so nothing is set synchronously here -
+    // a setState in the effect body triggers a cascading render.
+    void (async () => {
+      try {
+        const r = await fetch("/api/college/faculty-requirement");
+        setRequirement(r.ok ? ((await r.json()) as FacultyRequirementResult) : null);
+      } catch {
+        // Non-fatal: the form renders without the requirement summary.
+      } finally {
+        setReqLoading(false);
+      }
+    })();
   }, []);
 
   function updateEntry(key: string, patch: Partial<PositionEntry>) {

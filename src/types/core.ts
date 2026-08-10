@@ -24,8 +24,8 @@ export type UserRole =
   | "PLACEMENT_DEPT"
   | "LIBRARY"
   | "EXAM_CELL"
-  | "PANEL_MEMBER"
   | "WEBMASTER"
+  | "PANEL_MEMBER"
   | "ACCOUNTS"
   | "FINANCE"
   | "PURCHASE_DEPT"
@@ -51,8 +51,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "Placement Department",
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
-  PANEL_MEMBER: "Faculty",
   WEBMASTER: "Webmaster",
+  PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
   PURCHASE_DEPT: "Purchase Department",
@@ -79,8 +79,8 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   PLACEMENT_DEPT: "/placement-dept",
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
-  PANEL_MEMBER: "/panel",
   WEBMASTER: "/webmaster",
+  PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
   PURCHASE_DEPT: "/purchase",
@@ -388,10 +388,13 @@ export interface Department {
   // Sub-department support: a parent department (Principal-created) can be
   // split into several sub-departments (e.g. Basic Science → BS-Maths,
   // BS-English, ...), each with its own HOD ("sub-HOD" — just a normal HOD
-  // account on this child Department doc, no separate role). The parent's
-  // HOD gets automatic view-only access to every child's students/sections/
-  // assigned faculty; only the child's own HOD can edit it. One level deep
-  // only — child departments never set `hasSubDepartments`.
+  // account on this child Department doc, no separate role). The parent's HOD
+  // has FULL control over every child as well as their own department — they
+  // can create sections, add subjects, add faculty and make teaching
+  // assignments in any of them, alongside the sub-HOD who runs it day to day.
+  // Authority flows down the tree only: a sub-HOD never reaches the parent or a
+  // sibling. Enforced via canHodEditDepartment() in src/lib/departments/scope.ts.
+  // One level deep only — child departments never set `hasSubDepartments`.
   parentDepartmentId?: string;
   hasSubDepartments?: boolean;
   // Cross-listing: other departments whose HODs each get automatic view-only
@@ -659,6 +662,7 @@ export interface FacultyMember {
   joiningLetterUrl?: string; // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string; // Firebase Storage URL for the appointment order (uploaded by HOD)
   resumeUrl?: string; // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
+  officialEmail?: string; // institutional email address, set by Webmaster once an EmailCreationRequest is fulfilled — distinct from collegeEmail (the FMS login username)
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -1195,7 +1199,11 @@ export type NotificationType =
   | "CREDENTIAL_REQUESTED"
   | "FACULTY_ACCOUNT_REQUEST_COMPLETED"
   | "COORDINATOR_ASSIGNED"
-  // Leave
+  // Webmaster (official email provisioning)
+  | "EMAIL_REQUEST_SUBMITTED"
+  | "OFFICIAL_EMAIL_CREATED"
+  | "EMAIL_REQUEST_CANCELLED"
+  // Leave & Attendance
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
@@ -1292,6 +1300,10 @@ export type AuditAction =
   | "HIRING_DECISION_MADE"
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
+  // Webmaster module
+  | "EMAIL_REQUEST_CREATED"
+  | "EMAIL_REQUEST_FULFILLED"
+  | "EMAIL_REQUEST_CANCELLED"
   | "DOCUMENTS_VERIFIED"
   | "JOINING_LETTER_UPLOADED"
   | "CREDENTIAL_REQUESTED"

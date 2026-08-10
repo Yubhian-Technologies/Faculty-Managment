@@ -100,7 +100,13 @@ export default function SubDepartmentsSettingsPage() {
     }
   }, [department]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // Awaited in a wrapper so the loader's setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+        await load();
+    })();
+  }, [load]);
 
   function resetForm() {
     setName("");

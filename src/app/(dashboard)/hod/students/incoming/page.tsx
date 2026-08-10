@@ -22,16 +22,23 @@ export default function IncomingStudentsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(true);
-    fetch("/api/college/students")
-      .then((r) => r.json() as Promise<{ students: StudentListItem[] }>)
-      // secondaryDepartment (not the broader accessLevel === "secondary" tag,
-      // which also covers sub-department students) is what actually marks a
-      // student pre-registered here while primarily enrolled elsewhere - see
-      // useIncomingStudents for the full explanation.
-      .then((d) => setStudents((d.students ?? []).filter((s) => s.secondaryDepartment === user?.department)))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load first year students" }))
-      .finally(() => setIsLoading(false));
+    // isLoading already starts true, so nothing is set synchronously here -
+    // a setState in the effect body triggers a cascading render.
+    void (async () => {
+      try {
+        const d = await fetch("/api/college/students")
+          .then((r) => r.json() as Promise<{ students: StudentListItem[] }>);
+        // secondaryDepartment (not the broader accessLevel === "secondary" tag,
+        // which also covers sub-department students) is what actually marks a
+        // student pre-registered here while primarily enrolled elsewhere - see
+        // useIncomingStudents for the full explanation.
+        setStudents((d.students ?? []).filter((s) => s.secondaryDepartment === user?.department));
+      } catch {
+        toast({ variant: "destructive", title: "Failed to load first year students" });
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, [user?.department]);
 
   return (

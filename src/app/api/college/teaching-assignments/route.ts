@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
@@ -148,22 +148,24 @@ export async function POST(request: Request) {
       const section = sectionSnap.data() as { name: string; year: number; department: string };
       const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
 
-      // A parent department's HOD only has view-only access to a sub-department's
-      // sections - assigning faculty is an edit action, restricted to the section's
-      // own (primary) HOD. The faculty being assigned may come from the HOD's own
-      // department OR one of their sub-departments (e.g. a shared Basic Science
-      // section staffed with a BS-Physics specialist for the Physics subject) -
-      // but nowhere else.
+      // A parent department's HOD has full control over their own department and
+      // every sub-department beneath it, so both the section and the faculty may
+      // come from any of them (e.g. a shared Basic Science section staffed with a
+      // BS-Physics specialist). A sub-HOD, having no children, is still limited to
+      // their own department.
       if (session.role === "HOD") {
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-        if (!scope.departmentName || scope.departmentName !== section.department) {
-          return NextResponse.json({ error: "Section is not in your department" }, { status: 403 });
+        if (!canHodEditDepartment(scope, section.department)) {
+          return NextResponse.json(
+            { error: "Section is not in your department or one of your sub-departments" },
+            { status: 403 },
+          );
         }
 
         const facultySnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
         if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
         const facultyDept = (facultySnap.data() as { department?: string }).department ?? "";
-        if (facultyDept !== scope.departmentName && !scope.childDepartmentNames.includes(facultyDept)) {
+        if (!canHodEditDepartment(scope, facultyDept)) {
           return NextResponse.json({ error: "Faculty must be in your department or one of your sub-departments" }, { status: 403 });
         }
       }
@@ -288,15 +290,18 @@ export async function POST(request: Request) {
       const faculty = facultySnap.data() as { name?: string; department?: string };
       const subject = subjectSnap.data() as { name?: string; code?: string; department?: string; hoursPerWeek?: number };
 
-      // HOD may only assign within their own department (subject must be theirs)
-      // and their own department or sub-departments (faculty); Principal/Super
-      // Admin can cross departments freely.
+      // HOD may assign within their own department and any sub-department beneath
+      // it, for both the faculty and the subject; Principal/Super Admin can cross
+      // departments freely.
       if (session.role === "HOD") {
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
         const facultyDept = faculty.department ?? "";
-        const facultyAllowed = facultyDept === scope.departmentName || scope.childDepartmentNames.includes(facultyDept);
-        if (!scope.departmentName || !facultyAllowed || subject.department !== scope.departmentName) {
-          return NextResponse.json({ error: "Faculty/subject must be in your department" }, { status: 403 });
+        const subjectDept = subject.department ?? "";
+        if (!canHodEditDepartment(scope, facultyDept) || !canHodEditDepartment(scope, subjectDept)) {
+          return NextResponse.json(
+            { error: "Faculty/subject must be in your department or one of your sub-departments" },
+            { status: 403 },
+          );
         }
       }
 
@@ -378,8 +383,11 @@ export async function DELETE(request: Request) {
       if (!assignmentSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
       const assignmentDept = (assignmentSnap.data() as { department?: string }).department ?? "";
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!scope.departmentName || scope.departmentName !== assignmentDept) {
-        return NextResponse.json({ error: "You can only remove assignments in your own department" }, { status: 403 });
+      if (!canHodEditDepartment(scope, assignmentDept)) {
+        return NextResponse.json(
+          { error: "You can only remove assignments in your own department or its sub-departments" },
+          { status: 403 },
+        );
       }
     }
 

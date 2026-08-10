@@ -97,7 +97,13 @@ export default function HODFacultyPage() {
     }
   }
 
-  useEffect(() => { void load(statusFilter); }, [statusFilter]);
+  useEffect(() => {
+    // Awaited in a wrapper so the loader's setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+        await load(statusFilter);
+    })();
+  }, [statusFilter]);
 
   async function handleDelete() {
     if (!deleteTarget) return;

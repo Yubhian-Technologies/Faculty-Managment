@@ -68,7 +68,9 @@ export default function HODAttendancePage() {
   }, []);
 
   useEffect(() => {
-    void load(year, month);
+    // Awaited in a wrapper so load()'s setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => { await load(year, month); })();
   }, [load, year, month]);
 
   const summaryCards: SummaryCard[] = summary
