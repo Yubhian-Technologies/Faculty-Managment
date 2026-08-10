@@ -94,6 +94,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Timetable", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   { label: "Non-Technical Staff", href: "/principal/non-technical-staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -117,6 +118,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
+  { label: "Internal Exam", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"] },
   // Sits directly below Teaching Assignments: subjects are assigned there first,
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
@@ -136,10 +138,12 @@ export const NAV_ITEMS: NavItem[] = [
 
   // College Office
   { label: "Dashboard", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
-  { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
-  { label: "Faculty", href: "/college-office/faculty", iconName: "Wallet", roles: ["COLLEGE_OFFICE"], section: "Staff" },
-  { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"], section: "Staff" },
+  // Only the first item of a group carries `section` - the sidebar renders a
+  // header for every item that sets one, so repeating it printed "STAFF" three
+  // times over.
+  { label: "Faculty", href: "/college-office/faculty", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
+  { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
   { label: "Hiring Pipeline", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
   { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"], section: "Personal" },
@@ -393,7 +397,6 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   COLLEGE_OFFICE: [
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },
-    { label: "Sections", href: "/college-office/sections", iconName: "BookMarked", roles: ["COLLEGE_OFFICE"] },
     { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"] },
     { label: "Faculty", href: "/college-office/faculty", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
     { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },

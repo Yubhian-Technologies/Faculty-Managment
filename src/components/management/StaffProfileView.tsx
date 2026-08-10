@@ -9,7 +9,7 @@ import { SectionCard } from "@/components/shared/SectionCard";
 import { Avatar } from "@/components/shared/Avatar";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
-import type { FMSUser, FacultyProfileFields, UserRole } from "@/types";
+import type { FMSUser, FacultyProfileFields, UserRole, College, ResearchPublication } from "@/types";
 
 interface Props {
   collegeId: string;
@@ -22,15 +22,24 @@ interface Props {
 export function StaffProfileView({ collegeId, role, title, department, backHref }: Props) {
   const router = useRouter();
 
-  const { data: profile, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["mgmt-staff", collegeId, role, department],
     queryFn: () => {
       const qs = new URLSearchParams({ role, ...(department ? { department } : {}) });
       return fetch(`/api/management/colleges/${collegeId}/staff?${qs}`)
-        .then((r) => r.json() as Promise<{ profile: (FMSUser & { academicProfile?: FacultyProfileFields }) | null }>)
-        .then((d) => d.profile);
+        .then((r) => r.json() as Promise<{ profile: (FMSUser & { academicProfile?: FacultyProfileFields }) | null; publications?: ResearchPublication[] }>);
     },
   });
+  const profile = data?.profile;
+  const publications = data?.publications;
+
+  const { data: collegeData } = useQuery({
+    queryKey: ["mgmt-college-type", collegeId],
+    queryFn: () =>
+      fetch(`/api/management/colleges/${collegeId}`)
+        .then((r) => r.json() as Promise<{ college?: College }>),
+  });
+  const collegeType = collegeData?.college?.type;
 
   return (
     <div className="space-y-6">
@@ -69,7 +78,7 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
           </SectionCard>
 
           <SectionCard icon={GraduationCap} title="Academic Profile" accent="emerald">
-            <ProfileFieldsView profile={profile.academicProfile} includeTeachingAssignment={role === "HOD"} />
+            <ProfileFieldsView profile={profile.academicProfile} includeTeachingAssignment={role === "HOD"} collegeType={collegeType} publications={publications} />
           </SectionCard>
         </>
       )}

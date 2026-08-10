@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronRight, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -41,7 +40,6 @@ interface FacultyProfileHubProps {
 }
 
 interface ProfileModuleTilesProps {
-  designation?: string;
   basePath: string;
   hideFinancialModule?: boolean;
   excludeModules?: ProfileModuleKey[];
@@ -49,8 +47,8 @@ interface ProfileModuleTilesProps {
 
 // Just the tile grid, no identity header - for self-profile pages (My Profile)
 // that already render their own account-details card above it.
-export function ProfileModuleTiles({ designation, basePath, hideFinancialModule, excludeModules }: ProfileModuleTilesProps) {
-  const modules = getFacultyProfileModules(designation, { hideFinancialModule, excludeModules });
+export function ProfileModuleTiles({ basePath, hideFinancialModule, excludeModules }: ProfileModuleTilesProps) {
+  const modules = getFacultyProfileModules({ hideFinancialModule, excludeModules });
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {modules.map((m) => (
@@ -133,24 +131,13 @@ export function FacultyProfileHub({
         </CardContent>
       </Card>
 
-      <ProfileModuleTiles designation={faculty.designation} basePath={basePath} hideFinancialModule={hideFinancialModule} />
+      <ProfileModuleTiles basePath={basePath} hideFinancialModule={hideFinancialModule} />
     </div>
   );
 }
 
 // Self-profile counterpart to ProfileModuleTiles - the account-details card on
-// My Profile pages already shows identity, so this only needs the designation
-// (to pick Teaching vs Technical modules) which isn't on the lightweight
-// authStore user - fetched here from /api/college/faculty/me.
+// My Profile pages already shows identity.
 export function MyProfileModuleTiles({ basePath }: { basePath: string }) {
-  const [designation, setDesignation] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty?: { designation?: string } | null }>)
-      .then((d) => setDesignation(d.faculty?.designation))
-      .catch(() => {});
-  }, []);
-
-  return <ProfileModuleTiles designation={designation} basePath={basePath} />;
+  return <ProfileModuleTiles basePath={basePath} />;
 }

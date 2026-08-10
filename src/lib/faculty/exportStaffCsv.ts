@@ -22,6 +22,14 @@ function degreeCells(d: DegreeDetail | undefined): [string, string, string, stri
   return [degreeAndBranch, d.universityOrInstitute ?? "", d.percentageOrDivision ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
 }
 
+// PhD entries take Specialization instead of Branch/Percentage-CGPA (see
+// DegreeFields in ProfileFieldPrimitives.tsx) - split degree/specialization
+// rather than reusing degreeCells's combined "degree branch" string.
+function phdDegreeCells(d: DegreeDetail | undefined): [string, string, string, string] {
+  if (!d) return ["", "", "", ""];
+  return [d.degree ?? "", d.specialization ?? "", d.universityOrInstitute ?? "", d.yearOfCompletion ? String(d.yearOfCompletion) : ""];
+}
+
 function courseCells(courses: CourseAssignment[] | undefined, i: number): [string, string, string] {
   const c = courses?.[i];
   return c ? [c.code ?? "", c.name ?? "", c.weeklyCreditHours ? String(c.weeklyCreditHours) : ""] : ["", "", ""];
@@ -69,7 +77,7 @@ function buildRow(user: FMSUser): Record<string, string> {
   const p: Partial<FacultyProfileFields> = user.academicProfile ?? {};
   const [ugDegree, ugUniv, ugPct, ugYear] = degreeCells(p.ugDetails);
   const [pgDegree, pgUniv, pgPct, pgYear] = degreeCells(p.pgDetails);
-  const [phdDegree, phdUniv, phdPct, phdYear] = degreeCells(p.phdDetails);
+  const [phdDegree, phdSpecialization, phdUniv, phdYear] = phdDegreeCells(p.phdDetails);
 
   const row: Record<string, string> = {
     role: ROLE_LABELS[user.role] ?? s(user.role),
@@ -110,7 +118,7 @@ function buildRow(user: FMSUser): Record<string, string> {
     highestQualification: s(p.highestQualification),
     ug_degreeAndBranch: ugDegree, ug_university: ugUniv, ug_percentage: ugPct, ug_year: ugYear,
     pg_degreeAndBranch: pgDegree, pg_university: pgUniv, pg_percentage: pgPct, pg_year: pgYear,
-    phd_degreeAndBranch: phdDegree, phd_university: phdUniv, phd_percentage: phdPct, phd_year: phdYear,
+    phd_degree: phdDegree, phd_specialization: phdSpecialization, phd_university: phdUniv, phd_year: phdYear,
     phdStatus: s(p.phdStatus),
     phdMode: s(p.phdMode),
     phdSupervisorName: s(p.phdSupervisorName),

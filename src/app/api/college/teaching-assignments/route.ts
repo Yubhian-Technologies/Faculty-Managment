@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     let assignmentQuery: FirebaseFirestore.Query = collegeRef.collection("teachingAssignments");
-    let secondaryAssignmentQuery: FirebaseFirestore.Query | null = null;
+    let childAssignmentQuery: FirebaseFirestore.Query | null = null;
     let timetableSlots: (TimetableSlot & { id: string })[] = [];
 
     if (sectionId) {
@@ -35,12 +35,14 @@ export async function GET(request: Request) {
       // all HOD/Principal/etc. roles above may view any section within their own college.
       assignmentQuery = assignmentQuery.where("sectionId", "==", sectionId);
     } else if (deptView && session.role === "HOD") {
-      // Resolve HOD's department scope, including any sub-departments - a
-      // parent HOD gets automatic view-only access to child assignments.
+      // Resolve HOD's department scope, including any sub-departments. A parent
+      // HOD runs the whole tree, so child assignments come back as "primary" -
+      // fully editable - matching what the POST/PATCH/DELETE guards on this same
+      // route already allow via canHodEditDepartment().
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.departmentName) assignmentQuery = assignmentQuery.where("department", "==", scope.departmentName);
       if (scope.childDepartmentNames.length > 0) {
-        secondaryAssignmentQuery = collegeRef.collection("teachingAssignments")
+        childAssignmentQuery = collegeRef.collection("teachingAssignments")
           .where("department", "in", scope.childDepartmentNames);
       }
     } else {
@@ -63,16 +65,18 @@ export async function GET(request: Request) {
       timetableSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }));
     }
 
-    const [assignmentsSnap, secondaryAssignmentsSnap] = await Promise.all([
+    const [assignmentsSnap, childAssignmentsSnap] = await Promise.all([
       assignmentQuery.get(),
-      secondaryAssignmentQuery ? secondaryAssignmentQuery.get() : Promise.resolve(null),
+      childAssignmentQuery ? childAssignmentQuery.get() : Promise.resolve(null),
     ]);
 
     const assignments: (TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" })[] = assignmentsSnap.docs
       .map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" }));
-    if (secondaryAssignmentsSnap) {
-      for (const d of secondaryAssignmentsSnap.docs) {
-        assignments.push({ id: d.id, ...d.data(), accessLevel: "secondary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" });
+    if (childAssignmentsSnap) {
+      // "primary", not "secondary": a parent HOD owns their sub-departments and
+      // may edit and delete these, so the UI must not mark them view-only.
+      for (const d of childAssignmentsSnap.docs) {
+        assignments.push({ id: d.id, ...d.data(), accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" });
       }
     }
     assignments.sort((a, b) => {

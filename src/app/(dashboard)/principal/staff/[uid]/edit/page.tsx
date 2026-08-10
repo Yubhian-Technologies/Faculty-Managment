@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS } from "@/types";
@@ -35,6 +36,7 @@ export default function EditStaffPage() {
   const router = useRouter();
   const params = useParams<{ uid: string }>();
   const uid = params.uid;
+  const { collegeType } = useCollegeType();
 
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -242,6 +244,7 @@ export default function EditStaffPage() {
             value={academicProfile}
             onChange={setAcademicProfile}
             includeTeachingAssignment={false}
+            collegeType={collegeType}
             hideFinancialModule
           />
         </CardContent>

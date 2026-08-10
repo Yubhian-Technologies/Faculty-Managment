@@ -12,6 +12,7 @@ import { useAuthStore } from "@/store/authStore";
 import { getUserById } from "@/lib/firestore/users";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 
 interface Props {
@@ -31,6 +32,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint }: Props) {
   const moduleDef = PROFILE_MODULES[moduleKey];
   const { user } = useAuth();
   const setUser = useAuthStore((s) => s.setUser);
+  const { collegeType } = useCollegeType();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,7 +69,6 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint }: Props) {
           permanentAddress: (m.permanentAddress as string) ?? "",
           bloodGroup: (m.bloodGroup as string) ?? "",
           academicProfile: (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {},
-          technicalProfile: (m.technicalProfile as FacultyEditRecord["technicalProfile"]) ?? {},
         });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
@@ -82,9 +83,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint }: Props) {
     setSaving(true);
     try {
       const body: Record<string, unknown> =
-        moduleKey === "technical"
-          ? { technicalProfile: record.technicalProfile }
-          : moduleKey === "personal"
+        moduleKey === "personal"
           ? {
               gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
               fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
@@ -163,6 +162,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint }: Props) {
               onChange={patch}
               facultyId={user?.uid ?? ""}
               includeTeachingAssignment={false}
+              collegeType={collegeType}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`${basePath}/${moduleKey}`)}>Cancel</Button>

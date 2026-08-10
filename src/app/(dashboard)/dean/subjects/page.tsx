@@ -40,7 +40,16 @@ export default function DeanSubjectsPage() {
   useEffect(() => {
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments((d.departments ?? []).sort((a, b) => a.name.localeCompare(b.name))))
+      .then((d) => {
+        // Top-level departments only - sub-departments (parentDepartmentId
+        // set, e.g. BS-CHEMISTRY/BS-Mathematics under Basic Science) share
+        // their parent's courses rather than owning any of their own (see
+        // getHodDepartmentScope), so they'd never resolve to a real course
+        // here anyway - hide them from the picker instead of listing a
+        // dead end.
+        const topLevel = (d.departments ?? []).filter((dept) => !dept.parentDepartmentId);
+        setDepartments(topLevel.sort((a, b) => a.name.localeCompare(b.name)));
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
       .finally(() => setIsLoading(false));
   }, []);

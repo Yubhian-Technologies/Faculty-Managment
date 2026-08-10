@@ -40,6 +40,14 @@ export interface InternalExamMarksBatch {
   totalStudents: number;
   enteredCount: number;
   submittedAt?: Timestamp | null;
+  // Set only when a Principal/VP/Super Admin corrects already-submitted marks
+  // (see PATCH /internal-exam-marks/[id]) — the faculty's own submission
+  // itself is never attributed here, only a later correction. The full
+  // before/after diff for each such edit is written to the college's
+  // existing `auditLogs` collection rather than duplicated here.
+  lastModifiedBy?: string;
+  lastModifiedByName?: string;
+  lastModifiedAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

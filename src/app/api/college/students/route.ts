@@ -114,9 +114,19 @@ export async function GET(request: Request) {
       seenIds.add(d.id);
       students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "primary" });
     }
-    for (const snap of [secondarySnap, childDeptSnap]) {
-      if (!snap) continue;
-      for (const d of snap.docs) {
+    // Sub-department students are "primary": a parent HOD runs the whole
+    // department tree. Only genuinely cross-listed students - registered to an
+    // unrelated department and merely pre-registered here - stay view-only.
+    // Same split as the sections route.
+    if (childDeptSnap) {
+      for (const d of childDeptSnap.docs) {
+        if (seenIds.has(d.id)) continue;
+        seenIds.add(d.id);
+        students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "primary" });
+      }
+    }
+    if (secondarySnap) {
+      for (const d of secondarySnap.docs) {
         if (seenIds.has(d.id)) continue;
         seenIds.add(d.id);
         students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "secondary" });

@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS, ROLE_SCOPE } from "@/types";
-import type { FacultyProfileFields, UserRole, Religion, Caste } from "@/types";
+import type { FacultyProfileFields, UserRole, Religion, Caste, College, CollegeType } from "@/types";
 
 // The 6 roles Super Admin directly administers. Scope (COLLEGE/LOCATION/GLOBAL) is
 // read from ROLE_SCOPE - a role's tenancy tier, not something re-declared here -
@@ -56,6 +56,15 @@ export default function EditUserPage() {
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
+  const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
+
+  useEffect(() => {
+    if (!collegeId) return;
+    fetch("/api/admin/colleges")
+      .then((r) => r.json() as Promise<{ colleges?: College[] }>)
+      .then((d) => setCollegeType(d.colleges?.find((c) => c.id === collegeId)?.type))
+      .catch(() => {});
+  }, [collegeId]);
 
   useEffect(() => {
     if (isCollegeScoped) {
@@ -334,7 +343,7 @@ export default function EditUserPage() {
             <Card className="mt-6">
               <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
               <CardContent>
-                <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} />
+                <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} collegeType={collegeType} />
               </CardContent>
             </Card>
           ) : (

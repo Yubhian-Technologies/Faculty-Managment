@@ -1,38 +1,43 @@
 import type { Timestamp } from "firebase/firestore";
-import type { DegreeDetail, EmploymentType, FacultyStatus, TrainingEntry, AwardEntry, Religion, Caste } from "./core";
+import type { EmploymentType, FacultyStatus, TrainingEntry, AwardEntry, Religion, Caste, StaffQualification } from "./core";
 
-// ─── Supporting Staff (Non-Technical) ──────────────────────────────────────────
-// NBA/AICTE-compliant profile module for non-teaching, non-technical staff,
-// parallel to the Teaching Faculty module (FacultyMember/FacultyProfileFields
-// in core.ts). Technical staff (Lab Assistant/Programmer/System Administrator/
-// Network Engineer) moved to the Faculty module (see TechnicalProfile in
-// core.ts) - this module only ever covers Non-Technical staff now.
+// ─── Supporting Staff ───────────────────────────────────────────────────────
+// NBA/AICTE-compliant profile module for non-teaching staff, parallel to the
+// Teaching Faculty module (FacultyMember/FacultyProfileFields in core.ts).
+// Designation is free text, per-college-type (see College.type and
+// src/lib/designations/config.ts) - covers both the original Non-Technical
+// roles (Office Staff/Accountant/Clerk/...) and, for Engineering/Pharmacy/
+// Dental colleges, the Technical roles (Lab Assistant/Programmer/System
+// Administrator/Network Engineer) migrated back in from the Faculty module.
 
 export type SupportingStaffCategory = "NON_TECHNICAL";
 export const STAFF_CATEGORY_LABELS: Record<SupportingStaffCategory, string> = {
   NON_TECHNICAL: "Non-Technical Staff",
 };
 
-export type NonTechnicalStaffDesignation =
-  | "OFFICE_STAFF" | "ACCOUNTANT" | "CLERK" | "ATTENDER" | "OFFICE_ASSISTANT" | "OTHER";
-export type SupportingStaffDesignation = NonTechnicalStaffDesignation;
+// Free text, not a closed enum - see src/lib/designations/config.ts for the
+// per-college-type lists. The original fixed codes below are what
+// Engineering/Pharmacy/Dental colleges use and what every pre-existing
+// SupportingStaffMember record holds - NON_TECHNICAL_STAFF_DESIGNATION_LABELS
+// keeps them displaying as words.
+export type NonTechnicalStaffDesignation = string;
+export type SupportingStaffDesignation = string;
 
-export const NON_TECHNICAL_STAFF_DESIGNATION_LABELS: Record<NonTechnicalStaffDesignation, string> = {
+export const NON_TECHNICAL_STAFF_DESIGNATION_LABELS: Record<string, string> = {
   OFFICE_STAFF: "Office Staff",
   ACCOUNTANT: "Accountant",
   CLERK: "Clerk",
   ATTENDER: "Attender",
   OFFICE_ASSISTANT: "Office Assistant",
+  // Migrated back in from the Faculty module's old Designation codes (see
+  // core.ts's DESIGNATION_LABELS) - kept here too so a SupportingStaffMember
+  // record with one of these designations displays as a word.
+  LAB_ASSISTANT: "Lab Assistant",
+  PROGRAMMER: "Programmer",
+  SYSTEM_ADMINISTRATOR: "System Administrator",
+  NETWORK_ENGINEER: "Network Engineer",
   OTHER: "Other",
 };
-
-// Reuses DegreeDetail's exact shape (degreeAndBranch/universityOrInstitute/
-// percentageOrDivision/yearOfCompletion/certificateUrl), +level to label SSC/
-// Intermediate/Degree/PG (Non-Technical) vs Diploma/B.Tech-B.Sc/M.Tech-MCA
-// (Technical) within one repeating list.
-export interface StaffQualification extends DegreeDetail {
-  level: string;
-}
 
 export type NonTechnicalResponsibility =
   | "OFFICE_ADMINISTRATION" | "STUDENT_RECORDS" | "FILE_MANAGEMENT" | "ACCOUNTS"

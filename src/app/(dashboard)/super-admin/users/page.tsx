@@ -145,7 +145,15 @@ export default function UsersPage() {
     setDownloadingResumeUid(user.uid);
     try {
       const collegeName = colleges.find((c) => c.id === user.collegeId)?.name ?? "";
-      await downloadResumePdf({ ...user, collegeName }, (user.employeeId as string) || (user.name as string));
+      let researchPublications: unknown[] = [];
+      if (user.collegeId) {
+        try {
+          const pubRes = await fetch(`/api/college/publications?collegeId=${encodeURIComponent(user.collegeId)}&uid=${encodeURIComponent(user.uid)}`);
+          const pubData = await pubRes.json() as { publications?: unknown[] };
+          researchPublications = pubData.publications ?? [];
+        } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
+      }
+      await downloadResumePdf({ ...user, researchPublications, collegeName }, (user.employeeId as string) || (user.name as string));
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
