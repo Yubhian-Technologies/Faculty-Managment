@@ -9,28 +9,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { KeyRound, UserPlus, Clock } from "lucide-react";
-import type { OfferLetter } from "@/types";
+import { KeyRound, UserPlus, Clock, PlayCircle, CheckCircle2 } from "lucide-react";
+import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
+import type { FacultyAccountRequest, FacultyAccountRequestStatus } from "@/types";
 
-type OfferRow = OfferLetter & { id: string };
+type RequestRow = FacultyAccountRequest & { id: string };
+
+const STATUS_BADGE: Record<FacultyAccountRequestStatus, string> = {
+  SUBMITTED: "text-amber-700 border-amber-300 bg-amber-50",
+  IN_PROGRESS: "text-blue-700 border-blue-300 bg-blue-50",
+  CREDENTIALS_CREATED: "text-green-700 border-green-300 bg-green-50",
+  COMPLETED: "text-muted-foreground",
+};
 
 export default function WebmasterCredentialRequestsPage() {
-  const [letters, setLetters] = useState<OfferRow[]>([]);
+  const [requests, setRequests] = useState<RequestRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [provisioning, setProvisioning] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string; employeeId?: string } | null>(null);
 
   async function load() {
     try {
-      const letters = await fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferRow[] }>).then((d) => d.letters ?? []);
-      const pending = letters
-        .filter((l) => l.credentialsRequestedAt && !l.credentialsFulfilledAt)
-        .sort((a, b) => {
-          const ta = (a.credentialsRequestedAt as unknown as { toMillis?: () => number })?.toMillis?.() ?? 0;
-          const tb = (b.credentialsRequestedAt as unknown as { toMillis?: () => number })?.toMillis?.() ?? 0;
-          return ta - tb; // oldest first
-        });
-      setLetters(pending);
+      const requests = await fetch("/api/college/faculty-account-requests")
+        .then((r) => r.json() as Promise<{ requests: RequestRow[] }>)
+        .then((d) => d.requests ?? []);
+      // Completed requests still show briefly for confirmation, but the queue is
+      // ordered so anything still needing action floats to the top.
+      const order: Record<FacultyAccountRequestStatus, number> = { SUBMITTED: 0, IN_PROGRESS: 1, CREDENTIALS_CREATED: 2, COMPLETED: 3 };
+      requests.sort((a, b) => order[a.status] - order[b.status]);
+      setRequests(requests);
     } catch {
       toast({ variant: "destructive", title: "Failed to load" });
     } finally {
@@ -40,8 +47,8 @@ export default function WebmasterCredentialRequestsPage() {
 
   useEffect(() => {
     void load();
-    // Office raises new credential requests from a different session —
-    // refetch on refocus so this queue doesn't sit stale.
+    // Office raises new requests from a different session — refetch on refocus
+    // so this queue doesn't sit stale.
     function onFocus() { void load(); }
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
@@ -51,62 +58,96 @@ export default function WebmasterCredentialRequestsPage() {
     };
   }, []);
 
-  async function fulfill(letter: OfferRow) {
-    setProvisioning(letter.id);
+  async function transition(request: RequestRow, action: "START_REVIEW" | "CREATE_CREDENTIALS" | "COMPLETE") {
+    setBusyId(request.id);
     try {
-      const res = await fetch(`/api/college/offer-letters/${letter.id}/provision`, { method: "POST" });
-      const data = await res.json() as { ok?: boolean; alreadyExists?: boolean; employeeId?: string; generatedPassword?: string; error?: string };
+      const res = await fetch(`/api/college/faculty-account-requests/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json() as { ok?: boolean; employeeId?: string; generatedPassword?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
-      if (data.alreadyExists) {
-        toast({ title: "Faculty account already exists" });
-      } else if (data.generatedPassword) {
+      if (data.generatedPassword) {
         toast({ variant: "success", title: "Account created", description: `Employee ID: ${data.employeeId ?? ""}` });
-        setRevealedPassword({ name: letter.candidateName ?? "the new faculty member", password: data.generatedPassword, employeeId: data.employeeId });
+        setRevealedPassword({ name: request.candidateName, password: data.generatedPassword, employeeId: data.employeeId });
+      } else if (action === "COMPLETE") {
+        toast({ variant: "success", title: "Request completed", description: "Office has been notified." });
+      } else {
+        toast({ variant: "success", title: "Status updated" });
       }
       void load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to create account", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Action failed", description: err instanceof Error ? err.message : undefined });
     } finally {
-      setProvisioning(null);
+      setBusyId(null);
     }
   }
 
+  const activeRequests = requests.filter((r) => r.status !== "COMPLETED");
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Credential Requests" description="Create the login for each candidate the office has requested credentials for" />
+      <PageHeader title="Faculty Account Requests" description="Review and provision the login for each candidate the office has requested an account for" />
 
       {isLoading ? (
         <div className="space-y-3">{[1, 2, 3].map((i) => <CardSkeleton key={i} />)}</div>
-      ) : letters.length === 0 ? (
+      ) : activeRequests.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="p-12 text-center">
             <KeyRound className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium">No pending requests</p>
-            <p className="text-sm text-muted-foreground mt-1">Requests appear here once College Office asks for a candidate&apos;s login.</p>
+            <p className="text-sm text-muted-foreground mt-1">Requests appear here once College Office asks for a candidate&apos;s faculty account.</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
-          {letters.map((letter) => (
-            <Card key={letter.id}>
+          {activeRequests.map((request) => (
+            <Card key={request.id}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="font-medium text-sm">{letter.candidateName}</p>
-                    <p className="text-xs text-muted-foreground">{letter.designation} · {letter.department}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                      <Clock className="h-3 w-3" />
-                      Requested by {letter.credentialsRequestedByName} on {formatDate(letter.credentialsRequestedAt as Parameters<typeof formatDate>[0])}
-                    </p>
+                    <p className="font-medium text-sm">{request.candidateName}</p>
+                    <p className="text-xs text-muted-foreground">{request.designation} · {request.department}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Official email: {request.officialEmail}</p>
+                    {(request.specialization || request.qualification) && (
+                      <p className="text-xs text-muted-foreground">
+                        {[request.qualification, request.specialization].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
                   </div>
-                  <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 shrink-0">Pending</Badge>
+                  <Badge variant="outline" className={`shrink-0 ${STATUS_BADGE[request.status]}`}>
+                    {FACULTY_ACCOUNT_REQUEST_STATUS_LABELS[request.status]}
+                  </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="pt-0">
-                <Button size="sm" loading={provisioning === letter.id} onClick={() => void fulfill(letter)}>
-                  <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                  Create Account
-                </Button>
+              <CardContent className="pt-0 space-y-3">
+                <div className="space-y-1">
+                  {request.history.map((h, i) => (
+                    <p key={i} className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3 shrink-0" />
+                      {FACULTY_ACCOUNT_REQUEST_STATUS_LABELS[h.action]} by {h.byName} on {formatDate(h.at)}
+                    </p>
+                  ))}
+                </div>
+                {request.status === "SUBMITTED" && (
+                  <Button size="sm" loading={busyId === request.id} onClick={() => void transition(request, "START_REVIEW")}>
+                    <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
+                    Start Review
+                  </Button>
+                )}
+                {request.status === "IN_PROGRESS" && (
+                  <Button size="sm" loading={busyId === request.id} onClick={() => void transition(request, "CREATE_CREDENTIALS")}>
+                    <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                    Create Credentials
+                  </Button>
+                )}
+                {request.status === "CREDENTIALS_CREATED" && (
+                  <Button size="sm" loading={busyId === request.id} onClick={() => void transition(request, "COMPLETE")}>
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                    Mark Completed &amp; Notify Office
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}

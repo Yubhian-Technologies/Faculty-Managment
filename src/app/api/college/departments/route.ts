@@ -7,7 +7,7 @@ import { getHodDepartmentScope } from "@/lib/departments/scope";
 
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "EXAM_CELL");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "EXAM_CELL", "DEAN");
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);

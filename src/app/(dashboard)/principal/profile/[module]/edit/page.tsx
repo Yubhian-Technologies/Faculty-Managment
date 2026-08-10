@@ -12,6 +12,7 @@ import { useAuthStore } from "@/store/authStore";
 import { getUserById } from "@/lib/firestore/users";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 
 // Principal/VP have no FacultyMember record - seeds directly from useAuth()'s
@@ -23,6 +24,7 @@ export default function PrincipalProfileModuleEditPage() {
   const moduleDef = PROFILE_MODULES[moduleKey];
   const { user } = useAuth();
   const setUser = useAuthStore((s) => s.setUser);
+  const { collegeType } = useCollegeType();
 
   const [saving, setSaving] = useState(false);
   const [record, setRecord] = useState<FacultyEditRecord>({});
@@ -142,6 +144,7 @@ export default function PrincipalProfileModuleEditPage() {
             onChange={patch}
             facultyId={user.uid}
             includeTeachingAssignment={false}
+            collegeType={collegeType}
           />
           <div className="flex justify-end gap-3 pt-4 border-t">
             <Button variant="outline" onClick={() => router.push(`/principal/profile/${moduleKey}`)}>Cancel</Button>

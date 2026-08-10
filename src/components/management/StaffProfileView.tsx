@@ -9,7 +9,7 @@ import { SectionCard } from "@/components/shared/SectionCard";
 import { Avatar } from "@/components/shared/Avatar";
 import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
 import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
-import type { FMSUser, FacultyProfileFields, UserRole } from "@/types";
+import type { FMSUser, FacultyProfileFields, UserRole, College } from "@/types";
 
 interface Props {
   collegeId: string;
@@ -31,6 +31,14 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
         .then((d) => d.profile);
     },
   });
+
+  const { data: collegeData } = useQuery({
+    queryKey: ["mgmt-college-type", collegeId],
+    queryFn: () =>
+      fetch(`/api/management/colleges/${collegeId}`)
+        .then((r) => r.json() as Promise<{ college?: College }>),
+  });
+  const collegeType = collegeData?.college?.type;
 
   return (
     <div className="space-y-6">
@@ -69,7 +77,7 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
           </SectionCard>
 
           <SectionCard icon={GraduationCap} title="Academic Profile" accent="emerald">
-            <ProfileFieldsView profile={profile.academicProfile} includeTeachingAssignment={role === "HOD"} />
+            <ProfileFieldsView profile={profile.academicProfile} includeTeachingAssignment={role === "HOD"} collegeType={collegeType} />
           </SectionCard>
         </>
       )}

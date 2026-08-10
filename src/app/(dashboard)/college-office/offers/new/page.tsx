@@ -14,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate } from "@/lib/utils";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
+import { useAuthStore } from "@/store/authStore";
 import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
 
 // Dropdown option for a DECISION-stage candidate in this batch. `id` is the
@@ -51,6 +52,7 @@ const emptyForm = (): CreateForm => ({
 
 export default function NewCollegeOfficeOfferLetterPage() {
   const router = useRouter();
+  const collegeId = useAuthStore((s) => s.user?.collegeId);
   const searchParams = useSearchParams();
   const presetBatchId = searchParams.get("batchId");
   const presetCandidateId = searchParams.get("candidateId");
@@ -203,7 +205,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
           termsAndConditions: form.termsAndConditions,
         }),
       });
-      const data = await res.json() as { error?: string; ccEmails?: string[] };
+      const data = await res.json() as { id?: string; error?: string; ccEmails?: string[] };
       if (!res.ok) throw new Error(data.error ?? "Failed to send offer");
 
       const batch = batches.find((b) => b.id === batchId);
@@ -226,6 +228,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
 
       if (selectedCandidate?.email) {
         const institution = collegeInfo.name || "the institution";
+        const acceptanceUrl = collegeId && data.id ? `${window.location.origin}/offer-acceptance/${collegeId}/${data.id}` : "";
         const subject = `Offer Letter – ${designation} | ${institution}`;
         const body = `Dear ${selectedCandidate.name},
 
@@ -234,7 +237,7 @@ Greetings from ${institution}.
 We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${new Date(joiningDate).toLocaleDateString("en-IN")}.
 
 The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
-
+${acceptanceUrl ? `\nPlease review the Terms & Conditions and confirm your acceptance and date of joining here:\n${acceptanceUrl}\n` : ""}
 Congratulations, and welcome aboard!
 
 Warm regards,

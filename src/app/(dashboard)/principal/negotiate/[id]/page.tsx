@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { ArrowRight, Plus, Save, CheckCircle2 } from "lucide-react";
-import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, HiringTermsTemplate } from "@/types";
 
 // Joined view: application (per-hiring-request negotiation state) + candidate
 // (person) fields. `id` is the applicationId (used for PATCHes to
@@ -44,12 +44,14 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
 
   async function load() {
     try {
-      const [batchRes, applicationsRes, candidatesRes] = await Promise.all([
+      const [batchRes, applicationsRes, candidatesRes, termsRes] = await Promise.all([
         fetch(`/api/college/hiring-batches/${id}`).then((r) => r.json() as Promise<{ batch: HiringBatch }>),
         fetch(`/api/college/candidate-applications?batchId=${id}`).then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
         fetch(`/api/college/candidates`).then((r) => r.json() as Promise<{ candidates: Candidate[] }>),
+        fetch(`/api/college/hiring-terms`).then((r) => r.json() as Promise<{ templates: HiringTermsTemplate[] }>).catch(() => ({ templates: [] })),
       ]);
       setBatch(batchRes.batch);
+      const templateTexts = (termsRes.templates ?? []).map((t) => t.text);
       const candidateMap = new Map((candidatesRes.candidates ?? []).map((c) => [c.id, c]));
       const cands: NegotiateCandidateView[] = (applicationsRes.applications ?? []).map((a) => {
         const person = candidateMap.get(a.candidateId);
@@ -71,7 +73,17 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
         negotiatedSalary: c.negotiatedSalary != null ? String(c.negotiatedSalary) : "",
         dateOfJoining: c.dateOfJoining ?? "",
       }])));
-      setTermsChecklists(Object.fromEntries(cands.map((c) => [c.id, Object.fromEntries((c.termsAndConditions ?? []).map((t) => [t, true]))])));
+      setTermsChecklists(Object.fromEntries(cands.map((c) => {
+        const selected = new Set(c.termsAndConditions ?? []);
+        // Pre-seed with the Principal-managed library (unchecked unless already
+        // selected on this candidate), plus any already-selected ad-hoc term
+        // that isn't in the library (e.g. typed before the library existed).
+        const entries = [
+          ...templateTexts.map((t) => [t, selected.has(t)] as const),
+          ...(c.termsAndConditions ?? []).filter((t) => !templateTexts.includes(t)).map((t) => [t, true] as const),
+        ];
+        return [c.id, Object.fromEntries(entries)];
+      })));
     } catch {
       toast({ variant: "destructive", title: "Failed to load batch" });
     } finally {

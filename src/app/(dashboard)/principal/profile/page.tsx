@@ -46,10 +46,9 @@ export default function PrincipalProfilePage() {
       </Card>
 
       <ProfileModuleTiles
-        designation={user.designation}
         basePath="/principal/profile"
         hideFinancialModule
-        excludeModules={["teaching-load", "documents"]}
+        excludeModules={["teaching-load"]}
       />
     </div>
   );
