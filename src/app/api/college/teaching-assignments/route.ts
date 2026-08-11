@@ -41,9 +41,12 @@ export async function GET(request: Request) {
       // route already allow via canHodEditDepartment().
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.departmentName) assignmentQuery = assignmentQuery.where("department", "==", scope.departmentName);
-      if (scope.childDepartmentNames.length > 0) {
+      // Sub-departments AND grouped/managed branches (a Sub-HOD manages their
+      // branches' assignments; a main HOD rolls up its sub-HODs' branches).
+      const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
+      if (ownedDeptNames.length > 0) {
         childAssignmentQuery = collegeRef.collection("teachingAssignments")
-          .where("department", "in", scope.childDepartmentNames);
+          .where("department", "in", ownedDeptNames.slice(0, 30));
       }
     } else {
       // Viewing a specific faculty member's assignments - HOD/Principal/SuperAdmin may look up anyone;

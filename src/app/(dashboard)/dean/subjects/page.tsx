@@ -191,7 +191,7 @@ export default function DeanSubjectsPage() {
                   </h2>
                   <Button
                     size="sm"
-                    onClick={() => router.push(`/dean/subjects/new?courseId=${selectedCourseId}&year=${selectedYear}`)}
+                    onClick={() => router.push(`/dean/subjects/new?courseId=${selectedCourseId}&year=${selectedYear}&department=${encodeURIComponent(selectedDepartment.name)}`)}
                   >
                     <Plus className="h-4 w-4 mr-2" />Add Subject
                   </Button>
@@ -207,35 +207,48 @@ export default function DeanSubjectsPage() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {subjects.map((s) => (
-                      <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                            <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                    {subjects.map((s) => {
+                      // A 1st-year subject viewed under a fed department (e.g.
+                      // IT) is actually Basic Science's own record, shown here
+                      // read-only - editing/deleting it from a department that
+                      // doesn't own it would silently change/remove it for
+                      // every other department sharing it too.
+                      const isOwnDepartment = s.department === selectedDepartment.name;
+                      return (
+                        <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                              <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                              {!isOwnDepartment && (
+                                <Badge variant="outline" className="text-xs">From {s.department}</Badge>
+                              )}
+                            </div>
+                            <p className="font-medium text-sm">{s.name}</p>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{s.hoursPerWeek} hrs/week</span>
+                              {s.totalHoursPerSemester != null && <span>{s.totalHoursPerSemester} hrs/semester</span>}
+                              {s.credits > 0 && <span>{s.credits} credits</span>}
+                            </div>
                           </div>
-                          <p className="font-medium text-sm">{s.name}</p>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{s.hoursPerWeek} hrs/week</span>
-                            {s.totalHoursPerSemester != null && <span>{s.totalHoursPerSemester} hrs/semester</span>}
-                            {s.credits > 0 && <span>{s.credits} credits</span>}
-                          </div>
+                          {isOwnDepartment && (
+                            <div className="flex gap-1 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => router.push(`/dean/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(s)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex gap-1 shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => router.push(`/dean/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(s)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

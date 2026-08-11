@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/authStore";
 import type { Department } from "@/types";
@@ -30,6 +30,7 @@ export function DepartmentScopeSelect({
 }: DepartmentScopeSelectProps) {
   const { user } = useAuthStore();
   const [departments, setDepartments] = useState<Department[]>([]);
+  const didDefault = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,10 +63,35 @@ export function DepartmentScopeSelect({
         .sort((a, b) => a.name.localeCompare(b.name))
     : [];
 
+  // A grouping container (a sub-department created ONLY to group real branches
+  // under a Sub-HOD, e.g. "BS-Maths" managing IT + CSE) is not itself a real
+  // academic department, so it must never own sections/subjects/faculty - drop
+  // it from the choices and offer only the real branches it manages.
+  const isGroupingContainer = managedNames.size > 0;
+  // Memoized so the default-seeding effect below doesn't re-run every render.
+  const options = useMemo(() => {
+    if (!own) return [];
+    const ch = departments
+      .filter((d) => d.parentDepartmentId === own.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const mg = departments
+      .filter((d) => (own.managedDepartments ?? []).includes(d.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return (own.managedDepartments?.length ?? 0) > 0 ? [...ch, ...mg] : [own, ...ch, ...mg];
+  }, [departments, own]);
+
+  // For a grouping container the caller's own department isn't a valid target,
+  // so seed the parent form with the first real branch instead of letting it
+  // fall back to the container server-side.
+  useEffect(() => {
+    if (didDefault.current || value !== "" || !isGroupingContainer || options.length === 0) return;
+    didDefault.current = true;
+    onChange(options[0].name, options[0].id);
+  }, [value, isGroupingContainer, options, onChange]);
+
   if (!own || (children.length === 0 && managed.length === 0)) return null;
 
-  const options = [own, ...children, ...managed];
-  const selectedName = value || ownName;
+  const selectedName = value || options[0]?.name || ownName;
 
   return (
     <div className="space-y-1.5">

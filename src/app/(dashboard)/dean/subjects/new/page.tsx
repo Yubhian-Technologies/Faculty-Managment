@@ -31,6 +31,7 @@ export default function NewDeanSubjectPage() {
   const searchParams = useSearchParams();
   const courseId = searchParams.get("courseId") ?? "";
   const year = searchParams.get("year") ?? "";
+  const department = searchParams.get("department") ?? "";
 
   const [form, setForm] = useState<SubjectForm>(EMPTY_SUBJECT_FORM);
   const [saving, setSaving] = useState(false);
@@ -62,6 +63,7 @@ export default function NewDeanSubjectPage() {
         body: JSON.stringify({
           courseId,
           year: Number(year),
+          department: department || undefined,
           name: form.name.trim(),
           code: form.code.trim(),
           type: form.type,

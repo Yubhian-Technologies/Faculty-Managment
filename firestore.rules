@@ -507,6 +507,14 @@ service cloud.firestore {
         allow write: if isHODorAbove(collegeId);
       }
 
+      // Cross-department requests to lend a faculty member for a subject
+      // (see api/college/faculty-assignment-requests) - only HOD-and-above
+      // create/fulfil these; every staff role may read for visibility.
+      match /facultyAssignmentRequests/{requestId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId);
+      }
+
       match /timetableSlots/{slotId} {
         allow read: if isStaff(collegeId);
         allow write: if isHODorAbove(collegeId);
