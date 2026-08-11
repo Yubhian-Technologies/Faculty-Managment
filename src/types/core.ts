@@ -1076,13 +1076,14 @@ export interface Section {
   classLeaderUid?: string;
   classLeaderName?: string;
   studentCount: number;
-  // Secondary — view-only access for one or more other departments' HODs,
-  // e.g. a shared first-year section whose roster splits across several
-  // eventual branches. Auto-copied from the owning Department's own
-  // `secondaryDepartments` at section creation (see college/sections POST) —
-  // not chosen per-section. Mirrors StudentRecord.secondaryDepartment's
-  // primary/secondary access model, just at the section level (and plural)
-  // instead of per-student.
+  // Secondary — the branch this section feeds, e.g. a shared first-year Basic
+  // Science section whose cohort promotes into CSE. Chosen per section from the
+  // owning Department's configured `secondaryDepartments` via the Add/Edit
+  // Section branch picker (see college/sections POST + [id] PATCH); when the
+  // department cross-lists to exactly one branch it's auto-filled. Grants that
+  // branch's HOD view-only access, and every student imported into this section
+  // inherits it as StudentRecord.secondaryDepartment (their promotion target).
+  // Stored plural for legacy shape, but a section commits to a single branch.
   secondaryDepartments?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;

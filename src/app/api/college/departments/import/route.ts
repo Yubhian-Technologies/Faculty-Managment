@@ -24,12 +24,17 @@ export async function POST(request: Request) {
     const usersColl = db.collection("colleges").doc(collegeId).collection("users");
 
     const [existingDeptsSnap, hodUsersSnap] = await Promise.all([
-      deptsColl.select("code").get(),
+      deptsColl.select("name", "code").get(),
       usersColl.where("role", "==", "HOD").get(),
     ]);
 
     const existingCodes = new Set(
       existingDeptsSnap.docs.map((d) => ((d.data() as { code?: string }).code ?? "").toUpperCase())
+    );
+    // Names are the scope model's join key (see college/departments POST), so a
+    // duplicate name is as unsafe as a duplicate code - guard both, case-insensitively.
+    const existingNames = new Set(
+      existingDeptsSnap.docs.map((d) => ((d.data() as { name?: string }).name ?? "").trim().toLowerCase())
     );
     const hodByEmail = new Map(
       hodUsersSnap.docs.map((d) => {
@@ -55,6 +60,7 @@ export async function POST(request: Request) {
       if (!name) { failed.push({ row: rowNum, name: "-", error: "Department name is required" }); continue; }
       if (!code) { failed.push({ row: rowNum, name, error: "Short code is required" }); continue; }
       if (code.length > 10) { failed.push({ row: rowNum, name, error: "Short code must be 10 characters or fewer" }); continue; }
+      if (existingNames.has(name.toLowerCase())) { failed.push({ row: rowNum, name, error: `Department "${name}" already exists` }); continue; }
       if (existingCodes.has(code)) { failed.push({ row: rowNum, name, error: `Code "${code}" already exists` }); continue; }
 
       let hodUid = "";
@@ -88,6 +94,7 @@ export async function POST(request: Request) {
       }
 
       existingCodes.add(code); // prevent duplicate codes within the same batch
+      existingNames.add(name.toLowerCase()); // ...and duplicate names
       created.push(name);
       batchCount++;
 

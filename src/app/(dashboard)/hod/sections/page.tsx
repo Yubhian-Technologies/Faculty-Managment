@@ -46,7 +46,7 @@ export default function HODSectionsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeCourseId, setActiveCourseId] = useState<string>("all");
+  const [activeCourseKey, setActiveCourseKey] = useState<string>("all");
   const [activeYear, setActiveYear] = useState<number | "all">("all");
   const [deptFilter, setDeptFilter] = useState<string>("all");
 
@@ -101,8 +101,39 @@ export default function HODSectionsPage() {
     return Array.from(names).filter(Boolean).sort();
   }, [deptOptions, sections, ownDept]);
 
+  // The HOD's Course list unions courses across every related department - a
+  // department fed by another (e.g. CSE fed by Basic Science's shared first-year
+  // course) surfaces the feeder's course alongside its own. Both instances carry
+  // the SAME catalog course, so without collapsing they render as two identical
+  // "Bachelor of Technology" tabs, each filtering only the sections that happen
+  // to store that particular course-doc id - splitting one program in two.
+  // Group by catalog course (falling back to the normalized name for legacy
+  // courses created before the catalog existed) and remember every underlying
+  // course-doc id so a single tab filters sections across all of them.
+  type CourseGroup = { key: string; name: string; durationYears: number; courseIds: string[] };
+  const courseGroups = useMemo<CourseGroup[]>(() => {
+    const map = new Map<string, CourseGroup>();
+    for (const c of courses) {
+      const key = c.catalogId ?? `name:${c.name.trim().toLowerCase()}`;
+      const g = map.get(key);
+      if (g) {
+        g.courseIds.push(c.id);
+        if (!g.name && c.name) g.name = c.name;
+      } else {
+        map.set(key, { key, name: c.name, durationYears: c.durationYears, courseIds: [c.id] });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [courses]);
+
   function openCreate() {
-    router.push(activeCourseId !== "all" ? `/hod/sections/new?courseId=${activeCourseId}` : "/hod/sections/new");
+    const group = activeCourseKey !== "all" ? courseGroups.find((g) => g.key === activeCourseKey) ?? null : null;
+    if (!group) { router.push("/hod/sections/new"); return; }
+    // Prefer this HOD's own department's instance of the course so a created
+    // section's stored courseId lines up with their department rather than a
+    // feeder's - both share the same catalog, so year options are identical.
+    const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === ownDept?.id);
+    router.push(`/hod/sections/new?courseId=${own ?? group.courseIds[0]}`);
   }
 
   async function handleDelete() {
@@ -125,29 +156,71 @@ export default function HODSectionsPage() {
     }
   }
 
-  const activeCourse = activeCourseId !== "all" ? courses.find((c) => c.id === activeCourseId) ?? null : null;
+  const activeGroup = activeCourseKey !== "all" ? courseGroups.find((g) => g.key === activeCourseKey) ?? null : null;
+  const activeCourseIds = activeGroup ? new Set(activeGroup.courseIds) : null;
 
-  const filteredSections = sections.filter((s) => {
-    if (activeCourseId !== "all" && s.courseId !== activeCourseId) return false;
-    if (activeCourse && activeYear !== "all" && s.year !== activeYear) return false;
+  // Year filter tabs follow the department's assigned years ("Years Taught"),
+  // not the raw course span - so a department teaching [1,2,3] shows only those,
+  // mirroring what the Add Section dropdown now offers. When a specific branch
+  // tab is active, use that branch's assigned years; otherwise union every
+  // department in this (sub-)HOD's scope. Falls back to the full course span
+  // when nothing is assigned yet.
+  const yearTabOptions = useMemo(() => {
+    if (!activeGroup) return [] as number[];
+    const courseYears = Array.from({ length: activeGroup.durationYears }, (_, i) => i + 1);
+    const relevant = deptFilter !== "all"
+      ? departments.filter((d) => d.name === deptFilter)
+      : deptOptions;
+    const assigned = new Set<number>();
+    for (const d of relevant) for (const y of d.assignedYears ?? []) assigned.add(y);
+    return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
+  }, [activeGroup, deptFilter, departments, deptOptions]);
+
+  // Each section is scoped to the years its OWN department is assigned to teach
+  // ("Years Taught"). A section whose year the department no longer teaches
+  // (e.g. a 2nd-year section after the department was narrowed to 3rd year only)
+  // drops out of the view, so the list tracks the Principal's year selection.
+  // Departments with no assigned years yet are left unrestricted.
+  const assignedYearsByDept = useMemo(() => {
+    const m = new Map<string, number[]>();
+    for (const d of departments) m.set(d.name, d.assignedYears ?? []);
+    return m;
+  }, [departments]);
+
+  // The year-scoped universe of sections this (sub-)HOD manages - the basis for
+  // both the summary totals and the filtered grid, so counts and cards agree.
+  const yearScopedSections = useMemo(() => sections.filter((s) => {
+    const assigned = assignedYearsByDept.get(s.department);
+    return !(assigned && assigned.length > 0 && !assigned.includes(s.year));
+  }), [sections, assignedYearsByDept]);
+
+  const filteredSections = yearScopedSections.filter((s) => {
+    if (activeCourseIds && !activeCourseIds.has(s.courseId)) return false;
+    if (activeGroup && activeYear !== "all" && s.year !== activeYear) return false;
     if (deptFilter !== "all" && s.department !== deptFilter) return false;
     return true;
   });
 
-  // Group by course, then by year within each course
-  type Group = { courseId: string; courseName: string; year: number; sections: SectionRow[] };
+  // Group by course, then by year within each course. Sections keyed by the
+  // collapsed course group (not the raw course-doc id) so two instances of the
+  // same catalog course - e.g. a feeder's and the fed department's "Bachelor of
+  // Technology" - land in one group instead of two identically-labeled cards.
+  const groupKeyByCourseId = new Map<string, string>();
+  for (const cg of courseGroups) for (const id of cg.courseIds) groupKeyByCourseId.set(id, cg.key);
+  type Group = { key: string; courseName: string; year: number; sections: SectionRow[] };
   const groups: Group[] = [];
   for (const s of filteredSections) {
-    let g = groups.find((x) => x.courseId === s.courseId && x.year === s.year);
+    const gk = groupKeyByCourseId.get(s.courseId) ?? s.courseId;
+    let g = groups.find((x) => x.key === gk && x.year === s.year);
     if (!g) {
-      g = { courseId: s.courseId, courseName: s.courseName ?? "Unknown Course", year: s.year, sections: [] };
+      g = { key: gk, courseName: s.courseName ?? "Unknown Course", year: s.year, sections: [] };
       groups.push(g);
     }
     g.sections.push(s);
   }
   groups.sort((a, b) => a.courseName.localeCompare(b.courseName) || a.year - b.year);
 
-  const totalStudents = sections.reduce((sum, s) => sum + (s.studentCount ?? 0), 0);
+  const totalStudents = yearScopedSections.reduce((sum, s) => sum + (s.studentCount ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -171,7 +244,7 @@ export default function HODSectionsPage() {
       <div className="flex flex-wrap gap-4 text-sm">
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <GraduationCap className="h-4 w-4" />
-          <span><strong className="text-foreground">{sections.length}</strong> sections</span>
+          <span><strong className="text-foreground">{yearScopedSections.length}</strong> sections</span>
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <Users className="h-4 w-4" />
@@ -192,26 +265,26 @@ export default function HODSectionsPage() {
       {courses.length > 0 && (
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => { setActiveCourseId("all"); setActiveYear("all"); }}
+            onClick={() => { setActiveCourseKey("all"); setActiveYear("all"); }}
             className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              activeCourseId === "all"
+              activeCourseKey === "all"
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-background border-border hover:bg-muted"
             }`}
           >
             All Courses
           </button>
-          {courses.map((c) => (
+          {courseGroups.map((g) => (
             <button
-              key={c.id}
-              onClick={() => { setActiveCourseId(c.id); setActiveYear("all"); }}
+              key={g.key}
+              onClick={() => { setActiveCourseKey(g.key); setActiveYear("all"); }}
               className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                activeCourseId === c.id
+                activeCourseKey === g.key
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-background border-border hover:bg-muted"
               }`}
             >
-              {c.name}
+              {g.name}
             </button>
           ))}
         </div>
@@ -249,9 +322,9 @@ export default function HODSectionsPage() {
       )}
 
       {/* Year filter tabs (only when a specific course is selected) */}
-      {activeCourse && (
+      {activeGroup && (
         <div className="flex gap-2 flex-wrap">
-          {(["all", ...Array.from({ length: activeCourse.durationYears }, (_, i) => i + 1)] as const).map((y) => (
+          {(["all", ...yearTabOptions] as (number | "all")[]).map((y) => (
             <button
               key={y}
               onClick={() => setActiveYear(y)}
@@ -276,12 +349,17 @@ export default function HODSectionsPage() {
         </div>
       )}
 
-      {/* Empty state */}
-      {!isLoading && courses.length > 0 && sections.length === 0 && (
+      {/* Empty state - keyed off the year-scoped set so a department whose only
+          sections fall outside its assigned years doesn't render a blank page. */}
+      {!isLoading && courses.length > 0 && yearScopedSections.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <GraduationCap className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="font-medium">No sections yet</p>
-          <p className="text-sm text-muted-foreground mt-1 mb-4">Create your first section to get started</p>
+          <p className="font-medium">{sections.length === 0 ? "No sections yet" : "No sections for the assigned years"}</p>
+          <p className="text-sm text-muted-foreground mt-1 mb-4">
+            {sections.length === 0
+              ? "Create your first section to get started"
+              : "This department's sections fall outside its currently assigned years."}
+          </p>
           <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" />Add Section</Button>
         </div>
       )}
@@ -293,10 +371,10 @@ export default function HODSectionsPage() {
             const sts = g.sections.reduce((s, r) => s + (r.studentCount ?? 0), 0);
             const req = sts > 0 ? Math.ceil(sts / STUDENT_FACULTY_RATIO) : 0;
             return (
-              <div key={`${g.courseId}_${g.year}`}>
+              <div key={`${g.key}_${g.year}`}>
                 <div className="flex items-center gap-3 mb-3">
                   <h2 className="font-semibold text-base">
-                    {activeCourseId === "all" ? `${g.courseName} · ${ordinalYear(g.year)}` : ordinalYear(g.year)}
+                    {activeCourseKey === "all" ? `${g.courseName} · ${ordinalYear(g.year)}` : ordinalYear(g.year)}
                   </h2>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${yearBadge(g.year)}`}>
                     {g.sections.length} section{g.sections.length !== 1 ? "s" : ""} · {sts} students
@@ -319,9 +397,6 @@ export default function HODSectionsPage() {
                                 Sub-HOD can tell which of their managed branches it belongs to. */}
                             {sec.department && (
                               <Badge variant="secondary" className="text-xs">{sec.department}</Badge>
-                            )}
-                            {sec.secondaryDepartments && sec.secondaryDepartments.length > 0 && (
-                              <Badge variant="outline" className="text-xs">+ {sec.secondaryDepartments.join(", ")}</Badge>
                             )}
                             {sec.accessLevel === "secondary" && (
                               <Badge variant="secondary" className="text-xs">View only</Badge>

@@ -27,6 +27,11 @@ export default function DepartmentDetailPage() {
 
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
 
+  // A sub-department (one with a parent) shares its parent's courses/timings/
+  // academic years rather than owning any - so its detail view is read-only for
+  // those, to stop a course edit/delete here from mutating the parent's.
+  const isSubDepartment = !!parentDepartment;
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -179,19 +184,45 @@ export default function DepartmentDetailPage() {
             <CardTitle className="text-base flex items-center gap-2">
               <GraduationCap className="h-4 w-4" />Courses
             </CardTitle>
-            <Button size="sm" onClick={() => router.push(`/principal/departments/${id}/courses/new`)}>
-              <Plus className="h-4 w-4 mr-2" />Add Course
-            </Button>
+            {/* A sub-department shares its parent's program - it never owns
+                courses of its own (courses resolve to the parent, see
+                getRelatedDepartmentIds). So course creation and edits stay on
+                the parent's page; here they'd delete/edit the parent's course. */}
+            {!isSubDepartment && (
+              <Button size="sm" onClick={() => router.push(`/principal/departments/${id}/courses/new`)}>
+                <Plus className="h-4 w-4 mr-2" />Add Course
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
+            {isSubDepartment && courses.length > 0 && (
+              <div className="mb-3 flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                <Layers className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  These courses, timings and academic years belong to{" "}
+                  <span className="text-foreground">{parentDepartment?.name}</span> and are shared by this
+                  sub-department. Manage them from the parent department.
+                </span>
+              </div>
+            )}
             {courses.length === 0 ? (
               <p className="text-sm text-muted-foreground py-6 text-center">
-                No courses yet. Add the courses offered by this department.
+                {isSubDepartment
+                  ? `No courses yet. Add them on ${parentDepartment?.name ?? "the parent department"} - this sub-department shares them.`
+                  : "No courses yet. Add the courses offered by this department."}
               </p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {courses.map((c) => {
-                  const years = Array.from({ length: c.durationYears }, (_, i) => i + 1);
+                  // Only surface the years this department is actually assigned
+                  // to teach (Department.assignedYears - the "Years Taught"
+                  // selection). A department set to [2,3,4] shouldn't show a
+                  // Year-1 timing/academic-year row it can never use. When no
+                  // years are assigned yet, fall back to the full course span so
+                  // the department isn't left with nothing to configure.
+                  const allYears = Array.from({ length: c.durationYears }, (_, i) => i + 1);
+                  const assigned = department?.assignedYears ?? [];
+                  const years = assigned.length > 0 ? allYears.filter((y) => assigned.includes(y)) : allYears;
                   return (
                     <div key={c.id} className="rounded-lg border p-3 space-y-3">
                       <div className="flex items-start justify-between gap-2">
@@ -200,26 +231,30 @@ export default function DepartmentDetailPage() {
                           <p className="font-semibold text-sm">{c.name}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{c.durationYears} year{c.durationYears !== 1 ? "s" : ""}</p>
                         </div>
-                        <div className="flex gap-1 shrink-0">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/edit`)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeletingCourse(c)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                        {!isSubDepartment && (
+                          <div className="flex gap-1 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/edit`)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeletingCourse(c)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="space-y-1.5 border-t pt-2">
                         <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Year Timings</p>
-                        {years.map((y) => {
+                        {years.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No years assigned to this department yet.</p>
+                        ) : years.map((y) => {
                           const t = getTiming(c.id, y);
                           const ay = getAcademicYear(c.id, y);
                           return (
                             <div
                               key={y}
-                              onClick={() => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
-                              className="flex w-full flex-col gap-1 rounded-md border px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors cursor-pointer"
+                              onClick={isSubDepartment ? undefined : () => router.push(`/principal/departments/${id}/courses/${c.id}/timing/${y}/edit`)}
+                              className={`flex w-full flex-col gap-1 rounded-md border px-2 py-1.5 text-xs ${isSubDepartment ? "" : "hover:bg-muted/50 transition-colors cursor-pointer"}`}
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="flex items-center gap-1.5 font-medium">
@@ -232,21 +267,21 @@ export default function DepartmentDetailPage() {
                                     {t.collegeStartTime}–{t.collegeEndTime} · {t.numberOfPeriods} periods
                                   </span>
                                 ) : (
-                                  <span className="text-muted-foreground">Not configured - tap to add</span>
+                                  <span className="text-muted-foreground">{isSubDepartment ? "Not configured" : "Not configured - tap to add"}</span>
                                 )}
                               </div>
                               <span
-                                onClick={(e) => {
+                                onClick={isSubDepartment ? undefined : (e) => {
                                   e.stopPropagation();
                                   router.push(`/principal/departments/${id}/courses/${c.id}/academic-year/${y}/edit`);
                                 }}
-                                className="flex items-center gap-1.5 self-start hover:underline"
+                                className={`flex items-center gap-1.5 self-start ${isSubDepartment ? "" : "hover:underline"}`}
                               >
                                 <CalendarClock className="h-3 w-3 shrink-0" />
                                 {ay ? (
-                                  <span className="text-emerald-600 font-medium">{ay.label} - tap to advance</span>
+                                  <span className="text-emerald-600 font-medium">{ay.label}{isSubDepartment ? "" : " - tap to advance"}</span>
                                 ) : (
-                                  <span className="text-orange-500 font-medium">Academic year required - tap to set</span>
+                                  <span className="text-orange-500 font-medium">{isSubDepartment ? "Academic year not set" : "Academic year required - tap to set"}</span>
                                 )}
                               </span>
                             </div>
