@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, onFocus, ...props }, ref) => {
     return (
       <input
         type={type}
@@ -13,6 +13,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           className
         )}
         ref={ref}
+        onFocus={(e) => {
+          // Number inputs commonly rest at "0" - select it on focus so typing
+          // a digit replaces it instead of landing after it (native number
+          // inputs never self-correct a stuck leading "0" on their own).
+          if (type === "number") e.target.select();
+          onFocus?.(e);
+        }}
         {...props}
       />
     );

@@ -78,6 +78,7 @@ export default function CollegeOfficeStaffPage() {
         onRowClick={(row) => router.push(`/college-office/staff/${row.uid}/promotion-salary`)}
         searchPlaceholder="Search by name..."
         searchKeys={["name"] as (keyof StaffRow)[]}
+        groupBy={(row) => (row.department as string) || "College-wide"}
         emptyTitle="No HOD or Principal profiles yet"
       />
     </div>

@@ -45,7 +45,9 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
         <DegreeView label="Intermediate (12th)" degree={p.intermediateDetails} />
         <DegreeView label="UG" degree={p.ugDetails} />
         <DegreeView label="PG" degree={p.pgDetails} />
+        {(p.additionalPgDetails ?? []).map((d, i) => <DegreeView key={`pg-${i}`} label={`PG ${i + 2}`} degree={d} />)}
         <DegreeView label="PhD" degree={p.phdDetails} level="DOCTORAL" />
+        {(p.additionalPhdDetails ?? []).map((d, i) => <DegreeView key={`phd-${i}`} label={`PhD ${i + 2}`} degree={d} level="DOCTORAL" />)}
         <DegreeView label="Post-Doctoral" degree={p.postDoctoralDetails} />
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">

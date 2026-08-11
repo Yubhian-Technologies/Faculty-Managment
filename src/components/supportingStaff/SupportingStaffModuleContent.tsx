@@ -25,6 +25,7 @@ export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
   const nonTechnical = profile.nonTechnicalProfile;
   const responsibilityLabels = (nonTechnical?.responsibilities ?? []).map((r) => NON_TECHNICAL_RESPONSIBILITY_LABELS[r] ?? r);
   const computerSkillLabels = (nonTechnical?.computerSkills ?? []).map((s) => COMPUTER_SKILL_LABELS[s] ?? s);
+  const hardwareSkillLabels = nonTechnical?.hardwareSkills ?? [];
 
   return (
     <Card>
@@ -45,6 +46,12 @@ export function SupportingStaffModuleContent({ moduleKey, staff }: Props) {
               <ChipList values={computerSkillLabels} />
               {nonTechnical?.otherComputerSkill && <Field label="Other Computer Skill" value={nonTechnical.otherComputerSkill} />}
             </div>
+            {hardwareSkillLabels.length > 0 && (
+              <div className="space-y-2">
+                <SubLabel>Hardware Skills</SubLabel>
+                <ChipList values={hardwareSkillLabels} />
+              </div>
+            )}
             <Field label="Typing Speed (WPM)" value={nonTechnical?.typingSpeedWpm} />
           </Section>
         )}

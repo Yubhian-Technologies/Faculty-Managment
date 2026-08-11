@@ -2,7 +2,7 @@
 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { NumInput, TextInput, QualificationsFields, CheckboxGroup } from "@/components/shared/ProfileFieldPrimitives";
+import { NumInput, TextInput, QualificationsFields, CheckboxGroup, StringListInput } from "@/components/shared/ProfileFieldPrimitives";
 import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { TrainingGroup, AchievementsGroup } from "@/components/shared/TrainingAchievementsFields";
 import { getSupportingQualificationLevels } from "@/lib/designations/config";
@@ -71,6 +71,12 @@ export function SupportingStaffModuleEditor({ moduleKey, record, onChange, colle
           {nonTechnical.computerSkills?.includes("OTHER") && (
             <TextInput label="Other Computer Skill" value={nonTechnical.otherComputerSkill} onChange={(v) => setNonTechnical("otherComputerSkill", v)} />
           )}
+          <StringListInput
+            label="Hardware Skills"
+            values={nonTechnical.hardwareSkills}
+            onChange={(v) => setNonTechnical("hardwareSkills", v)}
+            placeholder="e.g. PC Assembly, Networking, CCTV — type and press Add"
+          />
           <NumInput label="Typing Speed (WPM)" value={nonTechnical.typingSpeedWpm} onChange={(v) => setNonTechnical("typingSpeedWpm", v)} />
         </div>
       );

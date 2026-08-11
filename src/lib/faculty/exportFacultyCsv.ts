@@ -6,7 +6,7 @@
 
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { toDateInputValue } from "@/lib/utils";
-import { COLUMNS, TEACHING_SUMMARY_COLUMN } from "@/lib/faculty/csvColumns";
+import { COLUMNS } from "@/lib/faculty/csvColumns";
 import { ADMIN_RESPONSIBILITY_CATEGORY_LABELS, TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, AWARD_CATEGORY_LABELS, RELIGION_LABELS, CASTE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS } from "@/types";
 import type {
   FacultyMember, FacultyProfileFields, DegreeDetail, CourseAssignment, Publication, PreviousInstitution,
@@ -275,7 +275,12 @@ export function exportFacultyCsv(
   faculty: FacultyMember[],
   teachingSummaries: Record<string, string> = {}
 ): void {
-  const exportColumns = [...COLUMNS, TEACHING_SUMMARY_COLUMN];
+  // Export is limited to identity + personal/statutory details only - the
+  // deep Academic Profile / research / teaching columns (everything from
+  // "highestQualification" onward in COLUMNS) are captured in the app's
+  // Edit forms, not the spreadsheet.
+  const academicStart = COLUMNS.findIndex((c) => c.key === "highestQualification");
+  const exportColumns = academicStart >= 0 ? COLUMNS.slice(0, academicStart) : COLUMNS;
   const headers = exportColumns.map((c) => c.label);
   const rows = faculty.map((f) => {
     const row = buildRow(f, teachingSummaries[f.id] ?? "");

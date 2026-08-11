@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import type { Designation, EmploymentType } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
@@ -53,6 +54,31 @@ type ImportRow = {
   employmentType: string;
   joiningDate: string;
   dateOfJoiningDepartment?: string;
+  // Personal / statutory details
+  gender?: string;
+  dateOfBirth?: string;
+  legalName?: string;
+  fatherName?: string;
+  motherName?: string;
+  aadharNo?: string;
+  panNo?: string;
+  passportNumber?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  religion?: string;
+  caste?: string;
+  subCaste?: string;
+  ratificationStatus?: string;
+  ratificationDate?: string;
+  maritalStatus?: string;
+  spouseName?: string;
+  numberOfChildren?: string;
+  referral?: string;
+  nativePlace?: string;
+  bloodGroup?: string;
+  temporaryAddress?: string;
+  permanentSameAsTemporary?: string;
+  permanentAddress?: string;
 };
 
 // Accepts the template's YYYY-MM-DD format, and falls back to DD-MM-YYYY /
@@ -239,6 +265,41 @@ export async function POST(request: Request) {
 
       const docRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
 
+      // Personal/statutory details - same shared shape the Add/Edit forms use.
+      // Dates are run through the route's robust parseDate() and set directly;
+      // the rest go through buildPersonalDetailsUpdate (string fields, PAN
+      // uppercasing, number/boolean coercion).
+      const dob = parseDate(row.dateOfBirth);
+      if (row.dateOfBirth?.trim() && !dob) dropped(empId, "Date of Birth", row.dateOfBirth);
+      const ratDate = parseDate(row.ratificationDate);
+      if (row.ratificationDate?.trim() && !ratDate) dropped(empId, "Ratification Date", row.ratificationDate);
+      const personalInput: PersonalDetailsInput = {
+        gender: row.gender?.trim() || undefined,
+        legalName: row.legalName?.trim() || undefined,
+        fatherName: row.fatherName?.trim() || undefined,
+        motherName: row.motherName?.trim() || undefined,
+        aadharNo: row.aadharNo?.trim() || undefined,
+        panNo: row.panNo?.trim() || undefined,
+        passportNumber: row.passportNumber?.trim() || undefined,
+        emergencyContactName: row.emergencyContactName?.trim() || undefined,
+        emergencyContactPhone: row.emergencyContactPhone?.trim() || undefined,
+        religion: row.religion?.trim() || undefined,
+        caste: row.caste?.trim() || undefined,
+        subCaste: row.subCaste?.trim() || undefined,
+        ratificationStatus: row.ratificationStatus?.trim() || undefined,
+        maritalStatus: row.maritalStatus?.trim() || undefined,
+        spouseName: row.spouseName?.trim() || undefined,
+        numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
+        referral: row.referral?.trim() || undefined,
+        nativePlace: row.nativePlace?.trim() || undefined,
+        temporaryAddress: row.temporaryAddress?.trim() || undefined,
+        permanentSameAsTemporary: row.permanentSameAsTemporary
+          ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes"
+          : undefined,
+        permanentAddress: row.permanentAddress?.trim() || undefined,
+        bloodGroup: row.bloodGroup?.trim() || undefined,
+      };
+
       const payload: Record<string, unknown> = {
         userUid,
         collegeId,
@@ -256,6 +317,9 @@ export async function POST(request: Request) {
         joiningDate,
         dateOfJoiningDepartment: dateOfJoiningDepartment || undefined,
         status: "ACTIVE",
+        ...buildPersonalDetailsUpdate(personalInput),
+        ...(dob ? { dateOfBirth: dob } : {}),
+        ...(ratDate ? { ratificationDate: ratDate } : {}),
         createdAt: now,
         updatedAt: now,
       };

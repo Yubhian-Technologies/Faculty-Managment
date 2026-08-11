@@ -262,7 +262,7 @@ export default function EditUserPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Phone</Label>
-                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+                      <Input type="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
                     </div>
                   </div>
                 </div>

@@ -966,7 +966,13 @@ export interface FacultyProfileFields {
   intermediateDetails?: DegreeDetail; // 12th
   ugDetails?: DegreeDetail;
   pgDetails?: DegreeDetail;
+  // Extra PG/PhD degrees beyond the primary one above (e.g. a second Master's
+  // or a second doctorate). Kept as separate arrays rather than turning
+  // pgDetails/phdDetails into arrays so every existing record, export, resume
+  // and view that reads the single field keeps working unchanged.
+  additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
+  additionalPhdDetails?: DegreeDetail[];
   postDoctoralDetails?: DegreeDetail;
   phdStatus?: PhdStatus;
   phdMode?: PhdMode;
