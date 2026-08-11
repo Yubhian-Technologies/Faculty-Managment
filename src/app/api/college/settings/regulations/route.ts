@@ -21,7 +21,7 @@ function resolveCollegeId(request: Request, role: string, sessionCollegeId: stri
 
 export async function GET(request: Request) {
   try {
-    const session = await requireRole("SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireRole("SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "DEAN");
     const collegeId = resolveCollegeId(request, session.role, session.collegeId);
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId is required" }, { status: 400 });

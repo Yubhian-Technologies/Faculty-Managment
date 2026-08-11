@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,16 @@ function yearLabel(y: string) {
   return `${y}${suffix} Year`;
 }
 
-export function RegulationSettingsCard() {
+interface RegulationSettingsCardProps {
+  // Dean's dashboard shows the same settings live off the Principal's own
+  // GET endpoint (see /api/college/settings/regulations), but Dean can't
+  // PUT to it - so this skips straight to the read-only view and drops the
+  // Edit button entirely, rather than dropping them into a form that would
+  // 403 on Save.
+  readOnly?: boolean;
+}
+
+export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsCardProps) {
   const [settings, setSettings] = useState<AcademicRegulationSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -29,7 +38,7 @@ export function RegulationSettingsCard() {
   const [yearRegulations, setYearRegulations] = useState<Record<string, string>>({});
   const [newRegulation, setNewRegulation] = useState("");
 
-  function load() {
+  const load = useCallback(() => {
     setIsLoading(true);
     fetch("/api/college/settings/regulations")
       .then((r) => r.json() as Promise<{ settings: AcademicRegulationSettings }>)
@@ -38,17 +47,17 @@ export function RegulationSettingsCard() {
         setRegulations(s.regulations ?? []);
         setYearRegulations(s.yearRegulations ?? {});
         // Nothing saved yet - go straight into editing so there's something to do here.
-        setIsEditing((s.regulations ?? []).length === 0);
+        setIsEditing(!readOnly && (s.regulations ?? []).length === 0);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }))
       .finally(() => setIsLoading(false));
-  }
+  }, [readOnly]);
 
   useEffect(() => {
     // Wrapped so load()'s setState calls aren't reachable synchronously from
     // the effect body (react-hooks/set-state-in-effect).
     void (async () => { load(); })();
-  }, []);
+  }, [load]);
 
   function addRegulation() {
     const value = newRegulation.trim();
@@ -115,7 +124,7 @@ export function RegulationSettingsCard() {
             Curriculum regulations in use (e.g. R20, R23) and which one applies to each year of study
           </CardDescription>
         </div>
-        {!isLoading && !isEditing && (
+        {!readOnly && !isLoading && !isEditing && (
           <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
             <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
           </Button>
@@ -193,6 +202,8 @@ export function RegulationSettingsCard() {
               </Button>
             </div>
           </>
+        ) : (settings?.regulations ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">The Principal hasn&rsquo;t set any regulations yet.</p>
         ) : (
           <>
             <div className="flex flex-wrap gap-2">

@@ -132,6 +132,8 @@ export default function PrincipalSettingsPage() {
 
       <CourseCatalogSettingsCard />
 
+      <RegulationSettingsCard />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Faculty Norms</CardTitle>
@@ -203,8 +205,6 @@ export default function PrincipalSettingsPage() {
           </div>
         </CardContent>
       </Card>
-
-      <RegulationSettingsCard />
 
       <HiringTermsSettingsCard />
 
