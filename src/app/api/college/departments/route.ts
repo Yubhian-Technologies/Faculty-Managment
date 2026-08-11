@@ -4,6 +4,39 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import {
+  findBranchClaimConflicts,
+  branchClaimConflictMessage,
+  type DepartmentClaimRow,
+} from "@/lib/departments/managedBranches";
+
+// Years a department teaches must be a subset of the years this college has
+// actually opened (Location Admin's Academic Years toggle) - mirrors the same
+// check done for Section creation in college/sections/route.ts. Shared by the
+// create and update paths so both reject the same way.
+// Returns an error message, or null when the years are valid.
+async function validateAssignedYears(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  assignedYears: number[]
+): Promise<string | null> {
+  const academicYearsSnap = await db
+    .collection("colleges")
+    .doc(collegeId)
+    .collection("academicYears")
+    .get();
+  const openYears = new Set(
+    academicYearsSnap.docs
+      .map((d) => d.data() as { yearNumber: number; isActive: boolean })
+      .filter((y) => y.isActive)
+      .map((y) => y.yearNumber)
+  );
+  const invalid = assignedYears.filter((y) => !openYears.has(Number(y)));
+  return invalid.length > 0 ? `Year(s) ${invalid.join(", ")} are not open for this college` : null;
+}
+
+// yyyy-mm-dd, the same shape StudentRecord.dateOfBirth already uses.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET() {
   try {
@@ -78,6 +111,9 @@ export async function POST(request: Request) {
       parentDepartmentId?: string;
       secondaryDepartments?: string[];
       managedDepartments?: string[];
+      assignedYears?: number[];
+      commonYearStart?: string;
+      commonYearEnd?: string;
     };
 
     const { name, code, hodUid, hodName } = body;
@@ -89,6 +125,33 @@ export async function POST(request: Request) {
     const collegeId = session.collegeId;
     const db = getAdminDb();
     const now = new Date();
+
+    // Years taught can now be set at creation (it used to be edit-only), so a
+    // Principal configuring e.g. a shared first-year department gets it right
+    // in one step rather than creating it and immediately editing it.
+    let assignedYears: number[] | undefined;
+    if (body.assignedYears !== undefined) {
+      if (!Array.isArray(body.assignedYears)) {
+        return NextResponse.json({ error: "assignedYears must be an array" }, { status: 400 });
+      }
+      assignedYears = Array.from(new Set(body.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
+      const yearsError = await validateAssignedYears(db, collegeId, assignedYears);
+      if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
+    }
+
+    // Approximate period the shared first year runs for. Advisory only - it
+    // gives the Principal's cohort-advance screen its context, and never gates
+    // a write.
+    const commonYearStart = body.commonYearStart?.trim() || undefined;
+    const commonYearEnd = body.commonYearEnd?.trim() || undefined;
+    for (const [label, value] of [["commonYearStart", commonYearStart], ["commonYearEnd", commonYearEnd]] as const) {
+      if (value !== undefined && !DATE_RE.test(value)) {
+        return NextResponse.json({ error: `${label} must be a yyyy-mm-dd date` }, { status: 400 });
+      }
+    }
+    if (commonYearStart && commonYearEnd && commonYearEnd < commonYearStart) {
+      return NextResponse.json({ error: "First-year period end must be on or after its start" }, { status: 400 });
+    }
 
     // Department name and code are the join keys the whole scoping model relies
     // on: getHodDepartmentScope resolves an HOD to their department BY NAME
@@ -161,6 +224,16 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: `"${mName}" is a sub-department and can't be used as a managed department` }, { status: 400 });
         }
       }
+      // A branch may be grouped under only ONE sub-department - see
+      // src/lib/departments/managedBranches.ts. Re-checked inside the
+      // transaction below so two concurrent creates can't both claim it.
+      const conflicts = findBranchClaimConflicts(
+        existingDeptsSnap.docs.map((d) => ({ ...(d.data() as DepartmentClaimRow), id: d.id })),
+        names
+      );
+      if (conflicts.length > 0) {
+        return NextResponse.json({ error: branchClaimConflictMessage(conflicts) }, { status: 409 });
+      }
       managedDepartments = names;
     }
 
@@ -181,24 +254,51 @@ export async function POST(request: Request) {
       parentDepartmentId = scope.departmentId;
     }
 
-    const ref = await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("departments")
-      .add({
-        collegeId,
-        name: name.trim(),
-        code: code.toUpperCase().trim(),
-        hodUid: hodUid ?? "",
-        hodName: hodName ?? "",
-        isActive: true,
-        ...(parentDepartmentId ? { parentDepartmentId } : {}),
-        ...(session.role !== "HOD" && body.hasSubDepartments ? { hasSubDepartments: true } : {}),
-        ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
-        ...(managedDepartments.length > 0 ? { managedDepartments } : {}),
-        createdAt: now,
-        updatedAt: now,
+    const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
+    const docData = {
+      collegeId,
+      name: name.trim(),
+      code: code.toUpperCase().trim(),
+      hodUid: hodUid ?? "",
+      hodName: hodName ?? "",
+      isActive: true,
+      ...(parentDepartmentId ? { parentDepartmentId } : {}),
+      ...(session.role !== "HOD" && body.hasSubDepartments ? { hasSubDepartments: true } : {}),
+      // Years taught and the shared-first-year period are Principal/VP territory,
+      // exactly as they are on PATCH - an HOD creating a sub-department here
+      // can set its Sub-HOD and grouping, nothing that redefines the academic
+      // calendar. Stripped rather than rejected so the sub-department flow
+      // (hod/settings/sub-departments) keeps working unchanged.
+      ...(session.role !== "HOD" && assignedYears !== undefined ? { assignedYears } : {}),
+      ...(session.role !== "HOD" && commonYearStart !== undefined ? { commonYearStart } : {}),
+      ...(session.role !== "HOD" && commonYearEnd !== undefined ? { commonYearEnd } : {}),
+      ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
+      ...(managedDepartments.length > 0 ? { managedDepartments } : {}),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    let ref: FirebaseFirestore.DocumentReference;
+    if (managedDepartments.length > 0) {
+      // Grouping branches is the one constraint here that must hold under
+      // concurrency: without a re-read inside the transaction, two sub-departments
+      // created at nearly the same time could both pass the check above and both
+      // claim the same branch. Mirrors the no-double-booking transaction in
+      // college/hiring-batches/route.ts. (Name/code uniqueness above remains a
+      // plain read-and-loop, as it has always been.)
+      ref = deptsColl.doc();
+      await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(deptsColl);
+        const conflicts = findBranchClaimConflicts(
+          fresh.docs.map((d) => ({ ...(d.data() as DepartmentClaimRow), id: d.id })),
+          managedDepartments
+        );
+        if (conflicts.length > 0) throw new Error(`BRANCH_CLAIMED:${branchClaimConflictMessage(conflicts)}`);
+        tx.set(ref, docData);
       });
+    } else {
+      ref = await deptsColl.add(docData);
+    }
 
     // Keep the HOD's own profile department in sync - faculty-requirement
     // and other HOD-scoped routes resolve department from their user doc,
@@ -227,6 +327,9 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof Error && err.message.startsWith("BRANCH_CLAIMED:")) {
+      return NextResponse.json({ error: err.message.slice("BRANCH_CLAIMED:".length) }, { status: 409 });
     }
     console.error("[college/departments POST]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -327,6 +430,8 @@ export async function PATCH(request: Request) {
       hasSubDepartments?: boolean;
       secondaryDepartments?: string[];
       managedDepartments?: string[];
+      commonYearStart?: string;
+      commonYearEnd?: string;
     };
 
     const { deptId, ...rawUpdates } = body;
@@ -427,32 +532,34 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ error: `"${mName}" is a sub-department and can't be used as a managed department` }, { status: 400 });
           }
         }
+        // A branch may be grouped under only ONE sub-department. This department's
+        // own existing claims don't conflict with itself, so re-saving an
+        // unchanged list stays a no-op. Re-checked in the transaction below.
+        const conflicts = findBranchClaimConflicts(
+          deptsSnap.docs.map((d) => ({ ...(d.data() as DepartmentClaimRow), id: d.id })),
+          names,
+          deptId
+        );
+        if (conflicts.length > 0) {
+          return NextResponse.json({ error: branchClaimConflictMessage(conflicts) }, { status: 409 });
+        }
       }
       updates.managedDepartments = names;
     }
 
-    // Assigned years must be a subset of the years this college has actually
-    // opened (Location Admin's Academic Years toggle) - mirrors the same
-    // check already done for Section creation in college/sections/route.ts.
     if (updates.assignedYears) {
-      const academicYearsSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("academicYears")
-        .get();
-      const openYears = new Set(
-        academicYearsSnap.docs
-          .map((d) => d.data() as { yearNumber: number; isActive: boolean })
-          .filter((y) => y.isActive)
-          .map((y) => y.yearNumber)
-      );
-      const invalid = updates.assignedYears.filter((y) => !openYears.has(Number(y)));
-      if (invalid.length > 0) {
-        return NextResponse.json(
-          { error: `Year(s) ${invalid.join(", ")} are not open for this college` },
-          { status: 400 }
-        );
+      const yearsError = await validateAssignedYears(db, session.collegeId, updates.assignedYears);
+      if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
+    }
+
+    for (const label of ["commonYearStart", "commonYearEnd"] as const) {
+      const value = updates[label];
+      if (value !== undefined && value !== "" && !DATE_RE.test(value)) {
+        return NextResponse.json({ error: `${label} must be a yyyy-mm-dd date` }, { status: 400 });
       }
+    }
+    if (updates.commonYearStart && updates.commonYearEnd && updates.commonYearEnd < updates.commonYearStart) {
+      return NextResponse.json({ error: "First-year period end must be on or after its start" }, { status: 400 });
     }
 
     const now = new Date();
@@ -474,12 +581,32 @@ export async function PATCH(request: Request) {
       }
     }
 
-    await deptRef.update({ ...updates, updatedAt: now });
+    if (updates.managedDepartments !== undefined && updates.managedDepartments.length > 0) {
+      // Same re-check under a transaction as the create path - two Sub-HOD edits
+      // landing together must not both claim the same branch.
+      const deptsColl = db.collection("colleges").doc(session.collegeId).collection("departments");
+      const claimed = updates.managedDepartments;
+      await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(deptsColl);
+        const conflicts = findBranchClaimConflicts(
+          fresh.docs.map((d) => ({ ...(d.data() as DepartmentClaimRow), id: d.id })),
+          claimed,
+          deptId
+        );
+        if (conflicts.length > 0) throw new Error(`BRANCH_CLAIMED:${branchClaimConflictMessage(conflicts)}`);
+        tx.update(deptRef, { ...updates, updatedAt: now });
+      });
+    } else {
+      await deptRef.update({ ...updates, updatedAt: now });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (err instanceof Error && err.message.startsWith("BRANCH_CLAIMED:")) {
+      return NextResponse.json({ error: err.message.slice("BRANCH_CLAIMED:".length) }, { status: 409 });
     }
     console.error("[college/departments PATCH]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

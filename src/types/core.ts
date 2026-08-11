@@ -451,6 +451,13 @@ export interface Department {
   // getHodDepartmentScope (src/lib/departments/scope.ts). Set by the parent
   // department's HOD on the Sub-Departments settings page.
   managedDepartments?: string[];
+  // Approximate period the shared first year runs for, on a common-year
+  // department (yyyy-mm-dd, same shape as StudentRecord.dateOfBirth). Advisory
+  // only: it gives the Principal's cohort-advance screen its context and is
+  // never a gate on any write. See src/lib/college/academicStructure.ts for how
+  // a common-year department is identified.
+  commonYearStart?: string;
+  commonYearEnd?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }

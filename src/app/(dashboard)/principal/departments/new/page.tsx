@@ -14,7 +14,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { Department, FMSUser } from "@/types";
+import { yearOrdinalLabel } from "@/lib/college/academicYears";
+import type { AcademicYear, Department, FMSUser } from "@/types";
 
 export default function NewDepartmentPage() {
   const router = useRouter();
@@ -23,6 +24,11 @@ export default function NewDepartmentPage() {
   const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubDepartments, setHasSubDepartments] = useState(false);
+  const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
+  const [assignedYears, setAssignedYears] = useState<number[]>([]);
+  const [addingYear, setAddingYear] = useState(false);
+  const [commonYearStart, setCommonYearStart] = useState("");
+  const [commonYearEnd, setCommonYearEnd] = useState("");
 
   useEffect(() => {
     fetch("/api/college/users?role=HOD")
@@ -34,7 +40,34 @@ export default function NewDepartmentPage() {
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments((d.departments ?? []).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => {});
+
+    fetch("/api/college/academic-years")
+      .then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>)
+      .then((d) => setOpenYears((d.academicYears ?? []).filter((y) => y.isActive)))
+      .catch(() => {});
   }, []);
+
+  function toggleAssignedYear(year: number, checked: boolean) {
+    setAssignedYears((prev) => (checked ? [...prev, year] : prev.filter((y) => y !== year)));
+  }
+
+  async function handleAddYear() {
+    setAddingYear(true);
+    try {
+      const res = await fetch("/api/college/academic-years", { method: "POST" });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to add year");
+
+      const yearsRes = await fetch("/api/college/academic-years");
+      const data = await yearsRes.json() as { academicYears: AcademicYear[] };
+      setOpenYears((data.academicYears ?? []).filter((y) => y.isActive));
+      toast({ variant: "success", title: "Academic year added" });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add year" });
+    } finally {
+      setAddingYear(false);
+    }
+  }
 
   const {
     register,
@@ -49,6 +82,13 @@ export default function NewDepartmentPage() {
 
   const hodUid = watch("hodUid");
   const nameValue = watch("name");
+
+  // The first-year period only applies to a department that would act as the
+  // shared first-year one - it claims year 1 AND is a shared parent (split into
+  // sub-departments, or cross-listing the branches it feeds). Mirrors the rule
+  // in src/lib/college/academicStructure.ts.
+  const isCommonYearCandidate =
+    assignedYears.includes(1) && (hasSubDepartments || secondaryDepartments.length > 0);
 
   async function handleHodCreated(uid: string) {
     try {
@@ -76,6 +116,11 @@ export default function NewDepartmentPage() {
         hodName: selectedHod?.name ?? "",
         hasSubDepartments,
         secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
+        assignedYears: assignedYears.length > 0 ? assignedYears : undefined,
+        // Only meaningful on a shared first-year department, and only sent when
+        // year 1 is actually among the years this department teaches.
+        ...(isCommonYearCandidate && commonYearStart ? { commonYearStart } : {}),
+        ...(isCommonYearCandidate && commonYearEnd ? { commonYearEnd } : {}),
       };
       const res = await fetch("/api/college/departments", {
         method: "POST",
@@ -161,6 +206,36 @@ export default function NewDepartmentPage() {
             </div>
 
             <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Years Taught</Label>
+                <Button type="button" variant="outline" size="sm" onClick={handleAddYear} loading={addingYear}>
+                  + Add Year
+                </Button>
+              </div>
+              {openYears.length === 0 ? (
+                <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                  No academic years added yet for this college - use &quot;+ Add Year&quot; above.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+                  {openYears.map((y) => (
+                    <label key={y.yearNumber} className="flex items-center gap-1.5 text-sm">
+                      <Checkbox
+                        checked={assignedYears.includes(y.yearNumber)}
+                        onCheckedChange={(checked) => toggleAssignedYear(y.yearNumber, !!checked)}
+                      />
+                      {yearOrdinalLabel(y.yearNumber)}
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Which years of study this department currently teaches. HODs can only create sections for these
+                years. A shared first-year department holds just 1st Year; each core branch holds the rest.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label>Secondary Departments</Label>
               {(() => {
                 const options = departments.filter((d) => d.name !== nameValue && !d.parentDepartmentId);
@@ -203,6 +278,39 @@ export default function NewDepartmentPage() {
                 </p>
               </div>
             </div>
+
+            {isCommonYearCandidate && (
+              <div className="space-y-2 rounded-md border p-3">
+                <Label>First-Year Period</Label>
+                <p className="text-xs text-muted-foreground">
+                  Approximately when this shared first year runs. Optional and advisory - it gives the
+                  &quot;Advance First-Year Cohort&quot; screen its context and never blocks anything.
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="common-year-start" className="text-xs font-normal">Starts</Label>
+                    <Input
+                      id="common-year-start"
+                      type="date"
+                      value={commonYearStart}
+                      onChange={(e) => setCommonYearStart(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="common-year-end" className="text-xs font-normal">Ends</Label>
+                    <Input
+                      id="common-year-end"
+                      type="date"
+                      value={commonYearEnd}
+                      onChange={(e) => setCommonYearEnd(e.target.value)}
+                    />
+                  </div>
+                </div>
+                {commonYearStart && commonYearEnd && commonYearEnd < commonYearStart && (
+                  <p className="text-sm text-destructive">End must be on or after the start.</p>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
