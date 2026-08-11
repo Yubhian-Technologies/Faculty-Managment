@@ -19,6 +19,10 @@ const PUBLIC_PATHS = [
   "/candidate-form",
   "/offer-acceptance",
   "/about-team-illustration.png",
+  // face-api.js model weights (public/models/) - fetched client-side by
+  // MarkAttendanceDialog regardless of which authenticated role is checking
+  // in, so this must stay reachable rather than fall under role path gating.
+  "/models",
 ];
 
 // /panel/interviews is shared - any staff role can be added as a panel member
