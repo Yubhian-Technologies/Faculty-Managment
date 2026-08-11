@@ -23,6 +23,16 @@ export function isNavItemActive(item: NavItem, pathname: string, allItems: NavIt
   return item.href !== "/" && pathname.startsWith(item.href + "/");
 }
 
+// Roles whose own hiring-pipeline board (PipelineBoard.tsx / PrincipalPipelineBoard.tsx)
+// already links straight into panel scoring ("Monitor Panel Scoring →") - they don't
+// need the dynamic "My Interviews" nav item Sidebar/MobileDrawer inject for every other
+// role that gets added to a panel (e.g. Principal/VP are default members on every batch).
+export const ROLES_WITH_EMBEDDED_PANEL_ACCESS: ReadonlySet<UserRole> = new Set([
+  "PRINCIPAL",
+  "VICE_PRINCIPAL",
+  "HOD",
+]);
+
 export const NAV_ITEMS: NavItem[] = [
   // Management
   { label: "Dashboard", href: "/management/dashboard", iconName: "LayoutDashboard", roles: ["MANAGEMENT"] },
@@ -31,6 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Faculty Details", href: "/management/faculty", iconName: "UsersRound", roles: ["MANAGEMENT"] },
   { label: "Budget", href: "/management/budget", iconName: "PiggyBank", roles: ["MANAGEMENT"], section: "Reports" },
   { label: "Budget History", href: "/management/indents", iconName: "ClipboardList", roles: ["MANAGEMENT"] },
+  { label: "Leave Approvals", href: "/management/leave-approvals", iconName: "CalendarClock", roles: ["MANAGEMENT"], section: "HR" },
   { label: "My Profile", href: "/management/profile", iconName: "UserCircle", roles: ["MANAGEMENT"], section: "Personal" },
 
   // Super Admin
@@ -96,9 +107,11 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
+  // Panel Scoring and Appointment Letters are no longer separate tabs - both
+  // are folded into the Hiring Requests pipeline's own status badges/actions
+  // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
+  // same hiring request, not independent destinations.
   { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline" },
-  { label: "Panel Scoring", href: "/panel/interviews", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  { label: "Appointment Letters", href: "/principal/appointment-letters", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -107,6 +120,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Staff", href: "/principal/staff", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR Management" },
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Attendance Report", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave Profiles", href: "/principal/leave/profiles", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget" },
   { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -135,13 +149,16 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
+  { label: "Faculty Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
   { label: "Purchase Clearance", href: "/hod/purchase-clearance", iconName: "Receipt", roles: ["HOD"] },
+  // Panel Scoring is no longer its own tab - it's folded into the Hiring
+  // Pipeline's own status badges/actions (see PipelineBoard.tsx), matching
+  // the same merge done for Principal/Vice Principal.
   { label: "Hiring Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"], section: "Hiring" },
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
-  { label: "Panel Scoring", href: "/panel/interviews", iconName: "ClipboardCheck", roles: ["HOD"] },
   { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "My Work" },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
   { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"] },

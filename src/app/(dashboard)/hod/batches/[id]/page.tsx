@@ -49,12 +49,46 @@ type BatchCandidateView = {
   bioDataSubmitted?: boolean;
 };
 
+type PanelScores = {
+  subjectKnowledge: number;
+  presentationSkills: number;
+  research: number;
+  specificAttributes: number;
+  others: number;
+};
+
 type PanelFeedbackItem = {
   id: string;
   candidateId: string;
   panelUid: string;
   panelName: string;
+  panelScores?: PanelScores;
+  recommendation?: "ACCEPT" | "REJECT" | "MAYBE";
+  comments?: string;
 };
+
+// Panel rubric is marked out of 10 per criterion; a panelist's overall is the
+// mean of their 5 criteria (also out of 10).
+const PANEL_SCORE_LABELS: [keyof PanelScores, string][] = [
+  ["subjectKnowledge", "Subject Knowledge"],
+  ["presentationSkills", "Presentation"],
+  ["research", "Research"],
+  ["specificAttributes", "Specific Attributes"],
+  ["others", "Others"],
+];
+
+const RECOMMENDATION_LABELS: Record<NonNullable<PanelFeedbackItem["recommendation"]>, string> = {
+  ACCEPT: "Recommended",
+  MAYBE: "With Reservations",
+  REJECT: "Not Recommended",
+};
+
+function panelAvg(scores?: PanelScores): number | null {
+  if (!scores) return null;
+  const vals = PANEL_SCORE_LABELS.map(([k]) => scores[k]).filter((v) => typeof v === "number");
+  if (vals.length === 0) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
 
 type StudentFeedbackSummary = {
   candidateId: string;
@@ -655,16 +689,22 @@ ${institution}`;
                     <p className="font-medium text-sm">{c.name}</p>
                     <p className="text-xs text-muted-foreground">{c.email}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => copyFormLink(c)}>
-                      <Copy className="h-3.5 w-3.5 mr-1.5" />
-                      Copy Link
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => sendCallLetter(c)}>
-                      <Mail className="h-3.5 w-3.5 mr-1.5" />
-                      Send Call Letter
-                    </Button>
-                  </div>
+                  {c.bioDataSubmitted ? (
+                    <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />Form submitted
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => copyFormLink(c)}>
+                        <Copy className="h-3.5 w-3.5 mr-1.5" />
+                        Copy Link
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => sendCallLetter(c)}>
+                        <Mail className="h-3.5 w-3.5 mr-1.5" />
+                        Send Call Letter
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -774,10 +814,17 @@ ${institution}`;
                       <span className="text-xs text-green-600 font-medium flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3" />Arrived
                       </span>
-                    ) : (
+                    ) : c.bioDataSubmitted ? (
                       <Button size="sm" variant="outline" loading={arrivingId === c.id} disabled={!!arrivingId} onClick={() => void markArrived(c.id)}>
                         Mark Arrived
                       </Button>
+                    ) : (
+                      <span
+                        className="text-xs text-muted-foreground flex items-center gap-1"
+                        title="The candidate's bio data form hasn't been submitted yet — review it in Candidate Bio Data above before marking them arrived"
+                      >
+                        <Clock className="h-3 w-3" />Awaiting bio data form
+                      </span>
                     )}
                   </div>
                 )}
@@ -953,6 +1000,94 @@ ${institution}`;
         </Card>
       )}
 
+      {/* ── Panel scores + student feedback + overall, per candidate ──────────── */}
+      {["PANEL_INTERVIEW", "PRINCIPAL_FINAL_REVIEW", "COMPLETED"].includes(batch.currentPhase) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Star className="h-4 w-4 text-primary" />
+              Panel Evaluation &amp; Overall Score
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {candidates.map((c) => {
+              const rows = panelFeedback.filter((f) => f.candidateId === c.candidateId && f.panelScores);
+              const panelAverages = rows.map((r) => panelAvg(r.panelScores)).filter((v): v is number => v != null);
+              const panelOverall = panelAverages.length ? panelAverages.reduce((a, b) => a + b, 0) / panelAverages.length : null;
+              const sf = studentFeedbackSummary.find((s) => s.candidateId === c.candidateId);
+              const studentVals = sf ? Object.values(sf.averages) : [];
+              const studentOverall = sf
+                ? (sf.averages.overallImpression ?? (studentVals.length ? studentVals.reduce((a, b) => a + b, 0) / studentVals.length : null))
+                : null;
+              // Normalize both signals to /10 (student rubric is out of 5) and
+              // average whichever are available into a single overall.
+              const overallParts: number[] = [];
+              if (panelOverall != null) overallParts.push(panelOverall);
+              if (studentOverall != null) overallParts.push(studentOverall * 2);
+              const overall10 = overallParts.length ? overallParts.reduce((a, b) => a + b, 0) / overallParts.length : null;
+              return (
+                <div key={c.id} className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-sm">{c.name}</p>
+                    {overall10 != null ? (
+                      <div className="text-right">
+                        <span className="text-lg font-semibold text-primary">{overall10.toFixed(1)}</span>
+                        <span className="text-xs text-muted-foreground"> /10 overall</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No scores yet</span>
+                    )}
+                  </div>
+
+                  {rows.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">No panel evaluations submitted yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-muted-foreground text-left">
+                            <th className="py-1 pr-3 font-medium">Panel Member</th>
+                            {PANEL_SCORE_LABELS.map(([k, label]) => (
+                              <th key={k} className="py-1 px-2 font-medium text-center">{label}</th>
+                            ))}
+                            <th className="py-1 px-2 font-medium text-center">Avg</th>
+                            <th className="py-1 pl-2 font-medium">Recommendation</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((r) => {
+                            const avg = panelAvg(r.panelScores);
+                            return (
+                              <tr key={r.id} className="border-t">
+                                <td className="py-1.5 pr-3 font-medium">{r.panelName}</td>
+                                {PANEL_SCORE_LABELS.map(([k]) => (
+                                  <td key={k} className="py-1.5 px-2 text-center">{r.panelScores?.[k] ?? "-"}</td>
+                                ))}
+                                <td className="py-1.5 px-2 text-center font-semibold">{avg != null ? avg.toFixed(1) : "-"}</td>
+                                <td className="py-1.5 pl-2">
+                                  {r.recommendation ? (
+                                    <Badge variant="outline" className="text-[10px]">{RECOMMENDATION_LABELS[r.recommendation]}</Badge>
+                                  ) : "-"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-4 text-xs pt-2 border-t">
+                    <span className="text-muted-foreground">Panel avg: <span className="font-semibold text-foreground">{panelOverall != null ? `${panelOverall.toFixed(1)}/10` : "—"}</span></span>
+                    <span className="text-muted-foreground">Student feedback: <span className="font-semibold text-foreground">{studentOverall != null ? `${studentOverall.toFixed(1)}/5 · ${sf?.count ?? 0} response${(sf?.count ?? 0) !== 1 ? "s" : ""}` : "—"}</span></span>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── STEP B: HOD releases to panel interview scoring ─────────────────────── */}
       {batch.currentPhase === "IN_PROGRESS" && (
         <Card className="border-primary/30">
@@ -1107,15 +1242,33 @@ ${institution}`;
         </>
       )}
 
-      {/* Pending demo message */}
+      {/* Once a candidate has arrived, open the interview session directly —
+          no need to wait for a separate demo day. */}
       {batch.currentPhase === "INTERVIEW_READY" && (
-        <Card className="border-dashed">
+        <Card className={candidates.some((c) => c.hasArrived) ? "border-primary/30" : "border-dashed"}>
           <CardContent className="p-6 text-center">
-            <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="font-medium text-sm">Waiting for Demo Day</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              The coordinator will mark the demo complete on interview day. Feedback sections unlock after that.
-            </p>
+            {candidates.some((c) => c.hasArrived) ? (
+              <>
+                <p className="font-medium text-sm">Candidates are arriving</p>
+                <p className="text-xs text-muted-foreground mt-1 mb-3">
+                  Open the interview session to display demo QR codes and run scoring.
+                </p>
+                <Button asChild>
+                  <Link href={`/coordinator/${id}`}>
+                    Open Demo Session
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="font-medium text-sm">Waiting for candidates to arrive</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Mark candidates arrived above, then open the interview session to run the demo and scoring.
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

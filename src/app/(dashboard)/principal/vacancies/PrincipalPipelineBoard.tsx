@@ -55,6 +55,10 @@ function getNextAction(entry: PipelineEntry): NextAction {
   if (p === "PRINCIPAL_REVIEW") {
     return { label: "Review Interview Plan →", href: `/principal/interviews/${batch.id}` };
   }
+  // Panel Scoring no longer has its own nav tab - this is the only way in now.
+  if (p === "PANEL_INTERVIEW") {
+    return { label: "Monitor Panel Scoring →", href: `/panel/interviews/${batch.id}`, variant: "outline" };
+  }
   if (p === "PRINCIPAL_FINAL_REVIEW") {
     return { label: "Make Decision →", href: `/principal/negotiate/${batch.id}` };
   }
@@ -107,10 +111,20 @@ function PipelineCard({
       ? "Decision made"
       : "-";
 
+  const approvedStatuses = batch?.currentPhase === "COMPLETED"
+    ? getApprovedDetailedStatuses(candidates, batch.currentPhase, offerStatusByCandidate, appointmentCandidateIds, accountRequestStatusByCandidate)
+    : [];
+
   const stage5Sub =
     batch?.currentPhase === "COMPLETED"
-      ? getOnboardingSummary(getApprovedDetailedStatuses(candidates, batch.currentPhase, offerStatusByCandidate, appointmentCandidateIds, accountRequestStatusByCandidate))
+      ? getOnboardingSummary(approvedStatuses)
       : "-";
+
+  // Panel Scoring and Appointment Letters no longer have their own nav tabs
+  // (see navConfig.ts) - these two extra badges are how their status now
+  // surfaces on the Hiring Requests card instead.
+  const panelScoringOpen = batch?.currentPhase === "PANEL_INTERVIEW";
+  const appointmentLetterPending = approvedStatuses.includes("APPOINTMENT_LETTER_PENDING");
 
   const accentColor =
     vacancy.status === "REJECTED"
@@ -133,6 +147,16 @@ function PipelineCard({
                 <span className="text-[11px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
                   {BATCH_PHASE_LABELS[batch.currentPhase]}
                 </span>
+              )}
+              {panelScoringOpen && (
+                <Badge variant="outline" className="text-[11px] text-blue-700 border-blue-300 bg-blue-50">
+                  Panel Scoring Open
+                </Badge>
+              )}
+              {appointmentLetterPending && (
+                <Badge variant="outline" className="text-[11px] text-indigo-700 border-indigo-300 bg-indigo-50">
+                  Appointment Letter Pending
+                </Badge>
               )}
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">
@@ -172,6 +196,11 @@ function PipelineCard({
             <Link href={nextAction.href}>{nextAction.label}</Link>
           </Button>
         )}
+        {appointmentLetterPending && (
+          <Button size="sm" variant="outline" className="border-indigo-300 text-indigo-700 hover:bg-indigo-50" asChild>
+            <Link href="/principal/appointment-letters">Generate Appointment Letter →</Link>
+          </Button>
+        )}
         {vacancy.status === "PENDING" && (
           <div className="flex items-center gap-2">
             <Button size="sm" variant="destructive" asChild>
@@ -209,7 +238,7 @@ function PipelineCard({
                     className="flex items-center justify-between rounded-lg bg-background border px-3 py-2 text-sm"
                   >
                     <div className="min-w-0">
-                      <span className="font-medium">{c.name}</span>
+                      <Link href={`/candidate-profile/${c.candidateId}`} className="font-medium hover:underline">{c.name}</Link>
                       <span className="text-muted-foreground text-xs ml-2 truncate">{c.email}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -363,8 +392,13 @@ export function PrincipalPipelineBoard({ scope, department }: { scope: "active" 
             candidates: viewsByVacancy.get(v.id) ?? [],
             batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
           }));
+        // updatedAt (not createdAt) so a request that was modified/resubmitted
+        // after its original submission bubbles back to the top too, instead of
+        // staying buried under it under its original, now-stale creation date.
         built.sort(
-          (a, b) => (toDate(b.vacancy.createdAt)?.getTime() ?? 0) - (toDate(a.vacancy.createdAt)?.getTime() ?? 0)
+          (a, b) =>
+            (toDate(b.vacancy.updatedAt ?? b.vacancy.createdAt)?.getTime() ?? 0) -
+            (toDate(a.vacancy.updatedAt ?? a.vacancy.createdAt)?.getTime() ?? 0)
         );
         setEntries(built);
       })

@@ -114,12 +114,18 @@ export interface LeaveBalance {
 //  - "Other" requests (isOtherRequest): the HOD can REJECT outright, or tag
 //    isPaidLeave and forward to PENDING_PRINCIPAL, where the Principal/VP
 //    gives the final APPROVE/REJECT (balance-exempt either way).
-// Non-PANEL_MEMBER submitters (HOD/Principal/etc.'s own leave) skip the HOD
-// stage entirely and start at PENDING_PRINCIPAL, unchanged from before.
+// Non-PANEL_MEMBER submitters (HOD/Vice Principal/etc.'s own leave) skip the
+// HOD stage entirely and start at PENDING_PRINCIPAL, unchanged from before -
+// approvable by the Principal (a Vice Principal can't approve their own, see
+// applications/[id]/route.ts). A PRINCIPAL's own leave instead starts at
+// PENDING_MANAGEMENT, decided by the global MANAGEMENT role (see
+// api/management/leave-approvals) since there's no one above the Principal
+// within the college itself.
 
 export type LeaveRequestStatus =
   | "PENDING_HOD"
   | "PENDING_PRINCIPAL"
+  | "PENDING_MANAGEMENT"
   | "APPROVED"
   | "REJECTED"
   | "CANCELLED";
@@ -127,6 +133,7 @@ export type LeaveRequestStatus =
 export const LEAVE_REQUEST_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
   PENDING_HOD: "Pending HOD",
   PENDING_PRINCIPAL: "Pending Principal",
+  PENDING_MANAGEMENT: "Pending Management",
   APPROVED: "Approved",
   REJECTED: "Rejected",
   CANCELLED: "Cancelled",
@@ -172,6 +179,9 @@ export interface LeaveRequest {
   lopDays?: number;
   hodAction?: LeaveActionRecord;
   principalAction?: LeaveActionRecord;
+  // Set when a PRINCIPAL's own leave (PENDING_MANAGEMENT) is decided - see
+  // api/management/leave-approvals/[id]/route.ts.
+  managementAction?: LeaveActionRecord;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   // Not stored on the document - computed from the requester's leave profile

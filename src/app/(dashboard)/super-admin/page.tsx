@@ -62,7 +62,7 @@ export default function SuperAdminDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name?.split(" ")[0] ?? "Admin"}`}
+        title={`Welcome, ${user?.name ?? "Admin"}`}
         description="System-wide overview of all colleges and operations"
         actions={
           <Button asChild>

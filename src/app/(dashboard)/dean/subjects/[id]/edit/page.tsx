@@ -31,8 +31,13 @@ export default function EditDeanSubjectPage() {
   const params = useParams<{ id: string }>();
   const subjectId = params.id;
   const searchParams = useSearchParams();
+  const departmentId = searchParams.get("departmentId") ?? "";
   const courseId = searchParams.get("courseId") ?? "";
   const year = searchParams.get("year") ?? "";
+  const academicYear = searchParams.get("academicYear") ?? "";
+  // Carried through to Cancel/Save so the Subjects list lands back on this
+  // same department/course/year/session instead of the blank pickers.
+  const backHref = `/dean/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}`;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,7 +46,7 @@ export default function EditDeanSubjectPage() {
   useEffect(() => {
     if (!courseId || !year) {
       toast({ variant: "destructive", title: "Select a course and year first" });
-      router.push("/dean/subjects");
+      router.push(backHref);
       return;
     }
     fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
@@ -50,7 +55,7 @@ export default function EditDeanSubjectPage() {
         const s = (d.subjects ?? []).find((x) => x.id === subjectId);
         if (!s) {
           toast({ variant: "destructive", title: "Subject not found" });
-          router.push("/dean/subjects");
+          router.push(backHref);
           return;
         }
         setForm({
@@ -64,7 +69,7 @@ export default function EditDeanSubjectPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load subject" }))
       .finally(() => setLoading(false));
-  }, [courseId, year, subjectId, router]);
+  }, [courseId, year, subjectId, router, backHref]);
 
   function setF(patch: Partial<SubjectForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -95,7 +100,7 @@ export default function EditDeanSubjectPage() {
         throw new Error(json.error ?? "Failed to save subject");
       }
       toast({ variant: "success", title: "Subject updated" });
-      router.push("/dean/subjects");
+      router.push(backHref);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save subject" });
     } finally {
@@ -185,7 +190,7 @@ export default function EditDeanSubjectPage() {
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => router.push(backHref)}>Cancel</Button>
               <Button type="submit" loading={saving}>Save Changes</Button>
             </div>
           </form>

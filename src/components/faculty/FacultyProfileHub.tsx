@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronRight, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -7,8 +8,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/shared/Avatar";
+import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { getFacultyProfileModules, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { formatDate } from "@/lib/utils";
+import { toast } from "@/hooks/useToast";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { FacultyMember, FacultyStatus } from "@/types";
 
@@ -78,6 +81,25 @@ export function FacultyProfileHub({
   faculty, basePath, hideFinancialModule, excludeModules, backHref, editHref, parentDeptName,
 }: FacultyProfileHubProps) {
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
+  const [photoUrl, setPhotoUrl] = useState(faculty.profilePhotoUrl);
+
+  // AvatarUploadField only uploads to Storage - this persists the resulting URL
+  // onto the faculty record itself (and, server-side, syncs it to their login
+  // account if they have one - see PATCH /api/college/faculty/[id]).
+  async function handlePhotoUploaded(url: string) {
+    setPhotoUrl(url);
+    if (!faculty.id) return;
+    try {
+      const res = await fetch(`/api/college/faculty/${faculty.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profilePhotoUrl: url }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      toast({ variant: "destructive", title: "Photo uploaded but failed to save - try again" });
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -103,7 +125,17 @@ export function FacultyProfileHub({
       <Card>
         <CardContent className="p-5 space-y-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <Avatar name={faculty.name ?? "?"} photoUrl={faculty.profilePhotoUrl} size="lg" />
+            {faculty.id ? (
+              <AvatarUploadField
+                name={faculty.name ?? "?"}
+                photoUrl={photoUrl}
+                targetId={faculty.id}
+                onUploaded={handlePhotoUploaded}
+                onDeleted={() => void handlePhotoUploaded("")}
+              />
+            ) : (
+              <Avatar name={faculty.name ?? "?"} photoUrl={photoUrl} size="lg" />
+            )}
             {faculty.status && <Badge variant={STATUS_VARIANTS[faculty.status] ?? "secondary"}>{FACULTY_STATUS_LABELS[faculty.status] ?? faculty.status}</Badge>}
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

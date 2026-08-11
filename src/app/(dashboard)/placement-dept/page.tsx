@@ -8,7 +8,7 @@ export default function PlacementDeptDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name?.split(" ")[0] ?? "Placement Department"}`}
+        title={`Welcome, ${user?.name ?? "Placement Department"}`}
         description="Placement Department - college placement & recruitment support"
       />
       <p className="text-muted-foreground text-sm">Placement Department features are being set up. Check back soon.</p>

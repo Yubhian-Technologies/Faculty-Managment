@@ -132,6 +132,7 @@ export interface CandidateBioData {
   aadharNo?: string;
   panNo?: string;
   bloodGroup?: string;
+  caste?: string; // reservation category (OC/BC-*/SC/ST/EWS/Other)
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   // Hiring-specific, self-reported — not on FacultyMember
@@ -166,11 +167,12 @@ export interface CandidateBioData {
   };
 }
 
-// Candidate is a pure person record — reusable across any number of hiring
-// requests. Everything specific to one hiring cycle (stage, documents,
-// salary negotiation, committee recommendation, etc.) lives on
-// CandidateApplication instead, since the same person can be attached to
-// multiple VacancyRequests at once with independent pipeline state for each.
+// Candidate is a pure person record — reusable across hiring requests over
+// time. Everything specific to one hiring cycle (stage, documents, salary
+// negotiation, committee recommendation, etc.) lives on CandidateApplication
+// instead. A candidate may only have one active (non-REJECTED) application
+// at a time, enforced server-side - once rejected from one, they can be
+// attached to another.
 export interface Candidate {
   id: string;
   collegeId: string;
@@ -202,8 +204,8 @@ export interface Candidate {
 
 // ─── Candidate Application ─────────────────────────────────────────────────
 // Join entity: "this Candidate applied to this Hiring Request (VacancyRequest)".
-// A candidate may have any number of applications (one per VacancyRequest,
-// enforced server-side); a VacancyRequest/HiringBatch may have many
+// A candidate may only have one active (non-REJECTED) application at a time,
+// enforced server-side; a VacancyRequest/HiringBatch may have many
 // applications. All per-hiring-cycle state lives here, not on Candidate.
 
 export interface CandidateApplication {
@@ -348,6 +350,16 @@ export interface PanelFeedback {
   demoOverallScore?: number; // 1–10
   demoComments?: string;
 
+  // Panel evaluation module — marks out of 10 per criterion. This is the active
+  // evaluation form used across the HOD / panel / coordinator dashboards.
+  panelScores?: {
+    subjectKnowledge: number;    // 1–10
+    presentationSkills: number;  // 1–10
+    research: number;            // 1–10
+    specificAttributes: number;  // 1–10
+    others: number;              // 1–10
+  };
+
   // Panel-interview module (paper "Panel Sheet")
   ratings?: {
     technicalKnowledge: number;    // 1–5
@@ -455,6 +467,7 @@ export interface AppointmentLetter {
   designation: string;
   department: string;
   joiningDate: Timestamp;
+  ctcAnnual?: number;          // finalized CTC carried over from the accepted offer letter
   candidateAddress?: string;
   termsAndConditions?: string; // full appointment-order clause text shown on the PDF, one clause per line
   generatedAt: Timestamp;

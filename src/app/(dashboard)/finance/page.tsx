@@ -44,7 +44,7 @@ export default function FinanceDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? "Finance"}`}
+        title={`Hello, ${user?.name ?? "Finance"}`}
         description="Budgets, approvals, payments, and financial reporting"
       />
 

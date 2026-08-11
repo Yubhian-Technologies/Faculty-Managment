@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -19,6 +18,23 @@ type BatchRow = Record<string, unknown> & HiringBatch;
 // panel proposal itself was rejected — everything else is still active.
 function isPastBatch(b: BatchRow): boolean {
   return b.currentPhase === "COMPLETED" || b.status === "REJECTED";
+}
+
+// Panel-member–facing evaluation status derived from the batch phase. Mirrors
+// the detail page's `canScore` gate (PANEL_INTERVIEW+) so the list and detail
+// agree on when scoring is open.
+// ponytail: phase-only, doesn't reflect whether THIS panelist already submitted —
+// add a per-batch panel-feedback fetch if a "Submitted" state is wanted here.
+function evalStatus(b: BatchRow): { label: string; className: string } {
+  switch (b.currentPhase) {
+    case "COMPLETED":
+      return { label: "Completed", className: "bg-gray-100 text-gray-600 border-gray-200" };
+    case "PANEL_INTERVIEW":
+    case "PRINCIPAL_FINAL_REVIEW":
+      return { label: "Pending Evaluation", className: "bg-amber-50 text-amber-700 border-amber-200" };
+    default:
+      return { label: "Evaluation Not Opened", className: "bg-slate-50 text-slate-500 border-slate-200" };
+  }
 }
 
 export default function PanelInterviewsPage() {
@@ -83,7 +99,10 @@ export default function PanelInterviewsPage() {
     {
       key: "status",
       header: "Status",
-      render: (row) => <StatusBadge status={(row as unknown as HiringBatch).status} />,
+      render: (row) => {
+        const s = evalStatus(row);
+        return <Badge variant="outline" className={`text-xs ${s.className}`}>{s.label}</Badge>;
+      },
     },
     {
       key: "actions",
