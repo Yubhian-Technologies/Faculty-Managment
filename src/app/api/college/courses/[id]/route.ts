@@ -12,26 +12,43 @@ export async function PATCH(
     const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
-      name?: string;
-      code?: string;
-      durationYears?: number;
+      catalogId?: string;
       isActive?: boolean;
     };
 
     const db = getAdminDb();
-    const ref = db.collection("colleges").doc(session.collegeId).collection("courses").doc(id);
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const ref = collegeRef.collection("courses").doc(id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.name != null) updates.name = body.name.trim();
-    if (body.code != null) updates.code = body.code.toUpperCase().trim();
-    if (body.durationYears != null) {
-      if (body.durationYears < 1 || body.durationYears > 10) {
-        return NextResponse.json({ error: "durationYears must be between 1 and 10" }, { status: 400 });
+
+    // Re-pointing a course to a different catalog entry re-derives its
+    // name/code/duration from the catalog - never from free-typed input.
+    if (body.catalogId != null) {
+      const catalogSnap = await collegeRef.collection("courseCatalog").doc(body.catalogId).get();
+      if (!catalogSnap.exists) {
+        return NextResponse.json({ error: "Selected course is not in the catalog" }, { status: 400 });
       }
-      updates.durationYears = Number(body.durationYears);
+      const catalog = catalogSnap.data() as { name: string; code: string; durationYears: number };
+      const departmentId = (snap.data() as { departmentId?: string }).departmentId;
+
+      const dupe = await collegeRef.collection("courses")
+        .where("departmentId", "==", departmentId)
+        .where("catalogId", "==", body.catalogId)
+        .limit(2)
+        .get();
+      if (dupe.docs.some((d) => d.id !== id)) {
+        return NextResponse.json({ error: "This course is already added to the department" }, { status: 409 });
+      }
+
+      updates.catalogId = body.catalogId;
+      updates.name = catalog.name;
+      updates.code = catalog.code;
+      updates.durationYears = Number(catalog.durationYears);
     }
+
     if (body.isActive != null) updates.isActive = body.isActive;
 
     await ref.update(updates);

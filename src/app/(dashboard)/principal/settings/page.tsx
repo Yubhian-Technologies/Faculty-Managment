@@ -10,6 +10,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettingsCard";
+import { CourseCatalogSettingsCard } from "@/components/academics/CourseCatalogSettingsCard";
 import type { FacultyNorms } from "@/types/core";
 
 interface CollegeInfo {
@@ -127,6 +128,8 @@ export default function PrincipalSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <CourseCatalogSettingsCard />
 
       <Card>
         <CardHeader>

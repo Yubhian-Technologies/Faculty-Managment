@@ -13,6 +13,8 @@ import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIncomingStudents } from "@/hooks/useIncomingStudents";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
+import { useCollegeType } from "@/hooks/useCollegeType";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { OrgScopeTree } from "./OrgScopeTree";
@@ -49,6 +51,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { hasIncomingStudents } = useIncomingStudents();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
+  const { collegeType } = useCollegeType();
 
   if (!user) return null;
 
@@ -59,9 +62,13 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // "Sub-Departments" is hidden unless the HOD's own department both isn't
   // itself a sub-department and has sub-departments enabled by the Principal
   // - see useIsSubDepartmentHod for why either gap makes the page a dead end.
+  // "Supporting Staff" is hidden for college types with no Technical/Non-
+  // Technical split (School) - HOD has nothing to manage there, it's all
+  // centrally owned by Principal (see hasSupportingStaffSplit).
   const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
     .filter((item) => hasIncomingStudents || item.href !== "/hod/students/incoming")
-    .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
+    .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
+    .filter((item) => hasSupportingStaffSplit(collegeType) || item.href !== "/hod/supporting-staff");
 
   // Inject dynamic nav items based on panel assignments (any role can be a panel member)
   let navItems = baseNavItems;

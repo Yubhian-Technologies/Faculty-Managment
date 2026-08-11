@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, UsersRound } from "lucide-react";
+import { ArrowLeft, Eye, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -135,7 +135,7 @@ export default function PrincipalDepartmentFacultyPage() {
                 </div>
               </div>
               <Button size="sm" variant="outline" asChild>
-                <Link href={`/principal/staff/${hod.uid}/edit`}><Pencil className="h-3.5 w-3.5 mr-1" />Edit HOD</Link>
+                <Link href={`/principal/staff/${hod.uid}`}><Eye className="h-3.5 w-3.5 mr-1" />View HOD</Link>
               </Button>
             </>
           ) : (

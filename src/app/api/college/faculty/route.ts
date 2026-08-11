@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope, getRelatedDepartmentNames, canHodEditDepartment } from "@/lib/departments/scope";
+import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
@@ -89,12 +90,19 @@ export async function GET(request: Request) {
         faculty.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
       }
     }
-    faculty.sort((a, b) => {
+    // Technical designations belong to Supporting Staff now (see
+    // LEGACY_TECHNICAL_DESIGNATIONS) - excluded here rather than at query time
+    // (Firestore only allows one inequality filter per query, already spent on
+    // department/status) so the Faculty Register stays teaching-only even for
+    // any pre-migration record still sitting in facultyMembers.
+    const teachingOnly = faculty.filter((f) => !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation as string));
+
+    teachingOnly.sort((a, b) => {
       const an = (a.name as string | undefined) ?? "";
       const bn = (b.name as string | undefined) ?? "";
       return an.localeCompare(bn);
     });
-    return NextResponse.json({ faculty });
+    return NextResponse.json({ faculty: teachingOnly });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

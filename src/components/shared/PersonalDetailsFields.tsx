@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RELIGION_LABELS, CASTE_LABELS } from "@/types";
+import { RELIGION_LABELS, CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
 import { PHONE_REGEX } from "@/lib/validations";
 import type { Religion, Caste } from "@/types";
 
@@ -48,6 +48,8 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
   function set<K extends keyof PersonalDetailsValue>(key: K, v: PersonalDetailsValue[K]) {
     onChange({ ...value, [key]: v });
   }
+
+  const subCasteOptions = SUB_CASTES_BY_CASTE[value.caste as Caste] ?? [];
 
   return (
     <div className="space-y-5">
@@ -121,7 +123,7 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           <Label>Caste</Label>
           <Select
             value={value.caste && !(value.caste in CASTE_LABELS) ? "OTHER" : (value.caste ?? "")}
-            onValueChange={(v) => set("caste", v)}
+            onValueChange={(v) => onChange({ ...value, caste: v, subCaste: undefined })}
           >
             <SelectTrigger><SelectValue placeholder="Select caste" /></SelectTrigger>
             <SelectContent>
@@ -138,7 +140,29 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
         </div>
         <div className="space-y-2">
           <Label>Sub Caste</Label>
-          <Input value={value.subCaste ?? ""} onChange={(e) => set("subCaste", e.target.value)} placeholder="e.g. BC-B" />
+          {subCasteOptions.length > 0 ? (
+            <>
+              <Select
+                value={value.subCaste && !subCasteOptions.includes(value.subCaste) ? "OTHER" : (value.subCaste ?? "")}
+                onValueChange={(v) => set("subCaste", v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Select sub caste" /></SelectTrigger>
+                <SelectContent>
+                  {subCasteOptions.map((sc) => <SelectItem key={sc} value={sc}>{sc}</SelectItem>)}
+                  <SelectItem value="OTHER">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              {value.subCaste && (value.subCaste === "OTHER" || !subCasteOptions.includes(value.subCaste)) && (
+                <Input
+                  value={value.subCaste === "OTHER" ? "" : value.subCaste}
+                  onChange={(e) => set("subCaste", e.target.value || "OTHER")}
+                  placeholder="Please specify"
+                />
+              )}
+            </>
+          ) : (
+            <Input value={value.subCaste ?? ""} onChange={(e) => set("subCaste", e.target.value)} placeholder="e.g. BC-B" />
+          )}
         </div>
         <div className="space-y-2">
           <Label>Aadhar No</Label>

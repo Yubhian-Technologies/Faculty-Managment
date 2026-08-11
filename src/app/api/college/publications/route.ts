@@ -3,15 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember, verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type { UserRole } from "@/types";
 
 // Every college-scoped staff role - any of them can read their own
 // publications; only R_AND_D can read across the whole college or write.
-const COLLEGE_STAFF_ROLES = [
-  "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF",
-  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT",
-  "LIBRARY", "EXAM_CELL", "WEBMASTER", "PANEL_MEMBER",
-];
+const COLLEGE_STAFF_ROLES = PUBLICATION_ELIGIBLE_ROLES;
 
 export async function GET(request: Request) {
   try {
@@ -96,6 +93,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
     }
     const owner = ownerSnap.data() as { name?: string; role?: UserRole };
+    if (!owner.role || !PUBLICATION_ELIGIBLE_ROLES.includes(owner.role)) {
+      return NextResponse.json({ error: "Publications can only be recorded for staff, not students" }, { status: 400 });
+    }
 
     let addedByName = "R&D";
     try {
