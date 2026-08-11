@@ -252,10 +252,32 @@ export async function POST(request: Request) {
         const deptDoc = deptSnap.docs[0].data() as { assignedYears?: number[]; secondaryDepartments?: string[]; parentDepartmentId?: string };
         const assignedYears = deptDoc.assignedYears ?? [];
         if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
-          return NextResponse.json(
-            { error: `Your department is not assigned to teach Year ${body.year}` },
-            { status: 400 }
-          );
+          // A real branch (e.g. IT) reached through a sub-department's managed
+          // grouping (BS-Maths managing IT + CSBS) never carries the shared
+          // first year in its OWN "Years Taught" - that's configured on the
+          // managing sub-department (or its parent common department) instead.
+          // Before rejecting, check whether whoever manages this branch teaches
+          // the requested year - if so, this section is exactly that shared-year
+          // section and should be allowed.
+          const managingSnap = await db.collection("colleges").doc(session.collegeId)
+            .collection("departments").where("managedDepartments", "array-contains", dept).limit(1).get();
+          let allowedViaManager = false;
+          if (!managingSnap.empty) {
+            const manager = managingSnap.docs[0].data() as { assignedYears?: number[]; parentDepartmentId?: string };
+            let managerYears = manager.assignedYears ?? [];
+            if (managerYears.length === 0 && manager.parentDepartmentId) {
+              const parentSnap = await db.collection("colleges").doc(session.collegeId)
+                .collection("departments").doc(manager.parentDepartmentId).get();
+              managerYears = (parentSnap.data() as { assignedYears?: number[] } | undefined)?.assignedYears ?? [];
+            }
+            allowedViaManager = managerYears.includes(Number(body.year));
+          }
+          if (!allowedViaManager) {
+            return NextResponse.json(
+              { error: `Your department is not assigned to teach Year ${body.year}` },
+              { status: 400 }
+            );
+          }
         }
         // Available branches: this department's own configured secondaries, or -
         // for a sub-department with none of its own - those inherited from its

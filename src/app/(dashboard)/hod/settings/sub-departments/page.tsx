@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Network, Plus, Users, BookMarked, UserCog, Trash2, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +24,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
+import { buildManagedBranchOwner, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department, FMSUser, Section, StudentListItem } from "@/types";
 
 interface SubDeptSummary {
@@ -63,6 +64,15 @@ export default function SubDepartmentsSettingsPage() {
   const [editHodUid, setEditHodUid] = useState("");
   const [editManagedDepartments, setEditManagedDepartments] = useState<string[]>([]);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+
+  // branch name -> the sub-department already managing it. A branch may be
+  // grouped under only ONE sub-department (enforced with a 409 by
+  // college/departments); showing it disabled here means the user never picks
+  // a branch that is going to be rejected. Same helper the server uses.
+  const branchOwner = useMemo(
+    () => buildManagedBranchOwner(allDepartments as DepartmentWithId[]),
+    [allDepartments]
+  );
 
   const load = useCallback(async () => {
     if (!department) {
@@ -356,15 +366,24 @@ export default function SubDepartmentsSettingsPage() {
                     );
                     return options.length > 0 ? (
                       <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-                        {options.map((d) => (
-                          <label key={d.id} className="flex items-center gap-1.5 text-sm">
-                            <Checkbox
-                              checked={managedDepartments.includes(d.name)}
-                              onCheckedChange={(checked) => toggleManagedDepartment(d.name, !!checked)}
-                            />
-                            {d.name}
-                          </label>
-                        ))}
+                        {options.map((d) => {
+                          const takenBy = branchOwner.get(d.name);
+                          return (
+                            <label
+                              key={d.id}
+                              className={`flex items-center gap-1.5 text-sm ${takenBy ? "opacity-50" : ""}`}
+                              title={takenBy ? `Already managed by ${takenBy}` : undefined}
+                            >
+                              <Checkbox
+                                disabled={!!takenBy}
+                                checked={managedDepartments.includes(d.name)}
+                                onCheckedChange={(checked) => toggleManagedDepartment(d.name, !!checked)}
+                              />
+                              {d.name}
+                              {takenBy && <span className="text-xs text-muted-foreground">({takenBy})</span>}
+                            </label>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
@@ -493,15 +512,27 @@ export default function SubDepartmentsSettingsPage() {
                 );
                 return options.length > 0 ? (
                   <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-                    {options.map((d) => (
-                      <label key={d.id} className="flex items-center gap-1.5 text-sm">
-                        <Checkbox
-                          checked={editManagedDepartments.includes(d.name)}
-                          onCheckedChange={(checked) => toggleEditManagedDepartment(d.name, !!checked)}
-                        />
-                        {d.name}
-                      </label>
-                    ))}
+                    {options.map((d) => {
+                      // A branch this sub-department already manages is its own
+                      // claim, not a conflict - only another owner disables it.
+                      const owner = branchOwner.get(d.name);
+                      const takenBy = owner && owner !== editTarget?.name ? owner : undefined;
+                      return (
+                        <label
+                          key={d.id}
+                          className={`flex items-center gap-1.5 text-sm ${takenBy ? "opacity-50" : ""}`}
+                          title={takenBy ? `Already managed by ${takenBy}` : undefined}
+                        >
+                          <Checkbox
+                            disabled={!!takenBy}
+                            checked={editManagedDepartments.includes(d.name)}
+                            onCheckedChange={(checked) => toggleEditManagedDepartment(d.name, !!checked)}
+                          />
+                          {d.name}
+                          {takenBy && <span className="text-xs text-muted-foreground">({takenBy})</span>}
+                        </label>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
