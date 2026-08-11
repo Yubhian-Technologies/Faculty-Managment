@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { provisionFacultyFromOffer, generatePassword, type ProvisionResult } from "@/lib/firestore/facultyProvisioning";
+import { notify, notifyRole } from "@/lib/notify";
 import type { FacultyAccountRequestStatus } from "@/types";
 
 type Action = "START_REVIEW" | "CREATE_CREDENTIALS" | "COMPLETE" | "REVEAL_CREDENTIALS";
@@ -17,6 +18,8 @@ const TRANSITIONS: Record<Exclude<Action, "REVEAL_CREDENTIALS">, { from: Faculty
   CREATE_CREDENTIALS: { from: "IN_PROGRESS", to: "CREDENTIALS_CREATED" },
   COMPLETE: { from: "CREDENTIALS_CREATED", to: "COMPLETED" },
 };
+
+const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
 
 // Tries each provided email in order (recommended, then the two optional
 // alternates), stopping at the first one that isn't already taken by a
@@ -46,7 +49,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const body = (await request.json()) as { action?: Action; remarks?: string };
+    const body = (await request.json()) as { action?: Action; remarks?: string; password?: string };
     const action = body.action;
 
     const db = getAdminDb();
@@ -94,6 +97,8 @@ export async function PATCH(
       alternateEmail1?: string;
       alternateEmail2?: string;
       candidateName?: string;
+      designation?: string;
+      department?: string;
       requestedBy?: string;
     };
     if (reqData.status !== transition.from) {
@@ -124,7 +129,12 @@ export async function PATCH(
     let employeeId: string | undefined;
     let assignedEmail: string | undefined;
     if (action === "CREATE_CREDENTIALS") {
-      const password = generatePassword();
+      // Webmaster sets the password directly rather than always generating one -
+      // still validated against Firebase Auth's own minimum length.
+      if (body.password !== undefined && body.password.trim().length < MIN_PASSWORD_LENGTH) {
+        return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, { status: 400 });
+      }
+      const password = body.password?.trim() || generatePassword();
       const candidateEmails = [reqData.officialEmail, reqData.alternateEmail1, reqData.alternateEmail2].filter(
         (e): e is string => !!e?.trim()
       );
@@ -166,17 +176,44 @@ export async function PATCH(
       updatedAt: now,
     });
 
-    if (action === "COMPLETE" && reqData.requestedBy) {
+    // Notify Office as soon as the login actually exists (CREATE_CREDENTIALS),
+    // not only once Webmaster later remembers to click "Mark Completed" - that
+    // used to be the only trigger, leaving Office with no signal that the
+    // credentials were ready to reveal.
+    if (action === "CREATE_CREDENTIALS" && reqData.requestedBy) {
       await collegeRef.collection("notifications").add({
         collegeId: session.collegeId,
         toUid: reqData.requestedBy,
-        type: "FACULTY_ACCOUNT_REQUEST_COMPLETED",
+        type: "FACULTY_ACCOUNT_REQUEST_CREDENTIALS_CREATED",
         title: "Faculty Account Created",
-        message: `The faculty account for ${reqData.candidateName ?? "the candidate"} has been created.`,
-        link: `/college-office/documents`,
+        message: `The faculty account for ${reqData.candidateName ?? "the candidate"} has been created — reveal the login credentials from Faculty Credentials.`,
+        link: `/college-office/settings/faculty-credentials`,
         read: false,
         createdAt: now,
       });
+    }
+
+    // Credential creation is the terminal step of the whole hiring pipeline now
+    // (there's no further "official email" stage after it) - tell the HOD who
+    // raised the vacancy and every Principal/Vice Principal the hire is done.
+    if (action === "CREATE_CREDENTIALS" && facultyId) {
+      try {
+        const offerSnap = await collegeRef.collection("offerLetters").doc(reqData.offerId).get();
+        const offerBatchId = (offerSnap.data() as { batchId?: string } | undefined)?.batchId;
+        const batchSnap = offerBatchId ? await collegeRef.collection("hiringBatches").doc(offerBatchId).get() : null;
+        const vacancyId = (batchSnap?.data() as { vacancyId?: string } | undefined)?.vacancyId;
+        const vacancySnap = vacancyId ? await collegeRef.collection("vacancyRequests").doc(vacancyId).get() : null;
+        const hodUid = (vacancySnap?.data() as { hodUid?: string } | undefined)?.hodUid;
+
+        const hiredMessage = `${reqData.candidateName ?? "The candidate"} has been hired as ${reqData.designation ?? "faculty"} in ${reqData.department ?? "the department"} — the hiring cycle is now closed.`;
+        if (hodUid) {
+          await notify(db, session.collegeId, hodUid, "CANDIDATE_HIRED", "Candidate Hired", hiredMessage, "/hod/pipeline");
+        }
+        await notifyRole(db, session.collegeId, "PRINCIPAL", "CANDIDATE_HIRED", "Candidate Hired", hiredMessage, "/principal/vacancies");
+        await notifyRole(db, session.collegeId, "VICE_PRINCIPAL", "CANDIDATE_HIRED", "Candidate Hired", hiredMessage, "/principal/vacancies");
+      } catch (err) {
+        console.error("[faculty-account-requests CREATE_CREDENTIALS notify HOD/Principal]", err);
+      }
     }
 
     const auditActionMap: Record<Exclude<Action, "REVEAL_CREDENTIALS">, string> = {
@@ -190,7 +227,12 @@ export async function PATCH(
       performedBy: session.uid,
       performedByName: actorName,
       targetId: id,
-      details: { facultyId, assignedEmail },
+      // facultyId/assignedEmail are only set during CREATE_CREDENTIALS — omit
+      // them for other actions so Firestore doesn't reject undefined values.
+      details: {
+        ...(facultyId ? { facultyId } : {}),
+        ...(assignedEmail ? { assignedEmail } : {}),
+      },
       timestamp: now,
     });
 

@@ -132,7 +132,9 @@ export default function NewCollegeOfficeOfferLetterPage() {
       ]);
       const personMap = new Map((candsData.candidates ?? []).map((c) => [c.id, c]));
       const opts: BatchCandidateOption[] = (appsData.applications ?? [])
-        .filter((a) => !existingLetterCandidateIds.has(a.candidateId))
+        // Offer can only go to candidates who have submitted their bio-data form
+        // (mirrors the gate on the documents candidate page's "Send Offer Letter").
+        .filter((a) => !existingLetterCandidateIds.has(a.candidateId) && personMap.get(a.candidateId)?.bioDataSubmitted)
         .map((a) => {
           const person = personMap.get(a.candidateId);
           return {
@@ -234,9 +236,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
 
 Greetings from ${institution}.
 
-We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${new Date(joiningDate).toLocaleDateString("en-IN")}.
-
-The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${new Date(joiningDate).toLocaleDateString("en-IN")}. Please find your offer letter attached.
 ${acceptanceUrl ? `\nPlease review the Terms & Conditions and confirm your acceptance and date of joining here:\n${acceptanceUrl}\n` : ""}
 Congratulations, and welcome aboard!
 

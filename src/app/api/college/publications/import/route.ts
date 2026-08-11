@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type { UserRole } from "@/types";
 
 type ImportRow = {
@@ -59,15 +60,16 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeId = session.collegeId;
 
-    // Publications are only ever attributed to a staff login account (any
-    // role) - same as the Add Publication form's staff picker (see
-    // /api/college/users?includeAll=true) - not to a bare FacultyMember
+    // Publications are only ever attributed to an eligible staff login
+    // account - same PUBLICATION_ELIGIBLE_ROLES as the Add Publication
+    // form's staff picker - never a Student/Class Leader account, even if a
+    // CSV row's name happens to match one, and not to a bare FacultyMember
     // record, which may not have a login at all.
     const usersSnap = await db.collection("colleges").doc(collegeId).collection("users").get();
     const byNormalizedName = new Map<string, { uid: string; name: string; role?: UserRole }>();
     for (const doc of usersSnap.docs) {
       const data = doc.data() as { name?: string; role?: UserRole };
-      if (!data.name) continue;
+      if (!data.name || !data.role || !PUBLICATION_ELIGIBLE_ROLES.includes(data.role)) continue;
       const key = normalizeName(data.name);
       if (!byNormalizedName.has(key)) byNormalizedName.set(key, { uid: doc.id, name: data.name, role: data.role }); // first match wins on duplicate names
     }

@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import { KeyRound, UserCog, Eye } from "lucide-react";
+import { KeyRound, UserCog, Eye, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
 import type {
   Candidate,
@@ -37,12 +37,26 @@ type EligibleCandidate = {
 
 type CandidateForm = {
   officialEmail: string;
-  alternateEmail1: string;
-  alternateEmail2: string;
 };
 
+type EmailField = keyof CandidateForm;
+type Availability = "unchecked" | "checking" | "available" | "taken";
+
 function emptyForm(email: string): CandidateForm {
-  return { officialEmail: email, alternateEmail1: "", alternateEmail2: "" };
+  return { officialEmail: email };
+}
+
+function availabilityKey(applicationId: string, field: EmailField): string {
+  return `${applicationId}:${field}`;
+}
+
+// "Past" = the request is fully wrapped up and needs no more office action:
+// COMPLETED with nothing left to reveal (creds already revealed, or none to
+// reveal). Everything else — including a COMPLETED request whose credentials
+// the office still has to reveal — counts as active.
+function isPastRequest(r: FacultyAccountRequest): boolean {
+  const revealPending = !!r.credentialResult && !r.credentialResult.revealed;
+  return r.status === "COMPLETED" && !revealPending;
 }
 
 export default function FacultyCredentialsPage() {
@@ -52,9 +66,11 @@ export default function FacultyCredentialsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [forms, setForms] = useState<Record<string, CandidateForm>>({});
+  const [availability, setAvailability] = useState<Record<string, Availability>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [revealBusyId, setRevealBusyId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [requestScope, setRequestScope] = useState<"active" | "past">("active");
 
   function load() {
     Promise.all([
@@ -131,8 +147,30 @@ export default function FacultyCredentialsPage() {
     });
   }
 
-  function updateForm(applicationId: string, patch: Partial<CandidateForm>) {
-    setForms((prev) => ({ ...prev, [applicationId]: { ...prev[applicationId], ...patch } }));
+  function updateForm(applicationId: string, field: EmailField, value: string) {
+    setForms((prev) => ({ ...prev, [applicationId]: { ...prev[applicationId], [field]: value } }));
+    // Any edit invalidates the last check on that field - re-check before relying on it again.
+    setAvailability((prev) => ({ ...prev, [availabilityKey(applicationId, field)]: "unchecked" }));
+  }
+
+  // Checked on blur (like the Webmaster's own email-assignment form) rather
+  // than on every keystroke - avoids a query per character while still
+  // catching a collision before the request is sent, not after.
+  async function checkAvailability(applicationId: string, field: EmailField, email: string) {
+    const key = availabilityKey(applicationId, field);
+    if (!email.trim()) {
+      setAvailability((prev) => ({ ...prev, [key]: "unchecked" }));
+      return;
+    }
+    setAvailability((prev) => ({ ...prev, [key]: "checking" }));
+    try {
+      const res = await fetch(`/api/college/email-requests/check-availability?email=${encodeURIComponent(email.trim())}`);
+      const data = (await res.json()) as { available?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Check failed");
+      setAvailability((prev) => ({ ...prev, [key]: data.available ? "available" : "taken" }));
+    } catch {
+      setAvailability((prev) => ({ ...prev, [key]: "unchecked" }));
+    }
   }
 
   async function handleSubmit() {
@@ -143,6 +181,10 @@ export default function FacultyCredentialsPage() {
       const form = forms[c.applicationId];
       if (!form?.officialEmail.trim()) {
         toast({ variant: "destructive", title: `${c.name}: recommended email is required` });
+        return;
+      }
+      if (availability[availabilityKey(c.applicationId, "officialEmail")] === "taken") {
+        toast({ variant: "destructive", title: `${c.name}: recommended email is already in use`, description: "Pick a different email before sending the request." });
         return;
       }
     }
@@ -159,8 +201,6 @@ export default function FacultyCredentialsPage() {
           body: JSON.stringify({
             offerId: c.offerId,
             officialEmail: form.officialEmail.trim(),
-            alternateEmail1: form.alternateEmail1.trim() || undefined,
-            alternateEmail2: form.alternateEmail2.trim() || undefined,
           }),
         });
         if (!res.ok) throw new Error();
@@ -196,6 +236,9 @@ export default function FacultyCredentialsPage() {
   }
 
   const selectedCount = selected.size;
+  const activeRequests = useMemo(() => requests.filter((r) => !isPastRequest(r)), [requests]);
+  const pastRequests = useMemo(() => requests.filter(isPastRequest), [requests]);
+  const visibleRequests = requestScope === "past" ? pastRequests : activeRequests;
   const canReveal = useMemo(
     () => new Set(requests.filter((r) => (r.status === "CREDENTIALS_CREATED" || r.status === "COMPLETED") && r.credentialResult && !r.credentialResult.revealed).map((r) => r.id)),
     [requests]
@@ -243,19 +286,15 @@ export default function FacultyCredentialsPage() {
                 </CardHeader>
                 {isSelected && (
                   <CardContent className="space-y-3 pt-0">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Recommended Email *</Label>
-                        <Input value={form.officialEmail} onChange={(e) => updateForm(c.applicationId, { officialEmail: e.target.value })} placeholder="name@college.edu" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Alternate Email 1</Label>
-                        <Input value={form.alternateEmail1} onChange={(e) => updateForm(c.applicationId, { alternateEmail1: e.target.value })} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Alternate Email 2</Label>
-                        <Input value={form.alternateEmail2} onChange={(e) => updateForm(c.applicationId, { alternateEmail2: e.target.value })} />
-                      </div>
+                    <div className="max-w-sm">
+                      <EmailFieldInput
+                        label="Recommended Email *"
+                        value={form.officialEmail}
+                        status={availability[availabilityKey(c.applicationId, "officialEmail")] ?? "unchecked"}
+                        onChange={(v) => updateForm(c.applicationId, "officialEmail", v)}
+                        onBlur={() => void checkAvailability(c.applicationId, "officialEmail", form.officialEmail)}
+                        placeholder="name@college.edu"
+                      />
                     </div>
                   </CardContent>
                 )}
@@ -276,8 +315,24 @@ export default function FacultyCredentialsPage() {
 
       {requests.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Requests</h2>
-          {requests.map((r) => (
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Requests</h2>
+            <div className="flex gap-2">
+              <Button size="sm" variant={requestScope === "active" ? "default" : "outline"} onClick={() => setRequestScope("active")}>
+                Active ({activeRequests.length})
+              </Button>
+              <Button size="sm" variant={requestScope === "past" ? "default" : "outline"} onClick={() => setRequestScope("past")}>
+                Past ({pastRequests.length})
+              </Button>
+            </div>
+          </div>
+          {visibleRequests.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                {requestScope === "past" ? "No past credential requests yet." : "No active credential requests."}
+              </CardContent>
+            </Card>
+          ) : visibleRequests.map((r) => (
             <Card key={r.id}>
               <CardContent className="pt-6 flex items-center justify-between gap-3 flex-wrap">
                 <div>
@@ -325,6 +380,45 @@ export default function FacultyCredentialsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function EmailFieldInput({
+  label,
+  value,
+  status,
+  onChange,
+  onBlur,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  status: Availability;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="relative">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          className={status === "taken" ? "border-red-400 pr-8 focus-visible:ring-red-400" : "pr-8"}
+        />
+        {status !== "unchecked" && (
+          <span className="absolute right-2 top-1/2 -translate-y-1/2">
+            {status === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            {status === "available" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+            {status === "taken" && <XCircle className="h-4 w-4 text-red-600" />}
+          </span>
+        )}
+      </div>
+      {status === "taken" && <p className="text-xs text-red-600">Already in use — pick a different email</p>}
     </div>
   );
 }

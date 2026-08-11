@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
+import type { CollegeType, UserRole } from "@/types";
 
 // Placement Department / Library / Exam Cell - college-scoped, one holder
 // per role per college (see ROLE_SCOPE in src/types/core.ts). Mirrors
@@ -83,9 +85,19 @@ export async function POST(request: Request) {
     if (!collegeSnap.exists) {
       return NextResponse.json({ error: "College not found" }, { status: 404 });
     }
-    const collegeData = collegeSnap.data() as { locationId?: string };
+    const collegeData = collegeSnap.data() as { locationId?: string; type?: CollegeType };
     if (collegeData.locationId !== session.locationId) {
       return NextResponse.json({ error: "College does not belong to your location" }, { status: 403 });
+    }
+
+    // This college's type may not offer the requested role at all (e.g. no
+    // Exam Cell for a Polytechnic college, nothing for School).
+    const applicableRoles = getCreatableOfficeRoles(collegeData.type);
+    if (!applicableRoles.includes(role as UserRole)) {
+      return NextResponse.json(
+        { error: `${role} is not available for this college's type` },
+        { status: 403 }
+      );
     }
 
     // Enforce one holder per role per college

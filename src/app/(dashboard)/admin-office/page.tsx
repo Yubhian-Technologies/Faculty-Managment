@@ -8,7 +8,7 @@ export default function AdminOfficeDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name?.split(" ")[0] ?? "Admin Office"}`}
+        title={`Welcome, ${user?.name ?? "Admin Office"}`}
         description="Admin Office - location administrative support"
       />
       <p className="text-muted-foreground text-sm">Admin Office features are being set up. Check back soon.</p>

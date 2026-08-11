@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { resolveOfferLetterCcEmails } from "@/lib/firestore/offerLetterCc";
 
 export async function GET(request: Request) {
   try {
@@ -49,6 +50,9 @@ export async function POST(request: Request) {
       designation: string;
       department: string;
       joiningDate: string;
+      ctcAnnual?: number;
+      candidateAddress?: string;
+      termsAndConditions?: string;
     };
 
     const { candidateId, batchId, candidateName, designation, department, joiningDate } = body;
@@ -62,6 +66,9 @@ export async function POST(request: Request) {
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
 
+    // Same CC recipients as the offer letter (Principal, VP, panel, HOD, Accounts).
+    const { ccEmails } = await resolveOfferLetterCcEmails(db, session.collegeId, batchId);
+
     const docRef = db.collection("colleges").doc(session.collegeId).collection("appointmentLetters").doc();
     const letter = {
       id: docRef.id,
@@ -72,6 +79,9 @@ export async function POST(request: Request) {
       designation,
       department,
       joiningDate: new Date(joiningDate),
+      ...(body.ctcAnnual != null ? { ctcAnnual: body.ctcAnnual } : {}),
+      ...(body.candidateAddress?.trim() ? { candidateAddress: body.candidateAddress.trim() } : {}),
+      ...(body.termsAndConditions?.trim() ? { termsAndConditions: body.termsAndConditions.trim() } : {}),
       status: "SENT",
       generatedBy: actorName,
       generatedByUid: session.uid,
@@ -90,7 +100,7 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    return NextResponse.json({ id: docRef.id, ok: true });
+    return NextResponse.json({ id: docRef.id, ok: true, ccEmails });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

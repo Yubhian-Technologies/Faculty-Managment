@@ -14,9 +14,15 @@ export async function PATCH(request: Request) {
       "HOD",
       "PANEL_MEMBER",
       "COLLEGE_OFFICE",
-      "ACCOUNTS",
-      "FINANCE",
-      "PURCHASE_DEPT"
+      "COLLEGE_STAFF",
+      "DEAN",
+      "IQAC_COORDINATOR",
+      "T_AND_P",
+      "R_AND_D",
+      "PLACEMENT_DEPT",
+      "LIBRARY",
+      "EXAM_CELL",
+      "WEBMASTER"
     );
 
     const body = (await request.json()) as { photoUrl?: string };

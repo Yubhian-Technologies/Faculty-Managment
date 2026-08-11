@@ -40,7 +40,7 @@ export default function CollegeOfficeDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? "Office"}`}
+        title={`Hello, ${user?.name ?? "Office"}`}
         description="Principal-approved candidates sent to Accounts"
       />
 

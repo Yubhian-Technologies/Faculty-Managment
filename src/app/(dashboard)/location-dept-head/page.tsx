@@ -63,7 +63,7 @@ export default function LocationDeptHeadDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name?.split(" ")[0] ?? "Dept Head"}`}
+        title={`Welcome, ${user?.name ?? "Dept Head"}`}
         description={`${user?.department ?? "Location"} Department Head`}
       />
       <div className="grid gap-4 sm:grid-cols-3">
