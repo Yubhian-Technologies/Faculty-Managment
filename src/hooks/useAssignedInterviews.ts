@@ -1,6 +1,20 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
-import { LOCATION_SCOPED_ROLES } from "@/types";
+import type { UserRole } from "@/types";
+
+// Mirrors requireCollegeMember's allow-list on /api/college/hiring-batches -
+// every other role (Super Admin, location-scoped roles, Webmaster, and any
+// other college role never granted panel access) would 401. Kept as an
+// allow-list rather than growing a deny-list, so a new role added there
+// doesn't need a matching edit here too.
+const HIRING_BATCH_ROLES: ReadonlySet<UserRole> = new Set([
+  "PRINCIPAL",
+  "VICE_PRINCIPAL",
+  "HOD",
+  "COLLEGE_OFFICE",
+  "PANEL_MEMBER",
+  "ACCOUNTS",
+]);
 
 export function useAssignedInterviews() {
   const user = useAuthStore((s) => s.user);
@@ -9,18 +23,7 @@ export function useAssignedInterviews() {
 
   useEffect(() => {
     const role = user?.role;
-    // Panel membership is a college-scoped concept - Super Admin and
-    // location-scoped roles never have a collegeId, so this call would 401.
-    // FINANCE and PURCHASE_DEPT are GLOBAL roles with no fixed collegeId
-    // either, and /api/college/hiring-batches doesn't allow them at all
-    // (see requireCollegeMember's role list there), so this would also 401.
-    if (
-      !role ||
-      role === "SUPER_ADMIN" ||
-      role === "FINANCE" ||
-      role === "PURCHASE_DEPT" ||
-      LOCATION_SCOPED_ROLES.includes(role)
-    ) {
+    if (!role || !HIRING_BATCH_ROLES.has(role)) {
       setLoading(false);
       return;
     }
