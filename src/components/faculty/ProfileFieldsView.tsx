@@ -5,6 +5,7 @@ import { ExternalLink } from "lucide-react";
 import {
   Section, SubLabel, Field, DegreeView, DocLink, QualificationsView,
 } from "@/components/shared/ProfileFieldPrimitives";
+import { designationLabel } from "@/lib/designations/config";
 import {
   TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
@@ -134,8 +135,12 @@ export function ExperienceModule({ profile, includeTeachingAssignment = true }: 
           <div className="space-y-2">
             {p.promotionHistory?.map((promo, i) => (
               <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <Field label="From" value={promo.fromDesignation} />
-                <Field label="To" value={promo.toDesignation} />
+                {/* Now stored as catalogue codes (ASSISTANT_PROFESSOR, …) since
+                    these became dropdowns - labelled here so the view doesn't
+                    show the raw code. Free text from older records and from
+                    "Other" passes through designationLabel unchanged. */}
+                <Field label="From" value={designationLabel(promo.fromDesignation)} />
+                <Field label="To" value={designationLabel(promo.toDesignation)} />
                 <Field label="Effective Year" value={promo.effectiveYear} />
                 {promo.orderUrl && (
                   <div className="col-span-2 sm:col-span-3">

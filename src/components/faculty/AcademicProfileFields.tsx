@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
+import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import {
   SectionTitle, NumInput, TextInput, DegreeFields, RepeatingGroup, QualificationsFields,
 } from "@/components/shared/ProfileFieldPrimitives";
@@ -150,8 +151,11 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
         onChange={(v) => set("promotionHistory", v)}
         renderRow={(item, update) => (
           <>
-            <TextInput label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
-            <TextInput label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
+            {/* Same catalogue-backed picker as the College Office promotion
+                page - this form writes the identical promotionHistory field,
+                so leaving it free-text here would let the two disagree. */}
+            <DesignationSelect label="From Designation" value={item.fromDesignation} collegeType={collegeType} onChange={(v) => update({ fromDesignation: v })} />
+            <DesignationSelect label="To Designation" value={item.toDesignation} collegeType={collegeType} onChange={(v) => update({ toDesignation: v })} />
             <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
             <div className="sm:col-span-2">
               <Label className="text-xs">Promotion Order</Label>

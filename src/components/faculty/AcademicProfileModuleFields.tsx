@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
+import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import {
   NumInput, TextInput, DegreeFields, RepeatingGroup, QualificationsFields,
 } from "@/components/shared/ProfileFieldPrimitives";
@@ -171,7 +172,7 @@ export function ExperienceFields({ value, onChange, includeTeachingAssignment = 
 // College Office-only editor for Promotion History - split out of
 // ExperienceFields since promotion (and salary, see FinancialFields) is no
 // longer editable by the owner or their HOD/Principal, only by College Office.
-export function PromotionFields({ value, onChange }: ModuleFieldsProps) {
+export function PromotionFields({ value, onChange, collegeType }: ModuleFieldsProps & { collegeType?: CollegeType }) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
@@ -183,8 +184,12 @@ export function PromotionFields({ value, onChange }: ModuleFieldsProps) {
       onChange={(v) => set("promotionHistory", v)}
       renderRow={(item, update) => (
         <>
-          <TextInput label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
-          <TextInput label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
+          {/* Both ends of a promotion are drawn from this college's own
+              designation catalogue rather than typed - a promotion can cross
+              between teaching and supporting, so neither side is narrowed by
+              `kind`. */}
+          <DesignationSelect label="From Designation" value={item.fromDesignation} collegeType={collegeType} onChange={(v) => update({ fromDesignation: v })} />
+          <DesignationSelect label="To Designation" value={item.toDesignation} collegeType={collegeType} onChange={(v) => update({ toDesignation: v })} />
           <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
           <div className="sm:col-span-2">
             <Label className="text-xs">Promotion Order</Label>

@@ -89,7 +89,10 @@ export function NumInput({ label, value, onChange }: { label: string; value: num
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Input type="number" value={value ?? 0} onFocus={(e) => e.target.select()} onChange={(e) => onChange(Number(e.target.value))} />
+      {/* Empty rather than 0 when unset, so a field nobody has filled in reads
+          as blank instead of asserting a value of zero. The leading-zero
+          cleanup when typing over an actual 0 lives in Input itself. */}
+      <Input type="number" value={value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => onChange(Number(e.target.value))} />
     </div>
   );
 }
