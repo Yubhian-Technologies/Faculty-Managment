@@ -18,6 +18,8 @@ const TRANSITIONS: Record<Exclude<Action, "REVEAL_CREDENTIALS">, { from: Faculty
   COMPLETE: { from: "CREDENTIALS_CREATED", to: "COMPLETED" },
 };
 
+const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
+
 // Tries each provided email in order (recommended, then the two optional
 // alternates), stopping at the first one that isn't already taken by a
 // different account — this is the "check for the existing ones" step the
@@ -46,7 +48,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const body = (await request.json()) as { action?: Action; remarks?: string };
+    const body = (await request.json()) as { action?: Action; remarks?: string; password?: string };
     const action = body.action;
 
     const db = getAdminDb();
@@ -124,7 +126,12 @@ export async function PATCH(
     let employeeId: string | undefined;
     let assignedEmail: string | undefined;
     if (action === "CREATE_CREDENTIALS") {
-      const password = generatePassword();
+      // Webmaster sets the password directly rather than always generating one -
+      // still validated against Firebase Auth's own minimum length.
+      if (body.password !== undefined && body.password.trim().length < MIN_PASSWORD_LENGTH) {
+        return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, { status: 400 });
+      }
+      const password = body.password?.trim() || generatePassword();
       const candidateEmails = [reqData.officialEmail, reqData.alternateEmail1, reqData.alternateEmail2].filter(
         (e): e is string => !!e?.trim()
       );

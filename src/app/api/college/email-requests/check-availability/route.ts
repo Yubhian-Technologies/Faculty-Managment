@@ -4,14 +4,17 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-// Used by the Webmaster's create-email form to check a candidate email (either
-// a College Office-suggested preferred email, or one the Webmaster typed) isn't
-// already taken within this college before it's assigned. Checked against every
-// place an institutional/login email can already live: assigned officialEmails,
-// FMS login usernames, and other outstanding requests targeting the same address.
+// Used by both (a) the Webmaster's create-email form and (b) College Office's
+// Faculty Credentials request form, to check a candidate email isn't already
+// taken within this college before it's assigned/submitted. Checked against
+// every place an institutional/login email can already live: assigned
+// officialEmails, FMS login usernames, other outstanding official-email
+// requests, and other faculty-account (login) requests still pending Webmaster
+// action - so Office sees the collision before sending the request, instead of
+// Webmaster discovering it later at CREATE_CREDENTIALS time.
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("WEBMASTER", "SUPER_ADMIN");
+    const session = await requireCollegeMember("WEBMASTER", "COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const { searchParams } = new URL(request.url);
     const email = (searchParams.get("email") ?? "").trim().toLowerCase();
     if (!email) {
@@ -19,14 +22,25 @@ export async function GET(request: Request) {
     }
 
     const db = getAdminDb();
-    const [facultyByOfficial, facultyByLogin, userDoc, requestDoc] = await Promise.all([
-      db.collection("colleges").doc(session.collegeId).collection("facultyMembers").where("officialEmail", "==", email).limit(1).get(),
-      db.collection("colleges").doc(session.collegeId).collection("facultyMembers").where("collegeEmail", "==", email).limit(1).get(),
-      db.collection("colleges").doc(session.collegeId).collection("users").where("email", "==", email).limit(1).get(),
-      db.collection("colleges").doc(session.collegeId).collection("emailRequests").where("assignedEmail", "==", email).limit(1).get(),
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [facultyByOfficial, facultyByLogin, userDoc, emailRequestDoc, officialAcctDoc, alt1AcctDoc, alt2AcctDoc] = await Promise.all([
+      collegeRef.collection("facultyMembers").where("officialEmail", "==", email).limit(1).get(),
+      collegeRef.collection("facultyMembers").where("collegeEmail", "==", email).limit(1).get(),
+      collegeRef.collection("users").where("email", "==", email).limit(1).get(),
+      collegeRef.collection("emailRequests").where("assignedEmail", "==", email).limit(1).get(),
+      collegeRef.collection("facultyAccountRequests").where("officialEmail", "==", email).limit(1).get(),
+      collegeRef.collection("facultyAccountRequests").where("alternateEmail1", "==", email).limit(1).get(),
+      collegeRef.collection("facultyAccountRequests").where("alternateEmail2", "==", email).limit(1).get(),
     ]);
 
-    const taken = !facultyByOfficial.empty || !facultyByLogin.empty || !userDoc.empty || !requestDoc.empty;
+    const taken =
+      !facultyByOfficial.empty ||
+      !facultyByLogin.empty ||
+      !userDoc.empty ||
+      !emailRequestDoc.empty ||
+      !officialAcctDoc.empty ||
+      !alt1AcctDoc.empty ||
+      !alt2AcctDoc.empty;
     return NextResponse.json({ email, available: !taken });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
