@@ -93,7 +93,7 @@ export default function HODDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name?.split(" ")[0] ?? "HOD"}`}
+        title={`Welcome, ${user?.name ?? "HOD"}`}
         description={`${user?.department ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""} - Department Portal`}
         actions={
           !isHiringHidden && (

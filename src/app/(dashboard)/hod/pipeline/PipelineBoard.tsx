@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
-import { ShortlistDialog } from "@/components/hiring/ShortlistDialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { getCurrentStage, stateForStage, getDetailedHiringStatus, getApprovedDetailedStatuses, getOnboardingSummary, isHiringClosed, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
@@ -124,19 +123,16 @@ function PipelineCard({
   appointmentCandidateIds,
   accountRequestStatusByCandidate,
   onDeleted,
-  onRefresh,
 }: {
   entry: PipelineEntry;
   offerStatusByCandidate: Record<string, OfferStatus>;
   appointmentCandidateIds: Set<string>;
   accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>;
   onDeleted: (vacancyId: string) => void;
-  onRefresh: () => void;
 }) {
   const { vacancy, candidates, batch } = entry;
   const [expanded, setExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [shortlistOpen, setShortlistOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   async function handleDelete() {
@@ -273,9 +269,11 @@ function PipelineCard({
             </Button>
           )}
           {showShortlist && (
-            <Button size="sm" variant="outline" onClick={() => setShortlistOpen(true)}>
-              <UserCheck className="h-3.5 w-3.5 mr-1" />
-              Shortlist Candidates
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/hod/shortlist/${vacancy.id}`}>
+                <UserCheck className="h-3.5 w-3.5 mr-1" />
+                Shortlist Candidates
+              </Link>
             </Button>
           )}
         </div>
@@ -416,19 +414,6 @@ function PipelineCard({
           )}
         </div>
       )}
-
-      <ShortlistDialog
-        vacancyPosition={vacancy.position}
-        candidates={candidates.map((c) => ({
-          applicationId: c.id,
-          name: c.name,
-          email: c.email,
-          isShortlisted: c.isShortlisted,
-        }))}
-        open={shortlistOpen}
-        onOpenChange={setShortlistOpen}
-        onSaved={onRefresh}
-      />
 
       <ConfirmDialog
         open={deleteConfirmOpen}
@@ -592,7 +577,6 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
           appointmentCandidateIds={appointmentCandidateIds}
           accountRequestStatusByCandidate={accountRequestStatusByCandidate}
           onDeleted={(vacancyId) => setEntries((prev) => prev.filter((entry) => entry.vacancy.id !== vacancyId))}
-          onRefresh={load}
         />
       ))}
     </div>

@@ -183,6 +183,7 @@ export async function POST(request: Request) {
     }
     if (hasPanel) {
       payload.panelScores = panelScores;
+      if (recommendation) payload.recommendation = recommendation;
       payload.strengths = body.strengths ?? "";
       payload.weaknesses = body.weaknesses ?? "";
       payload.comments = body.comments ?? "";

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { CheckCircle2, Clock, ShieldOff } from "lucide-react";
 import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
@@ -54,10 +55,18 @@ type PanelForm = {
     specificAttributes?: number;
     others?: number;
   };
+  recommendation: "" | "ACCEPT" | "MAYBE" | "REJECT";
   strengths: string;
   weaknesses: string;
   comments: string;
 };
+
+// Each panel member's overall call on the candidate.
+const RECOMMENDATION_OPTIONS: [Exclude<PanelForm["recommendation"], "">, string][] = [
+  ["ACCEPT", "Strongly Recommend – Take"],
+  ["MAYBE", "Recommend with Reservations – Maybe Take"],
+  ["REJECT", "Do Not Recommend – Not Suitable"],
+];
 
 // Panel evaluation rubric — marks out of 10 per criterion. Replaces the old
 // demo-sheet rubric across the HOD / panel / coordinator dashboards.
@@ -69,7 +78,7 @@ const PANEL_CRITERIA: [keyof PanelForm["scores"], string][] = [
   ["others", "Others"],
 ];
 
-const defaultPanelForm = (): PanelForm => ({ scores: {}, strengths: "", weaknesses: "", comments: "" });
+const defaultPanelForm = (): PanelForm => ({ scores: {}, recommendation: "", strengths: "", weaknesses: "", comments: "" });
 
 type MyFeedback = { candidateId: string; panelUid: string; panelScores?: unknown };
 
@@ -122,6 +131,10 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       toast({ variant: "destructive", title: "Please score all 5 criteria out of 10" });
       return;
     }
+    if (!panelForm.recommendation) {
+      toast({ variant: "destructive", title: "Please select a recommendation" });
+      return;
+    }
     setIsSaving(true);
     try {
       const res = await fetch("/api/college/panel-feedback", {
@@ -131,6 +144,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
           batchId,
           candidateId,
           panelScores: panelForm.scores,
+          recommendation: panelForm.recommendation,
           strengths: panelForm.strengths,
           weaknesses: panelForm.weaknesses,
           comments: panelForm.comments,
@@ -224,6 +238,23 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
                   onChange={(v) => setPanelForm((f) => ({ ...f, scores: { ...f.scores, [key]: v } }))}
                 />
               ))}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Recommendation</Label>
+              <Select
+                value={panelForm.recommendation}
+                onValueChange={(v) => setPanelForm((f) => ({ ...f, recommendation: v as PanelForm["recommendation"] }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a recommendation" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RECOMMENDATION_OPTIONS.map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

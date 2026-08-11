@@ -18,9 +18,9 @@ type CandidateRow = Record<string, unknown> & Candidate;
 export default function HODCandidatesPage() {
   const router = useRouter();
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
-  // Candidates with an active (non-REJECTED) application - mirrors the
+  // candidateId -> active (non-REJECTED) application - mirrors the
   // one-active-application-at-a-time rule enforced by the attach API.
-  const [attachedCandidateIds, setAttachedCandidateIds] = useState<Set<string>>(new Set());
+  const [attachedByCandidate, setAttachedByCandidate] = useState<Map<string, CandidateApplication>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [attachTarget, setAttachTarget] = useState<CandidateRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CandidateRow | null>(null);
@@ -35,11 +35,11 @@ export default function HODCandidatesPage() {
         fetch("/api/college/candidate-applications").then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
       ]);
       setCandidates(candidatesData.candidates ?? []);
-      setAttachedCandidateIds(
-        new Set(
+      setAttachedByCandidate(
+        new Map(
           (applicationsData.applications ?? [])
             .filter((a) => a.status !== "REJECTED")
-            .map((a) => a.candidateId)
+            .map((a) => [a.candidateId, a] as const)
         )
       );
     } catch {
@@ -118,10 +118,25 @@ export default function HODCandidatesPage() {
       },
     },
     {
+      key: "hiringRequest",
+      header: "Hiring Request",
+      render: (row) => {
+        const app = attachedByCandidate.get(row.id as string);
+        if (!app) return <span className="text-xs text-muted-foreground/60">Not attached</span>;
+        return (
+          <div>
+            <p className="text-sm font-medium">{app.position}</p>
+            <p className="text-xs text-muted-foreground">{app.department}</p>
+            <p className="text-[10px] font-mono text-muted-foreground/70 mt-0.5">ID: {app.vacancyRequestId}</p>
+          </div>
+        );
+      },
+    },
+    {
       key: "actions",
       header: "",
       render: (row) => {
-        const isAttached = attachedCandidateIds.has(row.id as string);
+        const isAttached = attachedByCandidate.has(row.id as string);
         return (
           <div className="flex items-center gap-1">
             <Button
