@@ -162,6 +162,12 @@ export async function POST(request: Request) {
       status?: StudentStatus;
       department?: string;
       departmentId?: string;
+      // Optional personal details - the same fields the Excel/CSV import
+      // collects, so a manually-added student carries the same information.
+      gender?: string;
+      dateOfBirth?: string;
+      guardianContact?: string;
+      email?: string;
     };
 
     // No roll number here by design: the College Office adds fresh students by
@@ -231,6 +237,13 @@ export async function POST(request: Request) {
       rollNumber: "",
       name: body.name.trim(),
       status: body.status ?? "REGULAR",
+      // Optional personal details - stored only when provided, mirroring the
+      // bulk importer's buildStudentDoc so both entry paths shape the doc the
+      // same way (email lower-cased, blanks omitted rather than stored empty).
+      ...(body.gender?.trim() ? { gender: body.gender.trim() } : {}),
+      ...(body.dateOfBirth?.trim() ? { dateOfBirth: body.dateOfBirth.trim() } : {}),
+      ...(body.guardianContact?.trim() ? { guardianContact: body.guardianContact.trim() } : {}),
+      ...(body.email?.trim() ? { email: body.email.trim().toLowerCase() } : {}),
       createdAt: now,
       updatedAt: now,
     });
