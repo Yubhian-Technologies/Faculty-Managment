@@ -34,6 +34,7 @@ interface FacultyProfileHubProps {
   faculty: Partial<FacultyMember>;
   basePath: string; // e.g. "/hod/faculty/abc123" - tiles link to "{basePath}/{moduleKey}"
   hideFinancialModule?: boolean;
+  excludeModules?: ProfileModuleKey[];
   backHref?: string;
   editHref?: string;
   parentDeptName?: string | null; // shown as a badge next to Department when it's a sub-department
@@ -74,7 +75,7 @@ export function ProfileModuleTiles({ basePath, hideFinancialModule, excludeModul
 // module (Personal, Academic Qualification, Research, ...) instead of one long
 // scrolling form - each tile routes to its own page (FacultyProfileModuleContent).
 export function FacultyProfileHub({
-  faculty, basePath, hideFinancialModule, backHref, editHref, parentDeptName,
+  faculty, basePath, hideFinancialModule, excludeModules, backHref, editHref, parentDeptName,
 }: FacultyProfileHubProps) {
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
 
@@ -131,7 +132,7 @@ export function FacultyProfileHub({
         </CardContent>
       </Card>
 
-      <ProfileModuleTiles basePath={basePath} hideFinancialModule={hideFinancialModule} />
+      <ProfileModuleTiles basePath={basePath} hideFinancialModule={hideFinancialModule} excludeModules={excludeModules} />
     </div>
   );
 }

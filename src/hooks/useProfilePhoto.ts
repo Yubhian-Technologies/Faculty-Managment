@@ -3,14 +3,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 
-async function uploadProfilePhoto(file: File): Promise<string> {
+const DEFAULT_PHOTO_ENDPOINT = "/api/college/users/me/photo";
+
+async function uploadProfilePhoto(file: File, endpoint: string): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
   const uploadRes = await fetch("/api/upload/profile-photo", { method: "POST", body: fd });
   const uploadData = (await uploadRes.json()) as { url?: string; error?: string };
   if (!uploadRes.ok || !uploadData.url) throw new Error(uploadData.error ?? "Upload failed");
 
-  const saveRes = await fetch("/api/college/users/me/photo", {
+  const saveRes = await fetch(endpoint, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ photoUrl: uploadData.url }),
@@ -21,8 +23,8 @@ async function uploadProfilePhoto(file: File): Promise<string> {
   return saveData.photoUrl;
 }
 
-async function deleteProfilePhoto(): Promise<void> {
-  const res = await fetch("/api/college/users/me/photo", {
+async function deleteProfilePhoto(endpoint: string): Promise<void> {
+  const res = await fetch(endpoint, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ photoUrl: "" }),
@@ -31,13 +33,16 @@ async function deleteProfilePhoto(): Promise<void> {
   if (!res.ok) throw new Error(data.error ?? "Failed to remove photo");
 }
 
-export function useUpdateProfilePhoto() {
+// endpoint defaults to the college-scoped route so every existing caller
+// (Principal/VP/HOD/Panel/Tier-A roles) keeps working unchanged; GLOBAL/LOCATION-
+// scoped "My Profile" pages pass their own /api/admin or /api/location endpoint.
+export function useUpdateProfilePhoto(endpoint: string = DEFAULT_PHOTO_ENDPOINT) {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
   return useMutation({
-    mutationFn: uploadProfilePhoto,
+    mutationFn: (file: File) => uploadProfilePhoto(file, endpoint),
     onSuccess: (photoUrl) => {
       if (user) setUser({ ...user, profilePhotoUrl: photoUrl });
       qc.invalidateQueries({ queryKey: ["collegeUser", user?.uid] });
@@ -45,13 +50,13 @@ export function useUpdateProfilePhoto() {
   });
 }
 
-export function useDeleteProfilePhoto() {
+export function useDeleteProfilePhoto(endpoint: string = DEFAULT_PHOTO_ENDPOINT) {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
   return useMutation({
-    mutationFn: deleteProfilePhoto,
+    mutationFn: () => deleteProfilePhoto(endpoint),
     onSuccess: () => {
       if (user) setUser({ ...user, profilePhotoUrl: undefined });
       qc.invalidateQueries({ queryKey: ["collegeUser", user?.uid] });

@@ -13,7 +13,11 @@ export async function PATCH(request: Request) {
   try {
     // Self-service only - the target uid always comes from the verified session,
     // never from the request body, mirroring me/photo/route.ts.
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeMember(
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD",
+      "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR",
+      "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"
+    );
 
     const body = (await request.json()) as Partial<{
       name: string;
@@ -47,8 +51,8 @@ export async function PATCH(request: Request) {
 
     if (body.name !== undefined && body.name.trim()) updates.name = body.name.trim();
     if (body.email !== undefined && body.email.trim()) updates.email = body.email.trim();
-    // HOD doesn't self-assign these - they're set by admin/HR
-    if (session.role !== "HOD") {
+    // Only Principal/VP self-assign these - every other role gets them set by admin/HR
+    if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
       if (body.collegeEmail !== undefined) updates.collegeEmail = body.collegeEmail;
       if (body.employeeId !== undefined) updates.employeeId = body.employeeId;
     }
