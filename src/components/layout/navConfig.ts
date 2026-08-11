@@ -41,6 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Faculty Details", href: "/management/faculty", iconName: "UsersRound", roles: ["MANAGEMENT"] },
   { label: "Budget", href: "/management/budget", iconName: "PiggyBank", roles: ["MANAGEMENT"], section: "Reports" },
   { label: "Budget History", href: "/management/indents", iconName: "ClipboardList", roles: ["MANAGEMENT"] },
+  { label: "Leave Approvals", href: "/management/leave-approvals", iconName: "CalendarClock", roles: ["MANAGEMENT"], section: "HR" },
   { label: "My Profile", href: "/management/profile", iconName: "UserCircle", roles: ["MANAGEMENT"], section: "Personal" },
 
   // Super Admin

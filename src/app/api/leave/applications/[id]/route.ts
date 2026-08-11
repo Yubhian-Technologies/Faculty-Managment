@@ -5,43 +5,12 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
-import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
-import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
-import { REQUESTS_COL, PROFILES_COL, commitApproval, releasePending, loadBalances, computeEntitlement } from "@/lib/leave/balanceEngine";
+import { REQUESTS_COL, commitApproval, releasePending, splitLeaveDays } from "@/lib/leave/balanceEngine";
+import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify } from "@/lib/notify";
-import { emitWorkflowNotification, resolveWorkflowNotifications } from "@/lib/notifications/workflowNotifications";
-import type { LeaveRequest, LeaveActionRecord, LeaveTypeFull, EmployeeLeaveProfile } from "@/types/leave";
-
-// Balance is never reserved at submission (see applications/route.ts), and
-// insufficient balance never blocks approval either - days beyond what's
-// remaining are accepted and split off as Loss of Pay instead. If no balance
-// doc exists yet (e.g. first request of this type, or balances were reset),
-// entitled falls back to the profile's computed default - NOT zero, which
-// was an earlier bug: a missing doc isn't the same as zero balance.
-async function splitLeaveDays(
-  db: FirebaseFirestore.Firestore,
-  collegeId: string,
-  uid: string,
-  lt: LeaveTypeFull,
-  year: number,
-  days: number
-): Promise<{ withinBalance: number; lopDays: number }> {
-  const balances = await loadBalances(db, collegeId, uid, year);
-  const bal = balances.find((b) => b.leaveTypeCode === lt.code);
-  let entitled = bal?.entitled;
-  if (entitled === undefined) {
-    const [profileSnap, settings] = await Promise.all([
-      PROFILES_COL(collegeId, db).doc(uid).get(),
-      loadCollegeSettings(db, collegeId),
-    ]);
-    const profile = { id: profileSnap.id, ...profileSnap.data() } as EmployeeLeaveProfile;
-    entitled = computeEntitlement(lt, computeEffectiveCategory(profile, settings.newJoiningYears));
-  }
-  const remaining = Math.max(0, entitled - (bal?.used ?? 0));
-  const withinBalance = Math.min(days, remaining);
-  return { withinBalance, lopDays: days - withinBalance };
-}
+import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
+import type { LeaveRequest, LeaveActionRecord } from "@/types/leave";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -102,7 +71,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (req.uid !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL") {
+      if (req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL" && req.status !== "PENDING_MANAGEMENT") {
         return NextResponse.json({ error: "Only pending requests can be cancelled" }, { status: 400 });
       }
       if (req.leaveTypeCode) {
@@ -215,57 +184,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Reached either by a non-PANEL_MEMBER's own leave request (any type,
     // unchanged from before - commits/releases its balance as always) or by
     // an HOD-forwarded "Other" request (isPaidLeave already set, never
-    // balance-tracked). Either way this is the final decision.
+    // balance-tracked). Either way this is the final decision. A PRINCIPAL's
+    // own leave never lands here at all - it starts at PENDING_MANAGEMENT
+    // instead (see applications/route.ts POST) and is decided via
+    // /api/management/leave-approvals, not this route.
     if (req.status === "PENDING_PRINCIPAL") {
       if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-
-      const actionRecord: LeaveActionRecord = {
-        action: body.action === "APPROVE" ? "APPROVED" : "REJECTED",
-        by: session.uid, byName: session.email || "Principal", at: now as unknown as LeaveActionRecord["at"],
-        ...(body.remarks ? { remarks: body.remarks } : {}),
-      };
-
-      let lopDays = 0;
-      if (body.action === "REJECT") {
-        if (req.leaveTypeCode) {
-          const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-          if (lt && !lt.rules.unlimited) {
-            await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
-          }
-        }
-        await ref.update({ status: "REJECTED", principalAction: actionRecord, updatedAt: now });
-      } else {
-        // Insufficient balance never blocks this - the excess becomes Loss of Pay.
-        if (req.leaveTypeCode) {
-          const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
-          if (lt && !lt.rules.unlimited) {
-            const split = await splitLeaveDays(db, session.collegeId, req.uid, lt, year, req.totalDays);
-            lopDays = split.lopDays;
-            if (split.withinBalance > 0) {
-              await commitApproval(db, session.collegeId, req.uid, req.leaveTypeCode, year, split.withinBalance);
-            }
-          }
-        }
-        await ref.update({ status: "APPROVED", principalAction: actionRecord, lopDays, updatedAt: now });
+      // A Vice Principal's own leave request must be decided by the
+      // Principal, not themselves - the approvals queue (GET .../
+      // applications?scope=approvals) already hides it from their own list,
+      // this is the server-side backstop for that.
+      if (session.role === "VICE_PRINCIPAL" && req.uid === session.uid) {
+        return NextResponse.json(
+          { error: "Your own leave request must be approved by the Principal" },
+          { status: 403 },
+        );
       }
 
-      await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId,
-        action: body.action === "APPROVE" ? "LEAVE_PRINCIPAL_APPROVED" : "LEAVE_REJECTED",
-        performedBy: session.uid, performedByName: session.email || "Principal", targetId: id, details: { lopDays }, timestamp: now,
+      if (body.action !== "APPROVE" && body.action !== "REJECT") {
+        return NextResponse.json({ error: "action must be APPROVE or REJECT" }, { status: 400 });
+      }
+      await decideFinalStageLeave({
+        db, collegeId: session.collegeId, id, req,
+        action: body.action, remarks: body.remarks,
+        decidedByUid: session.uid, decidedByEmail: session.email,
+        decider: "PRINCIPAL",
       });
-
-      await resolveWorkflowNotifications({ db, collegeId: session.collegeId, entityType: "leaveRequest", entityId: id });
-      await notify(
-        db, session.collegeId, req.uid,
-        body.action === "APPROVE" ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
-        body.action === "APPROVE" ? "Leave Request Approved" : "Leave Request Rejected",
-        `Your leave request for ${req.totalDays} day(s) was ${body.action === "APPROVE" ? "approved" : "rejected"} by the Principal` +
-          (body.action === "APPROVE" && lopDays > 0 ? ` — ${lopDays} day(s) exceed your balance and will be treated as Loss of Pay.` : "."),
-        "/panel/leave"
-      );
       return NextResponse.json({ ok: true });
     }
 
