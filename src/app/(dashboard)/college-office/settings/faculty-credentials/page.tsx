@@ -37,15 +37,13 @@ type EligibleCandidate = {
 
 type CandidateForm = {
   officialEmail: string;
-  alternateEmail1: string;
-  alternateEmail2: string;
 };
 
 type EmailField = keyof CandidateForm;
 type Availability = "unchecked" | "checking" | "available" | "taken";
 
 function emptyForm(email: string): CandidateForm {
-  return { officialEmail: email, alternateEmail1: "", alternateEmail2: "" };
+  return { officialEmail: email };
 }
 
 function availabilityKey(applicationId: string, field: EmailField): string {
@@ -176,7 +174,7 @@ export default function FacultyCredentialsPage() {
         return;
       }
       if (availability[availabilityKey(c.applicationId, "officialEmail")] === "taken") {
-        toast({ variant: "destructive", title: `${c.name}: recommended email is already in use`, description: "Pick a different email or set an alternate before sending the request." });
+        toast({ variant: "destructive", title: `${c.name}: recommended email is already in use`, description: "Pick a different email before sending the request." });
         return;
       }
     }
@@ -193,8 +191,6 @@ export default function FacultyCredentialsPage() {
           body: JSON.stringify({
             offerId: c.offerId,
             officialEmail: form.officialEmail.trim(),
-            alternateEmail1: form.alternateEmail1.trim() || undefined,
-            alternateEmail2: form.alternateEmail2.trim() || undefined,
           }),
         });
         if (!res.ok) throw new Error();
@@ -277,7 +273,7 @@ export default function FacultyCredentialsPage() {
                 </CardHeader>
                 {isSelected && (
                   <CardContent className="space-y-3 pt-0">
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="max-w-sm">
                       <EmailFieldInput
                         label="Recommended Email *"
                         value={form.officialEmail}
@@ -285,20 +281,6 @@ export default function FacultyCredentialsPage() {
                         onChange={(v) => updateForm(c.applicationId, "officialEmail", v)}
                         onBlur={() => void checkAvailability(c.applicationId, "officialEmail", form.officialEmail)}
                         placeholder="name@college.edu"
-                      />
-                      <EmailFieldInput
-                        label="Alternate Email 1"
-                        value={form.alternateEmail1}
-                        status={availability[availabilityKey(c.applicationId, "alternateEmail1")] ?? "unchecked"}
-                        onChange={(v) => updateForm(c.applicationId, "alternateEmail1", v)}
-                        onBlur={() => void checkAvailability(c.applicationId, "alternateEmail1", form.alternateEmail1)}
-                      />
-                      <EmailFieldInput
-                        label="Alternate Email 2"
-                        value={form.alternateEmail2}
-                        status={availability[availabilityKey(c.applicationId, "alternateEmail2")] ?? "unchecked"}
-                        onChange={(v) => updateForm(c.applicationId, "alternateEmail2", v)}
-                        onBlur={() => void checkAvailability(c.applicationId, "alternateEmail2", form.alternateEmail2)}
                       />
                     </div>
                   </CardContent>

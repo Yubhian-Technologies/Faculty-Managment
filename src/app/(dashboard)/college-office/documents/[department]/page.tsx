@@ -6,16 +6,14 @@ import Link from "next/link";
 import { ArrowLeft, Clock, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { Step } from "@/components/shared/PipelineStep";
+import { Step, type StepState } from "@/components/shared/PipelineStep";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import {
-  getCurrentStage,
-  stateForStage,
-  getApprovedDetailedStatuses,
-  getOnboardingSummary,
+  getDetailedHiringStatus,
   isHiringClosed,
-  type PipelineStage,
+  DETAILED_HIRING_STATUS_LABELS,
+  type DetailedHiringStatus,
 } from "@/lib/hiringPipeline";
 import { BATCH_PHASE_LABELS } from "@/types";
 import type {
@@ -28,8 +26,43 @@ import type {
   FacultyAccountRequestStatus,
 } from "@/types";
 
-// Same joined view HOD's pipeline board uses (src/app/(dashboard)/hod/pipeline/PipelineBoard.tsx)
-// so both dashboards compute the exact same 5-stage stepper for a vacancy.
+// Office's own 4-stage pipeline (Offer Letter -> Documents & Joining Letter ->
+// Appointment Letter -> Credentials & Email), each bucketing several of the
+// finer-grained DetailedHiringStatus values from hiringPipeline.ts - mirrors
+// the visual stepper HOD/Principal get (src/components/shared/PipelineStep.tsx)
+// but scoped to what Office actually does, instead of the Request/Candidates/
+// Interview/Decision/Onboarding stepper which starts before Office is involved.
+type OfficeStage = 1 | 2 | 3 | 4;
+
+const OFFICE_STAGE_BY_STATUS: Record<DetailedHiringStatus, OfficeStage> = {
+  INTERVIEW_COMPLETED: 1,
+  SELECTED: 1,
+  OFFER_PENDING: 1,
+  OFFER_SENT: 1,
+  CANDIDATE_ACCEPTANCE_PENDING: 1,
+  OFFER_ACCEPTED: 2,
+  DOCUMENTS_VERIFICATION: 2,
+  JOINING_LETTER_UPLOADED: 2,
+  APPOINTMENT_LETTER_PENDING: 3,
+  APPOINTMENT_LETTER_SENT: 3,
+  ACCOUNT_CREATION_PENDING: 4,
+  CREDENTIALS_CREATED: 4,
+  FACULTY_ONBOARDED: 4,
+  HIRING_COMPLETED: 4,
+};
+
+const OFFICE_STAGE_LABELS: Record<OfficeStage, string> = {
+  1: "Offer Letter",
+  2: "Documents & Joining Letter",
+  3: "Appointment Letter",
+  4: "Credentials & Email",
+};
+
+// Ascending progress order - same declaration order as DETAILED_HIRING_STATUS_LABELS.
+const DETAILED_STATUS_ORDER = Object.keys(DETAILED_HIRING_STATUS_LABELS) as DetailedHiringStatus[];
+
+// Same joined view HOD's and Principal's pipeline boards use, trimmed to the
+// fields getDetailedHiringStatus needs.
 type PipelineCandidateView = {
   id: string;
   candidateId: string;
@@ -188,20 +221,48 @@ function DepartmentVacancyCard({
   accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>;
 }) {
   const { vacancy, candidates, batch } = entry;
-  const currentStage = getCurrentStage(vacancy, batch);
 
-  function stateFor(stage: PipelineStage) {
-    return stateForStage(stage, currentStage);
+  // Office's own concern starts at the interview decision, not before - the
+  // stepper below tracks the least-advanced decided candidate through Office's
+  // 4 stages, same "least advanced wins" rule getOnboardingSummary used.
+  const decidedCandidates = candidates.filter((c) => c.status === "APPROVED" && c.currentStage === "DECISION");
+  const statuses = decidedCandidates.map((c) =>
+    getDetailedHiringStatus({
+      applicationStatus: c.status,
+      currentStage: c.currentStage,
+      batchPhase: batch?.currentPhase,
+      notifiedPrincipalDocsReady: c.notifiedPrincipalDocsReady,
+      joiningLetterUrl: c.joiningLetterUrl,
+      offerStatus: offerStatusByCandidate[c.candidateId],
+      appointmentLetterExists: appointmentCandidateIds.has(c.candidateId),
+      accountRequestStatus: accountRequestStatusByCandidate[c.candidateId],
+    })
+  );
+  const known = statuses.filter((s): s is DetailedHiringStatus => s !== null);
+  const leastAdvanced = known.length > 0 ? DETAILED_STATUS_ORDER.find((s) => known.includes(s)) ?? null : null;
+  const currentOfficeStage: OfficeStage = leastAdvanced ? OFFICE_STAGE_BY_STATUS[leastAdvanced] : 1;
+  const leastAdvancedCount = leastAdvanced ? known.filter((s) => s === leastAdvanced).length : 0;
+
+  function subFor(stage: OfficeStage): string {
+    if (decidedCandidates.length === 0) {
+      if (stage !== 1) return "-";
+      if (vacancy.status !== "APPROVED") return "Awaiting Principal's approval of the request";
+      if (!batch) return "Awaiting HOD to schedule interviews";
+      if (batch.currentPhase === "COMPLETED") return "No candidates selected";
+      return `In progress with HOD/Panel — ${BATCH_PHASE_LABELS[batch.currentPhase]}`;
+    }
+    if (stage < currentOfficeStage) return "Completed";
+    if (stage > currentOfficeStage) return "-";
+    if (!leastAdvanced) return "Awaiting offer letter";
+    const label = DETAILED_HIRING_STATUS_LABELS[leastAdvanced];
+    return decidedCandidates.length > 1 ? `${label} (${leastAdvancedCount}/${decidedCandidates.length})` : label;
   }
 
-  const stage1Sub = vacancy.status === "APPROVED" ? "Approved ✓" : vacancy.status === "REJECTED" ? "Rejected" : "Pending approval";
-  const stage2Sub = candidates.length === 0 ? "No candidates yet" : `${candidates.length} candidate${candidates.length !== 1 ? "s" : ""}`;
-  const stage3Sub = batch ? BATCH_PHASE_LABELS[batch.currentPhase] : "Not started";
-  const stage4Sub = batch?.currentPhase === "PRINCIPAL_FINAL_REVIEW" ? "Awaiting Principal's decision" : batch?.currentPhase === "COMPLETED" ? "Decision made" : "-";
-  const stage5Sub =
-    batch?.currentPhase === "COMPLETED"
-      ? getOnboardingSummary(getApprovedDetailedStatuses(candidates, batch.currentPhase, offerStatusByCandidate, appointmentCandidateIds, accountRequestStatusByCandidate))
-      : "-";
+  function stateFor(stage: OfficeStage): StepState {
+    if (stage < currentOfficeStage) return "done";
+    if (stage === currentOfficeStage) return "current";
+    return "upcoming";
+  }
 
   const accentColor =
     vacancy.status === "REJECTED" ? "border-l-red-400" : batch?.currentPhase === "COMPLETED" ? "border-l-green-500" : vacancy.status === "APPROVED" ? "border-l-primary" : "border-l-amber-400";
@@ -229,11 +290,10 @@ function DepartmentVacancyCard({
 
       <div className="px-5 py-3">
         <div className="flex flex-col sm:flex-row sm:items-start gap-0 sm:gap-0">
-          <Step step={1} label="Request" sub={stage1Sub} state={stateFor(1)} />
-          <Step step={2} label="Candidates" sub={stage2Sub} state={stateFor(2)} />
-          <Step step={3} label="Interview" sub={stage3Sub} state={stateFor(3)} />
-          <Step step={4} label="Decision" sub={stage4Sub} state={stateFor(4)} />
-          <Step step={5} label="Onboarding" sub={stage5Sub} state={stateFor(5)} isLast />
+          <Step step={1} label={OFFICE_STAGE_LABELS[1]} sub={subFor(1)} state={stateFor(1)} />
+          <Step step={2} label={OFFICE_STAGE_LABELS[2]} sub={subFor(2)} state={stateFor(2)} />
+          <Step step={3} label={OFFICE_STAGE_LABELS[3]} sub={subFor(3)} state={stateFor(3)} />
+          <Step step={4} label={OFFICE_STAGE_LABELS[4]} sub={subFor(4)} state={stateFor(4)} isLast />
         </div>
       </div>
 

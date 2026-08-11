@@ -455,6 +455,8 @@ export interface AppointmentLetter {
   designation: string;
   department: string;
   joiningDate: Timestamp;
+  candidateAddress?: string;
+  termsAndConditions?: string; // full appointment-order clause text shown on the PDF, one clause per line
   generatedAt: Timestamp;
   status: "DRAFT" | "GENERATED" | "SENT";
   generatedBy: string;
