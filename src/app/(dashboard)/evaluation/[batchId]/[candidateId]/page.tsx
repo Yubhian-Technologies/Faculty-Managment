@@ -63,9 +63,9 @@ type PanelForm = {
 
 // Each panel member's overall call on the candidate.
 const RECOMMENDATION_OPTIONS: [Exclude<PanelForm["recommendation"], "">, string][] = [
-  ["ACCEPT", "Strongly Recommend – Take"],
-  ["MAYBE", "Recommend with Reservations – Maybe Take"],
-  ["REJECT", "Do Not Recommend – Not Suitable"],
+  ["ACCEPT", "Recommended for Appointment"],
+  ["MAYBE", "Recommended with Reservations"],
+  ["REJECT", "Not Recommended for Appointment"],
 ];
 
 // Panel evaluation rubric — marks out of 10 per criterion. Replaces the old

@@ -78,8 +78,8 @@ const PANEL_SCORE_LABELS: [keyof PanelScores, string][] = [
 ];
 
 const RECOMMENDATION_LABELS: Record<NonNullable<PanelFeedbackItem["recommendation"]>, string> = {
-  ACCEPT: "Take",
-  MAYBE: "Maybe Take",
+  ACCEPT: "Recommended",
+  MAYBE: "With Reservations",
   REJECT: "Not Recommended",
 };
 
