@@ -28,7 +28,7 @@ export default function AccountsDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? "Accounts"}`}
+        title={`Hello, ${user?.name ?? "Accounts"}`}
         description="Offer letters and salary structure management"
       />
 

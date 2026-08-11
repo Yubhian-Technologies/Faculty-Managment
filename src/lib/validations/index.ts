@@ -57,6 +57,7 @@ export const createUserSchema = z.object({
   collegeId: z.string().min(1, "Select a college"),
   department: z.string().optional(),
   designation: z.string().optional(),
+  phone: z.string().optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 

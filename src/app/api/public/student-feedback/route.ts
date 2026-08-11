@@ -3,6 +3,23 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 
+// Public: lets the QR feedback page find out whether the demo is still open
+// before showing the rating form (so it can close once demo is complete).
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const collegeId = searchParams.get("collegeId");
+  const batchId = searchParams.get("batchId");
+  if (!collegeId || !batchId) {
+    return NextResponse.json({ error: "collegeId and batchId are required" }, { status: 400 });
+  }
+  const snap = await getAdminDb()
+    .collection("colleges").doc(collegeId)
+    .collection("hiringBatches").doc(batchId)
+    .get();
+  if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ demoComplete: snap.get("demoComplete") === true });
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
@@ -33,11 +50,13 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const now = new Date();
 
-    await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("hiringBatches")
-      .doc(batchId)
+    const batchRef = db.collection("colleges").doc(collegeId).collection("hiringBatches").doc(batchId);
+    const batchSnap = await batchRef.get();
+    if (batchSnap.get("demoComplete") === true) {
+      return NextResponse.json({ error: "Demo class is complete; feedback is closed." }, { status: 403 });
+    }
+
+    await batchRef
       .collection("studentFeedback")
       .add({
         collegeId,

@@ -1,37 +1,56 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeMember, verifySession } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { PUBLICATION_ELIGIBLE_ROLES } from "@/lib/publications/eligibleRoles";
 import type { UserRole } from "@/types";
 
 // Every college-scoped staff role - any of them can read their own
 // publications; only R_AND_D can read across the whole college or write.
-const COLLEGE_STAFF_ROLES = [
-  "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "COLLEGE_OFFICE", "COLLEGE_STAFF",
-  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT",
-  "LIBRARY", "EXAM_CELL", "WEBMASTER", "PANEL_MEMBER",
-];
+const COLLEGE_STAFF_ROLES = PUBLICATION_ELIGIBLE_ROLES;
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
+    const { searchParams } = new URL(request.url);
+
+    // SUPER_ADMIN has no session.collegeId (GLOBAL scope), so it can't go
+    // through requireCollegeMember - resolve the college from an explicit
+    // query param instead (e.g. the resume-download flow on the Users page,
+    // which needs a specific person's R&D-managed publications).
+    const globalSession = await verifySession();
+    let collegeId: string;
+    let role: string;
+    let uid: string;
+    if (globalSession?.role === "SUPER_ADMIN") {
+      const collegeIdParam = searchParams.get("collegeId");
+      if (!collegeIdParam) return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+      collegeId = collegeIdParam;
+      role = globalSession.role;
+      uid = globalSession.uid;
+    } else {
+      const session = await requireCollegeMember(...COLLEGE_STAFF_ROLES);
+      collegeId = session.collegeId;
+      role = session.role;
+      uid = session.uid;
+    }
+
     const db = getAdminDb();
-    const coll = db.collection("colleges").doc(session.collegeId).collection("publications");
+    const coll = db.collection("colleges").doc(collegeId).collection("publications");
 
     // R&D manages every record (optionally drilling into one uid); Principal/VP/HOD
     // may look up a specific uid too, since they already have full read access to
-    // any faculty member's profile elsewhere (module-tile View pages). Every other
-    // role can only ever see their own rows, regardless of query params.
+    // any faculty member's profile elsewhere (module-tile View pages). SUPER_ADMIN
+    // gets the same drill-down access. Every other role can only ever see their
+    // own rows, regardless of query params.
     let query: FirebaseFirestore.Query = coll;
-    const canQueryAnyUid = ["R_AND_D", "PRINCIPAL", "VICE_PRINCIPAL", "HOD"].includes(session.role);
+    const canQueryAnyUid = ["R_AND_D", "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN"].includes(role);
     if (canQueryAnyUid) {
-      const { searchParams } = new URL(request.url);
       const uidFilter = searchParams.get("uid");
       if (uidFilter) query = query.where("uid", "==", uidFilter);
-      else if (session.role !== "R_AND_D") query = query.where("uid", "==", session.uid);
+      else if (role !== "R_AND_D" && role !== "SUPER_ADMIN") query = query.where("uid", "==", uid);
     } else {
-      query = query.where("uid", "==", session.uid);
+      query = query.where("uid", "==", uid);
     }
 
     const snap = await query.get();
@@ -74,6 +93,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
     }
     const owner = ownerSnap.data() as { name?: string; role?: UserRole };
+    if (!owner.role || !PUBLICATION_ELIGIBLE_ROLES.includes(owner.role)) {
+      return NextResponse.json({ error: "Publications can only be recorded for staff, not students" }, { status: 400 });
+    }
 
     let addedByName = "R&D";
     try {

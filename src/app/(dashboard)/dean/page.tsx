@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuthStore } from "@/store/authStore";
 import { ROLE_LABELS } from "@/types";
+import { RegulationSettingsCard } from "@/components/settings/RegulationSettingsCard";
 
 export default function DeanDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -11,7 +12,7 @@ export default function DeanDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? "there"}`}
+        title={`Hello, ${user?.name ?? "there"}`}
         description={ROLE_LABELS.DEAN}
       />
       <Card>
@@ -20,6 +21,10 @@ export default function DeanDashboard() {
           college&apos;s administration as needed.
         </CardContent>
       </Card>
+
+      {/* Read-only - the Principal maintains these under Settings; whatever
+          they save there shows up here immediately on next load. */}
+      <RegulationSettingsCard readOnly />
     </div>
   );
 }

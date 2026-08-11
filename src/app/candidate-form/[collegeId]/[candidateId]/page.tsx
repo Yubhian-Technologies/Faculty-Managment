@@ -15,11 +15,26 @@ import { DocumentTypeCombobox } from "@/components/shared/DocumentTypeCombobox";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
-import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
+import { DOCUMENT_TYPE_GROUPS, EDUCATION_DOCUMENT_TEMPLATES } from "@/lib/documentTypes";
 import { Trash2, Plus, CheckCircle2 } from "lucide-react";
 import type { CandidateBioData, AcademicQualification, WorkExperienceEntry, RelativeInSociety } from "@/types";
 
 const OTHER_DOCUMENTS_CATEGORY = "Other Documents";
+
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+// AP/Telangana reservation categories (with BC sub-groups), as on the paper bio-data form.
+const CASTE_CATEGORIES = ["OC", "BC-A", "BC-B", "BC-C", "BC-D", "BC-E", "SC", "ST", "EWS", "Other"];
+
+function onlyDigits(value: string, maxLen: number): string {
+  return value.replace(/\D/g, "").slice(0, maxLen);
+}
+
+// Digits with at most one decimal point (percentage / CGPA).
+function decimalOnly(value: string): string {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole, ...rest] = cleaned.split(".");
+  return rest.length ? `${whole}.${rest.join("")}` : whole;
+}
 
 function categoryForDocument(label: string): string {
   return DOCUMENT_TYPE_GROUPS.find((g) => g.items.includes(label))?.category ?? OTHER_DOCUMENTS_CATEGORY;
@@ -48,14 +63,26 @@ function newCertRow(): CertRow {
   return { key: Math.random().toString(36).slice(2), label: "", file: null };
 }
 
-type QualificationRow = AcademicQualification & { file: File | null };
+// sourceLabel marks a row auto-created from one of the HOD's required
+// education documents (e.g. "10th Certificate & Marks Memo") — the degree
+// tile is prefilled/locked from EDUCATION_DOCUMENT_TEMPLATES and the row
+// can't be removed, since it stands in for that required-document upload.
+type QualificationRow = AcademicQualification & { file: File | null; sourceLabel?: string };
 
-function newQualificationRow(): QualificationRow {
+function newQualificationRow(sourceLabel?: string, degree?: string): QualificationRow {
   return {
     id: Math.random().toString(36).slice(2),
-    degree: "", institution: "", yearOfPassing: "", percentageOrCGPA: "",
+    degree: degree ?? "", institution: "", yearOfPassing: "", percentageOrCGPA: "",
     file: null,
+    sourceLabel,
   };
+}
+
+function institutionPlaceholderFor(sourceLabel?: string): string {
+  if (!sourceLabel) return "College / University name";
+  if (sourceLabel.startsWith("10th")) return "School name";
+  if (sourceLabel.startsWith("Intermediate")) return "Junior College name";
+  return "College / University name";
 }
 
 function newExperienceRow(): WorkExperienceEntry {
@@ -95,7 +122,13 @@ export default function CandidateFormPage() {
         setCandidate(d.candidate);
         const required = d.requiredDocuments ?? [];
         setRequiredDocuments(required);
-        setRequiredFiles(Object.fromEntries(required.map((label) => [label, null])));
+        const templatedLabels = required.filter((label) => EDUCATION_DOCUMENT_TEMPLATES[label]);
+        setRequiredFiles(
+          Object.fromEntries(required.filter((label) => !EDUCATION_DOCUMENT_TEMPLATES[label]).map((label) => [label, null]))
+        );
+        if (templatedLabels.length > 0) {
+          setQualifications(templatedLabels.map((label) => newQualificationRow(label, EDUCATION_DOCUMENT_TEMPLATES[label])));
+        }
         if (d.candidate.bioDataSubmitted) setSubmitted(true);
       })
       .catch(() => {})
@@ -146,14 +179,65 @@ export default function CandidateFormPage() {
     setRelatives((prev) => prev.filter((r) => r.id !== id));
   }
 
+  // Collects a "Missing <field>" / "<field> (reason)" message per problem, so the
+  // candidate sees exactly what to fix rather than a generic failure.
+  function collectFieldErrors(): string[] {
+    const errors: string[] = [];
+    const currentYear = new Date().getFullYear();
+
+    if (!form.fatherName?.trim()) errors.push("Missing Father's Name");
+    if (!form.dateOfBirth) errors.push("Missing Date of Birth");
+    if (!form.gender) errors.push("Missing Gender");
+    if (!form.bloodGroup) errors.push("Missing Blood Group");
+    if (!form.caste) errors.push("Missing Caste / Category");
+    if (!form.emergencyContactName?.trim()) errors.push("Missing Emergency Contact Name");
+
+    if (!form.emergencyContactPhone?.trim()) {
+      errors.push("Missing Emergency Contact Phone");
+    } else if (!/^\d{10}$/.test(form.emergencyContactPhone)) {
+      errors.push("Emergency Contact Phone must be 10 digits");
+    }
+    if (form.aadharNo && !/^\d{12}$/.test(form.aadharNo)) errors.push("Aadhaar Number must be 12 digits");
+    if (form.panNo && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.panNo)) errors.push("PAN Number must match ABCDE1234F");
+
+    for (const q of qualifications) {
+      const isActive = !!q.sourceLabel || !!q.degree.trim() || !!q.institution.trim();
+      if (!isActive) continue;
+      const label = q.sourceLabel || q.degree || q.institution;
+      if (!q.yearOfPassing.trim()) {
+        errors.push(`Missing Year of Passing for ${label}`);
+      } else if (!/^\d{4}$/.test(q.yearOfPassing) || Number(q.yearOfPassing) < 1950 || Number(q.yearOfPassing) > currentYear) {
+        errors.push(`Year of Passing for ${label} must be a valid year (1950–${currentYear})`);
+      }
+      if (!q.percentageOrCGPA.trim()) {
+        errors.push(`Missing Percentage / CGPA for ${label}`);
+      } else if (Number.isNaN(Number(q.percentageOrCGPA))) {
+        errors.push(`Percentage / CGPA for ${label} must be a number`);
+      }
+    }
+    return errors;
+  }
+
   function handleSubmitClick(e: React.FormEvent) {
     e.preventDefault();
-    const missing = requiredDocuments.filter((label) => !requiredFiles[label]);
-    if (missing.length > 0) {
+
+    const errors = collectFieldErrors();
+
+    const missingOther = requiredDocuments
+      .filter((label) => !EDUCATION_DOCUMENT_TEMPLATES[label])
+      .filter((label) => !requiredFiles[label]);
+    const missingTemplated = qualifications
+      .filter((q) => q.sourceLabel && !q.file)
+      .map((q) => q.sourceLabel as string);
+    for (const doc of [...missingOther, ...missingTemplated]) {
+      errors.push(`Missing document: ${doc}`);
+    }
+
+    if (errors.length > 0) {
       toast({
         variant: "destructive",
-        title: "Missing required documents",
-        description: `Please upload: ${missing.join(", ")}`,
+        title: "Please fix before submitting",
+        description: errors.join(" · "),
       });
       return;
     }
@@ -164,7 +248,7 @@ export default function CandidateFormPage() {
     setSaving(true);
     try {
       const certificates: Array<{ name: string; url: string }> = [];
-      for (const label of requiredDocuments) {
+      for (const label of requiredDocuments.filter((l) => !EDUCATION_DOCUMENT_TEMPLATES[l])) {
         const file = requiredFiles[label];
         if (!file) continue;
         const fileRef = ref(
@@ -189,7 +273,7 @@ export default function CandidateFormPage() {
       const qualifications_: AcademicQualification[] = [];
       for (const row of qualifications) {
         if (!row.degree.trim() && !row.institution.trim()) continue;
-        const { file, ...rest } = row;
+        const { file, sourceLabel, ...rest } = row;
         let certificateUrl = rest.certificateUrl;
         let certificateName = rest.certificateName;
         if (file) {
@@ -200,6 +284,9 @@ export default function CandidateFormPage() {
           await uploadBytes(fileRef, file);
           certificateUrl = await getDownloadURL(fileRef);
           certificateName = file.name;
+          // Also surface a source-labeled entry so office/HOD document review
+          // (which lists Candidate.certificates flat) still shows this file.
+          if (sourceLabel) certificates.push({ name: sourceLabel, url: certificateUrl });
         }
         qualifications_.push({ ...rest, certificateUrl, certificateName });
       }
@@ -291,7 +378,7 @@ export default function CandidateFormPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="fatherName">Father&apos;s Name</Label>
+                  <Label htmlFor="fatherName">Father&apos;s Name <span className="text-destructive">*</span></Label>
                   <Input id="fatherName" value={form.fatherName ?? ""} onChange={(e) => updateForm({ fatherName: e.target.value })} placeholder="Father's full name" />
                 </div>
                 <div className="space-y-2">
@@ -337,7 +424,7 @@ export default function CandidateFormPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="aadharNo">Aadhaar Number</Label>
-                  <Input id="aadharNo" value={form.aadharNo ?? ""} onChange={(e) => updateForm({ aadharNo: e.target.value })} placeholder="XXXX XXXX XXXX" maxLength={14} />
+                  <Input id="aadharNo" value={form.aadharNo ?? ""} inputMode="numeric" onChange={(e) => updateForm({ aadharNo: onlyDigits(e.target.value, 12) })} placeholder="12-digit number" maxLength={12} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="panNo">PAN Number</Label>
@@ -346,18 +433,32 @@ export default function CandidateFormPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="bloodGroup">Blood Group</Label>
-                  <Input id="bloodGroup" value={form.bloodGroup ?? ""} onChange={(e) => updateForm({ bloodGroup: e.target.value })} placeholder="e.g. O+" />
+                  <Label htmlFor="bloodGroup">Blood Group <span className="text-destructive">*</span></Label>
+                  <Select value={form.bloodGroup ?? ""} onValueChange={(v) => updateForm({ bloodGroup: v })}>
+                    <SelectTrigger id="bloodGroup"><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {BLOOD_GROUPS.map((bg) => <SelectItem key={bg} value={bg}>{bg}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="caste">Caste / Category <span className="text-destructive">*</span></Label>
+                  <Select value={form.caste ?? ""} onValueChange={(v) => updateForm({ caste: v })}>
+                    <SelectTrigger id="caste"><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {CASTE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="emergencyContactName">Emergency Contact Name</Label>
+                  <Label htmlFor="emergencyContactName">Emergency Contact Name <span className="text-destructive">*</span></Label>
                   <Input id="emergencyContactName" value={form.emergencyContactName ?? ""} onChange={(e) => updateForm({ emergencyContactName: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="emergencyContactPhone">Emergency Contact Phone</Label>
-                  <Input id="emergencyContactPhone" value={form.emergencyContactPhone ?? ""} onChange={(e) => updateForm({ emergencyContactPhone: e.target.value })} />
+                  <Label htmlFor="emergencyContactPhone">Emergency Contact Phone <span className="text-destructive">*</span></Label>
+                  <Input id="emergencyContactPhone" value={form.emergencyContactPhone ?? ""} inputMode="numeric" maxLength={10} onChange={(e) => updateForm({ emergencyContactPhone: onlyDigits(e.target.value, 10) })} placeholder="10-digit number" />
                 </div>
               </div>
             </CardContent>
@@ -367,10 +468,16 @@ export default function CandidateFormPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">Academic Qualifications</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {qualifications.map((row, i) => (
-                <div key={row.id} className="rounded-lg border p-3 space-y-3">
+                <div key={row.id} className={`rounded-lg border p-3 space-y-3 ${row.sourceLabel ? "border-primary/40 bg-primary/5" : ""}`}>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-muted-foreground">Qualification {i + 1}</p>
-                    {qualifications.length > 1 && (
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {row.sourceLabel ? (
+                        <>Required: {row.sourceLabel} <span className="text-destructive">*</span></>
+                      ) : (
+                        `Qualification ${i + 1}`
+                      )}
+                    </p>
+                    {!row.sourceLabel && qualifications.filter((q) => !q.sourceLabel).length > 1 && (
                       <Button type="button" variant="ghost" size="icon" aria-label="Remove qualification" onClick={() => removeQualificationRow(row.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -379,28 +486,28 @@ export default function CandidateFormPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor={`qual-degree-${row.id}`}>Degree / Course</Label>
-                      <Input id={`qual-degree-${row.id}`} value={row.degree} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="e.g. M.Tech" />
+                      <Input id={`qual-degree-${row.id}`} value={row.degree} disabled={!!row.sourceLabel} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="e.g. M.Tech" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`qual-institution-${row.id}`}>Institution</Label>
-                      <Input id={`qual-institution-${row.id}`} value={row.institution} onChange={(e) => updateQualificationRow(row.id, { institution: e.target.value })} placeholder="College / University name" />
+                      <Input id={`qual-institution-${row.id}`} value={row.institution} onChange={(e) => updateQualificationRow(row.id, { institution: e.target.value })} placeholder={institutionPlaceholderFor(row.sourceLabel)} />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor={`qual-year-${row.id}`}>Year of Passing</Label>
-                      <Input id={`qual-year-${row.id}`} value={row.yearOfPassing} onChange={(e) => updateQualificationRow(row.id, { yearOfPassing: e.target.value })} placeholder="e.g. 2020" />
+                      <Input id={`qual-year-${row.id}`} value={row.yearOfPassing} inputMode="numeric" maxLength={4} onChange={(e) => updateQualificationRow(row.id, { yearOfPassing: onlyDigits(e.target.value, 4) })} placeholder="e.g. 2020" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`qual-pct-${row.id}`}>Percentage / CGPA</Label>
-                      <Input id={`qual-pct-${row.id}`} value={row.percentageOrCGPA} onChange={(e) => updateQualificationRow(row.id, { percentageOrCGPA: e.target.value })} placeholder="e.g. 8.5 CGPA" />
+                      <Input id={`qual-pct-${row.id}`} value={row.percentageOrCGPA} inputMode="decimal" onChange={(e) => updateQualificationRow(row.id, { percentageOrCGPA: decimalOnly(e.target.value) })} placeholder="e.g. 8.5" />
                     </div>
                   </div>
                   <FileUpload
                     accept=".pdf,.png,.jpg,.jpeg"
                     maxSizeMB={5}
                     onFileSelect={(file) => updateQualificationRow(row.id, { file })}
-                    label="Upload Certificate"
+                    label={row.sourceLabel ? `Upload ${row.sourceLabel}` : "Upload Certificate"}
                   />
                 </div>
               ))}
@@ -618,7 +725,7 @@ export default function CandidateFormPage() {
             </CardContent>
           </Card>
 
-          {groupRequiredDocuments(requiredDocuments).map(({ category, labels }) => (
+          {groupRequiredDocuments(requiredDocuments.filter((l) => !EDUCATION_DOCUMENT_TEMPLATES[l])).map(({ category, labels }) => (
             <Card key={category}>
               <CardHeader className="pb-3"><CardTitle className="text-base">{category}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -674,11 +781,7 @@ export default function CandidateFormPage() {
           </Card>
         </div>
 
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={!form.dateOfBirth || !form.gender}
-          >
+          <Button type="submit" className="w-full">
             Submit My Details
           </Button>
         </form>

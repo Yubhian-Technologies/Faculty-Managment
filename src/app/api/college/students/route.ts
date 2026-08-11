@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
@@ -23,11 +23,6 @@ async function getInchargeSections(
     .where("facultyInchargeUid", "in", candidateIds)
     .get();
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Section);
-}
-
-async function getHodDept(db: FirebaseFirestore.Firestore, collegeId: string, uid: string): Promise<string> {
-  const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-  return (snap.data() as { department?: string } | undefined)?.department ?? "";
 }
 
 export async function GET(request: Request) {
@@ -95,8 +90,11 @@ export async function GET(request: Request) {
         primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
         secondaryQuery = withCommonFilters(studentsColl.where("secondaryDepartment", "==", scope.departmentName));
       }
-      if (scope.childDepartmentNames.length > 0) {
-        childDeptQuery = withCommonFilters(studentsColl.where("department", "in", scope.childDepartmentNames));
+      // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
+      // both fully-owned - a single `in` query covers both, tagged primary.
+      const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
+      if (ownedDeptNames.length > 0) {
+        childDeptQuery = withCommonFilters(studentsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
       }
     }
 
@@ -146,58 +144,106 @@ export async function GET(request: Request) {
 
 // Faculty (PANEL_MEMBER) can view their sections' rosters but cannot add
 // students - that stays with HOD/Office/above.
+//
+// Two shapes of add are supported:
+//  - Section-based: a `section` name + `year` resolve to an existing section;
+//    the student is placed straight into it (department comes from the section).
+//  - Unassigned: a `department` name (or `departmentId`) with no section; the
+//    student is created under that department with `section: ""` (an "unassigned"
+//    pool the College Office fills before sub-HODs section them). This is what
+//    lets Office import/add a branch cohort before any sections exist.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const body = (await request.json()) as {
-      rollNumber: string;
       name: string;
-      section: string;
+      section?: string;
       year: number;
       status?: StudentStatus;
+      department?: string;
+      departmentId?: string;
+      // Optional personal details - the same fields the Excel/CSV import
+      // collects, so a manually-added student carries the same information.
+      gender?: string;
+      dateOfBirth?: string;
+      guardianContact?: string;
+      email?: string;
     };
 
-    if (!body.rollNumber?.trim() || !body.name?.trim() || !body.section?.trim() || !body.year) {
-      return NextResponse.json({ error: "rollNumber, name, section, year are required" }, { status: 400 });
+    // No roll number here by design: the College Office adds fresh students by
+    // basic details only. Roll numbers are the department's responsibility - the
+    // assigned HOD (years 2-4) or sub-HOD (year 1) assigns them later, once
+    // students are divided into sections (see students/[id] PATCH).
+    if (!body.name?.trim() || !body.year) {
+      return NextResponse.json({ error: "name and year are required" }, { status: 400 });
     }
 
     const db = getAdminDb();
-    const sectionsSnap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("sections")
-      .where("name", "==", body.section.trim().toUpperCase())
-      .where("year", "==", Number(body.year))
-      .limit(1)
-      .get();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const now = new Date();
 
-    if (sectionsSnap.empty) {
-      return NextResponse.json({ error: "Section not found" }, { status: 400 });
-    }
-    const sectionDoc = sectionsSnap.docs[0].data() as Section;
+    // Resolve the target department + section. `dept` is always the student's
+    // owning department; `sectionName` is "" for an unassigned add.
+    let dept = "";
+    let sectionName = "";
 
-    if (session.role === "HOD") {
-      const dept = await getHodDept(db, session.collegeId, session.uid);
-      if (dept && sectionDoc.department !== dept) {
-        return NextResponse.json({ error: "Section is not in your department" }, { status: 403 });
+    if (body.section?.trim()) {
+      const sectionsSnap = await collegeRef
+        .collection("sections")
+        .where("name", "==", body.section.trim().toUpperCase())
+        .where("year", "==", Number(body.year))
+        .limit(1)
+        .get();
+      if (sectionsSnap.empty) {
+        return NextResponse.json({ error: "Section not found" }, { status: 400 });
+      }
+      const sectionDoc = sectionsSnap.docs[0].data() as Section;
+      dept = sectionDoc.department;
+      sectionName = sectionDoc.name;
+    } else {
+      // Unassigned add - resolve the department by id or name.
+      if (body.departmentId) {
+        const deptSnap = await collegeRef.collection("departments").doc(body.departmentId).get();
+        if (!deptSnap.exists) return NextResponse.json({ error: "Department not found" }, { status: 400 });
+        dept = (deptSnap.data() as { name?: string }).name ?? "";
+      } else if (body.department?.trim()) {
+        const deptSnap = await collegeRef.collection("departments").where("name", "==", body.department.trim()).limit(1).get();
+        if (deptSnap.empty) return NextResponse.json({ error: "Department not found" }, { status: 400 });
+        dept = (deptSnap.docs[0].data() as { name?: string }).name ?? body.department.trim();
+      } else {
+        return NextResponse.json({ error: "Provide a section, or a department for an unassigned student" }, { status: 400 });
       }
     }
 
-    const now = new Date();
-    const studentRef = db.collection("colleges").doc(session.collegeId).collection("students").doc();
+    // An HOD/Sub-HOD may only add into a department they own or manage.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (dept && !canHodEditDepartment(scope, dept)) {
+        return NextResponse.json({ error: "That department is not yours or one you manage" }, { status: 403 });
+      }
+    }
+
+    const studentRef = collegeRef.collection("students").doc();
     const history = departmentHistoryEntry(
-      db, session.collegeId, studentRef.id, sectionDoc.department, sectionDoc.name, Number(body.year), now
+      db, session.collegeId, studentRef.id, dept, sectionName, Number(body.year), now
     );
 
     const batch = db.batch();
     batch.set(studentRef, {
       collegeId: session.collegeId,
-      department: sectionDoc.department,
-      section: sectionDoc.name,
+      department: dept,
+      section: sectionName,
       year: Number(body.year),
-      rollNumber: body.rollNumber.trim(),
+      rollNumber: "",
       name: body.name.trim(),
       status: body.status ?? "REGULAR",
+      // Optional personal details - stored only when provided, mirroring the
+      // bulk importer's buildStudentDoc so both entry paths shape the doc the
+      // same way (email lower-cased, blanks omitted rather than stored empty).
+      ...(body.gender?.trim() ? { gender: body.gender.trim() } : {}),
+      ...(body.dateOfBirth?.trim() ? { dateOfBirth: body.dateOfBirth.trim() } : {}),
+      ...(body.guardianContact?.trim() ? { guardianContact: body.guardianContact.trim() } : {}),
+      ...(body.email?.trim() ? { email: body.email.trim().toLowerCase() } : {}),
       createdAt: now,
       updatedAt: now,
     });

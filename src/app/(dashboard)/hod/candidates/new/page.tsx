@@ -281,7 +281,7 @@ export default function NewCandidatePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone *</Label>
-                <Input id="phone" {...register("phone")} placeholder="+91 98765 43210" />
+                <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
                 {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
               </div>
 
@@ -418,8 +418,6 @@ export default function NewCandidatePage() {
 
             {/* Optional: attach to a hiring request now */}
             <div className="space-y-2">
-              <Label>Attach to Hiring Request <span className="text-xs font-normal text-muted-foreground">(optional — can be done later)</span></Label>
-
               {isLoadingVacancies ? (
                 <p className="text-sm text-muted-foreground">Loading hiring requests...</p>
               ) : prefilledVacancyId ? (
@@ -449,7 +447,6 @@ export default function NewCandidatePage() {
                           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">
                             {linked.requiredCount} post{linked.requiredCount !== 1 ? "s" : ""} open
                           </span>
-                          <p className="text-[10px] text-primary font-medium mt-1">Auto-attached ✓</p>
                         </div>
                       </div>
                       {alreadyAttached.length > 0 && (

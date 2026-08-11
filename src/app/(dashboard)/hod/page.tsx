@@ -22,13 +22,22 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { isPathHidden } from "@/components/layout/navConfig";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import type { Department, VacancyRequest, HiringBatch } from "@/types";
 
+// "Faculty" (teaching) and "Supporting Staff" (Technical, department-scoped)
+// are two segregated modules - separate tiles here, separate pages, separate
+// Firestore-backed ownership - not one combined "Faculty" entry. Supporting
+// Staff is omitted entirely for college types with no Technical/Non-
+// Technical split (School - see hasSupportingStaffSplit), matching the same
+// nav-hide Sidebar.tsx already applies.
 const HOD_MODULES = [
-  { label: "Faculty", description: "Department faculty list", href: "/hod/faculty", icon: UsersRound, color: "bg-blue-50 text-blue-600" },
+  { label: "Teaching Faculty", description: "Department faculty list", href: "/hod/faculty", icon: UsersRound, color: "bg-blue-50 text-blue-600" },
+  { label: "Supporting Staff", description: "Technical staff for your department", href: "/hod/supporting-staff", icon: UsersRound, color: "bg-teal-50 text-teal-600" },
   { label: "Hiring", description: "Pipeline · candidates · sessions", href: "/hod/pipeline", icon: ClipboardPlus, color: "bg-indigo-50 text-indigo-600" },
 ];
 
@@ -45,8 +54,11 @@ const PERSONAL_MODULES = [
 export default function HODDashboard() {
   const user = useAuthStore((s) => s.user);
   const { hiddenModules, hiddenItems } = useNavVisibility();
+  const { collegeType } = useCollegeType();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
-  const visibleHodModules = HOD_MODULES.filter((m) => !isHidden(m.href));
+  const visibleHodModules = HOD_MODULES
+    .filter((m) => !isHidden(m.href))
+    .filter((m) => hasSupportingStaffSplit(collegeType) || m.href !== "/hod/supporting-staff");
   const visiblePersonalModules = PERSONAL_MODULES.filter((m) => !isHidden(m.href));
   // "/hod/vacancy", "/hod/vacancy/new" and "/hod/batches" aren't their own nav
   // items - they're sub-pages of the "Hiring" module (whose nav entry is
@@ -93,7 +105,7 @@ export default function HODDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name?.split(" ")[0] ?? "HOD"}`}
+        title={`Welcome, ${user?.name ?? "HOD"}`}
         description={`${user?.department ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""} - Department Portal`}
         actions={
           !isHiringHidden && (

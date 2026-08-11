@@ -29,8 +29,14 @@ const EMPTY_SUBJECT_FORM: SubjectForm = {
 export default function NewDeanSubjectPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const departmentId = searchParams.get("departmentId") ?? "";
   const courseId = searchParams.get("courseId") ?? "";
   const year = searchParams.get("year") ?? "";
+  const department = searchParams.get("department") ?? "";
+  const academicYear = searchParams.get("academicYear") ?? "";
+  // Carried through to the success redirect so the Subjects list lands back
+  // on this same department/course/year/session instead of the blank pickers.
+  const backHref = `/dean/subjects?departmentId=${encodeURIComponent(departmentId)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}`;
 
   const [form, setForm] = useState<SubjectForm>(EMPTY_SUBJECT_FORM);
   const [saving, setSaving] = useState(false);
@@ -62,6 +68,8 @@ export default function NewDeanSubjectPage() {
         body: JSON.stringify({
           courseId,
           year: Number(year),
+          department: department || undefined,
+          academicYear: academicYear || undefined,
           name: form.name.trim(),
           code: form.code.trim(),
           type: form.type,
@@ -75,7 +83,7 @@ export default function NewDeanSubjectPage() {
         throw new Error(json.error ?? "Failed to save subject");
       }
       toast({ variant: "success", title: "Subject added" });
-      router.push("/dean/subjects");
+      router.push(backHref);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save subject" });
     } finally {
@@ -87,7 +95,11 @@ export default function NewDeanSubjectPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Subject"
-        description="Add a subject offered for this year of the course"
+        description={
+          academicYear
+            ? `Add a subject offered for this year of the course, for academic year ${academicYear}`
+            : "Add a subject offered for this year of the course"
+        }
       />
 
       <Card>
@@ -157,7 +169,7 @@ export default function NewDeanSubjectPage() {
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => router.push(backHref)}>Cancel</Button>
               <Button type="submit" loading={saving}>Add Subject</Button>
             </div>
           </form>

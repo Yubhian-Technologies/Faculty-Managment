@@ -11,9 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
-import { ShieldCheck, KeyRound } from "lucide-react";
+import { ShieldCheck, KeyRound, UserCheck } from "lucide-react";
 import { ROLE_LABELS } from "@/types";
-import type { VacancyRequest, Candidate, CandidateApplication, FMSUser } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, FMSUser, HiringBatch } from "@/types";
 
 const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL"] as const;
 const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
@@ -70,15 +70,27 @@ export default function NewBatchPage() {
         .then((r) => r.json() as Promise<{ faculty: FacultyRecord[] }>)
         .then((d) => d.faculty ?? [])
         .catch(() => [] as FacultyRecord[]),
+      fetch("/api/college/hiring-batches")
+        .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
+        .then((d) => d.batches ?? [])
+        .catch(() => [] as HiringBatch[]),
     ])
-      .then(([v, apps, candidates, s, f]) => {
-        setVacancies(v);
+      .then(([v, apps, candidates, s, f, batches]) => {
+        // A vacancy's own status stays APPROVED forever - whether its hiring
+        // has actually finished is tracked on the batch instead, so a past
+        // (COMPLETED) hiring must be excluded here explicitly or it stays
+        // pickable as if it were still open. Mirrors AttachToVacancyDialog's filter.
+        const completedVacancyIds = new Set(
+          batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
+        );
+        const openVacancies = v.filter((vac) => vac.requiredCount > 0 && !completedVacancyIds.has(vac.id));
+        setVacancies(openVacancies);
         setApplications(apps);
         setCandidatesById(new Map(candidates.map((c) => [c.id, c])));
         setLoginlessFaculty(f.filter((rec) => !rec.userUid));
 
         // Auto-select if vacancyId was passed from pipeline
-        if (prefilledVacancyId && v.find((vac) => vac.id === prefilledVacancyId)) {
+        if (prefilledVacancyId && openVacancies.find((vac) => vac.id === prefilledVacancyId)) {
           setSelectedVacancyId(prefilledVacancyId);
         }
 
@@ -122,14 +134,15 @@ export default function NewBatchPage() {
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
   const filteredApplications = selectedVacancy
-    ? applications.filter((a) => !a.batchId && a.vacancyRequestId === selectedVacancyId)
+    ? applications.filter((a) => !a.batchId && a.vacancyRequestId === selectedVacancyId && a.status !== "REJECTED")
     : [];
 
-  function toggleApplication(id: string) {
-    setSelectedApplications((prev) =>
-      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
-    );
-  }
+  // Every shortlisted candidate for the chosen vacancy is included automatically
+  // (shortlisting already is the selection step) - no separate tick-box here.
+  useEffect(() => {
+    setSelectedApplications(filteredApplications.map((a) => a.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVacancyId, applications]);
 
   function togglePanel(uid: string) {
     if (lockedUids.has(uid)) return; // cannot deselect locked members
@@ -188,7 +201,7 @@ export default function NewBatchPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Vacancy Selection */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Step 1: Select Hiring Request</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Hiring Request</CardTitle></CardHeader>
           <CardContent>
             {vacancies.length === 0 ? (
               <p className="text-sm text-muted-foreground">No approved hiring requests. Get a hiring request approved first.</p>
@@ -205,7 +218,7 @@ export default function NewBatchPage() {
                 ) : (
                   <p className="text-sm text-muted-foreground">Loading…</p>
                 )}
-                <span className="text-[10px] text-primary font-medium">Auto-linked ✓</span>
+               
               </div>
             ) : (
               <Select value={selectedVacancyId} onValueChange={setSelectedVacancyId}>
@@ -256,10 +269,10 @@ export default function NewBatchPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Step 3: Select Candidates
+              Step 3: Shortlisted Candidates
               {selectedApplications.length > 0 && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {selectedApplications.length} selected
+                  {selectedApplications.length} included
                 </span>
               )}
             </CardTitle>
@@ -273,20 +286,19 @@ export default function NewBatchPage() {
               </p>
             ) : (
               <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Every shortlisted candidate for this hiring request is included in the interview session.
+                </p>
                 {filteredApplications.map((a) => {
                   const c = candidatesById.get(a.candidateId);
                   return (
-                    <div key={a.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                      <Checkbox
-                        id={`a-${a.id}`}
-                        checked={selectedApplications.includes(a.id)}
-                        onCheckedChange={() => toggleApplication(a.id)}
-                      />
-                      <label htmlFor={`a-${a.id}`} className="flex-1 cursor-pointer">
+                    <div key={a.id} className="flex items-start gap-3 p-3 border rounded-lg bg-muted/20">
+                      <UserCheck className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                      <div className="flex-1">
                         <p className="font-medium text-sm">{c?.name ?? "Unknown"}</p>
                         <p className="text-xs text-muted-foreground">{c?.email} · {c?.phone}</p>
                         <p className="text-xs text-muted-foreground">{a.position} · {a.department}</p>
-                      </label>
+                      </div>
                     </div>
                   );
                 })}

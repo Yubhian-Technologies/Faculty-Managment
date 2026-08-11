@@ -19,15 +19,27 @@ const PUBLIC_PATHS = [
   "/candidate-form",
   "/offer-acceptance",
   "/about-team-illustration.png",
+  // face-api.js model weights (public/models/) - fetched client-side by
+  // MarkAttendanceDialog regardless of which authenticated role is checking
+  // in, so this must stay reachable rather than fall under role path gating.
+  "/models",
 ];
 
 // /panel/interviews is shared - any staff role can be added as a panel member
 const PANEL_INTERVIEWS_PATH = "/panel/interviews";
+// /evaluation is the shared demo/interview scoring page - reachable by
+// exactly the same roles as /panel/interviews, since any of them can be
+// assigned as a panelist on a hiring batch.
+const EVALUATION_PATH = "/evaluation";
+// /candidate-profile is the shared read-only candidate dossier - reachable by
+// HOD, Principal/VP and College Office (they each already read the same
+// candidate/letter data via the college API guards).
+const CANDIDATE_PROFILE_PATH = "/candidate-profile";
 
 // Per-role *own* (and explicitly-shared) path prefixes. Inherited lower-level
 // dashboard paths are added on top of these by allowedPathsForRole().
 const ROLE_PATH_MAP: Record<string, string[]> = {
-  SUPER_ADMIN: ["/super-admin", PANEL_INTERVIEWS_PATH],
+  SUPER_ADMIN: ["/super-admin", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
   MANAGEMENT: ["/management"],
   WEBMASTER: ["/webmaster"],
   ADMINISTRATION: ["/administration"],
@@ -37,19 +49,19 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   LIBRARY: ["/library"],
   EXAM_CELL: ["/exam-cell"],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
-  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH],
+  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
   // Vice Principal mirrors Principal's authority (see AGENTS.md) - full access
   // to /principal/* alongside its own /vice-principal home.
-  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH],
-  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH],
-  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH],
+  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
+  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
+  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
   COLLEGE_STAFF: ["/college-staff"],
   DEAN: ["/dean"],
   IQAC_COORDINATOR: ["/iqac-coordinator"],
   T_AND_P: ["/t-and-p"],
   R_AND_D: ["/r-and-d"],
-  PANEL_MEMBER: ["/panel", "/coordinator"],
-  ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH],
+  PANEL_MEMBER: ["/panel", "/coordinator", EVALUATION_PATH],
+  ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
   FINANCE: ["/finance"],
   PURCHASE_DEPT: ["/purchase"],
   CLASS_LEADER: ["/class-leader"],

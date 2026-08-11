@@ -187,9 +187,7 @@ export default function AccountsHiringPage() {
 
 Greetings from ${institution}.
 
-We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}.
-
-The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}. Please find your offer letter attached.
 
 Congratulations, and welcome aboard!
 

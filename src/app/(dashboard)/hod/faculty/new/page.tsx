@@ -73,12 +73,12 @@ export default function NewFacultyPage() {
     handleSubmit,
     setValue,
     watch,
-    trigger,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", aicteEligible: false },
   });
+  const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
   const employmentType = watch("employmentType");
@@ -101,16 +101,32 @@ export default function NewFacultyPage() {
 
   const step = steps[stepIndex];
 
-  async function goNext() {
-    if (step.key === "core") {
-      const valid = await trigger();
-      if (!valid) return;
-    }
+  // Every validated/required field lives on the "core" step; map each to a
+  // friendly label so a failed submit can say exactly what's missing and in
+  // which module (see onInvalid). Steps can be navigated freely - validation
+  // is deferred entirely to submit time.
+  const FIELD_LABELS: Record<string, string> = {
+    employeeId: "Employee ID", name: "Full Name", collegeEmail: "College Email",
+    password: "Login Password", phone: "Phone", designation: "Designation",
+    qualification: "Highest Qualification", experienceYears: "Years of Experience",
+    joiningDate: "Date of Joining Institution", employmentType: "Employment Type",
+  };
+
+  function goNext() {
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   }
 
   function goBack() {
     setStepIndex((i) => Math.max(i - 1, 0));
+  }
+
+  function onInvalid(errs: typeof errors) {
+    // All required fields are on the "core" (Identity & Employment) step, so
+    // flag that module, jump to it, and list exactly which fields are missing.
+    setErroredSteps(new Set<WizardStepKey>(["core"]));
+    setStepIndex(steps.findIndex((s) => s.key === "core"));
+    const missing = Object.keys(errs).map((f) => FIELD_LABELS[f] ?? f).join(", ");
+    toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${missing}` });
   }
 
   const onSubmit = async (data: FormData) => {
@@ -157,22 +173,26 @@ export default function NewFacultyPage() {
     <div className="max-w-2xl">
       <PageHeader title="Add Faculty Member" description="Add a new entry to your department's faculty register" />
 
-      {/* Step indicator */}
+      {/* Step indicator - click any step to jump to it; steps with missing
+          required fields (after a submit attempt) are outlined in red. */}
       <div className="flex flex-wrap gap-2 mb-4">
         {steps.map((s, i) => (
-          <div
+          <button
+            type="button"
             key={s.key}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
-              i === stepIndex ? "bg-primary text-primary-foreground" : i < stepIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+            onClick={() => setStepIndex(i)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              erroredSteps.has(s.key) ? "ring-1 ring-destructive text-destructive bg-destructive/5" :
+              i === stepIndex ? "bg-primary text-primary-foreground" : i < stepIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:bg-muted/70"
             }`}
           >
-            {i < stepIndex && <Check className="h-3 w-3" />}
+            {i < stepIndex && !erroredSteps.has(s.key) && <Check className="h-3 w-3" />}
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit, onInvalid)}>
         <Card>
           <CardHeader><CardTitle className="text-base">{step.label}</CardTitle></CardHeader>
           <CardContent className="space-y-5">
@@ -215,7 +235,7 @@ export default function NewFacultyPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone</Label>
-                    <Input id="phone" {...register("phone")} placeholder="+91 98765 43210" />
+                    <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
                     {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
                   </div>
                 </div>

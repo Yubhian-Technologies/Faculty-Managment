@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/useToast";
-import type { VacancyRequest, CandidateApplication } from "@/types";
+import type { VacancyRequest, CandidateApplication, HiringBatch } from "@/types";
 
 interface AttachToVacancyDialogProps {
   candidateId: string;
@@ -30,7 +30,10 @@ export function AttachToVacancyDialog({
   onAttached,
 }: AttachToVacancyDialogProps) {
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
-  const [attachedVacancyIds, setAttachedVacancyIds] = useState<Set<string>>(new Set());
+  // A candidate may only be actively attached to one hiring request at a time
+  // (mirrors the server-side check in the POST route) - REJECTED applications
+  // don't count, so a rejected candidate can still be re-attached elsewhere.
+  const [activeApplication, setActiveApplication] = useState<CandidateApplication | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -48,21 +51,29 @@ export function AttachToVacancyDialog({
       fetch(`/api/college/candidate-applications?candidateId=${candidateId}`)
         .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
         .then((d) => d.applications ?? []),
+      fetch("/api/college/hiring-batches")
+        .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
+        .then((d) => d.batches ?? [])
+        .catch(() => []),
     ])
-      .then(([allVacancies, applications]) => {
-        setVacancies(allVacancies.filter((v) => v.requiredCount > 0));
-        setAttachedVacancyIds(
-          new Set(applications.filter((a) => a.status !== "REJECTED").map((a) => a.vacancyRequestId))
+      .then(([allVacancies, applications, batches]) => {
+        // A vacancy's own status stays APPROVED forever - whether its hiring
+        // has actually finished is tracked on the batch instead, so a past
+        // (COMPLETED) hiring must be excluded here explicitly or it stays
+        // pickable as if it were still open. Mirrors hod/candidates/new's filter.
+        const completedVacancyIds = new Set(
+          batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
         );
+        setVacancies(allVacancies.filter((v) => v.requiredCount > 0 && !completedVacancyIds.has(v.id)));
+        setActiveApplication(applications.find((a) => a.status !== "REJECTED") ?? null);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
       .finally(() => setIsLoading(false));
   }, [open, candidateId]);
 
-  const available = vacancies.filter((v) => !attachedVacancyIds.has(v.id));
   const matched = search.trim()
-    ? available.filter((v) => v.position.toLowerCase().includes(search.trim().toLowerCase()))
-    : available;
+    ? vacancies.filter((v) => v.position.toLowerCase().includes(search.trim().toLowerCase()))
+    : vacancies;
 
   async function handleAttach() {
     if (!selectedId) return;
@@ -100,10 +111,17 @@ export function AttachToVacancyDialog({
 
         {isLoading ? (
           <p className="text-sm text-muted-foreground py-4">Loading hiring requests...</p>
+        ) : activeApplication ? (
+          <div className="rounded-lg border-2 border-primary bg-primary/5 px-4 py-3">
+            <p className="text-sm font-medium text-primary">{activeApplication.position}</p>
+            <p className="text-xs text-muted-foreground/60 mt-0.5">{activeApplication.department}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {candidateName} is already attached to this hiring request. A candidate can only be attached to one
+              open hiring request at a time.
+            </p>
+          </div>
         ) : vacancies.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">No approved hiring requests yet.</p>
-        ) : available.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4">Already attached to every open hiring request.</p>
         ) : (
           <div className="space-y-3">
             <Input
@@ -144,8 +162,12 @@ export function AttachToVacancyDialog({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-          <Button onClick={() => void handleAttach()} disabled={!selectedId} loading={isSubmitting}>Attach</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            {activeApplication ? "Close" : "Cancel"}
+          </Button>
+          {!activeApplication && (
+            <Button onClick={() => void handleAttach()} disabled={!selectedId} loading={isSubmitting}>Attach</Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

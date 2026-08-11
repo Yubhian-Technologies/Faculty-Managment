@@ -10,7 +10,7 @@ import { ensureAcademicYear, yearOrdinalLabel } from "@/lib/college/academicYear
 // session (Principal) or the query param (Super Admin, who carries no collegeId).
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "HOD");
+    const session = await requireCollegeContext(request, "SUPER_ADMIN", "PRINCIPAL", "HOD", "COLLEGE_OFFICE");
     const db = getAdminDb();
 
     const snap = await db

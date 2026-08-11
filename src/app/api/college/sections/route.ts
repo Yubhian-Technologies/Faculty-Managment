@@ -41,8 +41,11 @@ export async function GET(request: Request) {
         primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
         secondaryDeptQuery = withCommonFilters(sectionsColl.where("secondaryDepartments", "array-contains", scope.departmentName));
       }
-      if (scope.childDepartmentNames.length > 0) {
-        childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", scope.childDepartmentNames));
+      // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
+      // both fully-owned - one `in` query covers both, tagged primary below.
+      const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
+      if (ownedDeptNames.length > 0) {
+        childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
       }
     } else if (session.role === "PANEL_MEMBER") {
       const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
@@ -136,7 +139,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
+    // Sections are HOD-managed: an HOD (own department, its sub-departments, and
+    // any managed branch) creates them; Super Admin retains an override. Reads
+    // (GET above) stay open to Principal/VP/Office/Panel.
+    const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
     const body = (await request.json()) as {
       courseId: string;
       name: string;
@@ -243,15 +249,45 @@ export async function POST(request: Request) {
         .limit(1)
         .get();
       if (!deptSnap.empty) {
-        const deptDoc = deptSnap.docs[0].data() as { assignedYears?: number[]; secondaryDepartments?: string[] };
+        const deptDoc = deptSnap.docs[0].data() as { assignedYears?: number[]; secondaryDepartments?: string[]; parentDepartmentId?: string };
         const assignedYears = deptDoc.assignedYears ?? [];
         if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
-          return NextResponse.json(
-            { error: `Your department is not assigned to teach Year ${body.year}` },
-            { status: 400 }
-          );
+          // A real branch (e.g. IT) reached through a sub-department's managed
+          // grouping (BS-Maths managing IT + CSBS) never carries the shared
+          // first year in its OWN "Years Taught" - that's configured on the
+          // managing sub-department (or its parent common department) instead.
+          // Before rejecting, check whether whoever manages this branch teaches
+          // the requested year - if so, this section is exactly that shared-year
+          // section and should be allowed.
+          const managingSnap = await db.collection("colleges").doc(session.collegeId)
+            .collection("departments").where("managedDepartments", "array-contains", dept).limit(1).get();
+          let allowedViaManager = false;
+          if (!managingSnap.empty) {
+            const manager = managingSnap.docs[0].data() as { assignedYears?: number[]; parentDepartmentId?: string };
+            let managerYears = manager.assignedYears ?? [];
+            if (managerYears.length === 0 && manager.parentDepartmentId) {
+              const parentSnap = await db.collection("colleges").doc(session.collegeId)
+                .collection("departments").doc(manager.parentDepartmentId).get();
+              managerYears = (parentSnap.data() as { assignedYears?: number[] } | undefined)?.assignedYears ?? [];
+            }
+            allowedViaManager = managerYears.includes(Number(body.year));
+          }
+          if (!allowedViaManager) {
+            return NextResponse.json(
+              { error: `Your department is not assigned to teach Year ${body.year}` },
+              { status: 400 }
+            );
+          }
         }
-        const availableSecondaryDepts = deptDoc.secondaryDepartments ?? [];
+        // Available branches: this department's own configured secondaries, or -
+        // for a sub-department with none of its own - those inherited from its
+        // parent, so a sub-HOD can create the shared first-year branch sections.
+        let availableSecondaryDepts = deptDoc.secondaryDepartments ?? [];
+        if (availableSecondaryDepts.length === 0 && deptDoc.parentDepartmentId) {
+          const parentSnap = await db.collection("colleges").doc(session.collegeId)
+            .collection("departments").doc(deptDoc.parentDepartmentId).get();
+          availableSecondaryDepts = (parentSnap.data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments ?? [];
+        }
         const chosen = body.secondaryDepartment?.trim()
           || (availableSecondaryDepts.length === 1 ? availableSecondaryDepts[0] : "");
         if (chosen) {
@@ -264,6 +300,36 @@ export async function POST(request: Request) {
           secondaryDepartments = [chosen];
         }
       }
+    }
+
+    // Reject an exact duplicate. Within a program a class section is identified
+    // by department + course + year + section name, plus its cross-listed branch
+    // (a shared first-year department may legitimately run two same-named
+    // sections feeding different branches - e.g. Basic Science "A" -> CSE and
+    // another "A" -> ECE). Batch is deliberately NOT part of the identity: only
+    // one batch occupies a given year at a time, and leaving it out also stops
+    // inconsistent batch text ("2025-26" vs "2025-2026") from slipping a real
+    // duplicate past this check.
+    const sectionName = body.name.trim().toUpperCase();
+    const chosenSecondary = (secondaryDepartments[0] ?? "").toLowerCase();
+    const siblingSnap = await db.collection("colleges").doc(session.collegeId).collection("sections")
+      .where("department", "==", dept)
+      .where("courseId", "==", body.courseId)
+      .where("year", "==", Number(body.year))
+      .get();
+    const isDuplicate = siblingSnap.docs.some((d) => {
+      const s = d.data() as { name?: string; secondaryDepartments?: string[] };
+      return (s.name ?? "").toUpperCase() === sectionName
+        && (s.secondaryDepartments?.[0] ?? "").toLowerCase() === chosenSecondary;
+    });
+    if (isDuplicate) {
+      return NextResponse.json(
+        {
+          error: `Section ${sectionName} already exists for ${dept} Year ${body.year}`
+            + `${secondaryDepartments[0] ? ` (feeding ${secondaryDepartments[0]})` : ""}.`,
+        },
+        { status: 409 }
+      );
     }
 
     // The Class Incharge picker supplies a FacultyMember doc id, but this field
@@ -282,7 +348,7 @@ export async function POST(request: Request) {
       ...(secondaryDepartments.length > 0 ? { secondaryDepartments } : {}),
       courseId: body.courseId,
       courseName: course.name,
-      name: body.name.trim().toUpperCase(),
+      name: sectionName,
       year: Number(body.year),
       batch: body.batch.trim(),
       facultyInchargeUid,

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BookOpen, Plus, Pencil, Trash2, Clock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,8 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import type { Course, Department, Subject } from "@/types";
+import type { AcademicRegulationSettings, Course, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
+import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -24,9 +25,13 @@ function ordinalYear(year: number) {
 // since a Dean isn't scoped to one department the way an HOD is.
 export default function DeanSubjectsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  // Fixed once by the Principal under Settings (see RegulationSettingsCard) -
+  // loaded once here and looked up by year below, purely for display.
+  const [regulationSettings, setRegulationSettings] = useState<AcademicRegulationSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
@@ -34,15 +39,32 @@ export default function DeanSubjectsPage() {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+  // Calendar academic session (e.g. "2026-27") a subject is tagged with when
+  // the Dean adds it - defaults to the current session, not required to change.
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
 
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
 
   useEffect(() => {
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments((d.departments ?? []).sort((a, b) => a.name.localeCompare(b.name))))
+      .then((d) => {
+        // Top-level departments only - sub-departments (parentDepartmentId
+        // set, e.g. BS-CHEMISTRY/BS-Mathematics under Basic Science) share
+        // their parent's courses rather than owning any of their own (see
+        // getHodDepartmentScope), so they'd never resolve to a real course
+        // here anyway - hide them from the picker instead of listing a
+        // dead end.
+        const topLevel = (d.departments ?? []).filter((dept) => !dept.parentDepartmentId);
+        setDepartments(topLevel.sort((a, b) => a.name.localeCompare(b.name)));
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
       .finally(() => setIsLoading(false));
+
+    fetch("/api/college/settings/regulations")
+      .then((r) => r.json() as Promise<{ settings: AcademicRegulationSettings }>)
+      .then((d) => setRegulationSettings(d.settings))
+      .catch(() => {}); // purely informational - no error state needed if this fails
   }, []);
 
   const selectedDepartment = useMemo(
@@ -54,35 +76,78 @@ export default function DeanSubjectsPage() {
     () => (selectedCourse ? Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1) : []),
     [selectedCourse]
   );
+  const currentRegulation = selectedYear ? regulationSettings?.yearRegulations?.[selectedYear] : undefined;
 
   const loadCourses = useCallback(async (departmentId: string) => {
     setIsLoadingCourses(true);
     try {
       const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(departmentId)}`);
       const data = await res.json() as { courses: Course[] };
-      setCourses((data.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name)));
+      const list = (data.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name));
+      setCourses(list);
+      return list;
     } catch {
       toast({ variant: "destructive", title: "Failed to load courses" });
+      return [];
     } finally {
       setIsLoadingCourses(false);
     }
   }, []);
 
-  const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string) => {
+  const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string, academicYear: string) => {
     if (!departmentName || !courseId || !year) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
     try {
       const res = await fetch(
-        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`
+        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}`
       );
       const data = await res.json() as { subjects: Subject[] };
-      setSubjects(data.subjects ?? []);
+      // The API also returns a feeder's shared subjects for a fed department
+      // (e.g. Basic Science's 1st-year subjects under CSE/ECE/IT/CIVIL) so an
+      // HOD can staff them - the Dean browses departments one at a time
+      // instead, so a fed department's own page shows only its own subjects;
+      // Basic Science's are seen by selecting Basic Science itself above.
+      setSubjects((data.subjects ?? []).filter((s) => s.department === departmentName));
     } catch {
       toast({ variant: "destructive", title: "Failed to load subjects" });
     } finally {
       setIsLoadingSubjects(false);
     }
   }, []);
+
+  // Coming back from "Add Subject"/"Edit" (see their departmentId/courseId/
+  // year/academicYear query params on success) should land right back on the
+  // same department, course, year and session instead of the blank pickers -
+  // restore that selection once, as soon as the department list is in so
+  // selectedDepartment can resolve. Runs at most once (hasRestoredRef) so it
+  // doesn't fight the user's own subsequent picks.
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (hasRestoredRef.current || isLoading || departments.length === 0) return;
+    hasRestoredRef.current = true;
+    const departmentId = searchParams.get("departmentId");
+    const courseId = searchParams.get("courseId");
+    const year = searchParams.get("year");
+    const academicYear = searchParams.get("academicYear") || selectedAcademicYear;
+    if (!departmentId) return;
+    const dept = departments.find((d) => d.id === departmentId);
+    if (!dept) return;
+    void (async () => {
+      setSelectedDepartmentId(departmentId);
+      setSelectedAcademicYear(academicYear);
+      const list = await loadCourses(departmentId);
+      if (courseId && list.some((c) => c.id === courseId)) {
+        setSelectedCourseId(courseId);
+        if (year) {
+          setSelectedYear(year);
+          await loadSubjects(dept.name, courseId, year, academicYear);
+        }
+      }
+    })();
+    // hasRestoredRef guards this to run at most once - selectedAcademicYear
+    // in the deps just lets the effect see its latest default value the one
+    // time it actually runs; it re-entering harmlessly no-ops afterwards.
+  }, [isLoading, departments, searchParams, loadCourses, loadSubjects, selectedAcademicYear]);
 
   function selectDepartment(departmentId: string) {
     setSelectedDepartmentId(departmentId);
@@ -101,7 +166,12 @@ export default function DeanSubjectsPage() {
 
   function selectYear(year: string) {
     setSelectedYear(year);
-    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year);
+    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, selectedAcademicYear);
+  }
+
+  function selectAcademicYear(academicYear: string) {
+    setSelectedAcademicYear(academicYear);
+    if (selectedDepartment && selectedYear) void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, academicYear);
   }
 
   async function handleDelete() {
@@ -111,7 +181,7 @@ export default function DeanSubjectsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to delete subject");
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
-      await loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear);
+      await loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedAcademicYear);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
     } finally {
@@ -135,7 +205,7 @@ export default function DeanSubjectsPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label>Department</Label>
                 <Select value={selectedDepartmentId} onValueChange={selectDepartment}>
@@ -163,6 +233,15 @@ export default function DeanSubjectsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <Label>Academic Year</Label>
+                <Select value={selectedAcademicYear} onValueChange={selectAcademicYear}>
+                  <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
+                  <SelectContent>
+                    {recentAcademicSessions().map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </CardContent>
           </Card>
 
@@ -172,17 +251,23 @@ export default function DeanSubjectsPage() {
             </p>
           )}
 
-          {selectedCourse && selectedYear && selectedDepartment && (
+          {selectedCourse && selectedYear && selectedDepartment && selectedAcademicYear && (
             <Card>
               <CardContent className="p-4 space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h2 className="font-semibold text-sm flex items-center gap-2">
                     <BookOpen className="h-4 w-4" />
-                    {selectedDepartment.name} · {selectedCourse.name} · {ordinalYear(Number(selectedYear))}
+                    {selectedDepartment.name} · {selectedCourse.name} · {ordinalYear(Number(selectedYear))} · {selectedAcademicYear}
+                    {/* Fixed by the Principal under Settings for this year of study - see RegulationSettingsCard. */}
+                    {currentRegulation ? (
+                      <Badge variant="secondary" className="text-xs font-normal">Regulation {currentRegulation}</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs font-normal text-muted-foreground">Regulation not fixed</Badge>
+                    )}
                   </h2>
                   <Button
                     size="sm"
-                    onClick={() => router.push(`/dean/subjects/new?courseId=${selectedCourseId}&year=${selectedYear}`)}
+                    onClick={() => router.push(`/dean/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}`)}
                   >
                     <Plus className="h-4 w-4 mr-2" />Add Subject
                   </Button>
@@ -204,6 +289,7 @@ export default function DeanSubjectsPage() {
                           <div className="flex items-center gap-2 mb-0.5">
                             <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
                             <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                            {s.academicYear && <Badge variant="outline" className="text-xs">{s.academicYear}</Badge>}
                           </div>
                           <p className="font-medium text-sm">{s.name}</p>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
@@ -217,7 +303,7 @@ export default function DeanSubjectsPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => router.push(`/dean/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}
+                            onClick={() => router.push(`/dean/subjects/${s.id}/edit?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}`)}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>

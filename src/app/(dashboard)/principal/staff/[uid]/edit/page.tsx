@@ -9,14 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
-import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
-import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS } from "@/types";
-import type { Department, FacultyProfileFields, UserRole, Religion, Caste } from "@/types";
+import type { Department, UserRole } from "@/types";
 
 type StaffUser = {
   uid: string;
@@ -29,14 +25,15 @@ type StaffUser = {
   department?: string;
   designation?: string;
   profilePhotoUrl?: string;
-  academicProfile?: Partial<FacultyProfileFields>;
 } & Record<string, unknown>;
 
-export default function EditStaffPage() {
+// Account-level fields only (identity/employment) - personal details and
+// academic profile modules are edited from the view hub at /principal/staff/[uid]
+// instead, one module at a time (see that page for the module tiles + constraints).
+export default function EditStaffAccountPage() {
   const router = useRouter();
   const params = useParams<{ uid: string }>();
   const uid = params.uid;
-  const { collegeType } = useCollegeType();
 
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,8 +48,6 @@ export default function EditStaffPage() {
   const [department, setDepartment] = useState("");
   const [designation, setDesignation] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
-  const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
-  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
 
   useEffect(() => {
     fetch("/api/college/departments")
@@ -80,33 +75,6 @@ export default function EditStaffPage() {
         setDepartment(user.department ?? "");
         setDesignation(user.designation ?? "");
         setPhotoUrl(user.profilePhotoUrl || undefined);
-        setAcademicProfile(user.academicProfile ?? {});
-        setPersonalDetails({
-          gender: (user.gender as string) ?? "",
-          dateOfBirth: toDateInputValue(user.dateOfBirth as Parameters<typeof toDateInputValue>[0]),
-          legalName: (user.legalName as string) ?? "",
-          fatherName: (user.fatherName as string) ?? "",
-          motherName: (user.motherName as string) ?? "",
-          religion: user.religion as Religion | undefined,
-          caste: user.caste as Caste | undefined,
-          subCaste: (user.subCaste as string) ?? "",
-          aadharNo: (user.aadharNo as string) ?? "",
-          panNo: (user.panNo as string) ?? "",
-          passportNumber: (user.passportNumber as string) ?? "",
-          emergencyContactName: (user.emergencyContactName as string) ?? "",
-          emergencyContactPhone: (user.emergencyContactPhone as string) ?? "",
-          ratificationStatus: (user.ratificationStatus as string) ?? "",
-          ratificationDate: toDateInputValue(user.ratificationDate as Parameters<typeof toDateInputValue>[0]),
-          maritalStatus: (user.maritalStatus as string) ?? "",
-          spouseName: (user.spouseName as string) ?? "",
-          numberOfChildren: user.numberOfChildren as number | undefined,
-          referral: (user.referral as string) ?? "",
-          nativePlace: (user.nativePlace as string) ?? "",
-          temporaryAddress: (user.temporaryAddress as string) ?? "",
-          permanentSameAsTemporary: (user.permanentSameAsTemporary as boolean) ?? false,
-          permanentAddress: (user.permanentAddress as string) ?? "",
-          bloodGroup: (user.bloodGroup as string) ?? "",
-        });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load staff account" }))
       .finally(() => setLoaded(true));
@@ -130,8 +98,6 @@ export default function EditStaffPage() {
           phone: phone.trim(),
           ...(role === "HOD" ? { department } : {}),
           ...(role === "COLLEGE_STAFF" ? { designation } : {}),
-          ...personalDetails,
-          academicProfile,
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
         }),
       });
@@ -141,7 +107,7 @@ export default function EditStaffPage() {
         return;
       }
       toast({ variant: "success", title: "Staff account updated" });
-      router.push("/principal/staff");
+      router.push(`/principal/staff/${uid}`);
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
     } finally {
@@ -152,9 +118,9 @@ export default function EditStaffPage() {
   if (!loaded || !role) {
     return (
       <div className="max-w-xl space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => router.push("/principal/staff")}>
+        <Button variant="ghost" size="sm" onClick={() => router.push(`/principal/staff/${uid}`)}>
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Staff
+          Back
         </Button>
         <PageHeader title="Edit Staff Member" description="Loading…" />
       </div>
@@ -163,11 +129,11 @@ export default function EditStaffPage() {
 
   return (
     <div className="max-w-xl space-y-4">
-      <Button variant="ghost" size="sm" onClick={() => router.push("/principal/staff")}>
+      <Button variant="ghost" size="sm" onClick={() => router.push(`/principal/staff/${uid}`)}>
         <ArrowLeft className="h-4 w-4 mr-1" />
-        Back to Staff
+        Back
       </Button>
-      <PageHeader title={`Edit ${ROLE_LABELS[role]}`} description="Update this staff member's account and profile details" />
+      <PageHeader title={`Edit ${ROLE_LABELS[role]}`} description="Update this staff member's account details" />
 
       <Card>
         <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
@@ -185,7 +151,7 @@ export default function EditStaffPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+                  <Input type="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
                 </div>
               </div>
             </div>
@@ -223,30 +189,10 @@ export default function EditStaffPage() {
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => router.push(`/principal/staff/${uid}`)}>Cancel</Button>
               <Button type="submit" loading={saving} disabled={!isValid}>Save Changes</Button>
             </div>
           </form>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
-        <CardContent>
-          <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-        </CardContent>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-        <CardContent>
-          <AcademicProfileFields
-            value={academicProfile}
-            onChange={setAcademicProfile}
-            includeTeachingAssignment={false}
-            collegeType={collegeType}
-            hideFinancialModule
-          />
         </CardContent>
       </Card>
     </div>

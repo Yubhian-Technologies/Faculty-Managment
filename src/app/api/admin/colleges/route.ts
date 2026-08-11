@@ -5,6 +5,25 @@ import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { College, CollegeType } from "@/types";
 
+function isValidLatLng(latitude: unknown, longitude: unknown): boolean {
+  return typeof latitude === "number" && latitude >= -90 && latitude <= 90
+    && typeof longitude === "number" && longitude >= -180 && longitude <= 180;
+}
+
+function isValidCampusLocation(campusLocation: College["campusLocation"]): boolean {
+  if (!campusLocation) return true;
+  if (campusLocation.shape === "circle") {
+    return isValidLatLng(campusLocation.latitude, campusLocation.longitude)
+      && typeof campusLocation.radiusMeters === "number" && campusLocation.radiusMeters > 0;
+  }
+  if (campusLocation.shape === "polygon") {
+    return Array.isArray(campusLocation.points)
+      && campusLocation.points.length >= 3
+      && campusLocation.points.every((p) => isValidLatLng(p.latitude, p.longitude));
+  }
+  return false;
+}
+
 const COLLEGE_TYPES: CollegeType[] = ["ENGINEERING", "SCHOOL", "DENTAL", "PHARMACY", "POLYTECHNIC", "DEGREE"];
 
 export async function GET(request: Request) {
@@ -55,8 +74,8 @@ export async function POST(request: Request) {
     if (!name || String(name).trim().length < 2) {
       return NextResponse.json({ error: "College name is required" }, { status: 400 });
     }
-    if (type !== undefined && !COLLEGE_TYPES.includes(type)) {
-      return NextResponse.json({ error: "Invalid college type" }, { status: 400 });
+    if (!type || !COLLEGE_TYPES.includes(type)) {
+      return NextResponse.json({ error: "College type is required" }, { status: 400 });
     }
 
     // Administration uses their own locationId; Super Admin must supply one
@@ -76,7 +95,7 @@ export async function POST(request: Request) {
     await db.collection("colleges").doc(collegeId).set({
       name: String(name).trim(),
       locationId,
-      ...(type ? { type } : {}),
+      type,
       address: address ?? "",
       contactEmail: contactEmail ?? "",
       contactPhone: contactPhone ?? "",
@@ -130,7 +149,11 @@ export async function DELETE(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await requireSuperAdmin();
+    const { verifySession } = await import("@/lib/auth/verifySession");
+    const session = await verifySession();
+    if (!session || !["SUPER_ADMIN", "ADMINISTRATION"].includes(session.role)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const body = (await request.json()) as {
       collegeId: string;
@@ -140,8 +163,16 @@ export async function PATCH(request: Request) {
       address?: string;
       contactEmail?: string;
       contactPhone?: string;
+      campusLocation?: College["campusLocation"] | null;
     };
-    const { collegeId, isActive, name, type, address, contactEmail, contactPhone } = body;
+    const { collegeId, isActive, name, type, address, contactEmail, contactPhone, campusLocation } = body;
+
+    // The campus geofence gates a security-relevant check (self-attendance
+    // location verification) - Super Admin only, never Administration, even
+    // though Administration can edit everything else about their own colleges.
+    if (campusLocation !== undefined && session.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Only Super Admin can set the campus location" }, { status: 401 });
+    }
 
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
@@ -154,6 +185,24 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Invalid college type" }, { status: 400 });
     }
 
+    const db = getAdminDb();
+
+    // Administration may only edit colleges within their own location, and cannot
+    // (de)activate them - that stays a Super Admin-only power.
+    if (session.role === "ADMINISTRATION") {
+      if (isActive !== undefined) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const collegeSnap = await db.collection("colleges").doc(collegeId).get();
+      if (!collegeSnap.exists || collegeSnap.data()?.locationId !== session.locationId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
+
+    if (campusLocation && !isValidCampusLocation(campusLocation)) {
+      return NextResponse.json({ error: "Invalid campus location" }, { status: 400 });
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (isActive !== undefined) updates.isActive = isActive;
     if (name !== undefined) updates.name = String(name).trim();
@@ -161,8 +210,8 @@ export async function PATCH(request: Request) {
     if (address !== undefined) updates.address = address;
     if (contactEmail !== undefined) updates.contactEmail = contactEmail;
     if (contactPhone !== undefined) updates.contactPhone = contactPhone;
+    if (campusLocation !== undefined) updates.campusLocation = campusLocation;
 
-    const db = getAdminDb();
     await db.collection("colleges").doc(collegeId).update(updates);
 
     return NextResponse.json({ ok: true });

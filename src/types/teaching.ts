@@ -23,6 +23,11 @@ export interface Subject {
   courseName?: string;
   year?: number;               // academic year within the course (1..course.durationYears) - common to all sections of that year
   semester?: number;           // semester-scoped subjects only
+  // The calendar academic session this subject entry belongs to (e.g.
+  // "2026-27") - not the same as `year` above. Set by the Dean when creating
+  // a subject (see dean/subjects/new/page.tsx); optional/absent on subjects
+  // created before this field existed or via the HOD's own Subjects page.
+  academicYear?: string;
   name: string;
   code: string;
   hoursPerWeek: number;
@@ -76,6 +81,44 @@ export interface TeachingAssignment {
   assignmentSemester?: string;
   passPercentage?: number;
   studentFeedback?: number;   // average student feedback rating for this teaching period, as a %
+}
+
+// ─── Faculty Assignment Request ────────────────────────────────────────────────
+// When an HOD's own/managed/feeder faculty pool has nobody free for a subject on
+// one of their sections, they can ask a different, unrelated department to lend
+// a faculty member instead of assigning one directly (see college/
+// faculty-assignment-requests/route.ts). The target department's HOD picks one
+// of their own faculty to fulfill it, which creates the actual TeachingAssignment
+// (still filed under the requesting section's own department) - periods for it
+// are then picked the normal way, via the Timetable page's "Add a subject".
+
+export type FacultyAssignmentRequestStatus = "PENDING" | "ALLOCATED" | "DECLINED";
+
+export interface FacultyAssignmentRequest {
+  id: string;
+  collegeId: string;
+  courseId: string;
+  courseName: string;
+  year: number;
+  sectionId: string;
+  sectionName: string;
+  requestingDepartment: string;   // the section's own department - who this request is for
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  hoursPerWeek: number;
+  targetDepartmentId: string;     // the department being asked to lend a faculty member
+  targetDepartmentName: string;
+  requestedBy: string;            // uid
+  requestedByName: string;
+  status: FacultyAssignmentRequestStatus;
+  allocatedFacultyId?: string;
+  allocatedFacultyName?: string;
+  allocatedBy?: string;           // uid of the target department's HOD who fulfilled it
+  teachingAssignmentId?: string;  // the TeachingAssignment created once allocated
+  declineReason?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 // ─── Timetable Slot ───────────────────────────────────────────────────────────

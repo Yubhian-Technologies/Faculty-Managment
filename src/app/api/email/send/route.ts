@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       if (body.pdfBase64) {
         attachments = [{ filename: "appointment-letter.pdf", content: Buffer.from(body.pdfBase64, "base64") }];
       } else {
-        const letterHtml = getAppointmentLetterHTML(body.data as Parameters<typeof getAppointmentLetterHTML>[0]);
+        const letterHtml = getAppointmentLetterHTML(body.data as unknown as Parameters<typeof getAppointmentLetterHTML>[0]);
         attachments = [{ filename: "appointment-letter.html", content: Buffer.from(letterHtml, "utf8") }];
       }
     } else {

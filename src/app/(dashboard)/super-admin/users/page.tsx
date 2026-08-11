@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, UserX, UserCheck, Pencil, KeyRound, Trash2, Globe, FileDown } from "lucide-react";
+import { UserPlus, UserX, UserCheck, Eye, KeyRound, Trash2, Globe, FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -145,7 +145,15 @@ export default function UsersPage() {
     setDownloadingResumeUid(user.uid);
     try {
       const collegeName = colleges.find((c) => c.id === user.collegeId)?.name ?? "";
-      await downloadResumePdf({ ...user, collegeName }, (user.employeeId as string) || (user.name as string));
+      let researchPublications: unknown[] = [];
+      if (user.collegeId) {
+        try {
+          const pubRes = await fetch(`/api/college/publications?collegeId=${encodeURIComponent(user.collegeId)}&uid=${encodeURIComponent(user.uid)}`);
+          const pubData = await pubRes.json() as { publications?: unknown[] };
+          researchPublications = pubData.publications ?? [];
+        } catch { /* non-critical - resume falls back to self-reported publications, if any */ }
+      }
+      await downloadResumePdf({ ...user, researchPublications, collegeName }, (user.employeeId as string) || (user.name as string));
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
     } finally {
@@ -235,15 +243,15 @@ export default function UsersPage() {
         const isCollegeScoped = !!(row.collegeId as string);
         const isLocationScoped = !isCollegeScoped && !!(row.locationId as string);
         const canEdit = PHOTO_EDITABLE_ROLES.includes(row.role);
-        const editHref = `/super-admin/users/${row.uid}/edit?role=${row.role}` +
+        const editHref = `/super-admin/users/${row.uid}?role=${row.role}` +
           (row.collegeId ? `&collegeId=${row.collegeId}` : "") +
           (row.locationId ? `&locationId=${row.locationId}` : "");
         return (
           <div className="flex items-center gap-1 flex-wrap">
             {canEdit && (
               <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(editHref); }}>
-                <Pencil className="h-3.5 w-3.5" />
-                <span className="ml-1 hidden lg:inline">Edit</span>
+                <Eye className="h-3.5 w-3.5" />
+                <span className="ml-1 hidden lg:inline">{row.role === "PRINCIPAL" ? "View" : "Edit"}</span>
               </Button>
             )}
             <Button

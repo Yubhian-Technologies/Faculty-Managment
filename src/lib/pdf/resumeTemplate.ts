@@ -93,7 +93,9 @@ interface FacultyProfileFieldsLike {
   highestQualification?: string;
   ugDetails?: DegreeDetail;
   pgDetails?: DegreeDetail;
+  additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
+  additionalPhdDetails?: DegreeDetail[];
   phdStatus?: string;
   phdMode?: string;
   phdSupervisorName?: string;
@@ -145,6 +147,11 @@ export interface ResumeData {
   name: string;
   role?: string;
   designation?: string;
+  /** R&D-managed publication records (see /api/college/publications) - the
+   *  caller fetches these itself and passes them in, since this is the
+   *  authoritative publication list; ap.publications below is a legacy
+   *  self-reported fallback kept only for records this was never fetched for. */
+  researchPublications?: Publication[];
   department?: string;
   employeeId?: string;
   email?: string;
@@ -358,7 +365,9 @@ export function getResumeHTML(data: ResumeData): string {
   const highestQualification = ap?.highestQualification || data.qualification;
   const educationEntries =
     degreeEntry("Ph.D.", ap?.phdDetails, true) +
+    (ap?.additionalPhdDetails ?? []).map((d) => degreeEntry("Ph.D.", d, true)).join("") +
     degreeEntry("Postgraduate", ap?.pgDetails) +
+    (ap?.additionalPgDetails ?? []).map((d) => degreeEntry("Postgraduate", d)).join("") +
     degreeEntry("Undergraduate", ap?.ugDetails);
   const educationExtras = bullets([
     highestQualification && !ap?.phdDetails && !ap?.pgDetails && !ap?.ugDetails && `Highest Qualification: ${esc(highestQualification)}`,
@@ -423,8 +432,9 @@ export function getResumeHTML(data: ResumeData): string {
     (ap?.totalCitations || ap?.hIndex || ap?.i10Index) &&
       `Citations: ${ap?.totalCitations ?? 0} · h-Index: ${ap?.hIndex ?? 0} · i10-Index: ${ap?.i10Index ?? 0}`,
   ]);
-  const publicationEntries = ap?.publications?.length
-    ? ap.publications
+  const publicationList = data.researchPublications?.length ? data.researchPublications : ap?.publications;
+  const publicationEntries = publicationList?.length
+    ? publicationList
         .filter((p) => p.title)
         .map((p, i) => {
           const meta = [p.coAuthors, p.journalOrConference].filter(Boolean).join(" · ");

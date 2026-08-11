@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { SubjectType } from "@/types";
 import {
-  getHodDepartmentScope, canHodEditDepartment, editableDepartmentNames,
+  getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames, resolveSubjectDepartment,
 } from "@/lib/departments/scope";
 
 export async function GET(request: Request) {
@@ -15,32 +15,60 @@ export async function GET(request: Request) {
     const courseId = searchParams.get("courseId");
     const year = searchParams.get("year");
     const deptFilter = searchParams.get("department");
+    const academicYear = searchParams.get("academicYear");
 
     const db = getAdminDb();
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
 
     if (session.role === "HOD") {
-      // A parent HOD sees their own department's subjects and every
-      // sub-department's, since they manage those too. Firestore caps `in` at 30
-      // values, which comfortably covers a department's sub-departments.
+      // Viewing is bidirectional (unlike editing, which stays parent-only -
+      // see canHodEditDepartment in POST below): a parent HOD sees their own
+      // department's subjects and every sub-department's, AND a sub-HOD
+      // (e.g. BS-Chemistry, BS-Mathematics) sees their parent's (Basic
+      // Science) subjects too, since a sub-department's students are taught
+      // under the parent's program/courses rather than owning their own.
+      // Firestore caps `in` at 30 values, which comfortably covers a
+      // department's parent + siblings.
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const names = editableDepartmentNames(scope);
+      const relatedNames = await getRelatedDepartmentNames(db, session.collegeId, scope.departmentName);
+      // Also the grouped/managed branches - a Sub-HOD sees IT/CSE subjects they
+      // manage; a main HOD rolls up its sub-HODs' branches.
+      const names = Array.from(new Set([...relatedNames, ...scope.managedDepartmentNames]));
       if (names.length === 1) {
         query = query.where("department", "==", names[0]);
       } else if (names.length > 1) {
         query = query.where("department", "in", names.slice(0, 30));
       }
     } else if (deptFilter) {
-      query = query.where("department", "==", deptFilter);
+      // Same bidirectional visibility as the HOD branch above, for Dean/
+      // Principal/VP: browsing a fed department (e.g. IT) also shows its
+      // feeder's subjects (e.g. Basic Science's shared 1st-year catalog) -
+      // the `year` filter below keeps a feeder's subjects from leaking into
+      // a year it doesn't own.
+      const names = await getRelatedDepartmentNames(db, session.collegeId, deptFilter);
+      query = names.length > 1
+        ? query.where("department", "in", names.slice(0, 30))
+        : query.where("department", "==", deptFilter);
     }
 
     if (courseId) query = query.where("courseId", "==", courseId);
     if (year) query = query.where("year", "==", Number(year));
 
     const snap = await query.get();
-    const subjects = snap.docs
+    let subjects = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
+
+    // Dean-only filter (see dean/subjects/page.tsx) - a subject with no
+    // academicYear at all (created before this field existed, or via the
+    // HOD's own Subjects page, which doesn't set it) still matches any
+    // session rather than silently disappearing.
+    if (academicYear) {
+      subjects = subjects.filter((s) => {
+        const sy = (s as { academicYear?: string }).academicYear;
+        return !sy || sy === academicYear;
+      });
+    }
 
     return NextResponse.json({ subjects });
   } catch (err) {
@@ -70,6 +98,7 @@ export async function POST(request: Request) {
       credits?: number;
       type?: SubjectType;
       department?: string;
+      academicYear?: string;
     };
 
     if (!body.name?.trim() || !body.code?.trim()) {
@@ -117,14 +146,25 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "Course does not belong to your department" }, { status: 403 });
         }
       } else {
-        // Non-HOD callers (Principal/VP/Super Admin/Dean) aren't scoped to
-        // one department - derive the canonical department name from the
-        // course's own departmentId rather than trusting a client-supplied
-        // string, so it can never drift from what the course actually
-        // belongs to.
+        // Non-HOD callers (Principal/VP/Super Admin/Dean) aren't scoped to one
+        // department, so the client may name which one it's targeting - but
+        // only the course's own department or one of the departments it feeds
+        // (Department.secondaryDepartments) is accepted, so it can never drift
+        // to an unrelated department.
         const courseDeptSnap = await db.collection("colleges").doc(session.collegeId)
           .collection("departments").doc(course.departmentId).get();
-        dept = (courseDeptSnap.data() as { name?: string } | undefined)?.name ?? "";
+        const courseDept = courseDeptSnap.data() as { name?: string; secondaryDepartments?: string[] } | undefined;
+        const courseDeptName = courseDept?.name ?? "";
+        const requestedDept = body.department?.trim() || courseDeptName;
+        if (requestedDept !== courseDeptName && !(courseDept?.secondaryDepartments ?? []).includes(requestedDept)) {
+          return NextResponse.json({ error: "That department doesn't offer this course" }, { status: 403 });
+        }
+        // A fed department's reserved year (e.g. any secondary department's
+        // 1st year, when Basic Science reserves year 1 via assignedYears)
+        // files under the feeder instead, so every fed department reads from
+        // one shared 1st-year list; other years (2nd year onward) stay filed
+        // under the department actually selected (IT for IT, CS for CS, ...).
+        dept = await resolveSubjectDepartment(db, session.collegeId, requestedDept, Number(year));
       }
 
       const ref = await db
@@ -144,6 +184,7 @@ export async function POST(request: Request) {
           totalHoursPerSemester: body.totalHoursPerSemester != null ? Number(body.totalHoursPerSemester) : null,
           credits: body.credits != null ? Number(body.credits) : 0,
           type: body.type ?? "THEORY",
+          ...(body.academicYear ? { academicYear: body.academicYear } : {}),
           isActive: true,
           createdAt: now,
           updatedAt: now,

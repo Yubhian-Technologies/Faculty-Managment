@@ -3,10 +3,11 @@
  * old "Technical" Designation codes (colleges/{id}/facultyMembers,
  * designation in LAB_ASSISTANT/PROGRAMMER/SYSTEM_ADMINISTRATOR/
  * NETWORK_ENGINEER) into a Supporting Staff record (colleges/{id}/
- * supportingStaff) and flip its login's role from PANEL_MEMBER to
- * COLLEGE_STAFF, following the "Technical designations move to Supporting
- * Staff" change (see src/lib/designations/config.ts). This is the reverse
- * direction of scripts/migrate-technical-staff-to-faculty.mjs.
+ * supportingStaff, staffCategory "TECHNICAL" - HOD's department-scoped
+ * module) and flip its login's role from PANEL_MEMBER to COLLEGE_STAFF,
+ * following the "Technical designations move to Supporting Staff" change
+ * (see src/lib/designations/config.ts). This is the reverse direction of
+ * scripts/migrate-technical-staff-to-faculty.mjs.
  *
  * FacultyMember's old `technicalProfile` (skills/responsibilities/vendor
  * certifications) has no equivalent shape on SupportingStaffProfileFields'
@@ -64,7 +65,7 @@ const DIRECT_FIELDS = [
 ];
 
 function buildSupportingStaffPayload(faculty, now) {
-  const payload = { collegeId: faculty.collegeId, staffCategory: "NON_TECHNICAL" };
+  const payload = { collegeId: faculty.collegeId, staffCategory: "TECHNICAL" };
   for (const key of DIRECT_FIELDS) {
     if (faculty[key] !== undefined) payload[key] = faculty[key];
   }

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getPublicationsForUid } from "@/lib/firestore/publications";
 
 // MANAGEMENT is read-only - this route only implements GET.
 // Returns the first matching college-scoped user for a role (PRINCIPAL / VICE_PRINCIPAL / HOD),
@@ -27,8 +28,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
 
     const snap = await q.limit(1).get();
     const profile = snap.empty ? null : { uid: snap.docs[0].id, ...snap.docs[0].data() };
+    const publications = profile ? await getPublicationsForUid(db, collegeId, profile.uid) : [];
 
-    return NextResponse.json({ profile });
+    return NextResponse.json({ profile, publications });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -27,6 +27,7 @@ import {
   BookOpen,
   TrendingUp,
   GraduationCap,
+  Upload,
   AlertCircle,
   Wallet,
   UsersRound,
@@ -48,6 +49,7 @@ import {
   Landmark,
   AtSign,
   FlaskConical,
+  Send,
   type LucideProps,
 } from "lucide-react";
 
@@ -80,6 +82,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   BookOpen,
   TrendingUp,
   GraduationCap,
+  Upload,
   AlertCircle,
   Wallet,
   UsersRound,
@@ -101,6 +104,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   Landmark,
   AtSign,
   FlaskConical,
+  Send,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

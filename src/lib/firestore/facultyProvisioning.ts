@@ -6,6 +6,7 @@ export type ProvisionResult =
   | { status: "created"; facultyId: string; employeeId: string; generatedPassword: string }
   | { status: "already_exists"; facultyId: string }
   | { status: "no_email" }
+  | { status: "email_taken" }
   | { status: "not_found" };
 
 export function generatePassword(): string {
@@ -94,15 +95,14 @@ export async function provisionFacultyFromOffer(
     uid = await createFirebaseUser(collegeEmail, generatedPassword, name);
   } catch (err) {
     if (err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists") {
-      const sysSnap = await db.collection("systemUsers").where("email", "==", collegeEmail).limit(1).get();
-      if (sysSnap.empty) {
-        console.warn("[facultyProvisioning] email already exists but no systemUsers doc found:", collegeEmail);
-        return { status: "no_email" };
-      }
-      uid = sysSnap.docs[0].id;
-    } else {
-      throw err;
+      // The existingFaculty check above already returned "already_exists" if a
+      // facultyMembers doc for this candidate exists — reaching here means no
+      // such doc exists yet, so any systemUsers match on this email belongs to
+      // a different person. Don't silently hijack their account; let the
+      // caller fall back to an alternate email instead.
+      return { status: "email_taken" };
     }
+    throw err;
   }
 
   const employeeId = await generateEmployeeId(db, collegeId);

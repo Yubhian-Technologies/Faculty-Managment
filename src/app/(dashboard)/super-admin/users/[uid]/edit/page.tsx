@@ -2,20 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AcademicProfileFields } from "@/components/faculty/AcademicProfileFields";
-import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
-import { toDateInputValue } from "@/lib/utils";
 import { ROLE_LABELS, ROLE_SCOPE } from "@/types";
-import type { FacultyProfileFields, UserRole, Religion, Caste, College, CollegeType } from "@/types";
+import type { FacultyProfileFields, UserRole } from "@/types";
 
 // The 6 roles Super Admin directly administers. Scope (COLLEGE/LOCATION/GLOBAL) is
 // read from ROLE_SCOPE - a role's tenancy tier, not something re-declared here -
@@ -40,9 +39,11 @@ export default function EditUserPage() {
   const isEditableRole = roleParam !== "" && SUPER_ADMIN_EDITABLE_ROLES.includes(roleParam);
   const roleParamScope = isEditableRole ? ROLE_SCOPE[roleParam as UserRole] : undefined;
 
-  // College-scoped roles have a full edit form; Location/Global-scoped roles
-  // (Administration/Accounts, Management/Finance/Purchase) only get the photo and
-  // Module 6 - Others (no PATCH route exists for their other fields).
+  // College-scoped roles (PRINCIPAL) have this account-details form plus a
+  // module hub at /super-admin/users/[uid] for Personal Details/Academic
+  // Profile; Location/Global-scoped roles (Administration/Accounts,
+  // Management/Finance/Purchase) only get the photo and Module 6 - Others
+  // here (no PATCH route exists for their other fields).
   const isCollegeScoped = roleParamScope === "COLLEGE" || (!roleParam && !!collegeId);
 
   const [loading, setLoading] = useState(true);
@@ -55,16 +56,6 @@ export default function EditUserPage() {
   const [role, setRole] = useState<UserRole>(roleParam || "PRINCIPAL");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
-  const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
-  const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
-
-  useEffect(() => {
-    if (!collegeId) return;
-    fetch("/api/admin/colleges")
-      .then((r) => r.json() as Promise<{ colleges?: College[] }>)
-      .then((d) => setCollegeType(d.colleges?.find((c) => c.id === collegeId)?.type))
-      .catch(() => {});
-  }, [collegeId]);
 
   useEffect(() => {
     if (isCollegeScoped) {
@@ -89,33 +80,6 @@ export default function EditUserPage() {
           setPhone((u.phone as string) ?? "");
           setRole((u.role as UserRole) ?? "PRINCIPAL");
           setPhotoUrl((u.profilePhotoUrl as string) || undefined);
-          setAcademicProfile((u.academicProfile as Partial<FacultyProfileFields>) ?? {});
-          setPersonalDetails({
-            gender: (u.gender as string) ?? "",
-            dateOfBirth: toDateInputValue(u.dateOfBirth as never),
-            legalName: (u.legalName as string) ?? "",
-            fatherName: (u.fatherName as string) ?? "",
-            motherName: (u.motherName as string) ?? "",
-            religion: u.religion as Religion | undefined,
-            caste: u.caste as Caste | undefined,
-            subCaste: (u.subCaste as string) ?? "",
-            aadharNo: (u.aadharNo as string) ?? "",
-            panNo: (u.panNo as string) ?? "",
-            passportNumber: (u.passportNumber as string) ?? "",
-            emergencyContactName: (u.emergencyContactName as string) ?? "",
-            emergencyContactPhone: (u.emergencyContactPhone as string) ?? "",
-            ratificationStatus: (u.ratificationStatus as string) ?? "",
-            ratificationDate: toDateInputValue(u.ratificationDate as never),
-            maritalStatus: (u.maritalStatus as string) ?? "",
-            spouseName: (u.spouseName as string) ?? "",
-            numberOfChildren: u.numberOfChildren as number | undefined,
-            referral: (u.referral as string) ?? "",
-            nativePlace: (u.nativePlace as string) ?? "",
-            temporaryAddress: (u.temporaryAddress as string) ?? "",
-            permanentSameAsTemporary: (u.permanentSameAsTemporary as boolean) ?? false,
-            permanentAddress: (u.permanentAddress as string) ?? "",
-            bloodGroup: (u.bloodGroup as string) ?? "",
-          });
         })
         .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
         .finally(() => setLoading(false));
@@ -250,13 +214,11 @@ export default function EditUserPage() {
           employeeId,
           phone,
           role,
-          ...personalDetails,
-          academicProfile,
         }),
       });
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "User updated" });
-      router.push("/super-admin/users");
+      router.push(`/super-admin/users/${uid}?role=${role}&collegeId=${collegeId}`);
     } catch {
       toast({ variant: "destructive", title: "Failed to update user" });
     } finally {
@@ -278,8 +240,14 @@ export default function EditUserPage() {
 
       {isCollegeScoped ? (
         <>
+          <Button variant="ghost" size="sm" className="mb-4" asChild>
+            <Link href={`/super-admin/users/${uid}?role=${role}&collegeId=${collegeId}`}>
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back to Profile
+            </Link>
+          </Button>
           <Card>
-            <CardHeader><CardTitle className="text-base">User Details</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
@@ -294,7 +262,7 @@ export default function EditUserPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Phone</Label>
-                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
+                      <Input type="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone / WhatsApp" />
                     </div>
                   </div>
                 </div>
@@ -324,6 +292,10 @@ export default function EditUserPage() {
                   </Select>
                 </div>
 
+                <p className="text-xs text-muted-foreground">
+                  Personal Details and Academic Profile are edited one section at a time from the profile view - use &quot;Back to Profile&quot; above.
+                </p>
+
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
                   <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
                   <Button type="submit" loading={saving}>Save Changes</Button>
@@ -331,38 +303,6 @@ export default function EditUserPage() {
               </form>
             </CardContent>
           </Card>
-
-          <Card className="mt-6">
-            <CardHeader><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
-            <CardContent>
-              <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />
-            </CardContent>
-          </Card>
-
-          {role === "PRINCIPAL" ? (
-            <Card className="mt-6">
-              <CardHeader><CardTitle className="text-base">Academic Profile</CardTitle></CardHeader>
-              <CardContent>
-                <AcademicProfileFields value={academicProfile} onChange={setAcademicProfile} includeTeachingAssignment={false} collegeType={collegeType} />
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="mt-6">
-              <CardHeader><CardTitle className="text-base">Module 6 - Others</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <Label>Other Information</Label>
-                  <Textarea
-                    value={academicProfile.otherInformation ?? ""}
-                    onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
-                    placeholder="Anything not covered above - add it here"
-                    rows={4}
-                  />
-                  <p className="text-xs text-muted-foreground">Saved together with &quot;Save Changes&quot; above.</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </>
       ) : (
         <>

@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       html = getOfferLetterHTML(body.data as unknown as Parameters<typeof getOfferLetterHTML>[0]);
     } else if (body.type === "APPOINTMENT_LETTER") {
       html = getAppointmentLetterHTML(
-        body.data as Parameters<typeof getAppointmentLetterHTML>[0]
+        body.data as unknown as Parameters<typeof getAppointmentLetterHTML>[0]
       );
     } else if (body.type === "FINANCE_REPORT") {
       html = getFinanceReportHTML(body.data as Parameters<typeof getFinanceReportHTML>[0]);

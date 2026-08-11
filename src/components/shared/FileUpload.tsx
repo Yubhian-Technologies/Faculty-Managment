@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import { Upload, X, FileText } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface FileUploadProps {
@@ -99,17 +98,6 @@ export function FileUpload({
           View current file
         </a>
       )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-full sm:w-auto"
-        onClick={() => inputRef.current?.click()}
-        disabled={disabled}
-      >
-        <Upload className="h-4 w-4 mr-2" />
-        {label}
-      </Button>
     </div>
   );
 }

@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { KeyRound, UserPlus, Clock, PlayCircle, CheckCircle2 } from "lucide-react";
+import { KeyRound, UserPlus, Clock, PlayCircle, CheckCircle2, Dices } from "lucide-react";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
 import type { FacultyAccountRequest, FacultyAccountRequestStatus } from "@/types";
 
@@ -22,11 +24,20 @@ const STATUS_BADGE: Record<FacultyAccountRequestStatus, string> = {
   COMPLETED: "text-muted-foreground",
 };
 
+const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
+
+function suggestPassword(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(9));
+  return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, "").slice(0, 12);
+}
+
 export default function WebmasterCredentialRequestsPage() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string; employeeId?: string } | null>(null);
+  const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string; employeeId?: string; email?: string } | null>(null);
+  const [passwordDialogRequest, setPasswordDialogRequest] = useState<RequestRow | null>(null);
+  const [passwordInput, setPasswordInput] = useState("");
 
   async function load() {
     try {
@@ -58,19 +69,19 @@ export default function WebmasterCredentialRequestsPage() {
     };
   }, []);
 
-  async function transition(request: RequestRow, action: "START_REVIEW" | "CREATE_CREDENTIALS" | "COMPLETE") {
+  async function transition(request: RequestRow, action: "START_REVIEW" | "CREATE_CREDENTIALS" | "COMPLETE", password?: string) {
     setBusyId(request.id);
     try {
       const res = await fetch(`/api/college/faculty-account-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, ...(password ? { password } : {}) }),
       });
-      const data = await res.json() as { ok?: boolean; employeeId?: string; generatedPassword?: string; error?: string };
+      const data = await res.json() as { ok?: boolean; employeeId?: string; generatedPassword?: string; assignedEmail?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
       if (data.generatedPassword) {
         toast({ variant: "success", title: "Account created", description: `Employee ID: ${data.employeeId ?? ""}` });
-        setRevealedPassword({ name: request.candidateName, password: data.generatedPassword, employeeId: data.employeeId });
+        setRevealedPassword({ name: request.candidateName, password: data.generatedPassword, employeeId: data.employeeId, email: data.assignedEmail });
       } else if (action === "COMPLETE") {
         toast({ variant: "success", title: "Request completed", description: "Office has been notified." });
       } else {
@@ -82,6 +93,23 @@ export default function WebmasterCredentialRequestsPage() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  function openPasswordDialog(request: RequestRow) {
+    setPasswordInput(suggestPassword());
+    setPasswordDialogRequest(request);
+  }
+
+  async function submitCreateCredentials() {
+    if (!passwordDialogRequest) return;
+    if (passwordInput.length < MIN_PASSWORD_LENGTH) {
+      toast({ variant: "destructive", title: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+      return;
+    }
+    const request = passwordDialogRequest;
+    const password = passwordInput;
+    setPasswordDialogRequest(null);
+    await transition(request, "CREATE_CREDENTIALS", password);
   }
 
   const activeRequests = requests.filter((r) => r.status !== "COMPLETED");
@@ -109,10 +137,13 @@ export default function WebmasterCredentialRequestsPage() {
                   <div>
                     <p className="font-medium text-sm">{request.candidateName}</p>
                     <p className="text-xs text-muted-foreground">{request.designation} · {request.department}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Official email: {request.officialEmail}</p>
-                    {(request.specialization || request.qualification) && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Recommended: {request.officialEmail}
+                      {request.assignedEmail && request.assignedEmail !== request.officialEmail ? ` — assigned: ${request.assignedEmail}` : ""}
+                    </p>
+                    {(request.alternateEmail1 || request.alternateEmail2) && (
                       <p className="text-xs text-muted-foreground">
-                        {[request.qualification, request.specialization].filter(Boolean).join(" · ")}
+                        Alternates: {[request.alternateEmail1, request.alternateEmail2].filter(Boolean).join(", ")}
                       </p>
                     )}
                   </div>
@@ -137,7 +168,7 @@ export default function WebmasterCredentialRequestsPage() {
                   </Button>
                 )}
                 {request.status === "IN_PROGRESS" && (
-                  <Button size="sm" loading={busyId === request.id} onClick={() => void transition(request, "CREATE_CREDENTIALS")}>
+                  <Button size="sm" loading={busyId === request.id} onClick={() => openPasswordDialog(request)}>
                     <UserPlus className="h-3.5 w-3.5 mr-1.5" />
                     Create Credentials
                   </Button>
@@ -154,15 +185,52 @@ export default function WebmasterCredentialRequestsPage() {
         </div>
       )}
 
+      <Dialog open={!!passwordDialogRequest} onOpenChange={(o) => { if (!o) setPasswordDialogRequest(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set Login Password</DialogTitle>
+            <DialogDescription>
+              Choose the password for <strong>{passwordDialogRequest?.candidateName}</strong>&rsquo;s login
+              ({passwordDialogRequest?.assignedEmail || passwordDialogRequest?.officialEmail}), or use the suggested one below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Password</Label>
+            <div className="flex gap-2">
+              <Input
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                className="font-mono"
+              />
+              <Button type="button" variant="outline" size="icon" title="Suggest a random password" onClick={() => setPasswordInput(suggestPassword())}>
+                <Dices className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasswordDialogRequest(null)} disabled={busyId === passwordDialogRequest?.id}>Cancel</Button>
+            <Button onClick={() => void submitCreateCredentials()} loading={busyId === passwordDialogRequest?.id}>Create Credentials</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!revealedPassword} onOpenChange={(o) => { if (!o) setRevealedPassword(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Account Created</DialogTitle>
             <DialogDescription>
               A login was created for <strong>{revealedPassword?.name}</strong>
-              {revealedPassword?.employeeId ? ` (${revealedPassword.employeeId})` : ""}. Share this temporary password with them securely - it will not be shown again.
+              {revealedPassword?.employeeId ? ` (${revealedPassword.employeeId})` : ""}. College Office can also reveal this
+              once on their own Faculty Credentials page - it will not be shown again after that.
             </DialogDescription>
           </DialogHeader>
+          {revealedPassword?.email && (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+              <p className="text-xs text-muted-foreground">Email</p>
+              <p className="font-mono select-all">{revealedPassword.email}</p>
+            </div>
+          )}
           <div className="rounded-lg border bg-muted/40 p-3 font-mono text-sm text-center select-all">
             {revealedPassword?.password}
           </div>

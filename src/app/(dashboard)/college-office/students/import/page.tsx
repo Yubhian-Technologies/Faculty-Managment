@@ -21,15 +21,15 @@ const LOCKED_KEYS = ["department", "section", "year"];
 // other required column is required so a single file can cover the whole
 // college's intake, across every department, in one go.
 
+// The Office only knows a fresh student's basic details and which branch
+// (department) they're admitted into - not their roll number or section. Those
+// are assigned later by the department (the sub-HOD divides students into
+// sections; roll numbers follow), so they're deliberately NOT columns here.
 const COLUMNS = [
   { key: "sno",             label: "S.No",             required: false, sample: "1" },
-  { key: "rollNumber",      label: "Roll Number",      required: true,  sample: "21A91A0501", aliases: ["Roll No", "Roll No.", "Roll Num"] },
   { key: "name",            label: "Name",             required: true,  sample: "P. Sai Kumar", aliases: ["Student Name", "Full Name"] },
-  { key: "status",          label: "Status",           required: true,  sample: "REGULAR" },
-  { key: "department",      label: "Department",       required: true,  sample: "BS", aliases: ["Dept", "Department Code"] },
-  { key: "section",         label: "Section",          required: true,  sample: "A" },
+  { key: "department",      label: "Department",       required: true,  sample: "IT", aliases: ["Dept", "Department Code", "Branch"] },
   { key: "year",            label: "Academic Year",    required: true,  sample: "1", aliases: ["Year"] },
-  { key: "secondaryDepartment", label: "Secondary Department", required: false, sample: "CSE", aliases: ["Registered Branch", "Allotted Branch", "Target Department", "Secondary Dept"] },
   { key: "gender",          label: "Gender",           required: false, sample: "Male" },
   { key: "dateOfBirth",     label: "Date of Birth (YYYY-MM-DD)", required: false, sample: "2004-08-12", aliases: ["DOB", "Date of Birth"] },
   { key: "guardianContact", label: "Guardian Contact", required: false, sample: "9876543210", aliases: ["Parent Contact", "Guardian Phone", "Parent Phone"] },
@@ -37,11 +37,10 @@ const COLUMNS = [
 ];
 
 const HINTS = [
-  "Status: REGULAR or DETAINED",
-  "Department and Section must already exist (create the section first under Sections)",
-  "Department and Secondary Department accept either the full name (e.g. \"Computer Science\") or the short Code (e.g. \"CSE\")",
-  "A single file may mix multiple departments, sections, and years",
-  "Secondary Department is only for 1st-years who've pre-registered a core branch (e.g. CSE) while sitting under Basic Science - leave blank otherwise. That department's HOD gets view-only access until the student is promoted into it.",
+  "Only the basic details you know at admission are needed - Name, Department (branch) and Academic Year are required; Gender, Date of Birth, Guardian Contact and Email are optional.",
+  "Roll number and section are NOT collected here - the department assigns them later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\".",
+  "Department accepts either the full name (e.g. \"Information Technology\") or the short Code (e.g. \"IT\")",
+  "A single file may mix multiple departments and years",
 ];
 
 type ParsedRow = Record<string, string>;
@@ -56,9 +55,6 @@ export default function OfficeStudentImportPage() {
   const lockedDepartment = searchParams.get("department") ?? "";
   const lockedYear = searchParams.get("year") ?? "";
   const isLocked = !!(sectionId && lockedSection && lockedDepartment && lockedYear);
-  // The College Office section pages this used to return to have been removed,
-  // so Back goes to the dashboard. Nothing links here any more - see the note
-  // in the page header below.
   const backHref = "/college-office";
 
   const columns = isLocked ? COLUMNS.filter((c) => !LOCKED_KEYS.includes(c.key)) : COLUMNS;

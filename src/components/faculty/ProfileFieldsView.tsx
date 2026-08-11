@@ -1,66 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { ExternalLink } from "lucide-react";
 import {
   Section, SubLabel, Field, DegreeView, DocLink, QualificationsView,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { designationLabel } from "@/lib/designations/config";
+import { PublicationsSection } from "@/components/faculty/PublicationsModuleView";
 import {
   TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
 } from "@/types";
-import type { FacultyProfileFields, CollegeType } from "@/types";
+import type { FacultyProfileFields, CollegeType, ResearchPublication } from "@/types";
 
 interface Props {
   profile: Partial<FacultyProfileFields> | undefined;
   includeTeachingAssignment?: boolean;
   hideFinancialModule?: boolean;
   collegeType?: CollegeType;
-}
-
-const PUBS_PREVIEW = 3;
-
-function PublicationsList({ publications }: { publications: NonNullable<FacultyProfileFields["publications"]> }) {
-  const [expanded, setExpanded] = useState(false);
-  const sorted = [...publications].sort((a, b) => (b.publicationYear ?? 0) - (a.publicationYear ?? 0));
-  const visible = expanded ? sorted : sorted.slice(0, PUBS_PREVIEW);
-  const hidden = sorted.length - PUBS_PREVIEW;
-
-  return (
-    <div className="space-y-2">
-      {visible.map((pub, i) => (
-        <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
-          <Field label="Title" value={pub.title} />
-          <Field label="Co-Authors" value={pub.coAuthors} />
-          <Field label="Journal / Conference" value={pub.journalOrConference} />
-          <Field label="Year" value={pub.publicationYear} />
-          <Field label="Indexing" value={pub.indexing} />
-          {pub.driveLink && (
-            <div className="col-span-2 sm:col-span-5">
-              <a
-                href={pub.driveLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />View Publication
-              </a>
-            </div>
-          )}
-        </div>
-      ))}
-      {sorted.length > PUBS_PREVIEW && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="text-xs font-medium text-primary hover:underline mt-1"
-        >
-          {expanded ? "Show less" : `Show ${hidden} more`}
-        </button>
-      )}
-    </div>
-  );
+  // R&D-managed publication records for this person - the caller fetches
+  // these itself (source varies: /api/college/publications for college-scoped
+  // sessions, an embedded field for Management's separate API surface - see
+  // the two management/faculty pages). Undefined while still loading.
+  publications?: ResearchPublication[];
 }
 
 // ─── Per-module content (Modules 1-8, FacultyProfileFields) ────────────────────
@@ -86,7 +46,9 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
         <DegreeView label="Intermediate (12th)" degree={p.intermediateDetails} />
         <DegreeView label="UG" degree={p.ugDetails} />
         <DegreeView label="PG" degree={p.pgDetails} />
+        {(p.additionalPgDetails ?? []).map((d, i) => <DegreeView key={`pg-${i}`} label={`PG ${i + 2}`} degree={d} />)}
         <DegreeView label="PhD" degree={p.phdDetails} level="DOCTORAL" />
+        {(p.additionalPhdDetails ?? []).map((d, i) => <DegreeView key={`phd-${i}`} label={`PhD ${i + 2}`} degree={d} level="DOCTORAL" />)}
         <DegreeView label="Post-Doctoral" degree={p.postDoctoralDetails} />
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -174,37 +136,11 @@ export function ExperienceModule({ profile, includeTeachingAssignment = true }: 
   );
 }
 
-export function ResearchModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
-  const p = profile ?? {};
-  return (
-    <Section number={3} title="Research Publications">
-      <div className="space-y-2">
-        <SubLabel>Publications</SubLabel>
-        {(p.publications ?? []).length === 0
-          ? <p className="text-xs text-muted-foreground">None recorded.</p>
-          : <PublicationsList publications={p.publications!} />
-        }
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="First/Corresponding Author" value={p.publicationsFirstOrCorrespondingAuthor} />
-        <Field label="Q1 / IF>4.0" value={p.publicationsQ1OrHighImpact} />
-        <Field label="SCI/Scopus" value={p.sciScopusCount} />
-        <Field label="WoS (SCIE/ESCI)" value={p.wosCount} />
-        <Field label="Conference Papers" value={p.conferencePapersCount} />
-        <Field label="Book Chapters" value={p.bookChaptersCount} />
-        <Field label="Review Publications" value={p.reviewPublicationsCount} />
-        <Field label="Total Publications" value={p.totalPublications} />
-        <Field label="Total Citations" value={p.totalCitations} />
-        <Field label="H-Index" value={p.hIndex} />
-        <Field label="i10-Index" value={p.i10Index} />
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Google Scholar ID" value={p.googleScholarId} />
-        <Field label="Scopus Author ID" value={p.scopusAuthorId} />
-        <Field label="ORCID iD" value={p.orcidId} />
-      </div>
-    </Section>
-  );
+// Individual publication records are R&D-managed (see PublicationsModuleView) -
+// this just renders whatever list the caller already fetched from R&D's API
+// surface. `publications` is undefined while the caller is still loading it.
+export function ResearchModule({ profile, publications }: { profile: Partial<FacultyProfileFields> | undefined; publications?: ResearchPublication[] }) {
+  return <PublicationsSection publications={publications ?? null} academicProfile={profile} />;
 }
 
 export function GrantsModule({ profile }: { profile: Partial<FacultyProfileFields> | undefined }) {
@@ -417,12 +353,12 @@ export function OthersModule({ profile }: { profile: Partial<FacultyProfileField
 
 // Full scrolling view - all 7 modules stacked - kept for any caller that still
 // wants the single-page layout (e.g. printable exports).
-export function ProfileFieldsView({ profile, includeTeachingAssignment = true, hideFinancialModule = false, collegeType }: Props) {
+export function ProfileFieldsView({ profile, includeTeachingAssignment = true, hideFinancialModule = false, collegeType, publications }: Props) {
   return (
     <div className="space-y-5">
       <QualificationModule profile={profile} collegeType={collegeType} />
       <ExperienceModule profile={profile} includeTeachingAssignment={includeTeachingAssignment} />
-      <ResearchModule profile={profile} />
+      <ResearchModule profile={profile} publications={publications} />
       <GrantsModule profile={profile} />
       <MentorshipModule profile={profile} />
       {!hideFinancialModule && <FinancialModule profile={profile} />}

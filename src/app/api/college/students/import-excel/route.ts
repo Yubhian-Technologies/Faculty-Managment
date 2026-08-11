@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildStudentDoc, type StudentImportRow } from "@/lib/students/importRow";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Section } from "@/types";
 
@@ -83,7 +83,10 @@ function buildRelatedNamesResolver(
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    // Importing students is the College Office's responsibility only - no HOD,
+    // Principal, Vice Principal or Panel role may bulk-import. (Super Admin keeps
+    // access as the platform-wide override, consistent with every other route.)
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "SUPER_ADMIN");
     const body = (await request.json()) as { records: BulkImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
@@ -149,13 +152,19 @@ export async function POST(request: Request) {
     const relatedDepartmentNames = buildRelatedNamesResolver(departmentsSnap);
 
     const existingSnap = await db.collection("colleges").doc(collegeId).collection("students")
-      .select("rollNumber", "section", "year").get();
-    const existingRolls = new Set(
-      existingSnap.docs.map((d) => {
-        const s = d.data() as { rollNumber: string; section: string; year: number };
-        return `${s.rollNumber}::${s.section}::${s.year}`;
-      })
-    );
+      .select("rollNumber", "section", "year", "name", "department").get();
+    const existingRolls = new Set<string>();
+    // Office-imported students have no roll number yet, so they can't be
+    // de-duped by roll - key those (the section-less ones) by name+dept+year
+    // instead, so re-running the same file doesn't create duplicates.
+    const existingUnassignedNames = new Set<string>();
+    for (const d of existingSnap.docs) {
+      const s = d.data() as { rollNumber?: string; section?: string; year?: number; name?: string; department?: string };
+      existingRolls.add(`${s.rollNumber ?? ""}::${s.section ?? ""}::${s.year ?? 0}`);
+      if (!s.section) {
+        existingUnassignedNames.add(`${(s.name ?? "").trim().toLowerCase()}::${(s.department ?? "").toLowerCase()}::${s.year ?? 0}`);
+      }
+    }
 
     const now = new Date();
     const created: string[] = [];
@@ -167,10 +176,14 @@ export async function POST(request: Request) {
       const row = body.records[i];
       const rowNum = i + 2;
 
-      if (!row.rollNumber?.trim()) { failed.push({ row: rowNum, rollNumber: "-", error: "Roll Number is required" }); continue; }
-      if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Name is required" }); continue; }
-      if (!row.section?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Section is required" }); continue; }
-      if (!row.year) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Academic Year is required" }); continue; }
+      // Roll Number is required only for section-based (placed) rows - the
+      // Office's unassigned import doesn't collect it (checked in that path).
+      if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Name is required" }); continue; }
+      // Section may be blank for an "unassigned" import (a whole branch cohort
+      // loaded before its sections exist); such rows must instead name a
+      // Department. A row with neither can't be placed at all.
+      if (!row.section?.trim() && !row.department?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Section or Department is required" }); continue; }
+      if (!row.year) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Academic Year is required" }); continue; }
 
       // Department is optional at the row level (HOD's own template has no
       // such column at all) but, when present, both disambiguates the section
@@ -184,6 +197,48 @@ export async function POST(request: Request) {
           continue;
         }
       }
+
+      // Unassigned import: no section named, only a department. Create the
+      // student under that department with section "" for a sub-HOD to place
+      // into a section later (Distribute). Skips all the section-matching and
+      // cross-listing logic below, which only applies to placed students.
+      if (!row.section?.trim()) {
+        // departmentName is guaranteed here (the earlier guard rejects rows
+        // with neither section nor department).
+        if (hodScope && !canHodEditDepartment(hodScope, departmentName!)) {
+          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `${departmentName} is not yours or one you manage` });
+          continue;
+        }
+        // The Office doesn't know roll numbers yet, so they're optional here.
+        // De-dupe by roll when it's present, otherwise by name+dept+year so a
+        // re-run of the same roster doesn't duplicate roll-less students.
+        const roll = row.rollNumber?.trim() ?? "";
+        const nameKey = `${row.name.trim().toLowerCase()}::${departmentName!.toLowerCase()}::${Number(row.year)}`;
+        const rollKey = `${roll}::${""}::${Number(row.year)}`;
+        if (roll && existingRolls.has(rollKey)) {
+          failed.push({ row: rowNum, rollNumber: roll, error: "An unassigned student with this Roll Number already exists for this year" });
+          continue;
+        }
+        if (!roll && existingUnassignedNames.has(nameKey)) {
+          failed.push({ row: rowNum, rollNumber: "-", error: `"${row.name.trim()}" is already an unassigned ${departmentName} Year ${row.year} student` });
+          continue;
+        }
+        const docRef = studentsColl.doc();
+        batch.set(docRef, buildStudentDoc(
+          { collegeId, department: departmentName!, name: "", year: Number(row.year) },
+          { ...row, rollNumber: roll, secondaryDepartment: undefined },
+          now
+        ));
+        const history = departmentHistoryEntry(db, collegeId, docRef.id, departmentName!, "", Number(row.year), now);
+        batch.set(history.ref, history.data);
+        if (roll) existingRolls.add(rollKey); else existingUnassignedNames.add(nameKey);
+        created.push(roll || row.name.trim());
+        continue;
+      }
+
+      // Section-based (placed) rows still require a roll number - it's the
+      // per-section identity/de-dupe key the rest of the flow relies on.
+      if (!row.rollNumber?.trim()) { failed.push({ row: rowNum, rollNumber: "-", error: "Roll Number is required" }); continue; }
 
       // Resolved early (before section lookup) because it's also used to
       // pick between multiple same-named sections that only differ by which

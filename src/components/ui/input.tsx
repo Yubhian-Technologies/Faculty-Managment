@@ -4,14 +4,23 @@ import { cn, stripLeadingZeros } from "@/lib/utils";
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, onChange, ...props }, ref) => {
+  ({ className, type, onChange, onFocus, ...props }, ref) => {
     // Numeric fields across the app initialise to 0, so the box reads "0"
     // before anything is typed and the first keystroke appends to it ("0" +
-    // "5" = "05"). Handled here rather than at each call site because there
-    // are ~94 number inputs across ~46 files and every one of them renders
-    // through this component - a per-form fix would leave gaps and would not
-    // cover new forms. stripLeadingZeros is idempotent, so the call sites that
-    // already apply it themselves are unaffected.
+    // "5" = "05"). Two guards, because neither covers the problem alone:
+    //
+    //   - select-on-focus (below) makes the first digit replace the "0", but
+    //     only when focus arrives by keyboard - on a mouse click the following
+    //     mouseup collapses the selection to a caret - and it does nothing for
+    //     an edit made later in the field.
+    //   - stripping the leading zero on change catches every remaining route,
+    //     including click-then-type and mid-edit.
+    //
+    // Both live here rather than at the call sites: there are ~94 number
+    // inputs across ~46 files, all rendering through this component, so a
+    // per-form fix would leave gaps and would not cover new forms.
+    // stripLeadingZeros is idempotent, so the call sites that already apply it
+    // themselves are unaffected.
     //
     // The DOM node's value is rewritten before the handler runs so that the
     // correction sticks even when it produces no state change (typing "0" into
@@ -35,6 +44,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           className
         )}
         ref={ref}
+        onFocus={(e) => {
+          if (type === "number") e.target.select();
+          onFocus?.(e);
+        }}
         {...props}
       />
     );

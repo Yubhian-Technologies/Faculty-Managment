@@ -10,9 +10,10 @@ import type { EmploymentType, FacultyStatus, TrainingEntry, AwardEntry, Religion
 // Dental colleges, the Technical roles (Lab Assistant/Programmer/System
 // Administrator/Network Engineer) migrated back in from the Faculty module.
 
-export type SupportingStaffCategory = "NON_TECHNICAL";
+export type SupportingStaffCategory = "NON_TECHNICAL" | "TECHNICAL";
 export const STAFF_CATEGORY_LABELS: Record<SupportingStaffCategory, string> = {
   NON_TECHNICAL: "Non-Technical Staff",
+  TECHNICAL: "Technical Staff",
 };
 
 // Free text, not a closed enum - see src/lib/designations/config.ts for the
@@ -60,11 +61,13 @@ export const COMPUTER_SKILL_LABELS: Record<ComputerSkill, string> = {
   DOCUMENT_MANAGEMENT: "Document Management", OTHER: "Other",
 };
 
+
 export interface NonTechnicalProfile {
   responsibilities: NonTechnicalResponsibility[];
   otherResponsibility?: string;
   computerSkills: ComputerSkill[];
   otherComputerSkill?: string;
+  hardwareSkills?: string[]; // free-text, only captured for hardware-related designations
   typingSpeedWpm?: number;
   training: TrainingEntry[]; // ADMINISTRATIVE/ERP/OFFICE_AUTOMATION types apply here
   achievements: AwardEntry[];

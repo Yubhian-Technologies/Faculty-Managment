@@ -2,6 +2,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { LeaveBalance, LeaveTypeFull, EmployeeLeaveProfile, LeaveTypeCode, EffectiveLeaveCategory } from "@/types/leave";
 import { LEAVE_TYPE_SEED } from "./seedData";
 import { computeEffectiveCategory } from "./categoryEngine";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 
 // EL is the one leave type whose annual entitlement depends on the profile's
 // effective category (vacation/teaching staff: 6 days; non-vacation/
@@ -143,4 +144,37 @@ export async function releasePending(
     { collegeId, uid, leaveTypeCode, year, pending: Math.max(0, (data.pending ?? 0) - days), updatedAt: new Date() },
     { merge: true }
   );
+}
+
+// Balance is never reserved at submission (see applications/route.ts POST),
+// and insufficient balance never blocks approval either - days beyond what's
+// remaining are accepted and split off as Loss of Pay instead. If no balance
+// doc exists yet (e.g. first request of this type, or balances were reset),
+// entitled falls back to the profile's computed default - NOT zero, which was
+// an earlier bug: a missing doc isn't the same as zero balance. Shared by
+// every final-decision stage (HOD for standard types, Principal/Vice
+// Principal and Management for the PENDING_PRINCIPAL/PENDING_MANAGEMENT
+// stages) - see applications/[id]/route.ts and lib/leave/decideFinalStage.ts.
+export async function splitLeaveDays(
+  db: Firestore,
+  collegeId: string,
+  uid: string,
+  lt: LeaveTypeFull,
+  year: number,
+  days: number
+): Promise<{ withinBalance: number; lopDays: number }> {
+  const balances = await loadBalances(db, collegeId, uid, year);
+  const bal = balances.find((b) => b.leaveTypeCode === lt.code);
+  let entitled = bal?.entitled;
+  if (entitled === undefined) {
+    const [profileSnap, settings] = await Promise.all([
+      PROFILES_COL(collegeId, db).doc(uid).get(),
+      loadCollegeSettings(db, collegeId),
+    ]);
+    const profile = { id: profileSnap.id, ...profileSnap.data() } as EmployeeLeaveProfile;
+    entitled = computeEntitlement(lt, computeEffectiveCategory(profile, settings.newJoiningYears));
+  }
+  const remaining = Math.max(0, entitled - (bal?.used ?? 0));
+  const withinBalance = Math.min(days, remaining);
+  return { withinBalance, lopDays: days - withinBalance };
 }

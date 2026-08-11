@@ -341,6 +341,32 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   { key: "employmentType", label: "Employment Type", required: true, sample: "Regular", aliases: ["Employment", "Type of Employment"] },
   { key: "joiningDate",  label: "Date of Joining Institution (YYYY-MM-DD)", required: true, sample: "2020-06-01", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
   { key: "dateOfJoiningDepartment", label: "Date of Joining Department (YYYY-MM-DD)", required: false, sample: "", aliases: ["Department Joining Date"] },
+
+  // ─── Personal / statutory details (all optional) ──────────────────────────────
+  { key: "gender",            label: "Gender",                       required: false, sample: "Male" },
+  { key: "dateOfBirth",       label: "Date of Birth (YYYY-MM-DD)",   required: false, sample: "1990-05-15", aliases: ["DOB"] },
+  { key: "legalName",         label: "Legal Name (as per SSC)",      required: false, sample: "" },
+  { key: "fatherName",        label: "Father / Husband Name",        required: false, sample: "" },
+  { key: "motherName",        label: "Mother Name",                  required: false, sample: "" },
+  { key: "aadharNo",          label: "Aadhar No",                    required: false, sample: "" },
+  { key: "panNo",             label: "PAN No",                       required: false, sample: "" },
+  { key: "passportNumber",    label: "Passport No",                  required: false, sample: "" },
+  { key: "emergencyContactName",  label: "Emergency Contact Name",   required: false, sample: "" },
+  { key: "emergencyContactPhone", label: "Emergency Contact Phone",  required: false, sample: "" },
+  { key: "religion",          label: "Religion",                     required: false, sample: "Hindu" },
+  { key: "caste",             label: "Caste",                        required: false, sample: "OC" },
+  { key: "subCaste",          label: "Sub Caste",                    required: false, sample: "" },
+  { key: "ratificationStatus",label: "Ratification Status",          required: false, sample: "" },
+  { key: "ratificationDate",  label: "Ratification Date (YYYY-MM-DD)", required: false, sample: "" },
+  { key: "maritalStatus",     label: "Marital Status (Single/Married)", required: false, sample: "" },
+  { key: "spouseName",        label: "Spouse Name",                  required: false, sample: "" },
+  { key: "numberOfChildren",  label: "Number of Children",           required: false, sample: "" },
+  { key: "referral",          label: "Referral (if any)",            required: false, sample: "" },
+  { key: "nativePlace",       label: "Native Place",                 required: false, sample: "" },
+  { key: "bloodGroup",        label: "Blood Group",                  required: false, sample: "" },
+  { key: "temporaryAddress",  label: "Temporary Address",            required: false, sample: "" },
+  { key: "permanentSameAsTemporary", label: "Permanent Same as Temporary (Yes/No)", required: false, sample: "" },
+  { key: "permanentAddress",  label: "Permanent Address",            required: false, sample: "" },
 ];
 
 export const IMPORT_HINTS = [

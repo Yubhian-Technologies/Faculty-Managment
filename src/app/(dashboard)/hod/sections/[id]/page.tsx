@@ -85,20 +85,11 @@ export default function SectionRosterPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Section ${section.name}`}
-        description={`${section.courseName ?? ""}${section.secondaryDepartments && section.secondaryDepartments.length > 0 ? ` → ${section.secondaryDepartments.join(", ")}` : ""} · ${ordinalYear(section.year)} · ${section.batch}`}
+        description={`${section.department ?? ""}${section.department && section.courseName ? " · " : ""}${section.courseName ?? ""}${section.secondaryDepartments && section.secondaryDepartments.length > 0 ? ` → ${section.secondaryDepartments.join(", ")}` : ""} · ${ordinalYear(section.year)} · ${section.batch}`}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <Link href="/hod/sections"><ArrowLeft className="h-4 w-4 mr-1" />Back to Sections</Link>
-            </Button>
-            {/* Import Students - temporarily hidden, not removed. Re-enable by
-                uncommenting this button. */}
-            {/* {section.accessLevel !== "secondary" && (
-              <Button asChild>
-                <Link href="/hod/students/import"><Upload className="h-4 w-4 mr-1" />Import Students</Link>
-              </Button>
-            )} */}
-          </div>
+          <Button variant="outline" asChild>
+            <Link href="/hod/sections"><ArrowLeft className="h-4 w-4 mr-1" />Back to Sections</Link>
+          </Button>
         }
       />
 

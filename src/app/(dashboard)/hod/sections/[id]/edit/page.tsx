@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import type { Course, Section, Subject, TeachingAssignment } from "@/types";
+import type { Course, Department, Section, Subject, TeachingAssignment } from "@/types";
 
 type SectionRow = Section & { id: string };
 // `id` is the facultyMembers doc id — used for teachingAssignments.facultyId
@@ -47,10 +47,15 @@ export default function EditSectionPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [form, setForm] = useState<SectionForm>(EMPTY_FORM);
   const [sectionName, setSectionName] = useState("");
   const [enrolledCount, setEnrolledCount] = useState(0);
+  // Owning department name + the section's current target branch (if any), so
+  // a shared-first-year section (e.g. Basic Science → CSE) can be re-pointed.
+  const [ownerDept, setOwnerDept] = useState("");
+  const [branch, setBranch] = useState("");
 
   // Subjects & faculty (per-subject teaching assignments for this section)
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
@@ -84,6 +89,13 @@ export default function EditSectionPage() {
       })
       .catch(() => { /* non-critical */ });
 
+    // Departments carry each department's configured branches
+    // (secondaryDepartments) - needed to offer the branch picker below.
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => setDepartments(d.departments ?? []))
+      .catch(() => { /* non-critical - falls back to no branch picker */ });
+
     fetch("/api/college/sections")
       .then((r) => r.json() as Promise<{ sections: SectionRow[] }>)
       .then((d) => {
@@ -95,6 +107,8 @@ export default function EditSectionPage() {
         }
         setSectionName(s.name);
         setEnrolledCount(s.studentCount ?? 0);
+        setOwnerDept(s.department ?? "");
+        setBranch(s.secondaryDepartments?.[0] ?? "");
         setForm({
           courseId: s.courseId ?? "",
           name: s.name,
@@ -193,6 +207,21 @@ export default function EditSectionPage() {
     [formCourse]
   );
 
+  // Branch mode: this section's owning department cross-lists to one or more
+  // branches (a shared-first-year department). Offer them so the section's
+  // target branch can be changed. Unchanged for standalone departments.
+  const branchOptions = useMemo(() => {
+    const dept = departments.find((d) => d.name === ownerDept);
+    if (!dept) return [];
+    if (dept.secondaryDepartments?.length) return dept.secondaryDepartments;
+    // A sub-department inherits its parent's configured branches.
+    if (dept.parentDepartmentId) {
+      return departments.find((d) => d.id === dept.parentDepartmentId)?.secondaryDepartments ?? [];
+    }
+    return [];
+  }, [departments, ownerDept]);
+  const isBranchMode = branchOptions.length > 0;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.courseId) { toast({ variant: "destructive", title: "Course is required" }); return; }
@@ -212,6 +241,9 @@ export default function EditSectionPage() {
           batch: form.batch,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
+          // Only sent for a shared-first-year department; re-points the section
+          // to a branch (its students' promotion target).
+          ...(isBranchMode && branch ? { secondaryDepartment: branch } : {}),
         }),
       });
       if (!res.ok) {
@@ -272,6 +304,23 @@ export default function EditSectionPage() {
               </Select>
             </div>
 
+            {isBranchMode && (
+              <div className="space-y-2">
+                <Label>Branch (feeds into) *</Label>
+                <Select value={branch} onValueChange={setBranch}>
+                  <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                  <SelectContent>
+                    {branchOptions.map((b) => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Students in this section are promoted into this branch next year.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Section Name *</Label>
@@ -279,10 +328,10 @@ export default function EditSectionPage() {
                   value={form.name}
                   onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
                   placeholder="A, B, C…"
-                  maxLength={5}
+                  maxLength={10}
                   className="uppercase"
                 />
-                <p className="text-xs text-muted-foreground">e.g. A, B, C or CS-A</p>
+                <p className="text-xs text-muted-foreground">{isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}</p>
               </div>
               <div className="space-y-2">
                 <Label>Year *</Label>

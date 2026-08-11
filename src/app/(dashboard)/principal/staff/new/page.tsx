@@ -8,23 +8,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCollegeType } from "@/hooks/useCollegeType";
+import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
 import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS } from "@/types";
 import type { Department, UserRole } from "@/types";
 
-// Roles a Principal/VP can create here - must match PRINCIPAL_ROLES in
-// src/app/api/college/users/route.ts.
-const CREATABLE_ROLES: UserRole[] = [
-  "HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF",
-  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
-  "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER",
-];
+// Base roles every college type can create, plus whichever "internal
+// office" roles (Dean/IQAC/T&P/R&D/Placement/Library/Exam Cell/Webmaster)
+// apply to this college's type - see getCreatableOfficeRoles. Must match
+// the same college-type gating in src/app/api/college/users/route.ts.
+// COLLEGE_STAFF is deliberately NOT here: a generic "College Staff" login
+// (e.g. a Lab Assistant) created this way is only an account - it never gets
+// a Supporting Staff profile record, so it never shows in the Supporting
+// Staff lists. Non-teaching staff must be added via the Supporting Staff
+// modules (HOD for Technical, "Add Non-Technical Staff" for Non-Technical),
+// which create both the login and the profile record.
+const BASE_CREATABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL"];
 
 // One holder per college — matches COLLEGE_SINGLETON_ROLES on the API route.
-const SINGLETON_ROLES: UserRole[] = ["PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
+const SINGLETON_ROLES: UserRole[] = ["LIBRARY", "EXAM_CELL", "WEBMASTER"];
 
 export default function NewStaffPage() {
   const router = useRouter();
+  const { collegeType } = useCollegeType();
+  // Placement Department is provisioned by Administration (see
+  // administration/college-staff), not the Principal - so it's excluded here.
+  const CREATABLE_ROLES: UserRole[] = [
+    ...BASE_CREATABLE_ROLES,
+    ...getCreatableOfficeRoles(collegeType).filter((r) => r !== "PLACEMENT_DEPT"),
+  ];
   const [departments, setDepartments] = useState<Department[]>([]);
 
   const [name, setName] = useState("");
@@ -35,7 +48,6 @@ export default function NewStaffPage() {
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState<UserRole>("COLLEGE_OFFICE");
   const [department, setDepartment] = useState("");
-  const [designation, setDesignation] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -65,7 +77,6 @@ export default function NewStaffPage() {
           ...(employeeId.trim() ? { employeeId: employeeId.trim() } : {}),
           ...(phone.trim() ? { phone: phone.trim() } : {}),
           ...(role === "HOD" ? { department } : {}),
-          ...(role === "COLLEGE_STAFF" && designation.trim() ? { designation: designation.trim() } : {}),
         }),
       });
       const json = await res.json() as { uid?: string; error?: string };
@@ -95,7 +106,7 @@ export default function NewStaffPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label>Role <span className="text-destructive">*</span></Label>
-              <Select value={role} onValueChange={(v) => { setRole(v as UserRole); setDepartment(""); setDesignation(""); }}>
+              <Select value={role} onValueChange={(v) => { setRole(v as UserRole); setDepartment(""); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {CREATABLE_ROLES.map((r) => (
@@ -123,12 +134,6 @@ export default function NewStaffPage() {
               </div>
             )}
 
-            {role === "COLLEGE_STAFF" && (
-              <div className="space-y-2">
-                <Label>Designation</Label>
-                <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Dean - R&D, IQAC Coordinator" />
-              </div>
-            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -149,7 +154,7 @@ export default function NewStaffPage() {
               </div>
               <div className="space-y-2">
                 <Label>Phone</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+                <Input type="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
               </div>
               <div className="space-y-2">
                 <Label>Temporary Password <span className="text-destructive">*</span></Label>

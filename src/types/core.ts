@@ -240,26 +240,57 @@ export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
 // caste sub-classification, which stays free text since it isn't a fixed list).
 export type Religion =
   | "HINDU"
-  | "CHRISTIAN"
   | "MUSLIM"
-  | "JAIN"
+  | "CHRISTIAN"
   | "SIKH"
+  | "JAIN"
+  | "PARSI"
+  | "BUDDHIST"
   | "OTHER";
 export const RELIGION_LABELS: Record<Religion, string> = {
   HINDU: "Hindu",
-  CHRISTIAN: "Christian",
   MUSLIM: "Muslim",
-  JAIN: "Jain",
+  CHRISTIAN: "Christian",
   SIKH: "Sikh",
+  JAIN: "Jain",
+  PARSI: "Parsi",
+  BUDDHIST: "Buddhist",
   OTHER: "Other",
 };
-export type Caste = "OC" | "BC" | "SC" | "ST" | "OTHER";
+export type Caste = "OC" | "EBC" | "EPC" | "BC" | "SC" | "ST" | "OTHER";
 export const CASTE_LABELS: Record<Caste, string> = {
   OC: "OC",
+  EBC: "EBC",
+  EPC: "EPC",
   BC: "BC",
   SC: "SC",
   ST: "ST",
   OTHER: "Other",
+};
+
+// Sub-caste picklist per Caste (state reservation sub-categories) - values
+// are stored and displayed verbatim (no separate code/label split, unlike
+// Religion/Caste above) since they're only ever used as freeform sub-
+// classification text. EPC has no fixed list here - its Sub Caste field
+// falls back to free text, same as "OTHER" does for every caste.
+export const SUB_CASTES_BY_CASTE: Partial<Record<Caste, string[]>> = {
+  OC: [
+    "Brahmin", "Kshatriya", "Vysya", "Kapu", "Reddy", "Aryavysya", "Kamma", "Naidu",
+    "Adi Velama", "Arya Vyshya", "Marvadi", "Veerashaiva Lingayat", "Balija",
+    "Padmanayaka Velamadoralu", "Vellama",
+  ],
+  EBC: ["Faqir", "Muslim", "Shaik"],
+  BC: [
+    "Devanga", "Kummari", "Nai Brahmin", "Kalinga", "Gowda", "Cristian", "Kurama",
+    "Korpula Velama", "Vishwa Brahmin", "Agnikula Kshatriya", "Turupu Kapu",
+    "Karnibakthulu", "Settibalija", "Padmasali", "Rajaka", "Sri Sayana",
+    "Munnurukapu", "Yadava", "Velama", "Surya Balija", "Kummara", "Poosala",
+    "Jangam", "Perika", "Sagara", "Christian Mala", "Bhatraju", "Kambali",
+    "Uppara", "Bondili", "Vyshnavas", "Bukka", "Mutrasi", "Adi Andhra Christian",
+    "Telukula",
+  ],
+  SC: ["Mala", "Madiga", "Mala Dasu"],
+  ST: ["Koya"],
 };
 
 export interface FMSUser {
@@ -366,6 +397,12 @@ export interface College {
   contactEmail?: string;
   contactPhone?: string;
   isActive: boolean;
+  // Campus geofence for face+geo self-attendance check-in/out. Super Admin
+  // only (see PATCH /api/admin/colleges) — faculty must be within the circle
+  // radius, or literally inside the polygon boundary, depending on shape.
+  campusLocation?:
+    | { shape: "circle"; latitude: number; longitude: number; radiusMeters: number }
+    | { shape: "polygon"; points: { latitude: number; longitude: number }[] };
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -407,6 +444,38 @@ export interface Department {
   // Science" department feeds students on to both CSE and ECE, so both
   // HODs need visibility into its sections ahead of promotion.
   secondaryDepartments?: string[];
+  // Grouped/managed branches: on a sub-department, the top-level departments
+  // (e.g. IT, CSBS) whose students, sections and academics its Sub-HOD fully
+  // manages. Distinct from `secondaryDepartments` (view-only cross-listing) -
+  // these grant full control, resolved into the Sub-HOD's editable scope via
+  // getHodDepartmentScope (src/lib/departments/scope.ts). Set by the parent
+  // department's HOD on the Sub-Departments settings page.
+  managedDepartments?: string[];
+  // Approximate period the shared first year runs for, on a common-year
+  // department (yyyy-mm-dd, same shape as StudentRecord.dateOfBirth). Advisory
+  // only: it gives the Principal's cohort-advance screen its context and is
+  // never a gate on any write. See src/lib/college/academicStructure.ts for how
+  // a common-year department is identified.
+  commonYearStart?: string;
+  commonYearEnd?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// ─── Course Catalog (college-wide master list of course definitions the Principal
+// fixes once in Settings — the single source of truth for course names/codes so a
+// department can only *select* a course, never re-type it. Prevents duplicates like
+// "Bachelor of Technology" vs "Bachelors of Technology"). ──
+
+export interface CourseCatalogItem {
+  id: string;
+  collegeId: string;
+  name: string; // canonical name, e.g. "Bachelor of Technology"
+  code: string; // "BTECH"
+  durationYears: number; // e.g. 4, 2
+  isActive: boolean;
+  createdBy?: string;
+  createdByName?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -417,6 +486,7 @@ export interface Course {
   id: string;
   collegeId: string;
   departmentId: string;
+  catalogId?: string; // → CourseCatalogItem.id it was created from (source of truth)
   name: string; // "B.Tech", "B.Pharm", "BDS", "MBA", ...
   code: string; // "BTECH"
   durationYears: number; // e.g. 4, 2
@@ -491,6 +561,19 @@ export interface FacultyNorms {
   // must complete before converting into their vacation/non-vacation leave
   // category - see src/lib/leave/categoryEngine.ts.
   newJoiningYears: number;
+  updatedAt?: Timestamp;
+  updatedByName?: string;
+}
+
+// ─── Academic Regulations ─────────────────────────────────────────────────────
+// A college's curriculum "regulation" (e.g. R20, R23) usually changes only for
+// incoming batches, so the 1st through 4th year of study can each be running a
+// different regulation at the same time. The Principal maintains the list of
+// regulation names in use and fixes which one applies to each year.
+export interface AcademicRegulationSettings {
+  regulations: string[];
+  // Year of study ("1".."4") -> one of `regulations`. Omitted/empty until fixed.
+  yearRegulations: Record<string, string>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -637,7 +720,7 @@ export interface FacultyMember {
   joiningLetterUrl?: string; // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string; // Firebase Storage URL for the appointment order (uploaded by HOD)
   resumeUrl?: string; // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
-  officialEmail?: string; // institutional email address, set by Webmaster once an EmailCreationRequest is fulfilled — distinct from collegeEmail (the FMS login username)
+  officialEmail?: string; // institutional email address, if assigned — distinct from collegeEmail (the FMS login username)
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -890,7 +973,13 @@ export interface FacultyProfileFields {
   intermediateDetails?: DegreeDetail; // 12th
   ugDetails?: DegreeDetail;
   pgDetails?: DegreeDetail;
+  // Extra PG/PhD degrees beyond the primary one above (e.g. a second Master's
+  // or a second doctorate). Kept as separate arrays rather than turning
+  // pgDetails/phdDetails into arrays so every existing record, export, resume
+  // and view that reads the single field keeps working unchanged.
+  additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
+  additionalPhdDetails?: DegreeDetail[];
   postDoctoralDetails?: DegreeDetail;
   phdStatus?: PhdStatus;
   phdMode?: PhdMode;
@@ -1013,13 +1102,14 @@ export interface Section {
   classLeaderUid?: string;
   classLeaderName?: string;
   studentCount: number;
-  // Secondary — view-only access for one or more other departments' HODs,
-  // e.g. a shared first-year section whose roster splits across several
-  // eventual branches. Auto-copied from the owning Department's own
-  // `secondaryDepartments` at section creation (see college/sections POST) —
-  // not chosen per-section. Mirrors StudentRecord.secondaryDepartment's
-  // primary/secondary access model, just at the section level (and plural)
-  // instead of per-student.
+  // Secondary — the branch this section feeds, e.g. a shared first-year Basic
+  // Science section whose cohort promotes into CSE. Chosen per section from the
+  // owning Department's configured `secondaryDepartments` via the Add/Edit
+  // Section branch picker (see college/sections POST + [id] PATCH); when the
+  // department cross-lists to exactly one branch it's auto-filled. Grants that
+  // branch's HOD view-only access, and every student imported into this section
+  // inherits it as StudentRecord.secondaryDepartment (their promotion target).
+  // Stored plural for legacy shape, but a section commits to a single branch.
   secondaryDepartments?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -1099,12 +1189,14 @@ export type NotificationType =
   | "OFFER_LETTER_GENERATED"
   | "OFFER_RESPONSE_RECEIVED"
   | "CREDENTIAL_REQUESTED"
+  | "FACULTY_ACCOUNT_REQUEST_CREDENTIALS_CREATED"
   | "FACULTY_ACCOUNT_REQUEST_COMPLETED"
+  | "CANDIDATE_HIRED"
   | "COORDINATOR_ASSIGNED"
-  // Webmaster (official email provisioning)
-  | "EMAIL_REQUEST_SUBMITTED"
-  | "OFFICIAL_EMAIL_CREATED"
-  | "EMAIL_REQUEST_CANCELLED"
+  // Teaching (cross-department faculty assignment requests)
+  | "FACULTY_ASSIGNMENT_REQUESTED"
+  | "FACULTY_ASSIGNMENT_ALLOCATED"
+  | "FACULTY_ASSIGNMENT_DECLINED"
   // Leave & Attendance
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
@@ -1154,6 +1246,10 @@ export type NotificationType =
   | "PURCHASE_CLEARANCE_FINANCE_REJECTED"
   | "PURCHASE_CLEARANCE_GOODS_PURCHASED"
   | "PURCHASE_CLEARANCE_GRN_UPLOADED"
+  // Teaching (cross-department faculty assignment requests)
+  | "FACULTY_ASSIGNMENT_REQUESTED"
+  | "FACULTY_ASSIGNMENT_ALLOCATED"
+  | "FACULTY_ASSIGNMENT_DECLINED"
   | "GENERAL";
 
 export interface AppNotification {
@@ -1202,10 +1298,6 @@ export type AuditAction =
   | "HIRING_DECISION_MADE"
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
-  // Webmaster module
-  | "EMAIL_REQUEST_CREATED"
-  | "EMAIL_REQUEST_FULFILLED"
-  | "EMAIL_REQUEST_CANCELLED"
   | "DOCUMENTS_VERIFIED"
   | "JOINING_LETTER_UPLOADED"
   | "CREDENTIAL_REQUESTED"

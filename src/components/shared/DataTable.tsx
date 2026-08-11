@@ -29,6 +29,9 @@ interface DataTableProps<T extends Record<string, unknown>> {
   filterComponent?: React.ReactNode;
   onRowClick?: (row: T) => void;
   keyExtractor: (row: T) => string;
+  // When set, rows are grouped under a header row per returned label (e.g.
+  // department), sorted alphabetically - search/export still apply first.
+  groupBy?: (row: T) => string;
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -44,6 +47,7 @@ export function DataTable<T extends Record<string, unknown>>({
   filterComponent,
   onRowClick,
   keyExtractor,
+  groupBy,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
 
@@ -55,6 +59,16 @@ export function DataTable<T extends Record<string, unknown>>({
       )
     : data;
 
+  const groups = groupBy
+    ? Object.entries(
+        filtered.reduce<Record<string, T[]>>((acc, row) => {
+          const label = groupBy(row) || "—";
+          (acc[label] ??= []).push(row);
+          return acc;
+        }, {})
+      ).sort(([a], [b]) => a.localeCompare(b))
+    : null;
+
   const handleExport = () => {
     if (!csvFilename) return;
     exportToCSV(
@@ -63,6 +77,42 @@ export function DataTable<T extends Record<string, unknown>>({
       columns.map((c) => ({ key: c.key, header: c.header }))
     );
   };
+
+  const renderRow = (row: T) => (
+    <tr
+      key={keyExtractor(row)}
+      onClick={() => onRowClick?.(row)}
+      onKeyDown={
+        onRowClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onRowClick(row);
+              }
+            }
+          : undefined
+      }
+      tabIndex={onRowClick ? 0 : undefined}
+      role={onRowClick ? "button" : undefined}
+      className={cn(
+        "bg-background hover:bg-muted/30 transition-colors",
+        onRowClick && "cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
+      )}
+    >
+      {columns.map((col) => (
+        <td
+          key={col.key}
+          className={cn(
+            "px-4 py-3 whitespace-nowrap",
+            col.hideOnMobile && "hidden md:table-cell",
+            col.className
+          )}
+        >
+          {col.render ? col.render(row) : String(row[col.key] ?? "-")}
+        </td>
+      ))}
+    </tr>
+  );
 
   if (isLoading) return <TableSkeleton rows={5} cols={columns.length} />;
 
@@ -126,41 +176,21 @@ export function DataTable<T extends Record<string, unknown>>({
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filtered.map((row) => (
-                  <tr
-                    key={keyExtractor(row)}
-                    onClick={() => onRowClick?.(row)}
-                    onKeyDown={
-                      onRowClick
-                        ? (e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              onRowClick(row);
-                            }
-                          }
-                        : undefined
-                    }
-                    tabIndex={onRowClick ? 0 : undefined}
-                    role={onRowClick ? "button" : undefined}
-                    className={cn(
-                      "bg-background hover:bg-muted/30 transition-colors",
-                      onRowClick && "cursor-pointer focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
-                    )}
-                  >
-                    {columns.map((col) => (
-                      <td
-                        key={col.key}
-                        className={cn(
-                          "px-4 py-3 whitespace-nowrap",
-                          col.hideOnMobile && "hidden md:table-cell",
-                          col.className
-                        )}
-                      >
-                        {col.render ? col.render(row) : String(row[col.key] ?? "-")}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {groups
+                  ? groups.map(([label, rows]) => (
+                      <React.Fragment key={label}>
+                        <tr className="bg-muted/30">
+                          <td
+                            colSpan={columns.length}
+                            className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                          >
+                            {label} · {rows.length}
+                          </td>
+                        </tr>
+                        {rows.map((row) => renderRow(row))}
+                      </React.Fragment>
+                    ))
+                  : filtered.map((row) => renderRow(row))}
               </tbody>
             </table>
           </div>

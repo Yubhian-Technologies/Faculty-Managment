@@ -3,11 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { EmploymentType } from "@/types";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "WEBMASTER", "SUPER_ADMIN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "WEBMASTER", "SUPER_ADMIN", "ACCOUNTS");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
@@ -38,14 +37,13 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       offerId?: string;
       officialEmail?: string;
-      employmentType?: EmploymentType;
-      specialization?: string;
-      qualification?: string;
+      alternateEmail1?: string;
+      alternateEmail2?: string;
     };
 
-    const { offerId, officialEmail, employmentType } = body;
-    if (!offerId || !officialEmail?.trim() || !employmentType) {
-      return NextResponse.json({ error: "offerId, officialEmail, employmentType required" }, { status: 400 });
+    const { offerId, officialEmail } = body;
+    if (!offerId || !officialEmail?.trim()) {
+      return NextResponse.json({ error: "offerId and officialEmail required" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -114,11 +112,10 @@ export async function POST(request: Request) {
       candidateEmail: candidate?.email ?? "",
       candidatePhone: candidate?.phone ?? "",
       officialEmail: officialEmail.trim(),
+      ...(body.alternateEmail1?.trim() ? { alternateEmail1: body.alternateEmail1.trim() } : {}),
+      ...(body.alternateEmail2?.trim() ? { alternateEmail2: body.alternateEmail2.trim() } : {}),
       designation: offer.designation ?? "",
       department: offer.department ?? "",
-      employmentType,
-      ...(body.specialization?.trim() ? { specialization: body.specialization.trim() } : {}),
-      ...(body.qualification?.trim() ? { qualification: body.qualification.trim() } : {}),
       status: "SUBMITTED",
       history: [historyEntry],
       requestedBy: session.uid,

@@ -78,6 +78,7 @@ export default function CollegeOfficeFacultyPage() {
         onRowClick={(row) => router.push(`/college-office/faculty/${row.id}/promotion-salary`)}
         searchPlaceholder="Search by name, employee ID..."
         searchKeys={["name", "employeeId"] as (keyof FacultyRow)[]}
+        groupBy={(row) => (row.department as string) || "Unassigned"}
         emptyTitle="No faculty records yet"
       />
     </div>

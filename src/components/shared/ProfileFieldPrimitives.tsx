@@ -191,6 +191,40 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
   );
 }
 
+// A list of DegreeFields blocks with Add More / remove - for qualification
+// levels a person can hold more than one of (e.g. two Master's degrees or
+// two doctorates). Each entry is a full DegreeDetail, same shape as the
+// single-block DegreeFields above.
+export function DegreeFieldsList({ label, level, items, onChange }: {
+  label: string; level: DegreeLevel; items: DegreeDetail[] | undefined; onChange: (v: DegreeDetail[]) => void;
+}) {
+  const list = items ?? [];
+  return (
+    <div className="space-y-3">
+      {list.map((item, i) => (
+        <div key={i} className="relative">
+          <DegreeFields
+            label={`${label} ${i + 2}`}
+            level={level}
+            value={item}
+            onChange={(v) => { const next = [...list]; next[i] = v; onChange(next); }}
+          />
+          <Button
+            type="button" variant="ghost" size="sm"
+            className="absolute right-2 top-2 h-7 w-7 p-0 text-destructive hover:text-destructive"
+            onClick={() => onChange(list.filter((_, idx) => idx !== i))}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, { ...EMPTY_DEGREE }])}>
+        Add another {label}
+      </Button>
+    </div>
+  );
+}
+
 export function RepeatingGroup<T>({
   title, items, empty, onChange, renderRow, addLabel = "Add More",
 }: {

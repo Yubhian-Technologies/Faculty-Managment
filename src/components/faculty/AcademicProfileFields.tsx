@@ -6,13 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
 import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import {
-  SectionTitle, NumInput, TextInput, DegreeFields, RepeatingGroup, QualificationsFields,
+  SectionTitle, NumInput, TextInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config";
 import type {
   FacultyProfileFields,
   CollegeType,
-  Publication,
   FundedProject,
   ConsultancyProject,
   LabEstablished,
@@ -39,10 +38,11 @@ interface Props {
   onChange: (next: Partial<FacultyProfileFields>) => void;
   includeTeachingAssignment?: boolean;
   hideFinancialModule?: boolean;
+  hideResearchModule?: boolean;
+  hidePromotionHistory?: boolean;
   collegeType?: CollegeType;
 }
 
-const EMPTY_PUBLICATION: Publication = { title: "", coAuthors: "", journalOrConference: "", publicationYear: new Date().getFullYear(), indexing: "", driveLink: "" };
 const EMPTY_FUNDED_PROJECT: FundedProject = { title: "", fundingAgency: "", grantAmountLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_CONSULTANCY: ConsultancyProject = { title: "", clientOrAgency: "", revenueLakhs: 0, year: new Date().getFullYear(), status: "" };
 const EMPTY_LAB: LabEstablished = { facilityDetails: "", outcomes: "" };
@@ -54,7 +54,7 @@ const EMPTY_MEMBERSHIP: ProfessionalMembership = { body: "IEEE" };
 const EMPTY_ADMIN_RESPONSIBILITY: AdminResponsibilityEntry = { category: "COORDINATOR", description: "" };
 const EMPTY_AWARD: AwardEntry = { category: "BEST_TEACHER", title: "", awardingBody: "", year: new Date().getFullYear() };
 
-export function AcademicProfileFields({ value, onChange, includeTeachingAssignment = true, hideFinancialModule = false, collegeType }: Props) {
+export function AcademicProfileFields({ value, onChange, includeTeachingAssignment = true, hideFinancialModule = false, hideResearchModule = false, hidePromotionHistory = false, collegeType }: Props) {
   function set<K extends keyof FacultyProfileFields>(key: K, v: FacultyProfileFields[K]) {
     onChange({ ...value, [key]: v });
   }
@@ -85,7 +85,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           <DegreeFields label="Intermediate (12th) Details" level="INTERMEDIATE" value={value.intermediateDetails} onChange={(v) => set("intermediateDetails", v)} />
           <DegreeFields label="UG Details" level="UG" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
           <DegreeFields label="PG Details" level="PG" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
+          <DegreeFieldsList label="PG Details" level="PG" items={value.additionalPgDetails} onChange={(v) => set("additionalPgDetails", v)} />
           <DegreeFields label="PhD Details" level="DOCTORAL" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
+          <DegreeFieldsList label="PhD Details" level="DOCTORAL" items={value.additionalPhdDetails} onChange={(v) => set("additionalPhdDetails", v)} />
           <DegreeFields label="Post-Doctoral Details" level="POST_DOCTORAL" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -144,30 +146,32 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           </>
         )}
       />
-      <RepeatingGroup
-        title="Promotion History"
-        items={value.promotionHistory}
-        empty={EMPTY_PROMOTION}
-        onChange={(v) => set("promotionHistory", v)}
-        renderRow={(item, update) => (
-          <>
-            {/* Same catalogue-backed picker as the College Office promotion
-                page - this form writes the identical promotionHistory field,
-                so leaving it free-text here would let the two disagree. */}
-            <DesignationSelect label="From Designation" value={item.fromDesignation} collegeType={collegeType} onChange={(v) => update({ fromDesignation: v })} />
-            <DesignationSelect label="To Designation" value={item.toDesignation} collegeType={collegeType} onChange={(v) => update({ toDesignation: v })} />
-            <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
-            <div className="sm:col-span-2">
-              <Label className="text-xs">Promotion Order</Label>
-              <CertificateUploadField
-                value={item.orderUrl}
-                onUploaded={(url) => update({ orderUrl: url })}
-                onRemoved={() => update({ orderUrl: "" })}
-              />
-            </div>
-          </>
-        )}
-      />
+      {!hidePromotionHistory && (
+        <RepeatingGroup
+          title="Promotion History"
+          items={value.promotionHistory}
+          empty={EMPTY_PROMOTION}
+          onChange={(v) => set("promotionHistory", v)}
+          renderRow={(item, update) => (
+            <>
+              {/* Same catalogue-backed picker as the College Office promotion
+                  page - this form writes the identical promotionHistory field,
+                  so leaving it free-text here would let the two disagree. */}
+              <DesignationSelect label="From Designation" value={item.fromDesignation} collegeType={collegeType} onChange={(v) => update({ fromDesignation: v })} />
+              <DesignationSelect label="To Designation" value={item.toDesignation} collegeType={collegeType} onChange={(v) => update({ toDesignation: v })} />
+              <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
+              <div className="sm:col-span-2">
+                <Label className="text-xs">Promotion Order</Label>
+                <CertificateUploadField
+                  value={item.orderUrl}
+                  onUploaded={(url) => update({ orderUrl: url })}
+                  onRemoved={() => update({ orderUrl: "" })}
+                />
+              </div>
+            </>
+          )}
+        />
+      )}
 
       {includeTeachingAssignment && (
         <div className="space-y-3 rounded-lg border p-3">
@@ -184,43 +188,33 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
       )}
 
       {/* Module 3 */}
-      <SectionTitle>Module 3 - Research Publications</SectionTitle>
-      <RepeatingGroup
-        title="Publications"
-        items={value.publications}
-        empty={EMPTY_PUBLICATION}
-        onChange={(v) => set("publications", v)}
-        renderRow={(item, update) => (
-          <>
-            <TextInput label="Title" value={item.title} onChange={(v) => update({ title: v })} />
-            <TextInput label="Co-Authors" value={item.coAuthors} onChange={(v) => update({ coAuthors: v })} placeholder="Comma-separated names" />
-            <TextInput label="Journal / Conference" value={item.journalOrConference} onChange={(v) => update({ journalOrConference: v })} />
-            <NumInput label="Year of Publication" value={item.publicationYear} onChange={(v) => update({ publicationYear: v })} />
-            <TextInput label="Indexing" value={item.indexing} onChange={(v) => update({ indexing: v })} placeholder="e.g. SCI, Scopus, WoS, UGC-CARE" />
-            <div className="sm:col-span-2">
-              <TextInput label="Publication Link" value={item.driveLink} onChange={(v) => update({ driveLink: v })} placeholder="Paste your Google Drive public view link" />
-            </div>
-          </>
-        )}
-      />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <NumInput label="First/Corresponding Author Pubs" value={value.publicationsFirstOrCorrespondingAuthor} onChange={(v) => set("publicationsFirstOrCorrespondingAuthor", v)} />
-        <NumInput label="Q1 / IF > 4.0 Pubs" value={value.publicationsQ1OrHighImpact} onChange={(v) => set("publicationsQ1OrHighImpact", v)} />
-        <NumInput label="SCI/Scopus Count" value={value.sciScopusCount} onChange={(v) => set("sciScopusCount", v)} />
-        <NumInput label="WoS (SCIE/ESCI) Count" value={value.wosCount} onChange={(v) => set("wosCount", v)} />
-        <NumInput label="Conference Papers" value={value.conferencePapersCount} onChange={(v) => set("conferencePapersCount", v)} />
-        <NumInput label="Book Chapters" value={value.bookChaptersCount} onChange={(v) => set("bookChaptersCount", v)} />
-        <NumInput label="Review Publications" value={value.reviewPublicationsCount} onChange={(v) => set("reviewPublicationsCount", v)} />
-        <NumInput label="Total Publications" value={value.totalPublications} onChange={(v) => set("totalPublications", v)} />
-        <NumInput label="Total Citations" value={value.totalCitations} onChange={(v) => set("totalCitations", v)} />
-        <NumInput label="H-Index" value={value.hIndex} onChange={(v) => set("hIndex", v)} />
-        <NumInput label="i10-Index" value={value.i10Index} onChange={(v) => set("i10Index", v)} />
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <TextInput label="Google Scholar ID" value={value.googleScholarId} onChange={(v) => set("googleScholarId", v)} />
-        <TextInput label="Scopus Author ID" value={value.scopusAuthorId} onChange={(v) => set("scopusAuthorId", v)} />
-        <TextInput label="ORCID iD" value={value.orcidId} onChange={(v) => set("orcidId", v)} />
-      </div>
+      {!hideResearchModule && (
+        <>
+          <SectionTitle>Module 3 - Research Publications</SectionTitle>
+          <p className="text-xs text-muted-foreground">
+            Individual publication records are maintained by the R&amp;D office - view them on the Research Publications module.
+            The fields below are self-reported summary metrics.
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <NumInput label="First/Corresponding Author Pubs" value={value.publicationsFirstOrCorrespondingAuthor} onChange={(v) => set("publicationsFirstOrCorrespondingAuthor", v)} />
+            <NumInput label="Q1 / IF > 4.0 Pubs" value={value.publicationsQ1OrHighImpact} onChange={(v) => set("publicationsQ1OrHighImpact", v)} />
+            <NumInput label="SCI/Scopus Count" value={value.sciScopusCount} onChange={(v) => set("sciScopusCount", v)} />
+            <NumInput label="WoS (SCIE/ESCI) Count" value={value.wosCount} onChange={(v) => set("wosCount", v)} />
+            <NumInput label="Conference Papers" value={value.conferencePapersCount} onChange={(v) => set("conferencePapersCount", v)} />
+            <NumInput label="Book Chapters" value={value.bookChaptersCount} onChange={(v) => set("bookChaptersCount", v)} />
+            <NumInput label="Review Publications" value={value.reviewPublicationsCount} onChange={(v) => set("reviewPublicationsCount", v)} />
+            <NumInput label="Total Publications" value={value.totalPublications} onChange={(v) => set("totalPublications", v)} />
+            <NumInput label="Total Citations" value={value.totalCitations} onChange={(v) => set("totalCitations", v)} />
+            <NumInput label="H-Index" value={value.hIndex} onChange={(v) => set("hIndex", v)} />
+            <NumInput label="i10-Index" value={value.i10Index} onChange={(v) => set("i10Index", v)} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <TextInput label="Google Scholar ID" value={value.googleScholarId} onChange={(v) => set("googleScholarId", v)} />
+            <TextInput label="Scopus Author ID" value={value.scopusAuthorId} onChange={(v) => set("scopusAuthorId", v)} />
+            <TextInput label="ORCID iD" value={value.orcidId} onChange={(v) => set("orcidId", v)} />
+          </div>
+        </>
+      )}
 
       {/* Module 4 */}
       <SectionTitle>Module 4 - Grants, Consultancy &amp; IP</SectionTitle>

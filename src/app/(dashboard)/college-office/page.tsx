@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, GraduationCap } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,23 +40,39 @@ export default function CollegeOfficeDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? "Office"}`}
+        title={`Hello, ${user?.name ?? "Office"}`}
         description="Principal-approved candidates sent to Accounts"
       />
 
-      <Link href="/college-office/candidates" className="block w-fit">
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-blue-600 bg-blue-50">
-              <CheckCircle className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Sent to Accounts</p>
-              <p className="text-xl font-bold">{isLoading ? "—" : candidates.length}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </Link>
+      <div className="flex flex-wrap gap-4">
+        <Link href="/college-office/candidates" className="block">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-blue-600 bg-blue-50">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Sent to Accounts</p>
+                <p className="text-xl font-bold">{isLoading ? "—" : candidates.length}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/college-office/students" className="block">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-emerald-600 bg-emerald-50">
+                <GraduationCap className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Students</p>
+                <p className="text-sm font-semibold">Add, view or remove</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">

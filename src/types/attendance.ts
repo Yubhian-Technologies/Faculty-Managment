@@ -33,6 +33,15 @@ export interface AttendanceRecord {
   checkOut?: string;            // "HH:MM" 24h
   source: "MANUAL" | "BIOMETRIC" | "SYSTEM";
   markedBy?: string;            // uid of staff who marked manually
+  // Self-check-in/out verification metadata (source === "BIOMETRIC" only).
+  // Face matching runs entirely in the faculty's browser — no photo is ever
+  // uploaded, only the resulting distance/verified flag is recorded here.
+  checkInLocation?: { latitude: number; longitude: number };
+  checkInFaceMatchDistance?: number;
+  checkInVerified?: boolean;
+  checkOutLocation?: { latitude: number; longitude: number };
+  checkOutFaceMatchDistance?: number;
+  checkOutVerified?: boolean;
   leaveApplicationId?: string;  // populated when status is ON_LEAVE
   onDutyRequestId?: string;     // populated when status is ON_DUTY
   permissionRequestId?: string; // populated for partial-day permission
