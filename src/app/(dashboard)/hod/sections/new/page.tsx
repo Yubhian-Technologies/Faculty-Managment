@@ -63,11 +63,6 @@ export default function NewSectionPage() {
   const [letter, setLetter] = useState("");
 
   useEffect(() => {
-    fetch("/api/college/courses")
-      .then((r) => r.json() as Promise<{ courses: Course[] }>)
-      .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
-
     fetch("/api/college/faculty?status=ACTIVE")
       .then((r) => r.json())
       .then((d: { faculty?: { id: string; name: string; designation: string; userUid?: string }[] }) => {
@@ -82,6 +77,20 @@ export default function NewSectionPage() {
       .then((d) => setDepartments(d.departments ?? []))
       .catch(() => { /* non-critical - falls back to the full course span */ });
   }, []);
+
+  // Refetched whenever the resolved owning department changes - a real branch
+  // reached through a sub-department's managed grouping (e.g. IT under
+  // BS-Maths) owns its OWN course doc, separate from the common department's,
+  // so the college-wide "own scope" fetch this used to run once on mount would
+  // never surface it. Empty departmentId (nothing picked yet, or a plain HOD
+  // with no scope override) falls back to the server's own-department default.
+  useEffect(() => {
+    const qs = departmentId ? `?departmentId=${encodeURIComponent(departmentId)}` : "";
+    fetch(`/api/college/courses${qs}`)
+      .then((r) => r.json() as Promise<{ courses: Course[] }>)
+      .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+  }, [departmentId]);
 
   function setF(patch: Partial<SectionForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -111,23 +120,50 @@ export default function NewSectionPage() {
     [departments, activeDeptName]
   );
 
+  // Managed-branch mode: activeDept is a real branch (e.g. IT) reached through
+  // some sub-department's `managedDepartments` grouping (BS-Maths managing IT +
+  // CSBS) rather than a plain pick of the HOD's own department. Takes priority
+  // over the legacy secondaryDepartments branch mode below - a real branch
+  // reached this way already IS the final department, so there's nothing left
+  // to pick except the section letter.
+  const managingDept = useMemo(
+    () => (activeDept ? departments.find((d) => (d.managedDepartments ?? []).includes(activeDept.name)) ?? null : null),
+    [departments, activeDept]
+  );
+  const isManagedBranchMode = managingDept !== null;
+  // The managing sub-department (or, if it has none of its own, its parent
+  // common department) is where "Years Taught" for this shared year actually
+  // lives - a real branch's own assignedYears (e.g. IT's [2,3,4]) never
+  // includes the shared first year on its own.
+  const managingYears = useMemo(() => {
+    if (!managingDept) return [] as number[];
+    if ((managingDept.assignedYears?.length ?? 0) > 0) return managingDept.assignedYears ?? [];
+    if (managingDept.parentDepartmentId) {
+      return departments.find((d) => d.id === managingDept.parentDepartmentId)?.assignedYears ?? [];
+    }
+    return [];
+  }, [managingDept, departments]);
+  const managedBranchName = `${activeDept?.code?.trim() || activeDeptName}-${letter.trim().toUpperCase()}`;
+
   // Offer only the years this department is assigned to teach, intersected with
   // the course's own span. A department set to [1,2,3] never shows Year 4 even
-  // for a 4-year course. When no years are assigned yet (or departments haven't
-  // loaded), fall back to the full course span so creation isn't blocked - the
-  // server still rejects an unassigned year on submit.
+  // for a 4-year course. Union'd with the managing sub-department's years in
+  // managed-branch mode (see managingYears above). When no years are assigned
+  // yet (or departments haven't loaded), fall back to the full course span so
+  // creation isn't blocked - the server still rejects an unassigned year on submit.
   const formYearOptions = useMemo(() => {
     if (!formCourse) return [];
     const courseYears = Array.from({ length: formCourse.durationYears }, (_, i) => i + 1);
-    const assigned = activeDept?.assignedYears ?? [];
+    const assigned = Array.from(new Set([...(activeDept?.assignedYears ?? []), ...managingYears]));
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
-  }, [formCourse, activeDept]);
+  }, [formCourse, activeDept, managingYears]);
 
-  // Branch mode: the owning department cross-lists to one or more branches
-  // (Department.secondaryDepartments). When it does, the section feeds a branch
-  // instead of using a free-typed name.
+  // Legacy branch mode: the owning department cross-lists to one or more
+  // branches (Department.secondaryDepartments). When it does, the section
+  // feeds a branch instead of using a free-typed name. Only relevant when
+  // managed-branch mode above doesn't already apply.
   const branchOptions = useMemo(() => {
-    if (!activeDept) return [];
+    if (isManagedBranchMode || !activeDept) return [];
     if (activeDept.secondaryDepartments?.length) return activeDept.secondaryDepartments;
     // A sub-department inherits its parent's configured branches, so a sub-HOD
     // can create the shared first-year branch sections too.
@@ -135,14 +171,15 @@ export default function NewSectionPage() {
       return departments.find((d) => d.id === activeDept.parentDepartmentId)?.secondaryDepartments ?? [];
     }
     return [];
-  }, [activeDept, departments]);
+  }, [isManagedBranchMode, activeDept, departments]);
   const isBranchMode = branchOptions.length > 0;
   const branchCodeOf = (name: string) =>
     departments.find((d) => d.name === name)?.code?.trim() || name;
-  // Derived section name in branch mode: primary department code + branch code +
-  // letter, e.g. Basic Science → CSE → "BS-CSE-A". The primary prefix makes the
-  // section self-describing (which shared department owns it and which branch it
-  // feeds) everywhere it appears - lists, rosters, promotion dropdowns.
+  // Derived section name in legacy branch mode: primary department code + branch
+  // code + letter, e.g. Basic Science → CSE → "BS-CSE-A". The primary prefix
+  // makes the section self-describing (which shared department owns it and
+  // which branch it feeds) everywhere it appears - lists, rosters, promotion
+  // dropdowns.
   const ownerCode = activeDept?.code?.trim() || "";
   const derivedName = branch && letter
     ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(branch)}-${letter.trim().toUpperCase()}`
@@ -151,7 +188,9 @@ export default function NewSectionPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.courseId) { toast({ variant: "destructive", title: "Course is required" }); return; }
-    if (isBranchMode) {
+    if (isManagedBranchMode) {
+      if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
+    } else if (isBranchMode) {
       if (!branch) { toast({ variant: "destructive", title: "Branch is required" }); return; }
       if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
     } else if (!form.name.trim()) {
@@ -160,10 +199,14 @@ export default function NewSectionPage() {
     if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
     if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
 
-    // In branch mode the section name is derived from the branch + letter and
-    // the chosen branch is sent as the section's secondary department, so its
-    // students inherit it and auto-promote into that branch later.
-    const sectionName = isBranchMode ? derivedName : form.name;
+    // Managed-branch mode: the section belongs directly to the resolved real
+    // branch (activeDept, e.g. IT) - name is just "{code}-{letter}", no owner
+    // prefix, since the department IS the branch, not a container feeding it.
+    // Legacy branch mode: name carries the owning (common) department's prefix
+    // too, and the chosen branch is sent as the section's secondary department
+    // so its students inherit it and auto-promote into that branch later.
+    // Otherwise: whatever the HOD typed.
+    const sectionName = isManagedBranchMode ? managedBranchName : isBranchMode ? derivedName : form.name;
 
     setSaving(true);
     try {
@@ -177,9 +220,10 @@ export default function NewSectionPage() {
           batch: form.batch,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
-          ...(isBranchMode ? { secondaryDepartment: branch } : {}),
-          // Omitted unless a parent HOD picked a sub-department; the API then
-          // falls back to their own department, as before.
+          ...(isBranchMode && !isManagedBranchMode ? { secondaryDepartment: branch } : {}),
+          // Omitted unless a parent HOD picked a sub-department (or, in
+          // managed-branch mode, the resolved real branch); the API then falls
+          // back to their own department, as before.
           ...(departmentId ? { departmentId } : {}),
         }),
       });
@@ -215,9 +259,10 @@ export default function NewSectionPage() {
               value={departmentName}
               onChange={(name, id) => {
                 setDepartmentName(name); setDepartmentId(id);
-                // The owning department changed - its assigned years and its
-                // configured branches both differ, so clear year/branch/letter.
-                setF({ year: "" }); setBranch(""); setLetter("");
+                // The owning department changed - its assigned years, its
+                // configured branches, and (for a real branch) its own course
+                // list all differ, so clear everything downstream.
+                setF({ year: "", courseId: "" }); setBranch(""); setLetter("");
               }}
               hint="Create this section in your own department or one of its sub-departments."
             />
@@ -232,7 +277,41 @@ export default function NewSectionPage() {
               </Select>
             </div>
 
-            {isBranchMode ? (
+            {isManagedBranchMode ? (
+              <>
+                {/* The Sub-Department/Department cascade above already resolved
+                    the real branch (e.g. IT) this section belongs to - all
+                    that's left is the section letter, and the name is just
+                    "{code}-{letter}" since the department IS the branch. */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Section Letter *</Label>
+                    <Input
+                      value={letter}
+                      onChange={(e) => setLetter(e.target.value.toUpperCase())}
+                      placeholder="A, B…"
+                      maxLength={2}
+                      className="uppercase"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Section name will be{" "}
+                      {letter.trim() ? <strong className="text-foreground">{managedBranchName}</strong> : `e.g. ${activeDept?.code || "IT"}-A`}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Year *</Label>
+                    <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                      <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+                      <SelectContent>
+                        {formYearOptions.map((y) => (
+                          <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </>
+            ) : isBranchMode ? (
               <>
                 {/* Shared-first-year department (e.g. Basic Science): the section
                     feeds one of the configured branches, so pick the branch +

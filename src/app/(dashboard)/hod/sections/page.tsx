@@ -37,6 +37,30 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
+// Pure, module-level (not a hook) so both deptOptions and yearTabOptions can
+// call it directly instead of one depending on the other's memoized result -
+// the real departments in scope, never a grouping container (sub-department
+// or common parent) itself. See useCascadeFilter's comment for the two shapes.
+function resolveScopeDepartments(
+  ownDept: Department | null,
+  departments: Department[],
+  isGroupingContainer: boolean,
+  useCascadeFilter: boolean,
+  groupingChildren: Department[],
+  plainChildren: Department[]
+): Department[] {
+  if (!ownDept) return [];
+  if (useCascadeFilter) {
+    const managedBranches = groupingChildren.flatMap((c) =>
+      departments.filter((d) => (c.managedDepartments ?? []).includes(d.name))
+    );
+    return [...plainChildren, ...managedBranches];
+  }
+  const children = departments.filter((d) => d.parentDepartmentId === ownDept.id);
+  const managed = departments.filter((d) => (ownDept.managedDepartments ?? []).includes(d.name));
+  return isGroupingContainer ? [...children, ...managed] : [ownDept, ...children, ...managed];
+}
+
 const STUDENT_FACULTY_RATIO = 15;
 
 export default function HODSectionsPage() {
@@ -49,6 +73,9 @@ export default function HODSectionsPage() {
   const [activeCourseKey, setActiveCourseKey] = useState<string>("all");
   const [activeYear, setActiveYear] = useState<number | "all">("all");
   const [deptFilter, setDeptFilter] = useState<string>("all");
+  // Which sub-department's managed branches are currently drilled into (the
+  // two-tier chip flow below) - null until one is picked.
+  const [subDeptFilter, setSubDeptFilter] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<SectionRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -82,24 +109,71 @@ export default function HODSectionsPage() {
   // A grouping container (e.g. "BS-Maths" grouping IT + CSE under a Sub-HOD) is
   // not a real department, so it's never a section's owner.
   const isGroupingContainer = (ownDept?.managedDepartments?.length ?? 0) > 0;
-  // Real departments this (sub-)HOD manages, feeding the branch filter tabs:
-  // sub-departments and grouped/managed branches. A grouping container drops
-  // itself; a normal HOD keeps their own department too.
-  const deptOptions = useMemo(() => {
-    if (!ownDept) return [];
-    const children = departments.filter((d) => d.parentDepartmentId === ownDept.id);
-    const managed = departments.filter((d) => (ownDept.managedDepartments ?? []).includes(d.name));
-    return isGroupingContainer ? [...children, ...managed] : [ownDept, ...children, ...managed];
-  }, [departments, ownDept, isGroupingContainer]);
+  // Own department's sub-departments, split into the ones that group real
+  // branches (BS-Maths managing IT/CSBS) and plain ones that don't.
+  const groupingChildren = useMemo(
+    () => (ownDept ? departments.filter((d) => d.parentDepartmentId === ownDept.id && (d.managedDepartments?.length ?? 0) > 0) : []),
+    [departments, ownDept]
+  );
+  const plainChildren = useMemo(
+    () => (ownDept ? departments.filter((d) => d.parentDepartmentId === ownDept.id && (d.managedDepartments?.length ?? 0) === 0) : []),
+    [departments, ownDept]
+  );
+  // Main/common HOD case (e.g. "Basic Science"): their own department isn't a
+  // grouping container itself, but has sub-departments and at least one of
+  // them groups real branches - so browsing goes Sub-Department -> Department
+  // instead of a flat list, and neither the common department nor its
+  // sub-departments (both mere containers) are ever offered as a filter target.
+  const useCascadeFilter = !isGroupingContainer && Boolean(ownDept?.hasSubDepartments) && groupingChildren.length > 0;
+
+  // Real departments this (sub-)HOD manages, feeding the branch filter tabs -
+  // never a grouping container (sub-department or common parent) itself.
+  const deptOptions = useMemo(
+    () => resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren),
+    [departments, ownDept, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren]
+  );
 
   // The department/branch filter tabs - the real departments this (sub-)HOD
-  // manages (never the grouping container), union-ed with any real department
+  // manages (never a grouping container), union-ed with any real department
   // already present on a loaded section so none is unreachable by a tab.
   const scopeDepartments = useMemo(() => {
     const names = new Set(deptOptions.map((d) => d.name));
     for (const s of sections) if (s.department && s.department !== ownDept?.name) names.add(s.department);
     return Array.from(names).filter(Boolean).sort();
   }, [deptOptions, sections, ownDept]);
+
+  // A sub-department never owns a course of its own (it shares its parent's),
+  // so `load()`'s default own-scope course fetch resolves to either ownDept
+  // (plain HOD) or ownDept's parent (sub-HOD) - it never reaches a MANAGED
+  // branch's own Course doc (e.g. IT's own "Bachelor of Technology"). Whenever
+  // deptOptions includes something beyond ownDept itself, fetch each of those
+  // departments' courses explicitly and merge them in, so the course tabs and
+  // Add Section's course list both cover every real branch in scope.
+  const needsExtraCourseFetch = deptOptions.some((d) => d.id !== ownDept?.id);
+  useEffect(() => {
+    if (!needsExtraCourseFetch) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const lists = await Promise.all(
+          deptOptions.map((d) =>
+            fetch(`/api/college/courses?departmentId=${encodeURIComponent(d.id)}`)
+              .then((r) => r.json() as Promise<{ courses: Course[] }>)
+              .then((j) => j.courses ?? [])
+          )
+        );
+        if (cancelled) return;
+        setCourses((prev) => {
+          const byId = new Map(prev.map((c) => [c.id, c]));
+          for (const list of lists) for (const c of list) byId.set(c.id, c);
+          return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+        });
+      } catch {
+        // Non-fatal - the default own-scope fetch from load() already covers the common case.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [needsExtraCourseFetch, deptOptions]);
 
   // The HOD's Course list unions courses across every related department - a
   // department fed by another (e.g. CSE fed by Basic Science's shared first-year
@@ -159,28 +233,56 @@ export default function HODSectionsPage() {
   const activeGroup = activeCourseKey !== "all" ? courseGroups.find((g) => g.key === activeCourseKey) ?? null : null;
   const activeCourseIds = activeGroup ? new Set(activeGroup.courseIds) : null;
 
+  // branch name -> the years its managing sub-department (or, if that has none
+  // of its own, the sub-department's parent common department) teaches - a real
+  // branch's OWN "Years Taught" never includes a shared year like the common
+  // first year on its own, so anything scoped by assignedYears must fall back
+  // to this for a managed branch, or a correctly-created shared-year section
+  // (and the year tab that reveals it) would vanish from its own HOD's list.
+  const managedBranchYears = useMemo(() => {
+    const m = new Map<string, number[]>();
+    for (const d of departments) {
+      for (const branchName of d.managedDepartments ?? []) {
+        if (m.has(branchName)) continue;
+        let years = d.assignedYears ?? [];
+        if (years.length === 0 && d.parentDepartmentId) {
+          years = departments.find((p) => p.id === d.parentDepartmentId)?.assignedYears ?? [];
+        }
+        m.set(branchName, years);
+      }
+    }
+    return m;
+  }, [departments]);
+
   // Year filter tabs follow the department's assigned years ("Years Taught"),
   // not the raw course span - so a department teaching [1,2,3] shows only those,
   // mirroring what the Add Section dropdown now offers. When a specific branch
-  // tab is active, use that branch's assigned years; otherwise union every
-  // department in this (sub-)HOD's scope. Falls back to the full course span
-  // when nothing is assigned yet.
+  // tab is active, use that branch's assigned years (unioned with its managing
+  // sub-department's, for a managed branch); otherwise union every department
+  // in this (sub-)HOD's scope. Falls back to the full course span when nothing
+  // is assigned yet.
   const yearTabOptions = useMemo(() => {
     if (!activeGroup) return [] as number[];
     const courseYears = Array.from({ length: activeGroup.durationYears }, (_, i) => i + 1);
     const relevant = deptFilter !== "all"
       ? departments.filter((d) => d.name === deptFilter)
-      : deptOptions;
+      : resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren);
     const assigned = new Set<number>();
-    for (const d of relevant) for (const y of d.assignedYears ?? []) assigned.add(y);
+    for (const d of relevant) {
+      for (const y of d.assignedYears ?? []) assigned.add(y);
+      for (const y of managedBranchYears.get(d.name) ?? []) assigned.add(y);
+    }
     return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
-  }, [activeGroup, deptFilter, departments, deptOptions]);
+  }, [activeGroup, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren, plainChildren, isGroupingContainer, managedBranchYears]);
 
   // Each section is scoped to the years its OWN department is assigned to teach
   // ("Years Taught"). A section whose year the department no longer teaches
   // (e.g. a 2nd-year section after the department was narrowed to 3rd year only)
   // drops out of the view, so the list tracks the Principal's year selection.
-  // Departments with no assigned years yet are left unrestricted.
+  // Departments with no assigned years yet are left unrestricted. A managed
+  // branch (see managedBranchYears above) also stays visible for any year its
+  // managing sub-department teaches, even though the branch's own Years Taught
+  // doesn't include it.
   const assignedYearsByDept = useMemo(() => {
     const m = new Map<string, number[]>();
     for (const d of departments) m.set(d.name, d.assignedYears ?? []);
@@ -191,13 +293,28 @@ export default function HODSectionsPage() {
   // both the summary totals and the filtered grid, so counts and cards agree.
   const yearScopedSections = useMemo(() => sections.filter((s) => {
     const assigned = assignedYearsByDept.get(s.department);
-    return !(assigned && assigned.length > 0 && !assigned.includes(s.year));
-  }), [sections, assignedYearsByDept]);
+    if (!assigned || assigned.length === 0 || assigned.includes(s.year)) return true;
+    return (managedBranchYears.get(s.department) ?? []).includes(s.year);
+  }), [sections, assignedYearsByDept, managedBranchYears]);
+
+  // Sub-department drill-down (only reachable when useCascadeFilter is active):
+  // with a sub-department picked but no specific branch yet, show every section
+  // across every branch it manages; once a branch chip is picked, deptFilter
+  // narrows to that one branch same as the flat (non-cascading) case below.
+  const subDeptBranchNames = useMemo(() => {
+    if (!subDeptFilter) return null;
+    const dept = groupingChildren.find((c) => c.name === subDeptFilter);
+    return dept ? new Set(dept.managedDepartments ?? []) : new Set<string>();
+  }, [subDeptFilter, groupingChildren]);
 
   const filteredSections = yearScopedSections.filter((s) => {
     if (activeCourseIds && !activeCourseIds.has(s.courseId)) return false;
     if (activeGroup && activeYear !== "all" && s.year !== activeYear) return false;
-    if (deptFilter !== "all" && s.department !== deptFilter) return false;
+    if (deptFilter !== "all") {
+      if (s.department !== deptFilter) return false;
+    } else if (subDeptBranchNames && !subDeptBranchNames.has(s.department)) {
+      return false;
+    }
     return true;
   });
 
@@ -290,35 +407,112 @@ export default function HODSectionsPage() {
         </div>
       )}
 
-      {/* Department / branch filter tabs - own department plus every branch
-          grouped under this (sub-)HOD, so a Sub-HOD can jump between the
-          departments assigned to them (All, CSE, IT, ...). */}
-      {scopeDepartments.length > 1 && (
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setDeptFilter("all")}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              deptFilter === "all"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border hover:bg-muted"
-            }`}
-          >
-            All Departments
-          </button>
-          {scopeDepartments.map((d) => (
+      {/* Department / branch filter tabs. Two shapes:
+          - Main/common HOD (useCascadeFilter): Sub-Department chips only - never
+            the common department or a sub-department itself, since neither owns
+            sections directly. Picking a sub-department reveals a second row of
+            just the real branches it manages (e.g. BS-Maths -> IT, CSBS).
+          - Everyone else (plain HOD, or a Sub-HOD logged in directly): the
+            existing flat row - own department plus every branch grouped under
+            them, so a Sub-HOD can jump between the departments assigned to
+            them (All, CSE, IT, ...). */}
+      {useCascadeFilter ? (
+        <>
+          <div className="flex gap-2 flex-wrap">
             <button
-              key={d}
-              onClick={() => setDeptFilter(d)}
+              onClick={() => { setSubDeptFilter(null); setDeptFilter("all"); }}
               className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                deptFilter === d
+                subDeptFilter === null && deptFilter === "all"
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-background border-border hover:bg-muted"
               }`}
             >
-              {d}
+              All Departments
             </button>
-          ))}
-        </div>
+            {plainChildren.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => { setSubDeptFilter(null); setDeptFilter(c.name); }}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  deptFilter === c.name
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {c.name}
+              </button>
+            ))}
+            {groupingChildren.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => { setSubDeptFilter(c.name); setDeptFilter("all"); }}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  subDeptFilter === c.name
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+
+          {subDeptFilter && (
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setDeptFilter("all")}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  deptFilter === "all"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                All {subDeptFilter}
+              </button>
+              {Array.from(subDeptBranchNames ?? []).sort().map((name) => (
+                <button
+                  key={name}
+                  onClick={() => setDeptFilter(name)}
+                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                    deptFilter === name
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background border-border hover:bg-muted"
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        scopeDepartments.length > 1 && (
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setDeptFilter("all")}
+              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                deptFilter === "all"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              }`}
+            >
+              All Departments
+            </button>
+            {scopeDepartments.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDeptFilter(d)}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  deptFilter === d
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        )
       )}
 
       {/* Year filter tabs (only when a specific course is selected) */}
