@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Download, Save, Mail, CheckCircle2, XCircle, Send, KeyRound, Clock, PenLine, Copy, AtSign } from "lucide-react";
+import { ArrowLeft, Plus, Download, Save, Mail, CheckCircle2, XCircle, KeyRound, Clock, PenLine, Copy } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { downloadDocumentAcknowledgementPdf } from "@/lib/pdf/downloadDocumentAcknowledgement";
@@ -18,11 +18,11 @@ import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate } from "@/lib/utils";
 import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { MarkOfferAcceptedDialog } from "@/components/hiring/MarkOfferAcceptedDialog";
-import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS, EMAIL_REQUEST_STATUS_LABELS } from "@/types";
-import type { Candidate, CandidateApplication, HiringBatch, OfferLetter, FacultyAccountRequest, EmailCreationRequest, CandidateStatus, CandidateStage } from "@/types";
+import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
+import type { Candidate, CandidateApplication, HiringBatch, OfferLetter, FacultyAccountRequest, CandidateStatus, CandidateStage } from "@/types";
 import { getDetailedHiringStatus, DETAILED_HIRING_STATUS_LABELS } from "@/lib/hiringPipeline";
 
-type Phase = "AWAITING_OFFER" | "AWAITING_ACCEPTANCE" | "AWAITING_DOCS" | "READY_TO_NOTIFY" | "NOTIFIED" | "APPOINTMENT_SENT";
+type Phase = "AWAITING_OFFER" | "AWAITING_ACCEPTANCE" | "AWAITING_DOCS" | "NOTIFIED" | "APPOINTMENT_SENT";
 
 // Same joined shape as the overview (college-office/documents/page.tsx) —
 // `id` is the applicationId this route is keyed by, `candidateId` is the
@@ -60,7 +60,6 @@ export default function CollegeOfficeCandidateDetailPage() {
   const [notified, setNotified] = useState(false);
   const [persistedVerified, setPersistedVerified] = useState(false);
   const [accountRequestsByOfferId, setAccountRequestsByOfferId] = useState<Record<string, FacultyAccountRequest>>({});
-  const [emailRequestsByFacultyId, setEmailRequestsByFacultyId] = useState<Record<string, EmailCreationRequest>>({});
   const [acceptDialogOffer, setAcceptDialogOffer] = useState<OfferLetter | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
@@ -77,9 +76,8 @@ export default function CollegeOfficeCandidateDetailPage() {
       fetch("/api/college/offer-letters").then((r) => r.json() as Promise<{ letters: OfferLetter[] }>).catch(() => ({ letters: [] })),
       fetch("/api/college/appointment-letters").then((r) => r.json() as Promise<{ letters: { candidateId: string }[] }>).catch(() => ({ letters: [] })),
       fetch("/api/college/faculty-account-requests").then((r) => r.json() as Promise<{ requests: FacultyAccountRequest[] }>).catch(() => ({ requests: [] })),
-      fetch("/api/college/email-requests").then((r) => r.json() as Promise<{ requests: EmailCreationRequest[] }>).catch(() => ({ requests: [] })),
     ])
-      .then(([appsRes, candsRes, batchesRes, infoRes, offersRes, appointmentsRes, accountRequestsRes, emailRequestsRes]) => {
+      .then(([appsRes, candsRes, batchesRes, infoRes, offersRes, appointmentsRes, accountRequestsRes]) => {
         const personMap = new Map((candsRes.candidates ?? []).map((c) => [c.id, c]));
         const application = (appsRes.applications ?? []).find((a) => a.id === applicationId);
         if (!application) {
@@ -112,13 +110,6 @@ export default function CollegeOfficeCandidateDetailPage() {
         }
         setOfferByCandidate(offerMap);
         setAccountRequestsByOfferId(Object.fromEntries((accountRequestsRes.requests ?? []).map((r) => [r.offerId, r])));
-
-        const emailMap: Record<string, EmailCreationRequest> = {};
-        for (const r of emailRequestsRes.requests ?? []) {
-          if (r.status === "CANCELLED") continue;
-          emailMap[r.facultyId] = r;
-        }
-        setEmailRequestsByFacultyId(emailMap);
 
         setJoiningLetterUrl(application.joiningLetterUrl ?? "");
         setNotified(!!application.documentVerification?.notifiedPrincipalAt);
@@ -154,21 +145,30 @@ export default function CollegeOfficeCandidateDetailPage() {
     if (!offer) return "AWAITING_OFFER";
     if (offer.status !== "ACCEPTED") return "AWAITING_ACCEPTANCE";
     if (!persistedVerified || !joiningLetterUrl) return "AWAITING_DOCS";
-    if (!notified) return "READY_TO_NOTIFY";
+    // The joining-letter upload notifies the Principal in the same request
+    // (see uploadJoiningLetter), so a letter on file means they're notified -
+    // this also covers older candidates uploaded before that was automatic.
     return "NOTIFIED";
   }
 
+  // Uploading the joining letter is the last thing Office does before the
+  // Principal can act, so notify them in the same request instead of making
+  // Office click a separate "Notify Principal" button afterward. Removing an
+  // already-uploaded letter (url === "") doesn't re-notify.
   async function uploadJoiningLetter(url: string) {
     if (!candidate) return;
     try {
       const res = await fetch(`/api/college/candidate-applications/${candidate.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ joiningLetterUrl: url }),
+        body: JSON.stringify({ joiningLetterUrl: url, ...(url ? { notifyPrincipalDocsReady: true } : {}) }),
       });
       if (!res.ok) throw new Error();
       setJoiningLetterUrl(url);
-      if (url) toast({ variant: "success", title: "Joining letter saved" });
+      if (url) {
+        setNotified(true);
+        toast({ variant: "success", title: "Joining letter saved", description: "Principal notified automatically." });
+      }
     } catch {
       toast({ variant: "destructive", title: "Failed to save joining letter" });
     }
@@ -363,25 +363,6 @@ ${institution}`;
     toast({ variant: "success", title: "Acceptance link copied" });
   }
 
-  async function handleNotifyPrincipal() {
-    if (!candidate) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/college/candidate-applications/${candidate.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notifyPrincipalDocsReady: true }),
-      });
-      if (!res.ok) throw new Error();
-      setNotified(true);
-      toast({ variant: "success", title: "Principal notified", description: "They can now send the appointment letter." });
-    } catch {
-      toast({ variant: "destructive", title: "Failed to notify Principal" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -491,7 +472,7 @@ ${institution}`;
             );
           })()}
 
-          {(phase === "AWAITING_DOCS" || phase === "READY_TO_NOTIFY" || phase === "NOTIFIED") && (
+          {(phase === "AWAITING_DOCS" || phase === "NOTIFIED") && (
             <>
               {docs.length === 0 && (
                 <p className="text-sm text-muted-foreground">No required documents set for this batch — add one below.</p>
@@ -539,13 +520,6 @@ ${institution}`;
                 </div>
               )}
 
-              {phase === "READY_TO_NOTIFY" && (
-                <div className="pt-2 border-t">
-                  <Button size="sm" disabled={busy} onClick={() => void handleNotifyPrincipal()}>
-                    <Send className="h-4 w-4 mr-1.5" /> Notify Principal — Ready for Appointment Letter
-                  </Button>
-                </div>
-              )}
               {phase === "NOTIFIED" && (
                 <div className="pt-2 border-t flex items-center gap-1.5 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -560,8 +534,8 @@ ${institution}`;
           {phase === "APPOINTMENT_SENT" && (() => {
             const offer = offerByCandidate[offerKey(candidate.candidateId, candidate.batchId)];
             const accountRequest = offer ? accountRequestsByOfferId[offer.id] : undefined;
-            const facultyId = accountRequest?.facultyId;
-            const emailRequest = facultyId ? emailRequestsByFacultyId[facultyId] : undefined;
+            // The faculty-account/credential request is the final step of the whole
+            // hiring pipeline now - CREDENTIALS_CREATED (or COMPLETED) closes it out.
             const credentialsReady = accountRequest?.status === "CREDENTIALS_CREATED" || accountRequest?.status === "COMPLETED";
             return (
               <div className="space-y-2">
@@ -588,22 +562,6 @@ ${institution}`;
                       <Link href={`/college-office/settings/faculty-credentials?ids=${candidate.id}`}>
                         <KeyRound className="h-3.5 w-3.5 mr-1.5" />
                         Request Faculty Account →
-                      </Link>
-                    </Button>
-                  )
-                )}
-                {credentialsReady && facultyId && (
-                  emailRequest ? (
-                    <Badge variant="outline" className="text-xs">
-                      <AtSign className="h-3 w-3 mr-1" />
-                      Official Email: {EMAIL_REQUEST_STATUS_LABELS[emailRequest.status]}
-                      {emailRequest.status === "COMPLETED" && emailRequest.assignedEmail ? ` — ${emailRequest.assignedEmail}` : ""}
-                    </Badge>
-                  ) : (
-                    <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" asChild>
-                      <Link href={`/college-office/email-requests/new?facultyId=${facultyId}`}>
-                        <AtSign className="h-3.5 w-3.5 mr-1.5" />
-                        Request Official Email
                       </Link>
                     </Button>
                   )
