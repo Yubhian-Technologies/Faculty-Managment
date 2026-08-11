@@ -18,6 +18,26 @@ type ImportRow = {
   doi?: string;
   paperLink?: string;
   scopusLink?: string;
+  // Extra bibliometric/report columns - see ResearchPublication (src/types/core.ts).
+  department?: string;
+  authorPosition?: string;
+  authorsId?: string;
+  venueType?: string;
+  documentType?: string;
+  facultyOrStudent?: string;
+  impactFactor?: string;
+  sjr?: string;
+  quartile?: string;
+  isbnIssn?: string;
+  volume?: string;
+  issue?: string;
+  articleNo?: string;
+  pageStart?: string;
+  pageEnd?: string;
+  citedBy?: string;
+  publicationStage?: string;
+  openAccess?: string;
+  eid?: string;
 };
 
 // Case/punctuation-insensitive so "Bharathi D.V.N." and "Bharathi, D.V.N."
@@ -43,6 +63,15 @@ function toLink(doi: string | undefined, paperLink: string | undefined, scopusLi
   if (paperLink?.trim()) return paperLink.trim();
   if (scopusLink?.trim()) return scopusLink.trim();
   return "";
+}
+
+// "Cited By" is a plain non-negative integer when present - "0" is a valid,
+// meaningful value (not "absent"), so this can't just fall back on truthiness.
+function toCitedBy(raw: string | undefined): number | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : undefined;
 }
 
 export async function POST(request: Request) {
@@ -108,6 +137,7 @@ export async function POST(request: Request) {
       const coAuthors = row.authorFullNames?.trim() || row.authors?.trim() || "";
       const driveLink = toLink(row.doi, row.paperLink, row.scopusLink);
       const indexing = row.indexed?.trim() || "";
+      const citedBy = toCitedBy(row.citedBy);
 
       const docRef = db.collection("colleges").doc(collegeId).collection("publications").doc();
       batch.set(docRef, {
@@ -121,6 +151,25 @@ export async function POST(request: Request) {
         publicationYear,
         ...(indexing ? { indexing } : {}),
         ...(driveLink ? { driveLink } : {}),
+        ...(row.department?.trim() ? { department: row.department.trim() } : {}),
+        ...(row.authorPosition?.trim() ? { authorPosition: row.authorPosition.trim() } : {}),
+        ...(row.authorsId?.trim() ? { authorsId: row.authorsId.trim() } : {}),
+        ...(row.venueType?.trim() ? { venueType: row.venueType.trim() } : {}),
+        ...(row.documentType?.trim() ? { documentType: row.documentType.trim() } : {}),
+        ...(row.facultyOrStudent?.trim() ? { facultyOrStudent: row.facultyOrStudent.trim() } : {}),
+        ...(row.impactFactor?.trim() ? { impactFactor: row.impactFactor.trim() } : {}),
+        ...(row.sjr?.trim() ? { sjr: row.sjr.trim() } : {}),
+        ...(row.quartile?.trim() ? { quartile: row.quartile.trim() } : {}),
+        ...(row.isbnIssn?.trim() ? { isbnIssn: row.isbnIssn.trim() } : {}),
+        ...(row.volume?.trim() ? { volume: row.volume.trim() } : {}),
+        ...(row.issue?.trim() ? { issue: row.issue.trim() } : {}),
+        ...(row.articleNo?.trim() ? { articleNo: row.articleNo.trim() } : {}),
+        ...(row.pageStart?.trim() ? { pageStart: row.pageStart.trim() } : {}),
+        ...(row.pageEnd?.trim() ? { pageEnd: row.pageEnd.trim() } : {}),
+        ...(citedBy !== undefined ? { citedBy } : {}),
+        ...(row.publicationStage?.trim() ? { publicationStage: row.publicationStage.trim() } : {}),
+        ...(row.openAccess?.trim() ? { openAccess: row.openAccess.trim() } : {}),
+        ...(row.eid?.trim() ? { eid: row.eid.trim() } : {}),
         addedBy: session.uid,
         addedByName,
         createdAt: now,

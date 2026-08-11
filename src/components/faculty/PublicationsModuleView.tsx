@@ -7,7 +7,27 @@ import type { FacultyProfileFields, ResearchPublication } from "@/types";
 
 const PREVIEW_COUNT = 3;
 
+// Bibliometric/report fields (from a Scopus-style import) are only shown
+// when present, so older hand-entered records don't sprout a wall of "-".
 function PublicationRow({ pub }: { pub: ResearchPublication }) {
+  const extras: { label: string; value: string | number | undefined }[] = [
+    { label: "Dept.", value: pub.department },
+    { label: "Author Position", value: pub.authorPosition },
+    { label: "Faculty / Student", value: pub.facultyOrStudent },
+    { label: "Document Type", value: pub.documentType ?? pub.venueType },
+    { label: "Impact Factor", value: pub.impactFactor },
+    { label: "SJR", value: pub.sjr },
+    { label: "Quartile", value: pub.quartile },
+    { label: "Volume", value: pub.volume },
+    { label: "Issue", value: pub.issue },
+    { label: "Pages", value: pub.pageStart && pub.pageEnd ? `${pub.pageStart}-${pub.pageEnd}` : pub.pageStart || pub.pageEnd },
+    { label: "Cited By", value: pub.citedBy },
+    { label: "Publication Stage", value: pub.publicationStage },
+    { label: "Open Access", value: pub.openAccess },
+    { label: "ISBN / ISSN", value: pub.isbnIssn },
+    { label: "EID", value: pub.eid },
+  ].filter((f) => f.value !== undefined && f.value !== "");
+
   return (
     <div className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
       <Field label="Title" value={pub.title} />
@@ -15,6 +35,7 @@ function PublicationRow({ pub }: { pub: ResearchPublication }) {
       <Field label="Journal / Conference" value={pub.journalOrConference} />
       <Field label="Year" value={pub.publicationYear} />
       <Field label="Indexing" value={pub.indexing} />
+      {extras.map((f) => <Field key={f.label} label={f.label} value={f.value} />)}
       {pub.driveLink && (
         <a
           href={pub.driveLink}
