@@ -3,15 +3,25 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { SUPPORTING_STAFF_ROLE_CATEGORY } from "@/lib/supportingStaff/roleCategory";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { SUPPORTING_STAFF_ROLE_CATEGORY, canRolePostCategory } from "@/lib/supportingStaff/roleCategory";
 import type { SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus } from "@/types";
+
+// HOD may only reach Technical-staff records within their own (or owned
+// sub-) department - mirrors canHodEditDepartment's use in faculty/[id]/route.ts.
+async function hodCanAccessStaff(
+  db: FirebaseFirestore.Firestore, collegeId: string, uid: string, staffDepartment: string | undefined,
+): Promise<boolean> {
+  const scope = await getHodDepartmentScope(db, collegeId, uid);
+  return !!staffDepartment && canHodEditDepartment(scope, staffDepartment);
+}
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("SUPER_ADMIN", "COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
     const { id } = await params;
 
     const db = getAdminDb();
@@ -19,9 +29,16 @@ export async function GET(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+    const staffData = snap.data() as { staffCategory?: SupportingStaffCategory; department?: string };
 
+    // View access: same category filter as the list GET (COLLEGE_OFFICE ->
+    // Non-Technical only, HOD -> Technical only; PRINCIPAL/VICE_PRINCIPAL/
+    // SUPER_ADMIN see both, unrestricted).
     const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
-    if (requiredCategory && (snap.data() as { staffCategory?: SupportingStaffCategory }).staffCategory !== requiredCategory) {
+    if (requiredCategory && staffData.staffCategory !== requiredCategory) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (session.role === "HOD" && !(await hodCanAccessStaff(db, session.collegeId, session.uid, staffData.department))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
@@ -40,7 +57,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const { id } = await params;
 
     const body = (await request.json()) as Partial<{
@@ -95,15 +112,25 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
-    if (requiredCategory) {
-      if ((snap.data() as { staffCategory?: SupportingStaffCategory }).staffCategory !== requiredCategory) {
+    const currentCategory = (snap.data() as { staffCategory?: SupportingStaffCategory }).staffCategory ?? "NON_TECHNICAL";
+    if (!canRolePostCategory(session.role, currentCategory)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    // Category is locked to what the caller's role may touch - can't
+    // reassign a record into another role's territory via edit.
+    if (body.staffCategory !== undefined && !canRolePostCategory(session.role, body.staffCategory)) {
+      return NextResponse.json({ error: "Cannot change staff category" }, { status: 403 });
+    }
+    if (session.role === "HOD") {
+      const staffDept = (snap.data() as { department?: string }).department;
+      if (!(await hodCanAccessStaff(db, session.collegeId, session.uid, staffDept))) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
-      // Category is locked to the caller's role - HOD/College Office can't
-      // reassign a record into the other role's territory via edit.
-      if (body.staffCategory !== undefined && body.staffCategory !== requiredCategory) {
-        return NextResponse.json({ error: "Cannot change staff category" }, { status: 403 });
+      if (body.department !== undefined) {
+        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+        if (!canHodEditDepartment(scope, body.department)) {
+          return NextResponse.json({ error: "That department is not yours or one of your sub-departments" }, { status: 403 });
+        }
       }
     }
 
@@ -201,7 +228,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const { id } = await params;
 
     const db = getAdminDb();
@@ -210,10 +237,12 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const staffData = snap.data() as { name?: string; userUid?: string; staffCategory?: SupportingStaffCategory };
+    const staffData = snap.data() as { name?: string; userUid?: string; staffCategory?: SupportingStaffCategory; department?: string };
 
-    const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
-    if (requiredCategory && staffData.staffCategory !== requiredCategory) {
+    if (!canRolePostCategory(session.role, staffData.staffCategory ?? "NON_TECHNICAL")) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (session.role === "HOD" && !(await hodCanAccessStaff(db, session.collegeId, session.uid, staffData.department))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 

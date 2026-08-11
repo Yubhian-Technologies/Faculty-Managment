@@ -6,9 +6,11 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodTechnicalDesignations } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type {
-  SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus,
+  SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus, CollegeType,
   SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
   NonTechnicalResponsibility, ComputerSkill,
 } from "@/types";
@@ -289,7 +291,7 @@ function buildSupportingStaffProfile(
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD");
     const body = (await request.json()) as { records: ImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
@@ -302,6 +304,28 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeId = session.collegeId;
+    const staffCategory: SupportingStaffCategory = session.role === "HOD" ? "TECHNICAL" : "NON_TECHNICAL";
+
+    // Some college types (School) have no Technical/Non-Technical split -
+    // Supporting Staff there is centrally managed by Principal, so HOD has
+    // nothing to import. Backstops the nav-hide in Sidebar.tsx.
+    if (session.role === "HOD") {
+      const collegeSnap = await db.collection("colleges").doc(collegeId).get();
+      const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
+      if (getHodTechnicalDesignations(collegeType).length === 0) {
+        return NextResponse.json(
+          { error: "Supporting Staff for your college type is managed centrally by Principal" },
+          { status: 403 },
+        );
+      }
+    }
+
+    // HOD's imported rows are confined to their own (or owned sub-)
+    // department, same as the single "Add Staff" form and the Faculty import.
+    const hodScope = session.role === "HOD" ? await getHodDepartmentScope(db, collegeId, session.uid) : null;
+    if (hodScope && !hodScope.departmentName) {
+      return NextResponse.json({ error: "Your account has no department assigned - contact Administration" }, { status: 400 });
+    }
 
     const existingSnap = await db.collection("colleges").doc(collegeId).collection("supportingStaff")
       .select("employeeId").get();
@@ -343,8 +367,6 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const staffCategory: SupportingStaffCategory = "NON_TECHNICAL";
-
       const designationKey = row.designation.trim().toLowerCase();
       const designation: SupportingStaffDesignation = NON_TECHNICAL_DESIGNATION_MAP[designationKey] ?? row.designation.trim();
 
@@ -377,6 +399,13 @@ export async function POST(request: Request) {
           dropped(empId, "Department", department);
           department = "";
         }
+      }
+      if (hodScope) {
+        if (department && !canHodEditDepartment(hodScope, department)) {
+          dropped(empId, "Department", `${department} (not yours or one of your sub-departments)`);
+          department = "";
+        }
+        if (!department) department = hodScope.departmentName;
       }
 
       // Optional login creation - a CSV row with a Password fills in this

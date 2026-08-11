@@ -1,25 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
-import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
+import { getHodTechnicalDesignations, designationLabel } from "@/lib/designations/config";
 import { EMPLOYMENT_TYPE_LABELS } from "@/types";
-import type { EmploymentType, Department } from "@/types";
+import type { EmploymentType } from "@/types";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -33,7 +34,6 @@ const schema = z.object({
   experienceYears: z.number().min(0, "Cannot be negative"),
   joiningDate: z.string().min(1, "Joining date is required"),
   employmentType: z.string().min(1, "Employment type is required"),
-  department: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -45,25 +45,19 @@ interface WizardStep {
   label: string;
 }
 
+// Department is not asked here - the API defaults a new Technical staff
+// record to the HOD's own department automatically, same as Add Faculty.
 // Steps beyond "core" reuse SupportingStaffModuleEditor, the same per-module
 // field renderer the View/Edit hub uses (SUPPORTING_STAFF_MODULES) - so the
 // wizard's modules match what Edit later shows, 1:1.
-export default function NewNonTechnicalStaffPage() {
+export default function NewHodSupportingStaffPage() {
   const router = useRouter();
-  const { collegeType } = useCollegeType();
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const { collegeType, loading: collegeTypeLoading } = useCollegeType();
   const [record, setRecord] = useState<SupportingStaffEditRecord>({});
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [tempPhotoId] = useState(() => crypto.randomUUID());
   const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
-      .catch(() => { /* department assignment is optional */ });
-  }, []);
 
   const {
     register,
@@ -74,13 +68,13 @@ export default function NewNonTechnicalStaffPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", department: "" },
+    defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "" },
   });
 
   const designation = watch("designation");
   const employmentType = watch("employmentType");
-  const department = watch("department");
   const name = watch("name");
+  const designationOptions = getHodTechnicalDesignations(collegeType);
 
   const steps: WizardStep[] = useMemo(() => [
     { key: "core", label: "Identity & Employment" },
@@ -110,7 +104,7 @@ export default function NewNonTechnicalStaffPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
-          staffCategory: "NON_TECHNICAL",
+          staffCategory: "TECHNICAL",
           ...record,
           supportingStaffProfile: record.supportingStaffProfile ?? {},
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
@@ -127,8 +121,8 @@ export default function NewNonTechnicalStaffPage() {
         return;
       }
 
-      toast({ variant: "success", title: "Non-Technical staff added", description: `${data.name} has been added.` });
-      router.push("/college-office/non-technical-staff");
+      toast({ variant: "success", title: "Supporting Staff added", description: `${data.name} has been added.` });
+      router.push("/hod/supporting-staff");
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
     } finally {
@@ -136,9 +130,26 @@ export default function NewNonTechnicalStaffPage() {
     }
   };
 
+  if (!collegeTypeLoading && designationOptions.length === 0) {
+    return (
+      <div className="max-w-2xl">
+        <PageHeader title="Add Supporting Staff" description="Centrally managed by Principal for your college" />
+        <Card>
+          <CardContent className="py-16">
+            <EmptyState
+              title="Managed by Principal"
+              description="Supporting Staff for your college type is managed centrally by Principal, not per-department."
+              icon={<UsersRound className="h-8 w-8" />}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Add Non-Technical Staff" description="Add a Non-Technical staff member for your college" />
+      <PageHeader title="Add Supporting Staff" description="Add a Technical staff member for your department" />
 
       <div className="flex flex-wrap gap-2 mb-4">
         {steps.map((s, i) => (
@@ -173,7 +184,7 @@ export default function NewNonTechnicalStaffPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="name">Full Name *</Label>
-                      <Input id="name" {...register("name")} placeholder="Lakshmi Devi" />
+                      <Input id="name" {...register("name")} placeholder="Suresh Babu" />
                       {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                     </div>
                   </div>
@@ -204,19 +215,26 @@ export default function NewNonTechnicalStaffPage() {
                   <p className="text-xs text-muted-foreground">Share this with the staff member so they can log in with their college email.</p>
                 </div>
 
+                <div className="pt-2 pb-1 border-t">
+                  <p className="text-sm font-medium text-muted-foreground">Role Details</p>
+                </div>
+
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Designation *</Label>
                     <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                      <SelectContent><DesignationOptions collegeType={collegeType} kind="non-technical" /></SelectContent>
+                      <SelectContent>
+                        {designationOptions.map((v) => <SelectItem key={v} value={v}>{designationLabel(v)}</SelectItem>)}
+                        <SelectItem value="OTHER">Other</SelectItem>
+                      </SelectContent>
                     </Select>
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   {designation === "OTHER" && (
                     <div className="space-y-2">
                       <Label htmlFor="otherDesignationTitle">Designation Title</Label>
-                      <Input id="otherDesignationTitle" {...register("otherDesignationTitle")} placeholder="e.g. Store Keeper" />
+                      <Input id="otherDesignationTitle" {...register("otherDesignationTitle")} placeholder="e.g. Lab Technician" />
                     </div>
                   )}
                   <div className="space-y-2">
@@ -224,18 +242,6 @@ export default function NewNonTechnicalStaffPage() {
                     <Input id="experienceYears" type="number" min={0} {...register("experienceYears", { valueAsNumber: true })} />
                     {errors.experienceYears && <p className="text-sm text-destructive">{errors.experienceYears.message}</p>}
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Department</Label>
-                  <Select value={department || "__none__"} onValueChange={(v) => setValue("department", v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="Centrally managed (no department)" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Centrally managed (no department)</SelectItem>
-                      {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Optional - leave unassigned for centrally-managed roles like Librarian or Accountant.</p>
                 </div>
 
                 <div className="pt-2 pb-1 border-t">
@@ -248,9 +254,7 @@ export default function NewNonTechnicalStaffPage() {
                     <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v as EmploymentType)}>
                       <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => (
-                          <SelectItem key={v} value={v}>{l}</SelectItem>
-                        ))}
+                        {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}

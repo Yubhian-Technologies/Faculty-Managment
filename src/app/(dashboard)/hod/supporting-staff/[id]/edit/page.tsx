@@ -11,12 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
-import { DesignationOptions } from "@/components/faculty/DesignationOptions";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import { toDateInputValue } from "@/lib/utils";
+import { getHodTechnicalDesignations, designationLabel } from "@/lib/designations/config";
 import { EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { EmploymentType, FacultyStatus, SupportingStaffDesignation, Department } from "@/types";
+import type { EmploymentType, FacultyStatus, SupportingStaffDesignation } from "@/types";
 
 interface StaffForm {
   name: string;
@@ -24,7 +24,6 @@ interface StaffForm {
   collegeEmail: string;
   designation: SupportingStaffDesignation;
   otherDesignationTitle: string;
-  department: string;
   experienceYears: number;
   employmentType: EmploymentType;
   status: FacultyStatus;
@@ -33,14 +32,13 @@ interface StaffForm {
 
 const EMPTY_FORM: StaffForm = {
   name: "", phone: "", collegeEmail: "", designation: "", otherDesignationTitle: "",
-  department: "", experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
+  experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
 };
 
-// Account/employment fields only - Personal Details and the Profile modules
-// (Qualifications, Job Responsibilities & Skills, Training, Achievements,
-// Others) are edited one section at a time from the view hub at
-// /college-office/non-technical-staff/[id] instead (see that page).
-export default function EditNonTechnicalStaffAccountPage() {
+// Department isn't editable here - a Technical staff record stays owned by
+// the department it was created in (server-enforced, see
+// /api/college/supporting-staff/[id] PATCH's HOD scope check).
+export default function EditHodSupportingStaffPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
@@ -50,16 +48,9 @@ export default function EditNonTechnicalStaffAccountPage() {
   const [saving, setSaving] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
+  const [department, setDepartment] = useState("");
   const [form, setForm] = useState<StaffForm>(EMPTY_FORM);
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
-      .catch(() => { /* department assignment is optional */ });
-  }, []);
 
   useEffect(() => {
     fetch(`/api/college/supporting-staff/${staffId}`)
@@ -67,19 +58,19 @@ export default function EditNonTechnicalStaffAccountPage() {
       .then((data) => {
         if (!data.staff) {
           toast({ variant: "destructive", title: "Staff record not found" });
-          router.push("/college-office/non-technical-staff");
+          router.push("/hod/supporting-staff");
           return;
         }
         const m = data.staff;
         setEmployeeId((m.employeeId as string) ?? "");
         setEmail((m.email as string) ?? "");
+        setDepartment((m.department as string) ?? "");
         setForm({
           name: (m.name as string) ?? "",
           phone: (m.phone as string) ?? "",
           collegeEmail: (m.collegeEmail as string) ?? "",
           designation: (m.designation as SupportingStaffDesignation) ?? "",
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
-          department: (m.department as string) ?? "",
           experienceYears: (m.experienceYears as number) ?? 0,
           employmentType: (m.employmentType as EmploymentType) ?? "PERMANENT",
           status: (m.status as FacultyStatus) ?? "ACTIVE",
@@ -126,7 +117,7 @@ export default function EditNonTechnicalStaffAccountPage() {
       if (!res.ok) throw new Error();
 
       toast({ variant: "success", title: "Staff record updated" });
-      router.push(`/college-office/non-technical-staff/${staffId}`);
+      router.push("/hod/supporting-staff");
     } catch {
       toast({ variant: "destructive", title: "Failed to update" });
     } finally {
@@ -137,20 +128,22 @@ export default function EditNonTechnicalStaffAccountPage() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Edit Non-Technical Staff" description="Loading…" />
+        <PageHeader title="Edit Supporting Staff" description="Loading…" />
       </div>
     );
   }
 
+  const designationOptions = getHodTechnicalDesignations(collegeType);
+
   return (
     <div className="max-w-xl">
       <Button variant="ghost" size="sm" className="mb-4" asChild>
-        <Link href={`/college-office/non-technical-staff/${staffId}`}>
+        <Link href="/hod/supporting-staff">
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Profile
+          Back to Supporting Staff
         </Link>
       </Button>
-      <PageHeader title="Edit Non-Technical Staff" description={`Employee ID: ${employeeId} · ${email}`} />
+      <PageHeader title="Edit Supporting Staff" description={`Employee ID: ${employeeId} · ${email}`} />
 
       <form onSubmit={handleSubmit}>
         <Card className="mt-6">
@@ -197,24 +190,21 @@ export default function EditNonTechnicalStaffAccountPage() {
                 <Label>Designation *</Label>
                 <Select value={form.designation} onValueChange={(v) => set({ designation: v as SupportingStaffDesignation })}>
                   <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                  <SelectContent><DesignationOptions collegeType={collegeType} kind="non-technical" /></SelectContent>
+                  <SelectContent>
+                    {designationOptions.map((v) => <SelectItem key={v} value={v}>{designationLabel(v)}</SelectItem>)}
+                    <SelectItem value="OTHER">Other</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Department</Label>
-                <Select value={form.department || "__none__"} onValueChange={(v) => set({ department: v === "__none__" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Centrally managed" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Centrally managed (no department)</SelectItem>
-                    {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Input value={department || "-"} disabled />
               </div>
             </div>
             {form.designation === "OTHER" && (
               <div className="space-y-2">
                 <Label>Designation Title</Label>
-                <Input value={form.otherDesignationTitle} onChange={(e) => set({ otherDesignationTitle: e.target.value })} placeholder="e.g. Store Keeper" />
+                <Input value={form.otherDesignationTitle} onChange={(e) => set({ otherDesignationTitle: e.target.value })} placeholder="e.g. Lab Technician" />
               </div>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -255,7 +245,7 @@ export default function EditNonTechnicalStaffAccountPage() {
         </Card>
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end mt-6 pt-4 border-t">
-          <Button type="button" variant="outline" onClick={() => router.push(`/college-office/non-technical-staff/${staffId}`)}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={() => router.push("/hod/supporting-staff")}>Cancel</Button>
           <Button type="submit" loading={saving}>Save Changes</Button>
         </div>
       </form>

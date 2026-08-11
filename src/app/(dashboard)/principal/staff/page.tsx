@@ -10,8 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import { ROLE_LABELS } from "@/types";
-import type { Department, UserRole } from "@/types";
+import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS, ROLE_LABELS, STAFF_CATEGORY_LABELS } from "@/types";
+import type { Department, UserRole, SupportingStaffMember, SupportingStaffCategory, SupportingStaffDesignation } from "@/types";
 
 type StaffUser = {
   uid: string;
@@ -24,23 +24,31 @@ type StaffUser = {
   isActive?: boolean;
 };
 
+function supportingDesignationLabel(designation: SupportingStaffDesignation): string {
+  return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
+}
+
 export default function PrincipalStaffPage() {
   const [staff, setStaff] = useState<StaffUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [supportingStaff, setSupportingStaff] = useState<SupportingStaffMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [staffRes, deptsRes] = await Promise.all([
+      const [staffRes, deptsRes, supportingRes] = await Promise.all([
         fetch("/api/college/users"),
         fetch("/api/college/departments"),
+        fetch("/api/college/supporting-staff"),
       ]);
       const json = await staffRes.json() as { users: StaffUser[] };
       const deptsJson = await deptsRes.json() as { departments: Department[] };
+      const supportingJson = await supportingRes.json() as { staff: SupportingStaffMember[] };
       setStaff(json.users ?? []);
       setDepartments(deptsJson.departments ?? []);
+      setSupportingStaff(supportingJson.staff ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load staff" });
     } finally {
@@ -85,6 +93,13 @@ export default function PrincipalStaffPage() {
   const grouped = ROLE_ORDER
     .map((role) => ({ role, users: staff.filter((u) => u.role === role) }))
     .filter((g) => g.users.length > 0);
+
+  // Non-Technical first (Principal can add/edit these), then Technical
+  // (view-only here - that stays HOD's department-scoped domain).
+  const CATEGORY_ORDER: SupportingStaffCategory[] = ["NON_TECHNICAL", "TECHNICAL"];
+  const groupedSupporting = CATEGORY_ORDER
+    .map((category) => ({ category, members: supportingStaff.filter((s) => s.staffCategory === category) }))
+    .filter((g) => g.members.length > 0);
 
   return (
     <div className="space-y-6">
@@ -170,6 +185,66 @@ export default function PrincipalStaffPage() {
                                 </Button>
                               </div>
                             </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && groupedSupporting.length > 0 && (
+        <div className="space-y-6 pt-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-lg">Supporting Staff</h2>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/principal/staff/non-technical/new"><Plus className="h-4 w-4 mr-2" />Add Non-Technical Staff</Link>
+            </Button>
+          </div>
+          {groupedSupporting.map((g) => (
+            <div key={g.category}>
+              <h3 className="font-medium text-sm mb-3 text-muted-foreground">
+                {STAFF_CATEGORY_LABELS[g.category]} <span className="font-normal">({g.members.length})</span>
+                {g.category === "TECHNICAL" && <span className="ml-2 text-xs">(managed by HOD - view only)</span>}
+              </h3>
+              <Card>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Designation</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Department</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
+                          {g.category === "NON_TECHNICAL" && <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Action</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {g.members.map((m) => (
+                          <tr key={m.id}>
+                            <td className="px-4 py-2.5 font-medium">
+                              {m.name}
+                              {m.collegeEmail && <p className="text-xs text-muted-foreground font-normal">{m.collegeEmail}</p>}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {m.designation === "OTHER" && m.otherDesignationTitle ? m.otherDesignationTitle : supportingDesignationLabel(m.designation)}
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground">{m.department || "Centrally managed"}</td>
+                            <td className="px-4 py-2.5">
+                              <Badge variant={m.status === "ACTIVE" ? "default" : "secondary"} className="text-xs">{m.status}</Badge>
+                            </td>
+                            {g.category === "NON_TECHNICAL" && (
+                              <td className="px-4 py-2.5 text-right">
+                                <Button size="sm" variant="outline" asChild>
+                                  <Link href={`/principal/staff/non-technical/${m.id}`}><Eye className="h-3.5 w-3.5 mr-1" />View</Link>
+                                </Button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>

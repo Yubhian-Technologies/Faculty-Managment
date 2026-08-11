@@ -36,11 +36,7 @@ const EMPTY_FORM: StaffForm = {
   department: "", experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
 };
 
-// Account/employment fields only - Personal Details and the Profile modules
-// (Qualifications, Job Responsibilities & Skills, Training, Achievements,
-// Others) are edited one section at a time from the view hub at
-// /college-office/non-technical-staff/[id] instead (see that page).
-export default function EditNonTechnicalStaffAccountPage() {
+export default function EditPrincipalNonTechnicalStaffPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const staffId = params.id;
@@ -67,7 +63,7 @@ export default function EditNonTechnicalStaffAccountPage() {
       .then((data) => {
         if (!data.staff) {
           toast({ variant: "destructive", title: "Staff record not found" });
-          router.push("/college-office/non-technical-staff");
+          router.push("/principal/staff");
           return;
         }
         const m = data.staff;
@@ -126,7 +122,7 @@ export default function EditNonTechnicalStaffAccountPage() {
       if (!res.ok) throw new Error();
 
       toast({ variant: "success", title: "Staff record updated" });
-      router.push(`/college-office/non-technical-staff/${staffId}`);
+      router.push("/principal/staff");
     } catch {
       toast({ variant: "destructive", title: "Failed to update" });
     } finally {
@@ -145,9 +141,9 @@ export default function EditNonTechnicalStaffAccountPage() {
   return (
     <div className="max-w-xl">
       <Button variant="ghost" size="sm" className="mb-4" asChild>
-        <Link href={`/college-office/non-technical-staff/${staffId}`}>
+        <Link href="/principal/staff">
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Profile
+          Back to Staff
         </Link>
       </Button>
       <PageHeader title="Edit Non-Technical Staff" description={`Employee ID: ${employeeId} · ${email}`} />
@@ -255,7 +251,7 @@ export default function EditNonTechnicalStaffAccountPage() {
         </Card>
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end mt-6 pt-4 border-t">
-          <Button type="button" variant="outline" onClick={() => router.push(`/college-office/non-technical-staff/${staffId}`)}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={() => router.push("/principal/staff")}>Cancel</Button>
           <Button type="submit" loading={saving}>Save Changes</Button>
         </div>
       </form>

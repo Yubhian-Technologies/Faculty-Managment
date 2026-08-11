@@ -8,23 +8,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCollegeType } from "@/hooks/useCollegeType";
+import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
 import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS } from "@/types";
 import type { Department, UserRole } from "@/types";
 
-// Roles a Principal/VP can create here - must match PRINCIPAL_ROLES in
-// src/app/api/college/users/route.ts.
-const CREATABLE_ROLES: UserRole[] = [
-  "HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF",
-  "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
-  "LIBRARY", "EXAM_CELL", "WEBMASTER",
-];
+// Base roles every college type can create, plus whichever "internal
+// office" roles (Dean/IQAC/T&P/R&D/Placement/Library/Exam Cell/Webmaster)
+// apply to this college's type - see getCreatableOfficeRoles. Must match
+// the same college-type gating in src/app/api/college/users/route.ts.
+const BASE_CREATABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF"];
 
 // One holder per college — matches COLLEGE_SINGLETON_ROLES on the API route.
 const SINGLETON_ROLES: UserRole[] = ["LIBRARY", "EXAM_CELL", "WEBMASTER"];
 
 export default function NewStaffPage() {
   const router = useRouter();
+  const { collegeType } = useCollegeType();
+  const CREATABLE_ROLES: UserRole[] = [...BASE_CREATABLE_ROLES, ...getCreatableOfficeRoles(collegeType)];
   const [departments, setDepartments] = useState<Department[]>([]);
 
   const [name, setName] = useState("");

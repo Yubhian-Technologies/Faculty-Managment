@@ -43,6 +43,18 @@ export const TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]
   ],
 };
 
+// Degree and Polytechnic's supporting-staff lists (below) split into a
+// Technical half (HOD, department-scoped) and a Non-Technical half
+// (Principal/College Office, college-wide) - same ownership model as
+// Engineering/Pharmacy/Dental's LEGACY_TECHNICAL_DESIGNATIONS split. School's
+// supporting list is deliberately NOT split (see getHodTechnicalDesignations).
+const DEGREE_TECHNICAL_DESIGNATIONS = ["Lab Assistant", "Programmer", "Network I/C"];
+const DEGREE_NON_TECHNICAL_DESIGNATIONS = ["AO", "Sr. Office Assistant", "Office Assistant", "Librarian", "Trainee"];
+const POLYTECHNIC_TECHNICAL_DESIGNATIONS = [
+  "Sr. Lab Technician", "Drawing Assistant", "Lab Assistant", "Programmer", "Computer Operator", "Lab Technician",
+];
+const POLYTECHNIC_NON_TECHNICAL_DESIGNATIONS = ["A.A.O", "Office Assistant", "Attender"];
+
 export const SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
   ENGINEERING: ENGINEERING_SUPPORTING,
   PHARMACY: ENGINEERING_SUPPORTING,
@@ -74,6 +86,39 @@ export function getTeachingDesignations(type: CollegeType | undefined | null): s
 
 export function getSupportingDesignations(type: CollegeType | undefined | null): string[] {
   return SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? ENGINEERING_SUPPORTING;
+}
+
+// Designation picklist for HOD's Technical Staff (Supporting Staff
+// staffCategory "TECHNICAL"), and its Non-Technical counterpart for
+// College Office/Principal. Engineering/Pharmacy/Dental and Degree/
+// Polytechnic all have a real split; School deliberately does not (its
+// supporting staff is centrally managed, non-technical only - see
+// hasSupportingStaffSplit, which HOD's Sidebar nav entry keys off of).
+export function hasSupportingStaffSplit(type: CollegeType | undefined | null): boolean {
+  return type !== "SCHOOL";
+}
+
+export function getHodTechnicalDesignations(type: CollegeType | undefined | null): string[] {
+  switch (type) {
+    case "DEGREE": return DEGREE_TECHNICAL_DESIGNATIONS;
+    case "POLYTECHNIC": return POLYTECHNIC_TECHNICAL_DESIGNATIONS;
+    case "SCHOOL": return [];
+    default: return LEGACY_TECHNICAL_DESIGNATIONS; // ENGINEERING/PHARMACY/DENTAL and any unset type
+  }
+}
+
+// Non-Technical designation picklist for College Office/Principal. Only
+// Degree/Polytechnic actually differ from the full supporting list (their
+// Technical subset above is excluded) - every other type's Non-Technical
+// picker keeps showing the same full list it always has (see
+// getSupportingDesignations - untouched, still used by Salary Structures
+// and CSV-import label lookups regardless of category).
+export function getNonTechnicalDesignations(type: CollegeType | undefined | null): string[] {
+  switch (type) {
+    case "DEGREE": return DEGREE_NON_TECHNICAL_DESIGNATIONS;
+    case "POLYTECHNIC": return POLYTECHNIC_NON_TECHNICAL_DESIGNATIONS;
+    default: return getSupportingDesignations(type);
+  }
 }
 
 // A record created before this per-college-type system existed - including
