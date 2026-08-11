@@ -9,17 +9,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
 import type { College } from "@/types";
 
-const ROLE_OPTIONS = [
+const ALL_ROLE_OPTIONS = [
   { value: "PLACEMENT_DEPT", label: "Placement Department" },
   { value: "EXAM_CELL", label: "Exam Cell" },
 ] as const;
 
-type StaffRole = (typeof ROLE_OPTIONS)[number]["value"];
+type StaffRole = (typeof ALL_ROLE_OPTIONS)[number]["value"];
 
 function isStaffRole(value: string | null): value is StaffRole {
-  return ROLE_OPTIONS.some((r) => r.value === value);
+  return ALL_ROLE_OPTIONS.some((r) => r.value === value);
 }
 
 export default function NewCollegeStaffPage() {
@@ -46,10 +47,20 @@ export default function NewCollegeStaffPage() {
           return;
         }
         setCollege(c);
+        // This college's type may not offer the role picked from the query
+        // param/default (e.g. a School or Polytechnic college doesn't have
+        // Exam Cell) - fall back to whatever this type does offer, if any.
+        const applicableRoles = getCreatableOfficeRoles(c.type);
+        const availableOptions = ALL_ROLE_OPTIONS.filter((r) => applicableRoles.includes(r.value));
+        setForm((f) => (
+          availableOptions.some((r) => r.value === f.role) ? f : { ...f, role: availableOptions[0]?.value ?? "" }
+        ));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load college" }))
       .finally(() => setLoading(false));
   }, [collegeId, router]);
+
+  const roleOptions = ALL_ROLE_OPTIONS.filter((r) => getCreatableOfficeRoles(college?.type).includes(r.value));
 
   function set(patch: Partial<typeof form>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -70,7 +81,7 @@ export default function NewCollegeStaffPage() {
         toast({ variant: "destructive", title: "Failed to create", description: json.error });
         return;
       }
-      const roleLabel = ROLE_OPTIONS.find((r) => r.value === form.role)?.label ?? form.role;
+      const roleLabel = ALL_ROLE_OPTIONS.find((r) => r.value === form.role)?.label ?? form.role;
       toast({
         variant: "success",
         title: `${roleLabel} account created`,
@@ -92,6 +103,19 @@ export default function NewCollegeStaffPage() {
     );
   }
 
+  if (roleOptions.length === 0) {
+    return (
+      <div className="max-w-xl">
+        <PageHeader title="Add College Staff" description={college ? `For ${college.name}` : undefined} />
+        <Card>
+          <CardContent className="py-10 text-sm text-muted-foreground">
+            {college?.name ?? "This college"} has no Placement Department or Exam Cell role for its college type.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-xl">
       <PageHeader title="Add College Staff" description={college ? `For ${college.name}` : undefined} />
@@ -109,7 +133,7 @@ export default function NewCollegeStaffPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLE_OPTIONS.map((r) => (
+                  {roleOptions.map((r) => (
                     <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                   ))}
                 </SelectContent>

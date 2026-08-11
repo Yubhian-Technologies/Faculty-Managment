@@ -6,9 +6,14 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { syncDepartmentHod } from "@/lib/departments/scope";
-import type { UserRole } from "@/types";
+import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
+import type { CollegeType, UserRole } from "@/types";
 
-const PRINCIPAL_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER"];
+// Base roles every college type can create; which "internal office" roles
+// (Dean/IQAC/T&P/R&D/Placement/Library/Exam Cell/Webmaster) are also allowed
+// depends on the college's type - see getCreatableOfficeRoles. Must match
+// the same gating in principal/staff/new/page.tsx's CREATABLE_ROLES.
+const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF"];
 // HOD is included so a main HOD can create a Sub-HOD login (see
 // hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
 // posts role: "HOD" with the not-yet-created sub-department's name as
@@ -125,12 +130,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
+    const collegeId = session.collegeId;
+    const db = getAdminDb();
+
     // Enforce role-based creation rules - Vice Principal mirrors Principal's authority.
-    if ((session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") && !PRINCIPAL_ROLES.includes(role)) {
-      return NextResponse.json(
-        { error: `Principal can only create: ${PRINCIPAL_ROLES.join(", ")}` },
-        { status: 403 }
-      );
+    if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
+      const collegeSnap = await db.collection("colleges").doc(collegeId).get();
+      const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
+      const principalRoles = [...PRINCIPAL_BASE_ROLES, ...getCreatableOfficeRoles(collegeType)];
+      if (!principalRoles.includes(role)) {
+        return NextResponse.json(
+          { error: `Principal can only create: ${principalRoles.join(", ")}` },
+          { status: 403 }
+        );
+      }
     }
     if (session.role === "HOD" && !HOD_ROLES.includes(role)) {
       return NextResponse.json(
@@ -144,9 +157,6 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
-
-    const collegeId = session.collegeId;
-    const db = getAdminDb();
 
     // Class Leader: resolve + validate the target Section, derive
     // department/sectionName from it (never trust the client), and enforce

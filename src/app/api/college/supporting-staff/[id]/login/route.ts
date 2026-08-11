@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { SUPPORTING_STAFF_ROLE_CATEGORY } from "@/lib/supportingStaff/roleCategory";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type { SupportingStaffCategory, SupportingStaffDesignation } from "@/types";
@@ -22,7 +23,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD");
     const { id } = await params;
 
     const body = (await request.json()) as { email?: string; password?: string };
@@ -56,6 +57,12 @@ export async function POST(
     const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
     if (requiredCategory && data.staffCategory !== requiredCategory) {
       return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
+    }
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, data.department ?? "")) {
+        return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
+      }
     }
 
     if (data.userUid) {

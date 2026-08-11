@@ -1,0 +1,218 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { UserPlus, Eye, Trash2, Upload, LogIn, UsersRound } from "lucide-react";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { DataTable, type Column } from "@/components/shared/DataTable";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Avatar } from "@/components/shared/Avatar";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "@/hooks/useToast";
+import { useCollegeType } from "@/hooks/useCollegeType";
+import { getHodTechnicalDesignations } from "@/lib/designations/config";
+import {
+  NON_TECHNICAL_STAFF_DESIGNATION_LABELS,
+  EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS,
+} from "@/types";
+import type {
+  SupportingStaffMember, SupportingStaffDesignation,
+  EmploymentType, FacultyStatus,
+} from "@/types";
+
+type StaffRow = Record<string, unknown> & SupportingStaffMember;
+
+const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  INTERVIEW_DONE: "outline",
+  ACTIVE: "default",
+  ON_LEAVE: "outline",
+  RESIGNED: "secondary",
+  RETIRED: "secondary",
+};
+
+function designationLabel(designation: SupportingStaffDesignation): string {
+  return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
+}
+
+export default function HODSupportingStaffPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { collegeType, loading: collegeTypeLoading } = useCollegeType();
+  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [deleteTarget, setDeleteTarget] = useState<StaffRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function load() {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/college/supporting-staff");
+      const data = await res.json() as { staff: StaffRow[] };
+      setStaff(data.staff ?? []);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load Supporting Staff" });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/college/supporting-staff/${deleteTarget.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: `${deleteTarget.name} removed` });
+      setDeleteTarget(null);
+      void load();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to delete staff record" });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  const columns: Column<StaffRow>[] = [
+    {
+      key: "name",
+      header: "Staff Member",
+      render: (row) => (
+        <div className="flex items-start gap-3 min-w-0">
+          <Avatar name={row.name} photoUrl={row.profilePhotoUrl} size="sm" className="mt-0.5" />
+          <div className="space-y-0.5 min-w-0">
+            <p className="font-medium leading-tight">{row.name}</p>
+            {row.collegeEmail && <p className="text-xs text-muted-foreground">{row.collegeEmail}</p>}
+            <p className="text-xs text-muted-foreground">ID: {row.employeeId}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "designation",
+      header: "Role",
+      render: (row) => (
+        <p className="text-sm font-medium">
+          {row.designation === "OTHER" && row.otherDesignationTitle ? row.otherDesignationTitle : designationLabel(row.designation)}
+        </p>
+      ),
+    },
+    {
+      key: "employmentType",
+      header: "Employment",
+      hideOnMobile: true,
+      render: (row) => <Badge variant="outline">{EMPLOYMENT_TYPE_LABELS[row.employmentType as EmploymentType] ?? row.employmentType}</Badge>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (row) => (
+        <Badge variant={STATUS_VARIANTS[row.status] ?? "secondary"}>
+          {FACULTY_STATUS_LABELS[row.status] ?? row.status}
+        </Badge>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      render: (row) => (
+        <div className="flex items-center gap-1">
+          {!(row.userUid as string) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              title="Create login account"
+              onClick={(e) => { e.stopPropagation(); router.push(`/hod/supporting-staff/${row.id}/credentials`); }}
+            >
+              <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/hod/supporting-staff/${row.id}`); }}>
+            <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
+          </Button>
+          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const isCentrallyManaged = !collegeTypeLoading && getHodTechnicalDesignations(collegeType).length === 0;
+
+  if (isCentrallyManaged) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Supporting Staff" description="Centrally managed by Principal for your college" />
+        <Card>
+          <CardContent className="py-16">
+            <EmptyState
+              title="Managed by Principal"
+              description="Supporting Staff for your college type is managed centrally by Principal, not per-department."
+              icon={<UsersRound className="h-8 w-8" />}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Supporting Staff"
+        description="Technical staff records for your department"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => router.push("/hod/supporting-staff/import")}>
+              <Upload className="h-4 w-4 mr-2" />Import
+            </Button>
+            <Button onClick={() => router.push("/hod/supporting-staff/new")}>
+              <UserPlus className="h-4 w-4 mr-2" />Add Staff
+            </Button>
+          </div>
+        }
+      />
+
+      <SegmentedTabs
+        value={pathname?.startsWith("/hod/supporting-staff") ? "supporting" : "faculty"}
+        options={[
+          { key: "faculty", label: "Teaching Faculty", href: "/hod/faculty" },
+          { key: "supporting", label: "Supporting Staff", href: "/hod/supporting-staff" },
+        ]}
+      />
+
+      <DataTable
+        data={staff}
+        columns={columns}
+        isLoading={isLoading}
+        keyExtractor={(r) => r.id}
+        onRowClick={(row) => router.push(`/hod/supporting-staff/${row.id}`)}
+        searchPlaceholder="Search by name, email, employee ID..."
+        searchKeys={["name", "email", "employeeId"] as (keyof StaffRow)[]}
+        emptyTitle="No Supporting Staff records yet"
+        emptyDescription="Add Technical staff to build your department's Supporting Staff register"
+        emptyAction={<Button onClick={() => router.push("/hod/supporting-staff/new")}><UserPlus className="h-4 w-4 mr-2" />Add Staff</Button>}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Delete staff record?"
+        description={`This will permanently remove ${deleteTarget?.name ?? "this staff member"} (${deleteTarget?.employeeId ?? ""}). This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => void handleDelete()}
+        loading={isDeleting}
+      />
+    </div>
+  );
+}

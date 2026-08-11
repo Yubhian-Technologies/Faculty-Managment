@@ -20,7 +20,11 @@ const FINANCIAL_ACADEMIC_KEYS = ["presentSalary", "grossAnnualCTC", "incrementsA
 // "My Profile" show anything beyond name/email/role.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember(
+      "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
+      "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR",
+      "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER"
+    );
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);

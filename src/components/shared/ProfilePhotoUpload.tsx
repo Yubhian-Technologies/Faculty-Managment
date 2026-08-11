@@ -14,13 +14,15 @@ interface ProfilePhotoUploadProps {
   name: string;
   photoUrl?: string;
   className?: string;
+  // Only needed for roles outside the college-scoped default - see useProfilePhoto.ts.
+  endpoint?: string;
 }
 
-export function ProfilePhotoUpload({ name, photoUrl, className }: ProfilePhotoUploadProps) {
+export function ProfilePhotoUpload({ name, photoUrl, className, endpoint }: ProfilePhotoUploadProps) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
-  const { mutate: upload, isPending: uploading } = useUpdateProfilePhoto();
-  const { mutate: remove, isPending: deleting } = useDeleteProfilePhoto();
+  const { mutate: upload, isPending: uploading } = useUpdateProfilePhoto(endpoint);
+  const { mutate: remove, isPending: deleting } = useDeleteProfilePhoto(endpoint);
   const busy = uploading || deleting;
 
   const handleFileSelect = (file: File) => {

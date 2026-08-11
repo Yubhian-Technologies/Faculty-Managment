@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { UserPlus, Eye, Upload, Download, Trash2, LogIn, FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -9,11 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
 import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
+import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment } from "@/types";
+import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment, CollegeType } from "@/types";
 
 function fmtDate(val: unknown): string {
   if (!val) return "-";
@@ -54,6 +56,7 @@ const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline"
 
 export default function HODFacultyPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -63,11 +66,12 @@ export default function HODFacultyPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
   const [collegeName, setCollegeName] = useState("");
+  const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
 
   useEffect(() => {
     fetch("/api/college/info")
-      .then((r) => r.json() as Promise<{ name?: string }>)
-      .then((d) => setCollegeName(d.name ?? ""))
+      .then((r) => r.json() as Promise<{ name?: string; type?: CollegeType }>)
+      .then((d) => { setCollegeName(d.name ?? ""); setCollegeType(d.type); })
       .catch(() => {});
   }, []);
 
@@ -308,6 +312,16 @@ export default function HODFacultyPage() {
           </div>
         }
       />
+
+      {hasSupportingStaffSplit(collegeType) && (
+        <SegmentedTabs
+          value={pathname?.startsWith("/hod/supporting-staff") ? "supporting" : "faculty"}
+          options={[
+            { key: "faculty", label: "Teaching Faculty", href: "/hod/faculty" },
+            { key: "supporting", label: "Supporting Staff", href: "/hod/supporting-staff" },
+          ]}
+        />
+      )}
 
       <div className="flex gap-2 flex-wrap">
         {STATUS_TABS.map((tab) => (

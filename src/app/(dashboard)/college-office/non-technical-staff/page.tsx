@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Pencil, Trash2, Upload, LogIn } from "lucide-react";
+import { UserPlus, Eye, Trash2, Upload, LogIn } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -133,8 +133,8 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
               <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/college-office/non-technical-staff/${row.id}/edit`); }}>
-            <Pencil className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Edit</span>
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/college-office/non-technical-staff/${row.id}`); }}>
+            <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
           </Button>
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
             onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>

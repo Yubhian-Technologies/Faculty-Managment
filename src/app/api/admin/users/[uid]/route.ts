@@ -15,12 +15,20 @@ export async function GET(
 
     const { uid } = await params;
     const { searchParams } = new URL(request.url);
-    const collegeId = searchParams.get("collegeId");
+    const db = getAdminDb();
+
+    // Fall back to the systemUsers pointer when the caller doesn't already know
+    // collegeId (e.g. deep-linking straight into a module view/edit page) -
+    // mirrors the same fallback DELETE already uses below.
+    let collegeId = searchParams.get("collegeId") ?? "";
+    if (!collegeId) {
+      const sysSnap = await db.collection("systemUsers").doc(uid).get();
+      collegeId = (sysSnap.data() as { collegeId?: string } | undefined)?.collegeId ?? "";
+    }
     if (!collegeId) {
       return NextResponse.json({ error: "collegeId required" }, { status: 400 });
     }
 
-    const db = getAdminDb();
     const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
     if (!snap.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -45,7 +53,7 @@ export async function PATCH(
 
     const { uid } = await params;
     const body = (await request.json()) as {
-      collegeId: string;
+      collegeId?: string;
       role?: UserRole;
       isActive?: boolean;
       department?: string;
@@ -58,16 +66,24 @@ export async function PATCH(
       newPassword?: string;
     } & PersonalDetailsInput;
 
-    const { collegeId, role, isActive, department, name, email, collegeEmail, employeeId, phone, academicProfile, newPassword } = body;
+    const { role, isActive, department, name, email, collegeEmail, employeeId, phone, academicProfile, newPassword } = body;
 
-    if (!collegeId) {
-      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
-    }
     if (newPassword !== undefined && newPassword.length < 6) {
       return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
     }
 
     const db = getAdminDb();
+
+    // Same systemUsers fallback as GET - module edit pages don't carry collegeId
+    // through every link, only the initial list view does.
+    let collegeId = body.collegeId ?? "";
+    if (!collegeId) {
+      const sysSnap = await db.collection("systemUsers").doc(uid).get();
+      collegeId = (sysSnap.data() as { collegeId?: string } | undefined)?.collegeId ?? "";
+    }
+    if (!collegeId) {
+      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+    }
 
     // Reset Password only ever sends { collegeId, newPassword } - this was
     // previously silently dropped (not in this destructure at all), so the

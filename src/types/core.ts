@@ -240,26 +240,57 @@ export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
 // caste sub-classification, which stays free text since it isn't a fixed list).
 export type Religion =
   | "HINDU"
-  | "CHRISTIAN"
   | "MUSLIM"
-  | "JAIN"
+  | "CHRISTIAN"
   | "SIKH"
+  | "JAIN"
+  | "PARSI"
+  | "BUDDHIST"
   | "OTHER";
 export const RELIGION_LABELS: Record<Religion, string> = {
   HINDU: "Hindu",
-  CHRISTIAN: "Christian",
   MUSLIM: "Muslim",
-  JAIN: "Jain",
+  CHRISTIAN: "Christian",
   SIKH: "Sikh",
+  JAIN: "Jain",
+  PARSI: "Parsi",
+  BUDDHIST: "Buddhist",
   OTHER: "Other",
 };
-export type Caste = "OC" | "BC" | "SC" | "ST" | "OTHER";
+export type Caste = "OC" | "EBC" | "EPC" | "BC" | "SC" | "ST" | "OTHER";
 export const CASTE_LABELS: Record<Caste, string> = {
   OC: "OC",
+  EBC: "EBC",
+  EPC: "EPC",
   BC: "BC",
   SC: "SC",
   ST: "ST",
   OTHER: "Other",
+};
+
+// Sub-caste picklist per Caste (state reservation sub-categories) - values
+// are stored and displayed verbatim (no separate code/label split, unlike
+// Religion/Caste above) since they're only ever used as freeform sub-
+// classification text. EPC has no fixed list here - its Sub Caste field
+// falls back to free text, same as "OTHER" does for every caste.
+export const SUB_CASTES_BY_CASTE: Partial<Record<Caste, string[]>> = {
+  OC: [
+    "Brahmin", "Kshatriya", "Vysya", "Kapu", "Reddy", "Aryavysya", "Kamma", "Naidu",
+    "Adi Velama", "Arya Vyshya", "Marvadi", "Veerashaiva Lingayat", "Balija",
+    "Padmanayaka Velamadoralu", "Vellama",
+  ],
+  EBC: ["Faqir", "Muslim", "Shaik"],
+  BC: [
+    "Devanga", "Kummari", "Nai Brahmin", "Kalinga", "Gowda", "Cristian", "Kurama",
+    "Korpula Velama", "Vishwa Brahmin", "Agnikula Kshatriya", "Turupu Kapu",
+    "Karnibakthulu", "Settibalija", "Padmasali", "Rajaka", "Sri Sayana",
+    "Munnurukapu", "Yadava", "Velama", "Surya Balija", "Kummara", "Poosala",
+    "Jangam", "Perika", "Sagara", "Christian Mala", "Bhatraju", "Kambali",
+    "Uppara", "Bondili", "Vyshnavas", "Bukka", "Mutrasi", "Adi Andhra Christian",
+    "Telukula",
+  ],
+  SC: ["Mala", "Madiga", "Mala Dasu"],
+  ST: ["Koya"],
 };
 
 export interface FMSUser {
