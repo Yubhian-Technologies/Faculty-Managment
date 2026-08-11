@@ -91,6 +91,23 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   const trackedBalances = balances.filter((b) => !b.unlimited);
   const odBalance = balances.find((b) => b.unlimited);
 
+  // "On leave right now" - an APPROVED request whose date range spans today.
+  // "Pending" - a request already submitted and awaiting HOD/Principal
+  // decision. While one is pending, the Apply button is disabled below so a
+  // faculty member can't stack a second request on top of an undecided one
+  // (the server enforces this too - see applications/route.ts POST).
+  const today = new Date();
+  const activeLeave = requests.find((r) => {
+    if (r.status !== "APPROVED") return false;
+    const from = toDate(r.fromDate);
+    const to = toDate(r.toDate);
+    if (!from || !to) return false;
+    const fromStart = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+    return today >= fromStart && today <= toEnd;
+  });
+  const pendingRequest = requests.find((r) => r.status === "PENDING_HOD" || r.status === "PENDING_PRINCIPAL");
+
   // OD's count resets every calendar year, same as the tracked balances above
   // (the year comes from the request's fromDate, matching how HOD/Principal
   // approval commits a balance - see applications/[id]/route.ts). "Other" is
@@ -105,14 +122,28 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        {effectiveCategory && <Badge variant="secondary">{EFFECTIVE_CATEGORY_LABELS[effectiveCategory]}</Badge>}
+        <div className="flex items-center gap-2 flex-wrap">
+          {effectiveCategory && <Badge variant="secondary">{EFFECTIVE_CATEGORY_LABELS[effectiveCategory]}</Badge>}
+          {activeLeave && (
+            <Badge variant="in_progress">
+              On leave &middot; {formatDate(activeLeave.fromDate)} - {formatDate(activeLeave.toDate)}
+            </Badge>
+          )}
+        </div>
         {applyHref && (
-          <Button asChild size="sm">
-            <Link href={applyHref}>
+          pendingRequest ? (
+            <Button size="sm" disabled title="You already have a leave request pending approval">
               <Plus className="h-4 w-4 mr-1" />
-              Apply for Leave
-            </Link>
-          </Button>
+              Request Pending
+            </Button>
+          ) : (
+            <Button asChild size="sm">
+              <Link href={applyHref}>
+                <Plus className="h-4 w-4 mr-1" />
+                Apply for Leave
+              </Link>
+            </Button>
+          )
         )}
       </div>
 

@@ -120,12 +120,27 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
-    const [profile, identity] = await Promise.all([
+    const [profile, identity, existingSnap] = await Promise.all([
       getOrCreateProfile(db, session.collegeId, session.uid),
       resolveEmployeeIdentity(db, session.collegeId, session.uid),
+      REQUESTS_COL(session.collegeId, db).where("uid", "==", session.uid).get(),
     ]);
     if (!profile || !identity) {
       return NextResponse.json({ error: "Employee record not found" }, { status: 404 });
+    }
+    // One outstanding request at a time - a faculty member can't submit
+    // another while an earlier one is still awaiting HOD/Principal decision
+    // (the Apply button is also disabled client-side for this, but the
+    // server is the actual guard - see LeaveProfileView.tsx).
+    const hasPendingRequest = existingSnap.docs.some((d) => {
+      const status = (d.data() as LeaveRequest).status;
+      return status === "PENDING_HOD" || status === "PENDING_PRINCIPAL";
+    });
+    if (hasPendingRequest) {
+      return NextResponse.json(
+        { error: "You already have a leave request pending approval. Please wait for it to be decided before applying again." },
+        { status: 400 }
+      );
     }
 
     const settings = await loadCollegeSettings(db, session.collegeId);
