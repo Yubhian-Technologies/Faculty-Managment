@@ -23,6 +23,11 @@ export interface Subject {
   courseName?: string;
   year?: number;               // academic year within the course (1..course.durationYears) - common to all sections of that year
   semester?: number;           // semester-scoped subjects only
+  // The calendar academic session this subject entry belongs to (e.g.
+  // "2026-27") - not the same as `year` above. Set by the Dean when creating
+  // a subject (see dean/subjects/new/page.tsx); optional/absent on subjects
+  // created before this field existed or via the HOD's own Subjects page.
+  academicYear?: string;
   name: string;
   code: string;
   hoursPerWeek: number;

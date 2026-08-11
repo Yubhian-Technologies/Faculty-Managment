@@ -163,18 +163,23 @@ export default function AssignmentRequestsPage() {
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <p className="text-xs text-muted-foreground">
                       Allocated: <span className="text-foreground font-medium">{r.allocatedFacultyName}</span>
+                      {tab === "outgoing" && " - the lending department places its weekly periods and will notify you once ready"}
                     </p>
-                    {/* Whoever is looking may place the weekly periods - the
-                        lending HOD (who just picked the faculty and knows
-                        their availability) is the one this is meant for, but
-                        the requester can do it too if it's easier for them. */}
-                    <Button size="sm" variant="outline" asChild>
-                      <Link
-                        href={`/hod/timetable/${r.courseId}/${r.year}/${r.sectionId}?courseName=${encodeURIComponent(r.courseName)}&sectionName=${encodeURIComponent(r.sectionName)}&requestId=${r.id}&assignmentId=${r.teachingAssignmentId ?? ""}`}
-                      >
-                        <CalendarDays className="h-3.5 w-3.5 mr-1.5" />Place on timetable
-                      </Link>
-                    </Button>
+                    {/* Only the lending HOD places these periods now - they
+                        picked the faculty and know their availability, and
+                        the Timetable page's own "Add a subject" no longer
+                        offers this subject to the requester (see
+                        pickableAssignments there), so showing this link on
+                        the outgoing/requester side would just be a dead end. */}
+                    {tab === "incoming" && (
+                      <Button size="sm" variant="outline" asChild>
+                        <Link
+                          href={`/hod/timetable/${r.courseId}/${r.year}/${r.sectionId}?courseName=${encodeURIComponent(r.courseName)}&sectionName=${encodeURIComponent(r.sectionName)}&requestId=${r.id}&assignmentId=${r.teachingAssignmentId ?? ""}`}
+                        >
+                          <CalendarDays className="h-3.5 w-3.5 mr-1.5" />Place on timetable
+                        </Link>
+                      </Button>
+                    )}
                   </div>
                 )}
                 {r.status === "DECLINED" && r.declineReason && (

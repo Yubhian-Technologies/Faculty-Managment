@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { buildRows } from "@/lib/timetable/buildGrid";
 import type {
   Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
-  TeachingAssignment,
+  TeachingAssignment, FacultyAssignmentRequest,
 } from "@/types";
 import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
 
@@ -63,7 +63,7 @@ export default function HODTimetableGridPage() {
   const [draft, setDraft] = useState<TimetableDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [mode, setMode] = useState<Mode>("published");
+  const [modeState, setModeState] = useState<Mode>("published");
   const [isEditing, setIsEditing] = useState(false);
   const [selected, setSelected] = useState<DraftSlot | null>(null);
   const [busy, setBusy] = useState<null | "publish" | "discard" | "move" | "blank">(null);
@@ -79,12 +79,22 @@ export default function HODTimetableGridPage() {
   // the assignments taught by faculty they're responsible for. See
   // myAssignmentIds below.
   const [myFacultyIds, setMyFacultyIds] = useState<Set<string>>(new Set());
+  // Assignment ids on this section that were created by fulfilling a
+  // cross-department Assignment Request (cross-referenced via
+  // facultyAssignmentRequests.teachingAssignmentId, not by comparing faculty
+  // departments - a feeder like Basic Science can legitimately share its
+  // faculty with every department it feeds, so "faculty belongs to a
+  // different department" alone isn't a reliable signal). The lending HOD
+  // places these periods themselves from their own cross-department view of
+  // this same page, so myAssignmentIds/pickableAssignments below exclude them
+  // here regardless of who's currently viewing this section.
+  const [lentInAssignmentIds, setLentInAssignmentIds] = useState<Set<string>>(new Set());
 
   const days: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
   const loadAll = useCallback(async () => {
     try {
-      const [coursesData, sectionsData, timingsData, slotsData, draftData, assignData, facultyData] = await Promise.all([
+      const [coursesData, sectionsData, timingsData, slotsData, draftData, assignData, facultyData, requestsData] = await Promise.all([
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
         fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
           .then((r) => r.json() as Promise<{ sections: Section[] }>),
@@ -98,6 +108,8 @@ export default function HODTimetableGridPage() {
           .then((r) => r.json() as Promise<{ assignments: TeachingAssignment[] }>),
         fetch("/api/college/faculty?status=ACTIVE")
           .then((r) => r.json() as Promise<{ faculty: { id: string; accessLevel?: string }[] }>),
+        fetch("/api/college/faculty-assignment-requests")
+          .then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>),
       ]);
 
       setCourse((coursesData.courses ?? []).find((c) => c.id === courseId) ?? null);
@@ -107,8 +119,13 @@ export default function HODTimetableGridPage() {
       setDraft(draftData.draft ?? null);
       setAssignments((assignData.assignments ?? []).filter((a) => !a.isPast));
       setMyFacultyIds(new Set((facultyData.faculty ?? []).filter((f) => f.accessLevel !== "secondary").map((f) => f.id)));
+      setLentInAssignmentIds(new Set(
+        (requestsData.requests ?? [])
+          .filter((r) => r.sectionId === sectionId && r.teachingAssignmentId)
+          .map((r) => r.teachingAssignmentId as string)
+      ));
       // An unpublished draft is what the HOD most likely came here to act on.
-      if (draftData.draft && draftData.draft.status === "DRAFT") setMode("draft");
+      if (draftData.draft && draftData.draft.status === "DRAFT") setModeState("draft");
     } catch {
       toast({ variant: "destructive", title: "Failed to load timetable" });
     }
@@ -134,24 +151,30 @@ export default function HODTimetableGridPage() {
   // sub-HOD who manages CSE). Either way this is someone else's timetable,
   // so "Publish" reads as "Update" - see handlePublish.
   const isCrossDepartment = !isLoading && (!section || (!!user?.department && section.department !== user.department));
-  // Which draft assignments actually belong to this HOD, so "Update" only
-  // ever publishes their own faculty's periods - regardless of whether they
-  // arrived via a specific "Place on timetable" link (fulfillingAssignmentId)
-  // or navigated here directly (e.g. a BS sub-HOD opening a CSE section they
-  // manage straight from the sidebar). Everyone else's subjects on this same
-  // section - taught by faculty this HOD doesn't manage - are left alone.
+  // A cross-department contributor never publishes this section themselves
+  // (see handleNotify/handlePublish below and the server-side guard in
+  // /api/college/timetable/publish) - so there's nothing for them to "view
+  // published" either. Derived rather than a synced effect, so it can never
+  // flash the wrong toggle state: always draft for them, never "Published".
+  const mode: Mode = isCrossDepartment ? "draft" : modeState;
+  // Which assignments on this section this HOD may actually place/move/remove
+  // periods for - both here and in the "Add a subject" picker below, so
+  // "Update"/"Publish" only ever touches their own subjects. Cross-department:
+  // their own faculty's assignments, regardless of whether they arrived via a
+  // specific "Place on timetable" link (fulfillingAssignmentId) or navigated
+  // here directly (e.g. a BS sub-HOD opening a CSE section they manage
+  // straight from the sidebar). Own section: everything except a subject lent
+  // in through a cross-department Assignment Request (lentInAssignmentIds) -
+  // the lending HOD manages its periods from their own cross-department view
+  // of this same page, so this HOD can see it on the grid but not touch it.
   const myAssignmentIds = isCrossDepartment
     ? Array.from(new Set([
         ...assignments.filter((a) => myFacultyIds.has(a.facultyId)).map((a) => a.id),
         ...(fulfillingAssignmentId ? [fulfillingAssignmentId] : []),
       ]))
-    : [];
-  // The "Add a subject" picker offers only this HOD's own assignments
-  // cross-department, so they can't place someone else's subject's periods
-  // for them.
-  const pickableAssignments = isCrossDepartment
-    ? assignments.filter((a) => myAssignmentIds.includes(a.id))
-    : assignments;
+    : assignments.filter((a) => !lentInAssignmentIds.has(a.id)).map((a) => a.id);
+  // Same restriction, applied to the "Add a subject" picker.
+  const pickableAssignments = assignments.filter((a) => myAssignmentIds.includes(a.id));
   const draftHasSlots = Boolean(draft?.slots?.length);
   // Gates the Update button specifically: having *some* slots in the draft
   // isn't enough if none of them are this HOD's own faculty's yet.
@@ -186,7 +209,7 @@ export default function HODTimetableGridPage() {
         return;
       }
       await loadAll();
-      setMode("draft");
+      setModeState("draft");
       setIsEditing(true);
       toast({ title: "Blank timetable started", description: "Click any period to add a subject." });
     } finally {
@@ -298,7 +321,7 @@ export default function HODTimetableGridPage() {
       setIsEditing(false);
       setSelected(null);
       await loadAll();
-      setMode("published");
+      setModeState("published");
     } finally {
       setBusy(null);
       setConfirmPublish(false);
@@ -317,7 +340,7 @@ export default function HODTimetableGridPage() {
       setIsEditing(false);
       setSelected(null);
       await loadAll();
-      setMode("published");
+      setModeState("published");
     } finally {
       setBusy(null);
       setConfirmDiscard(false);
@@ -390,10 +413,12 @@ export default function HODTimetableGridPage() {
       {hasDraft && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3">
           <div className="flex items-center gap-2">
-            <Button size="sm" variant={mode === "published" ? "default" : "outline"} onClick={() => { setMode("published"); setIsEditing(false); setSelected(null); }}>
-              Published
-            </Button>
-            <Button size="sm" variant={mode === "draft" ? "default" : "outline"} onClick={() => setMode("draft")}>
+            {!isCrossDepartment && (
+              <Button size="sm" variant={mode === "published" ? "default" : "outline"} onClick={() => { setModeState("published"); setIsEditing(false); setSelected(null); }}>
+                Published
+              </Button>
+            )}
+            <Button size="sm" variant={mode === "draft" ? "default" : "outline"} onClick={() => setModeState("draft")}>
               Draft {draftIsUnpublished && <Badge variant="secondary" className="ml-1.5">unpublished</Badge>}
             </Button>
           </div>
@@ -430,7 +455,7 @@ export default function HODTimetableGridPage() {
         <p className="text-sm text-muted-foreground">
           {selected
             ? `Moving ${selected.subjectName} - click an empty period to place it, or click it again to cancel.`
-            : "Click an empty period to add a subject, or a placed subject to move or remove it. Pinned slots cannot be changed here."}
+            : "Click an empty period to add a subject, or a placed subject to move or remove it. Pinned slots and subjects lent in by another department cannot be changed here."}
         </p>
       )}
 
@@ -484,14 +509,18 @@ export default function HODTimetableGridPage() {
                       const dSlot = mode === "draft" ? draftSlotFor(d, row.period) : undefined;
                       const pSlot = mode === "published" ? publishedSlotFor(d, row.period) : undefined;
                       const slot = pinned ?? dSlot ?? pSlot;
-                      const isPinnedCell = Boolean(pinned) || (mode === "published" && pSlot?.source !== "GENERATED" && pSlot !== undefined);
+                      // A placed period this HOD doesn't own (e.g. a subject lent in
+                      // through a cross-department Assignment Request) is shown same as
+                      // a pinned slot - visible, but locked against move/remove here.
+                      const isForeignSlot = Boolean(dSlot) && !myAssignmentIds.includes(dSlot!.assignmentId);
+                      const isPinnedCell = Boolean(pinned) || isForeignSlot || (mode === "published" && pSlot?.source !== "GENERATED" && pSlot !== undefined);
                       const isSelected =
                         selected && dSlot &&
                         selected.assignmentId === dSlot.assignmentId &&
                         selected.day === dSlot.day &&
                         selected.periodNumber === dSlot.periodNumber;
 
-                      const clickable = mode === "draft" && isEditing && !pinned;
+                      const clickable = mode === "draft" && isEditing && !pinned && !isForeignSlot;
 
                       return (
                         <td key={d} className="p-2 align-top">
@@ -586,7 +615,9 @@ export default function HODTimetableGridPage() {
             <p className="text-sm text-muted-foreground">
               {isCrossDepartment
                 ? "None of your faculty are assigned to this section yet. Add that under Teaching Assignments first."
-                : "No subjects are assigned to this section yet. Add them under Teaching Assignments first."}
+                : assignments.length > 0
+                  ? "Every remaining subject was lent in through an Assignment Request - the lending department places its own periods from their side."
+                  : "No subjects are assigned to this section yet. Add them under Teaching Assignments first."}
             </p>
           ) : (
             <div className="max-h-80 space-y-1.5 overflow-y-auto">

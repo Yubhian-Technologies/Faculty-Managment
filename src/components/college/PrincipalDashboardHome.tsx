@@ -16,7 +16,7 @@ import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { formatDate } from "@/lib/utils";
-import type { VacancyRequest, HiringBatch } from "@/types";
+import type { VacancyRequest, HiringBatch, Department } from "@/types";
 
 // Shared home dashboard for /principal and /vice-principal - the two roles
 // carry equal authority and already share every /principal/* page (see
@@ -30,6 +30,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [pendingVacancies, setPendingVacancies] = useState<VacancyRequest[]>([]);
   const [pendingBatches, setPendingBatches] = useState<HiringBatch[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -41,14 +42,23 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
       fetch("/api/college/hiring-batches?status=PENDING")
         .then((r) => r.json() as Promise<{ batches: HiringBatch[] }>)
         .then((d) => d.batches ?? []),
+      fetch("/api/college/departments")
+        .then((r) => r.json() as Promise<{ departments: Department[] }>)
+        .then((d) => d.departments ?? []),
     ])
-      .then(([v, b]) => {
+      .then(([v, b, dept]) => {
         setPendingVacancies(v);
         setPendingBatches(b);
+        setDepartments(dept);
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Matches the Departments page's own count - a sub-department (e.g.
+  // BS-Chemistry under Basic Science) isn't a peer of its parent, so it's not
+  // counted separately here either.
+  const topLevelDepartmentCount = departments.filter((d) => !d.parentDepartmentId).length;
 
   return (
     <div className="space-y-6">
@@ -61,7 +71,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
         {[
           { label: "Pending Vacancies", value: isLoading ? "—" : pendingVacancies.length, icon: ClipboardList, color: "text-yellow-600 bg-yellow-50", href: "/principal/vacancies" },
           { label: "Interviews & Decisions", value: isLoading ? "—" : pendingBatches.length, icon: CalendarCheck, color: "text-blue-600 bg-blue-50", href: "/principal/interviews" },
-          { label: "Departments", value: "—", icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments" },
+          { label: "Departments", value: isLoading ? "—" : topLevelDepartmentCount, icon: BookOpen, color: "text-purple-600 bg-purple-50", href: "/principal/departments" },
         ].filter((stat) => !isHidden(stat.href)).map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">

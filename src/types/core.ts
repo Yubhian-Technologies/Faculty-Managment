@@ -558,6 +558,19 @@ export interface FacultyNorms {
   updatedByName?: string;
 }
 
+// ─── Academic Regulations ─────────────────────────────────────────────────────
+// A college's curriculum "regulation" (e.g. R20, R23) usually changes only for
+// incoming batches, so the 1st through 4th year of study can each be running a
+// different regulation at the same time. The Principal maintains the list of
+// regulation names in use and fixes which one applies to each year.
+export interface AcademicRegulationSettings {
+  regulations: string[];
+  // Year of study ("1".."4") -> one of `regulations`. Omitted/empty until fixed.
+  yearRegulations: Record<string, string>;
+  updatedAt?: Timestamp;
+  updatedByName?: string;
+}
+
 // ─── Nav visibility (Super Admin controlled module/item hiding) ───────────────
 // hiddenModules hides an entire `NavItem.section` group for a role (every item
 // whose nearest preceding `section` header matches); hiddenItems hides one

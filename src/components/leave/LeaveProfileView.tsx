@@ -38,6 +38,7 @@ interface LeaveProfileViewProps {
 const STATUS_VARIANT: Record<LeaveRequestStatus, "pending" | "approved" | "rejected" | "modified"> = {
   PENDING_HOD: "pending",
   PENDING_PRINCIPAL: "pending",
+  PENDING_MANAGEMENT: "pending",
   APPROVED: "approved",
   REJECTED: "rejected",
   CANCELLED: "modified",
@@ -91,6 +92,38 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   const trackedBalances = balances.filter((b) => !b.unlimited);
   const odBalance = balances.find((b) => b.unlimited);
 
+  // An APPROVED request that hasn't run its course yet - either ongoing right
+  // now, or approved for a future date not yet taken. Either way it isn't
+  // "completed", so the Apply button is disabled below (same as while a
+  // request is still undecided) so a faculty member can't submit a new one
+  // on top of it (the server enforces both too - see applications/route.ts
+  // POST's hasPendingRequest/overlapsApprovedLeave).
+  const today = new Date();
+  const unfinishedApprovedLeave = requests.find((r) => {
+    if (r.status !== "APPROVED") return false;
+    const to = toDate(r.toDate);
+    if (!to) return false;
+    const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+    return toEnd >= today;
+  });
+  const isOngoingLeave = (() => {
+    if (!unfinishedApprovedLeave) return false;
+    const from = toDate(unfinishedApprovedLeave.fromDate);
+    if (!from) return false;
+    const fromStart = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    return fromStart <= today;
+  })();
+  const pendingRequest = requests.find(
+    (r) => r.status === "PENDING_HOD" || r.status === "PENDING_PRINCIPAL" || r.status === "PENDING_MANAGEMENT"
+  );
+  const applyBlockedReason = unfinishedApprovedLeave
+    ? isOngoingLeave
+      ? "You're currently on approved leave"
+      : "You have an upcoming approved leave that hasn't been completed yet"
+    : pendingRequest
+      ? "You already have a leave request pending approval"
+      : null;
+
   // OD's count resets every calendar year, same as the tracked balances above
   // (the year comes from the request's fromDate, matching how HOD/Principal
   // approval commits a balance - see applications/[id]/route.ts). "Other" is
@@ -105,14 +138,29 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        {effectiveCategory && <Badge variant="secondary">{EFFECTIVE_CATEGORY_LABELS[effectiveCategory]}</Badge>}
+        <div className="flex items-center gap-2 flex-wrap">
+          {effectiveCategory && <Badge variant="secondary">{EFFECTIVE_CATEGORY_LABELS[effectiveCategory]}</Badge>}
+          {unfinishedApprovedLeave && (
+            <Badge variant="in_progress">
+              {isOngoingLeave ? "On leave" : "Leave scheduled"} &middot;{" "}
+              {formatDate(unfinishedApprovedLeave.fromDate)} - {formatDate(unfinishedApprovedLeave.toDate)}
+            </Badge>
+          )}
+        </div>
         {applyHref && (
-          <Button asChild size="sm">
-            <Link href={applyHref}>
+          applyBlockedReason ? (
+            <Button size="sm" disabled title={applyBlockedReason}>
               <Plus className="h-4 w-4 mr-1" />
-              Apply for Leave
-            </Link>
-          </Button>
+              {unfinishedApprovedLeave ? (isOngoingLeave ? "On Leave" : "Leave Scheduled") : "Request Pending"}
+            </Button>
+          ) : (
+            <Button asChild size="sm">
+              <Link href={applyHref}>
+                <Plus className="h-4 w-4 mr-1" />
+                Apply for Leave
+              </Link>
+            </Button>
+          )
         )}
       </div>
 

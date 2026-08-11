@@ -15,6 +15,7 @@ export async function GET(request: Request) {
     const courseId = searchParams.get("courseId");
     const year = searchParams.get("year");
     const deptFilter = searchParams.get("department");
+    const academicYear = searchParams.get("academicYear");
 
     const db = getAdminDb();
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
@@ -54,9 +55,20 @@ export async function GET(request: Request) {
     if (year) query = query.where("year", "==", Number(year));
 
     const snap = await query.get();
-    const subjects = snap.docs
+    let subjects = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
+
+    // Dean-only filter (see dean/subjects/page.tsx) - a subject with no
+    // academicYear at all (created before this field existed, or via the
+    // HOD's own Subjects page, which doesn't set it) still matches any
+    // session rather than silently disappearing.
+    if (academicYear) {
+      subjects = subjects.filter((s) => {
+        const sy = (s as { academicYear?: string }).academicYear;
+        return !sy || sy === academicYear;
+      });
+    }
 
     return NextResponse.json({ subjects });
   } catch (err) {
@@ -86,6 +98,7 @@ export async function POST(request: Request) {
       credits?: number;
       type?: SubjectType;
       department?: string;
+      academicYear?: string;
     };
 
     if (!body.name?.trim() || !body.code?.trim()) {
@@ -171,6 +184,7 @@ export async function POST(request: Request) {
           totalHoursPerSemester: body.totalHoursPerSemester != null ? Number(body.totalHoursPerSemester) : null,
           credits: body.credits != null ? Number(body.credits) : 0,
           type: body.type ?? "THEORY",
+          ...(body.academicYear ? { academicYear: body.academicYear } : {}),
           isActive: true,
           createdAt: now,
           updatedAt: now,
