@@ -42,6 +42,11 @@ export async function POST(
           { error: "Candidate has no email on file, or an account already exists under a different user" },
           { status: 400 }
         );
+      case "email_taken":
+        return NextResponse.json(
+          { error: "That email is already in use by a different account" },
+          { status: 409 }
+        );
       case "already_exists":
         return NextResponse.json({ ok: true, alreadyExists: true, facultyId: result.facultyId });
       case "created": {

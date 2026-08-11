@@ -3,36 +3,82 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { provisionFacultyFromOffer, generatePassword } from "@/lib/firestore/facultyProvisioning";
-import type { FacultyAccountRequestStatus, EmploymentType } from "@/types";
+import { provisionFacultyFromOffer, generatePassword, type ProvisionResult } from "@/lib/firestore/facultyProvisioning";
+import type { FacultyAccountRequestStatus } from "@/types";
 
-type Action = "START_REVIEW" | "CREATE_CREDENTIALS" | "COMPLETE";
+type Action = "START_REVIEW" | "CREATE_CREDENTIALS" | "COMPLETE" | "REVEAL_CREDENTIALS";
 
 // Explicit allowed-transitions map - a request can only move to the state
 // immediately after its current one, mirroring the Indent/Budget modules'
-// action-vs-current-status validation.
-const TRANSITIONS: Record<Action, { from: FacultyAccountRequestStatus; to: FacultyAccountRequestStatus }> = {
+// action-vs-current-status validation. REVEAL_CREDENTIALS isn't a status
+// transition (see the branch below) so it's handled outside this map.
+const TRANSITIONS: Record<Exclude<Action, "REVEAL_CREDENTIALS">, { from: FacultyAccountRequestStatus; to: FacultyAccountRequestStatus }> = {
   START_REVIEW: { from: "SUBMITTED", to: "IN_PROGRESS" },
   CREATE_CREDENTIALS: { from: "IN_PROGRESS", to: "CREDENTIALS_CREATED" },
   COMPLETE: { from: "CREDENTIALS_CREATED", to: "COMPLETED" },
 };
+
+// Tries each provided email in order (recommended, then the two optional
+// alternates), stopping at the first one that isn't already taken by a
+// different account — this is the "check for the existing ones" step the
+// Office/Webmaster handoff relies on instead of Webmaster picking manually.
+async function provisionWithFallback(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  offerId: string,
+  emails: string[],
+  password: string
+): Promise<{ result: ProvisionResult; assignedEmail?: string }> {
+  let lastResult: ProvisionResult = { status: "no_email" };
+  for (const email of emails) {
+    const result = await provisionFacultyFromOffer(db, collegeId, offerId, { collegeEmail: email, password });
+    if (result.status !== "email_taken") {
+      return { result, assignedEmail: result.status === "created" || result.status === "already_exists" ? email : undefined };
+    }
+    lastResult = result;
+  }
+  return { result: lastResult };
+}
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("WEBMASTER", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as { action?: Action; remarks?: string };
-
     const action = body.action;
-    const transition = action ? TRANSITIONS[action] : undefined;
+
+    const db = getAdminDb();
+
+    if (action === "REVEAL_CREDENTIALS") {
+      // Office-side roles only — Webmaster already saw the password once
+      // client-side when they created it. Reads and immediately scrubs the
+      // password in one transaction so a refresh or a second viewer never
+      // sees it again.
+      const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+      const reqRef = db.collection("colleges").doc(session.collegeId).collection("facultyAccountRequests").doc(id);
+      const revealed = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(reqRef);
+        if (!snap.exists) return { error: "Not found" as const, code: 404 };
+        const data = snap.data() as { assignedEmail?: string; credentialResult?: { password?: string; revealed?: boolean } };
+        if (!data.credentialResult || data.credentialResult.revealed || !data.credentialResult.password) {
+          return { error: "These credentials have already been revealed" as const, code: 410 };
+        }
+        tx.update(reqRef, { credentialResult: { revealed: true } });
+        return { email: data.assignedEmail ?? "", password: data.credentialResult.password };
+      });
+      if ("error" in revealed) return NextResponse.json({ error: revealed.error }, { status: revealed.code });
+      return NextResponse.json(revealed);
+    }
+
+    const session = await requireCollegeMember("WEBMASTER", "SUPER_ADMIN");
+
+    const transition = action ? TRANSITIONS[action as Exclude<Action, "REVEAL_CREDENTIALS">] : undefined;
     if (!action || !transition) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const reqRef = collegeRef.collection("facultyAccountRequests").doc(id);
     const reqSnap = await reqRef.get();
@@ -45,9 +91,8 @@ export async function PATCH(
       history?: unknown[];
       offerId: string;
       officialEmail: string;
-      employmentType: EmploymentType;
-      specialization?: string;
-      qualification?: string;
+      alternateEmail1?: string;
+      alternateEmail2?: string;
       candidateName?: string;
       requestedBy?: string;
     };
@@ -77,21 +122,32 @@ export async function PATCH(
     let generatedPassword: string | undefined;
     let facultyId: string | undefined;
     let employeeId: string | undefined;
+    let assignedEmail: string | undefined;
     if (action === "CREATE_CREDENTIALS") {
       const password = generatePassword();
-      const result = await provisionFacultyFromOffer(
+      const candidateEmails = [reqData.officialEmail, reqData.alternateEmail1, reqData.alternateEmail2].filter(
+        (e): e is string => !!e?.trim()
+      );
+      const { result, assignedEmail: winningEmail } = await provisionWithFallback(
         db,
         session.collegeId,
         reqData.offerId,
-        { collegeEmail: reqData.officialEmail, password },
-        { employmentType: reqData.employmentType, specialization: reqData.specialization, qualification: reqData.qualification }
+        candidateEmails,
+        password
       );
       if (result.status === "not_found") {
         return NextResponse.json({ error: "Offer letter or candidate not found" }, { status: 404 });
       }
       if (result.status === "no_email") {
-        return NextResponse.json({ error: "Could not create the account — the official email may already be in use" }, { status: 400 });
+        return NextResponse.json({ error: "Could not create the account — no email was provided" }, { status: 400 });
       }
+      if (result.status === "email_taken") {
+        return NextResponse.json(
+          { error: "All provided emails are already in use — resubmit the request with different alternates" },
+          { status: 409 }
+        );
+      }
+      assignedEmail = winningEmail;
       if (result.status === "already_exists") {
         facultyId = result.facultyId;
       } else {
@@ -105,6 +161,8 @@ export async function PATCH(
       status: transition.to,
       history: [...(reqData.history ?? []), historyEntry],
       ...(facultyId ? { facultyId } : {}),
+      ...(assignedEmail ? { assignedEmail } : {}),
+      ...(generatedPassword ? { credentialResult: { password: generatedPassword, revealed: false } } : {}),
       updatedAt: now,
     });
 
@@ -121,22 +179,22 @@ export async function PATCH(
       });
     }
 
-    const auditActionMap: Record<Action, string> = {
+    const auditActionMap: Record<Exclude<Action, "REVEAL_CREDENTIALS">, string> = {
       START_REVIEW: "FACULTY_ACCOUNT_REQUEST_IN_PROGRESS",
       CREATE_CREDENTIALS: "FACULTY_ACCOUNT_REQUEST_CREDENTIALS_CREATED",
       COMPLETE: "FACULTY_ACCOUNT_REQUEST_COMPLETED",
     };
     await collegeRef.collection("auditLogs").add({
       collegeId: session.collegeId,
-      action: auditActionMap[action],
+      action: auditActionMap[action as Exclude<Action, "REVEAL_CREDENTIALS">],
       performedBy: session.uid,
       performedByName: actorName,
       targetId: id,
-      details: { facultyId },
+      details: { facultyId, assignedEmail },
       timestamp: now,
     });
 
-    return NextResponse.json({ ok: true, facultyId, employeeId, generatedPassword });
+    return NextResponse.json({ ok: true, facultyId, employeeId, generatedPassword, assignedEmail });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

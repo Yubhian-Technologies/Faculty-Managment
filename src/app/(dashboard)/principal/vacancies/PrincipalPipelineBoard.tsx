@@ -290,7 +290,7 @@ function PipelineCard({
   );
 }
 
-export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }) {
+export function PrincipalPipelineBoard({ scope, department }: { scope: "active" | "closed"; department?: string }) {
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
   const [offerStatusByCandidate, setOfferStatusByCandidate] = useState<Record<string, OfferStatus>>({});
   const [appointmentCandidateIds, setAppointmentCandidateIds] = useState<Set<string>>(new Set());
@@ -356,11 +356,13 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
           if (list) list.push(view);
           else viewsByVacancy.set(a.vacancyRequestId, [view]);
         }
-        const built: PipelineEntry[] = vacancies.map((v) => ({
-          vacancy: v,
-          candidates: viewsByVacancy.get(v.id) ?? [],
-          batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
-        }));
+        const built: PipelineEntry[] = vacancies
+          .filter((v) => !department || v.department === department)
+          .map((v) => ({
+            vacancy: v,
+            candidates: viewsByVacancy.get(v.id) ?? [],
+            batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
+          }));
         built.sort(
           (a, b) => (toDate(b.vacancy.createdAt)?.getTime() ?? 0) - (toDate(a.vacancy.createdAt)?.getTime() ?? 0)
         );
@@ -382,7 +384,7 @@ export function PrincipalPipelineBoard({ scope }: { scope: "active" | "closed" }
       document.removeEventListener("visibilitychange", onFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [department]);
 
   function closedFor(e: PipelineEntry): boolean {
     const approvedCandidateIds = e.candidates

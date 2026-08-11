@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { WorkflowStatus, UserRole, EmploymentType } from "./core";
+import type { WorkflowStatus, UserRole } from "./core";
 
 // ─── Vacancy Request ──────────────────────────────────────────────────────────
 
@@ -495,12 +495,17 @@ export interface FacultyAccountRequest {
   candidateName: string;
   candidateEmail: string;
   candidatePhone: string;
-  officialEmail: string;
+  officialEmail: string; // "recommended" login email
+  alternateEmail1?: string;
+  alternateEmail2?: string;
+  assignedEmail?: string; // whichever of officialEmail/alternateEmail1/alternateEmail2 was actually provisioned
+  credentialResult?: { password?: string; revealed: boolean }; // one-time reveal payload for Office, see REVEAL_CREDENTIALS; password absent once revealed
   designation: string;
   department: string;
-  employmentType: EmploymentType;
-  specialization?: string;
-  qualification?: string;
+  // Employment type/specialization/qualification are no longer collected here -
+  // the faculty profile goes to the Webmaster as-is and those details are set
+  // directly on the facultyMembers record afterward (see facultyProvisioning.ts's
+  // "PERMANENT"/"" defaults).
   status: FacultyAccountRequestStatus;
   history: FacultyAccountRequestAction[]; // doubles as this workflow's audit trail
   facultyId?: string;
