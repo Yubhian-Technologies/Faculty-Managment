@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import type { TimetableDraft, TimetableSlot } from "@/types";
 
 // Materialises a draft into `timetableSlots` - the moment it becomes visible to
@@ -34,6 +35,23 @@ export async function POST(request: Request) {
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
     if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     const section = sectionSnap.data() as { department: string; courseId: string; year: number };
+
+    // Only the section's own department - or an HOD who owns/manages it (a
+    // parent HOD over a sub-department, or a Sub-HOD's grouped/managed
+    // branch) - may actually publish. An HOD only lending faculty to an
+    // unrelated department (see faculty-assignment-requests) has no editable
+    // scope over that section at all, so this always 403s for them - the
+    // Timetable page correctly routes them to "Notify department" instead,
+    // and this is the server-side backstop for that, not just a UI hint.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, section.department)) {
+        return NextResponse.json(
+          { error: "This section isn't in your department - notify its own HOD instead of publishing it directly." },
+          { status: 403 },
+        );
+      }
+    }
 
     // Re-check faculty double-booking against live data: another section may have
     // published since this draft was generated, so the draft's view of who is
