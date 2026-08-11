@@ -41,6 +41,7 @@ type DocCandidateView = {
   batchId?: string;
   status: CandidateStatus;
   currentStage: CandidateStage;
+  bioDataSubmitted?: boolean;
 };
 
 export default function CollegeOfficeCandidateDetailPage() {
@@ -96,6 +97,7 @@ export default function CollegeOfficeCandidateDetailPage() {
           batchId: application.batchId,
           status: application.status,
           currentStage: application.currentStage,
+          bioDataSubmitted: person?.bioDataSubmitted,
         });
 
         setBatches(Object.fromEntries((batchesRes.batches ?? []).map((b) => [b.id, b])));
@@ -336,9 +338,7 @@ export default function CollegeOfficeCandidateDetailPage() {
 
 Greetings from ${institution}.
 
-We are pleased to offer you the position of ${offer.designation} in the ${offer.department} department, effective from ${formatDate(offer.joiningDate as Parameters<typeof formatDate>[0])}.
-
-The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+We are pleased to offer you the position of ${offer.designation} in the ${offer.department} department, effective from ${formatDate(offer.joiningDate as Parameters<typeof formatDate>[0])}. Please find your offer letter attached.
 
 Please review the Terms & Conditions and confirm your acceptance and date of joining here:
 ${acceptanceUrl}
@@ -400,12 +400,17 @@ ${institution}`;
 
   return (
     <div className="space-y-6">
-      <Link
-        href={`/college-office/documents/${encodeURIComponent(candidate.department)}/${candidate.vacancyRequestId}`}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back to Hiring Request
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href={`/college-office/documents/${encodeURIComponent(candidate.department)}/${candidate.vacancyRequestId}`}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Hiring Request
+        </Link>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/candidate-profile/${candidate.candidateId}`}>View Full Profile</Link>
+        </Button>
+      </div>
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-2">
@@ -424,17 +429,27 @@ ${institution}`;
         </CardHeader>
         <CardContent className="space-y-4">
           {phase === "AWAITING_OFFER" && (
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground flex items-center gap-1.5">
-                <Mail className="h-3.5 w-3.5 shrink-0" />
-                Approved by Principal — send the offer letter to move them forward.
-              </span>
-              <Button size="sm" asChild>
-                <Link href={`/college-office/offers/new?batchId=${candidate.batchId ?? ""}&candidateId=${candidate.candidateId}`}>
-                  Send Offer Letter
-                </Link>
-              </Button>
-            </div>
+            candidate.bioDataSubmitted ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 shrink-0" />
+                  Approved by Principal — send the offer letter to move them forward.
+                </span>
+                <Button size="sm" asChild>
+                  <Link href={`/college-office/offers/new?batchId=${candidate.batchId ?? ""}&candidateId=${candidate.candidateId}`}>
+                    Send Offer Letter
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  Waiting for the candidate to submit their bio-data form before the offer letter can be sent.
+                </span>
+                <Button size="sm" disabled>Send Offer Letter</Button>
+              </div>
+            )
           )}
 
           {phase === "AWAITING_ACCEPTANCE" && (() => {

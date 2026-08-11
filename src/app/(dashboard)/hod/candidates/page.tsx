@@ -11,13 +11,16 @@ import { Badge } from "@/components/ui/badge";
 import { AttachToVacancyDialog } from "@/components/hiring/AttachToVacancyDialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import type { Candidate } from "@/types";
+import type { Candidate, CandidateApplication } from "@/types";
 
 type CandidateRow = Record<string, unknown> & Candidate;
 
 export default function HODCandidatesPage() {
   const router = useRouter();
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
+  // Candidates with an active (non-REJECTED) application - mirrors the
+  // one-active-application-at-a-time rule enforced by the attach API.
+  const [attachedCandidateIds, setAttachedCandidateIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [attachTarget, setAttachTarget] = useState<CandidateRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CandidateRow | null>(null);
@@ -27,9 +30,18 @@ export default function HODCandidatesPage() {
   // after an await, so calling this from an effect can't cascade renders.
   async function load() {
     try {
-      const d = await fetch("/api/college/candidates")
-        .then((r) => r.json() as Promise<{ candidates: CandidateRow[] }>);
-      setCandidates(d.candidates ?? []);
+      const [candidatesData, applicationsData] = await Promise.all([
+        fetch("/api/college/candidates").then((r) => r.json() as Promise<{ candidates: CandidateRow[] }>),
+        fetch("/api/college/candidate-applications").then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>),
+      ]);
+      setCandidates(candidatesData.candidates ?? []);
+      setAttachedCandidateIds(
+        new Set(
+          (applicationsData.applications ?? [])
+            .filter((a) => a.status !== "REJECTED")
+            .map((a) => a.candidateId)
+        )
+      );
     } catch {
       toast({ variant: "destructive", title: "Failed to load candidates" });
     } finally {
@@ -108,25 +120,34 @@ export default function HODCandidatesPage() {
     {
       key: "actions",
       header: "",
-      render: (row) => (
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); setAttachTarget(row); }}
-          >
-            <Plus className="h-4 w-4" /><span className="ml-1 hidden sm:inline">Attach</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}
-            className="text-destructive hover:text-destructive"
-          >
-            Remove
-          </Button>
-        </div>
-      ),
+      render: (row) => {
+        const isAttached = attachedCandidateIds.has(row.id as string);
+        return (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); setAttachTarget(row); }}
+            >
+              {isAttached ? (
+                <Badge variant="secondary" className="text-[11px] font-medium">Attached</Badge>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" /><span className="ml-1 hidden sm:inline">Attach</span>
+                </>
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}
+              className="text-destructive hover:text-destructive"
+            >
+              Remove
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 

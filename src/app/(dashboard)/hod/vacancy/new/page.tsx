@@ -136,6 +136,24 @@ function isEntryValid(entry: PositionEntry): boolean {
   );
 }
 
+// Names the first missing/invalid field instead of leaving the Submit button
+// silently disabled with no explanation of what's wrong.
+function getFirstValidationError(entries: PositionEntry[]): string | null {
+  if (entries.length === 0) return "Add at least one position before submitting.";
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const label = entries.length > 1 ? `Position ${i + 1}` : "this request";
+    if (!entry.category) return `Select a Position Category for ${label}.`;
+    if (!entry.designation) return `Select a Designation for ${label}.`;
+    if (entry.designation === "Others" && !entry.customDesignation.trim()) return `Specify the Designation for ${label}.`;
+    if (!(entry.requiredCount >= 1)) return `Enter a valid Current Hiring Requirement (at least 1) for ${label}.`;
+    if (!entry.qualification) return `Select a Required Qualification for ${label}.`;
+    if (entry.qualification === "Others" && !entry.qualificationOther.trim()) return `Specify the Qualification for ${label}.`;
+    if (entry.justification.trim().length < 10) return `Enter a Justification of at least 10 characters for ${label}.`;
+  }
+  return null;
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 // Colleges with their own per-type designation lists (not the Engineering/
@@ -212,12 +230,11 @@ export default function NewVacancyPage() {
     setEntries((prev) => prev.filter((e) => e.key !== key));
   }
 
-  const allValid = entries.length > 0 && entries.every(isEntryValid);
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!allValid) {
-      toast({ variant: "destructive", title: "Please fill all required fields for every position" });
+    const validationError = getFirstValidationError(entries);
+    if (validationError) {
+      toast({ variant: "destructive", title: "Missing required field", description: validationError });
       return;
     }
 
@@ -499,7 +516,7 @@ export default function NewVacancyPage() {
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Cancel
           </Button>
-          <Button type="submit" loading={isSubmitting} disabled={!allValid}>
+          <Button type="submit" loading={isSubmitting}>
             Submit {entries.length > 1 ? `${entries.length} Requests` : "to Principal"}
           </Button>
         </div>

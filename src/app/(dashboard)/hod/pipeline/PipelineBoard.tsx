@@ -75,7 +75,7 @@ function getNextAction(
     if (shortlisted >= 1) {
       return { label: "Create Interview Session →", href: `/hod/batches/new?vacancyId=${vacancy.id}` };
     }
-    return { label: "Add Candidates", href: "/hod/candidates" };
+    return { label: "Add Candidates", href: `/hod/candidates/new?vacancyId=${vacancy.id}` };
   }
 
   const p = batch.currentPhase;
@@ -96,6 +96,10 @@ function getNextAction(
       };
     }
     return { label: "Open Interview Session →", href: `/coordinator/${batch.id}` };
+  }
+  // Panel Scoring no longer has its own nav tab - this is the only way in now.
+  if (p === "PANEL_INTERVIEW") {
+    return { label: "Monitor Panel Scoring →", href: `/panel/interviews/${batch.id}`, variant: "outline" };
   }
   if (p === "PRINCIPAL_FINAL_REVIEW") {
     return { label: "Awaiting Principal's decision", href: "#", disabled: true };
@@ -215,6 +219,11 @@ function PipelineCard({
                   {BATCH_PHASE_LABELS[batch.currentPhase]}
                 </span>
               )}
+              {batch?.currentPhase === "PANEL_INTERVIEW" && (
+                <Badge variant="outline" className="text-[11px] text-blue-700 border-blue-300 bg-blue-50">
+                  Panel Scoring Open
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">
               {vacancy.department}
@@ -257,7 +266,7 @@ function PipelineCard({
           )}
           {showAddCandidate && (
             <Button size="sm" variant="outline" asChild>
-              <Link href="/hod/candidates">
+              <Link href={`/hod/candidates/new?vacancyId=${vacancy.id}`}>
                 <Plus className="h-3.5 w-3.5 mr-1" />
                 Add Candidate
               </Link>

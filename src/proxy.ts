@@ -27,6 +27,10 @@ const PANEL_INTERVIEWS_PATH = "/panel/interviews";
 // exactly the same roles as /panel/interviews, since any of them can be
 // assigned as a panelist on a hiring batch.
 const EVALUATION_PATH = "/evaluation";
+// /candidate-profile is the shared read-only candidate dossier - reachable by
+// HOD, Principal/VP and College Office (they each already read the same
+// candidate/letter data via the college API guards).
+const CANDIDATE_PROFILE_PATH = "/candidate-profile";
 
 // Per-role *own* (and explicitly-shared) path prefixes. Inherited lower-level
 // dashboard paths are added on top of these by allowedPathsForRole().
@@ -41,12 +45,12 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   LIBRARY: ["/library"],
   EXAM_CELL: ["/exam-cell"],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
-  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
+  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
   // Vice Principal mirrors Principal's authority (see AGENTS.md) - full access
   // to /principal/* alongside its own /vice-principal home.
-  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
-  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
-  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
+  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
+  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
+  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
   COLLEGE_STAFF: ["/college-staff"],
   DEAN: ["/dean"],
   IQAC_COORDINATOR: ["/iqac-coordinator"],

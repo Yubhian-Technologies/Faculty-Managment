@@ -82,6 +82,14 @@ export async function POST(request: Request) {
       };
       demoOverallScore?: number;
       demoComments?: string;
+      // Panel evaluation module (marks out of 10 per criterion) — the active form
+      panelScores?: {
+        subjectKnowledge: number;
+        presentationSkills: number;
+        research: number;
+        specificAttributes: number;
+        others: number;
+      };
       // Panel-interview module
       ratings?: {
         technicalKnowledge: number;
@@ -105,12 +113,13 @@ export async function POST(request: Request) {
       comments?: string;
     };
 
-    const { batchId, candidateId, demoRatings, demoOverallScore, ratings, recommendation } = body;
+    const { batchId, candidateId, demoRatings, demoOverallScore, panelScores, ratings, recommendation } = body;
     const hasDemo = !!demoRatings && demoOverallScore != null;
+    const hasPanel = !!panelScores;
     const hasInterview = !!ratings && !!recommendation;
-    if (!batchId || !candidateId || (!hasDemo && !hasInterview)) {
+    if (!batchId || !candidateId || (!hasDemo && !hasPanel && !hasInterview)) {
       return NextResponse.json(
-        { error: "batchId, candidateId, and either demoRatings+demoOverallScore or ratings+recommendation are required" },
+        { error: "batchId, candidateId, and one of panelScores / demoRatings+demoOverallScore / ratings+recommendation are required" },
         { status: 400 }
       );
     }
@@ -147,9 +156,10 @@ export async function POST(request: Request) {
     }
 
     // Mirrors evaluation/[batchId]/[candidateId]/page.tsx's own canScore gate -
-    // the demo rubric is the only scoring form, open from demo day through
-    // final review (not just while the demo itself is in progress).
-    if (hasDemo && !["IN_PROGRESS", "PANEL_INTERVIEW", "PRINCIPAL_FINAL_REVIEW", "COMPLETED"].includes(batch.currentPhase ?? "")) {
+    // the demo rubric is the only scoring form, open only once the HOD opens
+    // panel scoring (PANEL_INTERVIEW) through final review — not while the demo
+    // itself is still in progress (IN_PROGRESS).
+    if ((hasDemo || hasPanel) && !["PANEL_INTERVIEW", "PRINCIPAL_FINAL_REVIEW", "COMPLETED"].includes(batch.currentPhase ?? "")) {
       return NextResponse.json({ error: "Evaluation is not open for this batch right now" }, { status: 409 });
     }
     if (hasInterview && !["PANEL_INTERVIEW", "PRINCIPAL_FINAL_REVIEW", "COMPLETED"].includes(batch.currentPhase ?? "")) {
@@ -170,6 +180,12 @@ export async function POST(request: Request) {
       payload.demoRatings = demoRatings;
       payload.demoOverallScore = demoOverallScore;
       payload.demoComments = body.demoComments ?? "";
+    }
+    if (hasPanel) {
+      payload.panelScores = panelScores;
+      payload.strengths = body.strengths ?? "";
+      payload.weaknesses = body.weaknesses ?? "";
+      payload.comments = body.comments ?? "";
     }
     if (hasInterview) {
       payload.ratings = ratings;
@@ -208,7 +224,7 @@ export async function POST(request: Request) {
       performedBy: session.uid,
       performedByName: panelName,
       targetId: docId,
-      details: { batchId, candidateId, module: hasDemo ? "DEMO" : "PANEL_INTERVIEW", ...(recommendation ? { recommendation } : {}) },
+      details: { batchId, candidateId, module: hasPanel ? "PANEL_EVALUATION" : hasDemo ? "DEMO" : "PANEL_INTERVIEW", ...(recommendation ? { recommendation } : {}) },
       timestamp: now,
     });
 

@@ -10,42 +10,35 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import { CheckCircle2, Clock, ShieldOff } from "lucide-react";
-import type { HiringBatch, Candidate, CandidateApplication, DemoRatingLevel } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
 
 type PersonView = { name: string; email: string };
 
-const DEMO_LEVELS: { value: DemoRatingLevel; label: string }[] = [
-  { value: "POOR", label: "Poor" },
-  { value: "AVERAGE", label: "Avg." },
-  { value: "GOOD", label: "Good" },
-  { value: "EXCELLENT", label: "Excellent" },
-];
-
-function RatingLevelSelector({
+function Score1to10Selector({
   label,
   value,
   onChange,
 }: {
   label: string;
-  value: DemoRatingLevel | undefined;
-  onChange: (v: DemoRatingLevel) => void;
+  value: number | undefined;
+  onChange: (v: number) => void;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs font-medium">{label}</Label>
-      <div className="flex gap-1">
-        {DEMO_LEVELS.map((lvl) => (
+      <div className="flex flex-wrap gap-1">
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
           <button
-            key={lvl.value}
+            key={n}
             type="button"
-            onClick={() => onChange(lvl.value)}
-            className={`flex-1 h-9 rounded text-xs font-medium border transition-colors ${
-              value === lvl.value
+            onClick={() => onChange(n)}
+            className={`w-8 h-8 rounded text-xs font-medium border transition-colors ${
+              value === n
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-background border-border hover:bg-muted"
             }`}
           >
-            {lvl.label}
+            {n}
           </button>
         ))}
       </div>
@@ -53,33 +46,32 @@ function RatingLevelSelector({
   );
 }
 
-type DemoForm = {
-  ratings: {
-    planningAndOrganizing?: DemoRatingLevel;
-    effectiveUseOfTime?: DemoRatingLevel;
-    communicativeAbility?: DemoRatingLevel;
-    ensuringStudentAttention?: DemoRatingLevel;
-    chalkBoardWork?: DemoRatingLevel;
-    studentParticipation?: DemoRatingLevel;
+type PanelForm = {
+  scores: {
+    subjectKnowledge?: number;
+    presentationSkills?: number;
+    research?: number;
+    specificAttributes?: number;
+    others?: number;
   };
-  overallScore: number; // 0 = unset, 1-10
+  strengths: string;
+  weaknesses: string;
   comments: string;
 };
 
-// Wording matches docs/hiring/DEMO SHEET.docx exactly - this is the only
-// evaluation rubric in the app; there is no separate interview-phase form.
-const DEMO_RUBRIC: [keyof DemoForm["ratings"], string][] = [
-  ["planningAndOrganizing", "Planning and Organizing the subject"],
-  ["effectiveUseOfTime", "Effective use of time"],
-  ["communicativeAbility", "Communicative ability and clarity of expression"],
-  ["ensuringStudentAttention", "Ensuring student attention"],
-  ["chalkBoardWork", "Clean and systematic chalk board work"],
-  ["studentParticipation", "Student participation"],
+// Panel evaluation rubric — marks out of 10 per criterion. Replaces the old
+// demo-sheet rubric across the HOD / panel / coordinator dashboards.
+const PANEL_CRITERIA: [keyof PanelForm["scores"], string][] = [
+  ["subjectKnowledge", "Subject Knowledge"],
+  ["presentationSkills", "Presentation Skills"],
+  ["research", "Research"],
+  ["specificAttributes", "Specific Attributes"],
+  ["others", "Others"],
 ];
 
-const defaultDemoForm = (): DemoForm => ({ ratings: {}, overallScore: 0, comments: "" });
+const defaultPanelForm = (): PanelForm => ({ scores: {}, strengths: "", weaknesses: "", comments: "" });
 
-type MyFeedback = { candidateId: string; panelUid: string; demoRatings?: unknown };
+type MyFeedback = { candidateId: string; panelUid: string; panelScores?: unknown };
 
 export default function EvaluationPage({ params }: { params: Promise<{ batchId: string; candidateId: string }> }) {
   const { batchId, candidateId } = use(params);
@@ -89,7 +81,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [person, setPerson] = useState<PersonView | null>(null);
   const [myFeedback, setMyFeedback] = useState<MyFeedback | null>(null);
-  const [demoForm, setDemoForm] = useState<DemoForm>(defaultDemoForm());
+  const [panelForm, setPanelForm] = useState<PanelForm>(defaultPanelForm());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -124,10 +116,10 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       .finally(() => setIsLoading(false));
   }, [batchId, candidateId, myUid]);
 
-  async function submitDemoFeedback() {
-    const allRated = DEMO_RUBRIC.every(([key]) => demoForm.ratings[key] != null);
-    if (!allRated || demoForm.overallScore < 1) {
-      toast({ variant: "destructive", title: "Please rate all 6 criteria and give an overall score" });
+  async function submitPanelFeedback() {
+    const allRated = PANEL_CRITERIA.every(([key]) => panelForm.scores[key] != null);
+    if (!allRated) {
+      toast({ variant: "destructive", title: "Please score all 5 criteria out of 10" });
       return;
     }
     setIsSaving(true);
@@ -138,9 +130,10 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
         body: JSON.stringify({
           batchId,
           candidateId,
-          demoRatings: demoForm.ratings,
-          demoOverallScore: demoForm.overallScore,
-          demoComments: demoForm.comments,
+          panelScores: panelForm.scores,
+          strengths: panelForm.strengths,
+          weaknesses: panelForm.weaknesses,
+          comments: panelForm.comments,
         }),
       });
       if (!res.ok) throw new Error();
@@ -180,12 +173,13 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
     );
   }
 
+  // Scoring opens only once the HOD opens panel scoring (PANEL_INTERVIEW) —
+  // not while the demo itself is still in progress (IN_PROGRESS).
   const canScore =
-    batch.currentPhase === "IN_PROGRESS" ||
     batch.currentPhase === "PANEL_INTERVIEW" ||
     batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" ||
     batch.currentPhase === "COMPLETED";
-  const alreadySubmitted = myFeedback?.demoRatings != null;
+  const alreadySubmitted = myFeedback?.panelScores != null;
 
   return (
     <div className="space-y-6">
@@ -200,7 +194,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
             <p className="font-medium">Scoring Not Yet Open</p>
             <p className="text-sm text-muted-foreground">
-              Evaluation opens once candidates arrive for their demo class.
+              Evaluation opens once the HOD opens panel scoring for this batch.
             </p>
           </CardContent>
         </Card>
@@ -218,46 +212,46 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Demo Evaluation</CardTitle>
+            <CardTitle className="text-base">Panel Evaluation</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-4">
-              {DEMO_RUBRIC.map(([key, label]) => (
-                <RatingLevelSelector
+              {PANEL_CRITERIA.map(([key, label]) => (
+                <Score1to10Selector
                   key={key}
-                  label={label}
-                  value={demoForm.ratings[key]}
-                  onChange={(v) => setDemoForm((f) => ({ ...f, ratings: { ...f.ratings, [key]: v } }))}
+                  label={`${label} (out of 10)`}
+                  value={panelForm.scores[key]}
+                  onChange={(v) => setPanelForm((f) => ({ ...f, scores: { ...f.scores, [key]: v } }))}
                 />
               ))}
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Over all performance of the Teacher (Rating on 10 point scale)</Label>
-              <div className="flex flex-wrap gap-1">
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setDemoForm((f) => ({ ...f, overallScore: n }))}
-                    className={`w-8 h-8 rounded text-xs font-medium border transition-colors ${
-                      demoForm.overallScore >= n
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background border-border hover:bg-muted"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
+            <div className="space-y-2">
+              <Label>Strengths</Label>
+              <Textarea
+                value={panelForm.strengths}
+                onChange={(e) => setPanelForm((f) => ({ ...f, strengths: e.target.value }))}
+                placeholder="Candidate's key strengths..."
+                rows={2}
+              />
             </div>
 
             <div className="space-y-2">
-              <Label>Comments (optional)</Label>
+              <Label>Weaknesses</Label>
               <Textarea
-                value={demoForm.comments}
-                onChange={(e) => setDemoForm((f) => ({ ...f, comments: e.target.value }))}
-                placeholder="Any other observations from the demo class..."
+                value={panelForm.weaknesses}
+                onChange={(e) => setPanelForm((f) => ({ ...f, weaknesses: e.target.value }))}
+                placeholder="Areas of concern or improvement..."
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Comments</Label>
+              <Textarea
+                value={panelForm.comments}
+                onChange={(e) => setPanelForm((f) => ({ ...f, comments: e.target.value }))}
+                placeholder="Any other observations..."
                 rows={2}
               />
             </div>
@@ -266,7 +260,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
               <Button variant="outline" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button onClick={submitDemoFeedback} loading={isSaving}>
+              <Button onClick={submitPanelFeedback} loading={isSaving}>
                 Submit Evaluation
               </Button>
             </div>

@@ -774,10 +774,17 @@ ${institution}`;
                       <span className="text-xs text-green-600 font-medium flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3" />Arrived
                       </span>
-                    ) : (
+                    ) : c.bioDataSubmitted ? (
                       <Button size="sm" variant="outline" loading={arrivingId === c.id} disabled={!!arrivingId} onClick={() => void markArrived(c.id)}>
                         Mark Arrived
                       </Button>
+                    ) : (
+                      <span
+                        className="text-xs text-muted-foreground flex items-center gap-1"
+                        title="The candidate's bio data form hasn't been submitted yet — review it in Candidate Bio Data above before marking them arrived"
+                      >
+                        <Clock className="h-3 w-3" />Awaiting bio data form
+                      </span>
                     )}
                   </div>
                 )}

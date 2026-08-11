@@ -110,28 +110,54 @@ export function appointmentLetterEmail({
   department,
   joiningDate,
   collegeName,
+  payscale,
+  termsAndConditions,
 }: {
   candidateName: string;
   designation: string;
   department: string;
   joiningDate: string;
   collegeName: string;
+  payscale?: string;
+  termsAndConditions?: string;
 }): string {
+  const termsBlock = termsAndConditions?.trim()
+    ? `<div style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <h3 style="color:#0f172a;margin:0 0 8px;font-size:14px;">Terms &amp; Conditions</h3>
+        <ol style="color:#475569;padding-left:18px;margin:0;font-size:14px;line-height:1.7;">
+          ${termsAndConditions.trim().split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<li>${l}</li>`).join("")}
+        </ol>
+      </div>`
+    : "";
+
   return `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="font-family:Arial,sans-serif;background:#f8fafc;margin:0;padding:20px;">
   <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     <div style="background:#1d4ed8;padding:32px 24px;text-align:center;">
       <h1 style="color:#fff;margin:0;font-size:22px;">${collegeName}</h1>
-      <p style="color:#bfdbfe;margin:8px 0 0;">Appointment Letter</p>
+      <p style="color:#bfdbfe;margin:8px 0 0;">Appointment Order</p>
     </div>
     <div style="padding:32px 24px;">
       <p style="color:#0f172a;font-size:16px;">Dear <strong>${candidateName}</strong>,</p>
-      <p style="color:#475569;">Congratulations! Please find attached your formal appointment letter for the position of <strong>${designation}</strong> in the <strong>${department}</strong> department, effective from <strong>${joiningDate}</strong>.</p>
-      <p style="color:#475569;font-size:14px;">Please report with all original documents on your joining date as noted in the attached letter.</p>
-      <p style="color:#0f172a;font-weight:600;">Welcome aboard!<br><br>${collegeName}</p>
+      <p style="color:#475569;">Congratulations! With reference to your application and the personal interview, we are pleased to appoint you as <strong>${designation}</strong> in the Department of <strong>${department}</strong> at ${collegeName}. Your formal Appointment Order is attached to this email.</p>
+      <div style="background:#f1f5f9;border-radius:8px;padding:20px;margin:24px 0;">
+        <h3 style="color:#0f172a;margin:0 0 12px;font-size:15px;">Appointment Details</h3>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:6px 0;color:#64748b;font-size:14px;width:150px;">Designation</td><td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;">${designation}</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Department</td><td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;">${department}</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Date of Joining</td><td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;">${joiningDate}</td></tr>
+          ${payscale?.trim() ? `<tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Pay Scale</td><td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;">${payscale.trim()}</td></tr>` : ""}
+        </table>
+      </div>
+      ${termsBlock}
+      <p style="color:#475569;font-size:14px;">Please report to the Principal with all your original certificates on or before your joining date. Kindly sign and return one copy of the attached Appointment Order acknowledging receipt and acceptance of the above terms.</p>
+      <p style="color:#0f172a;font-weight:600;">We welcome you to our institution and wish you a prosperous career with us.<br><br>PRINCIPAL<br>${collegeName}</p>
+    </div>
+    <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 24px;text-align:center;">
+      <p style="color:#94a3b8;font-size:12px;margin:0;">This is an automated email. Please do not reply to this email.</p>
     </div>
   </div>
 </body>
