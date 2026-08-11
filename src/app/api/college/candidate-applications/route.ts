@@ -106,17 +106,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // Guard against attaching the same candidate to the same hiring request twice
-    // while a prior attempt is still live (candidate <-> vacancy is many-to-many,
-    // but not duplicated for the same pair at once).
+    // A candidate may only be actively attached to one hiring request at a time
+    // (REJECTED applications don't count, so a rejected candidate can be re-attached
+    // elsewhere). This also covers the same-vacancy-twice case.
     const existingSnap = await collegeRef
       .collection("candidateApplications")
       .where("candidateId", "==", candidateId)
-      .where("vacancyRequestId", "==", vacancyRequestId)
       .get();
-    const alreadyActive = existingSnap.docs.some((d) => (d.data() as { status?: string }).status !== "REJECTED");
-    if (alreadyActive) {
-      return NextResponse.json({ error: "Candidate is already attached to this hiring request" }, { status: 409 });
+    const activeApplication = existingSnap.docs.find((d) => (d.data() as { status?: string }).status !== "REJECTED");
+    if (activeApplication) {
+      const data = activeApplication.data() as { vacancyRequestId?: string; position?: string };
+      const message =
+        data.vacancyRequestId === vacancyRequestId
+          ? "Candidate is already attached to this hiring request"
+          : `Candidate is already attached to another hiring request (${data.position ?? "unknown position"})`;
+      return NextResponse.json({ error: message }, { status: 409 });
     }
 
     const addedByName = await getUserName(db, session.collegeId, session.uid);

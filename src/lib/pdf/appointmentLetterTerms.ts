@@ -2,24 +2,32 @@
 // paper "Appointment Order" format so the Principal doesn't retype it for
 // every candidate — one clause per line, pre-filled into the editable Terms &
 // Conditions field on /principal/appointment-letters and injected into the
-// PDF/email via getAppointmentLetterHTML. Salary figures (clause 4) are left
-// as blanks for the Principal to fill in - there's no structured pay-scale
-// field on the candidate record to source them from automatically.
+// PDF/email via getAppointmentLetterHTML. The compensation clause (clause 4) is
+// auto-filled from the Principal-approved negotiated salary when available;
+// there's no structured Basic/D.A./H.R.A. breakdown on the candidate record, so
+// the consolidated figure is filled and the break-up left to the Institution's
+// rules. When no salary is passed, the blanks are left for manual entry.
 export function getDefaultAppointmentTerms({
   collegeName,
   collegeAddress,
   collegePhone,
+  annualSalary,
 }: {
   collegeName: string;
   collegeAddress?: string;
   collegePhone?: string;
+  annualSalary?: number;
 }): string {
   const principalAddress = [collegeName, collegeAddress].filter(Boolean).join(", ");
+  const payClause =
+    annualSalary != null && annualSalary > 0
+      ? `You will draw a consolidated salary of Rs. ${annualSalary.toLocaleString("en-IN")}/- per annum, as approved by the Management. In addition, you are eligible for D.A., H.R.A. and other allowances as per the rules of the Institution.`
+      : "You will draw a Basic Pay of Rs. ______ in the scale of pay ______. In addition, you are eligible for D.A., H.R.A. and other allowances of Rs. ______.";
   return [
     "The appointment is subject to verification of your original certificates of qualification and experience. You have to deposit the original certificates with the Principal at the time of joining.",
     "The appointment is on regular basis and you have to face an interview of the Regular Staff Selection Committee of the affiliating University, to which the College is affiliated, for the purpose of regularization of the appointment.",
     "You will be on probation for a period of two years.",
-    "You will draw a Basic Pay of Rs. ______ in the scale of pay ______. In addition, you are eligible for D.A., H.R.A. and other allowances of Rs. ______.",
+    payClause,
     "You will be entitled for salary increase and/or revised D.A., if any, only after the satisfactory completion of the probationary period.",
     "Your job responsibilities are as per the rules framed by AICTE / Management from time to time.",
     "You will abide by the Staff service, conduct, leave and T.A. Rules as adopted by the Governing Body and amended from time to time.",

@@ -16,7 +16,7 @@ import { getDefaultAppointmentTerms } from "@/lib/pdf/appointmentLetterTerms";
 import { ChevronDown, ChevronUp, FileText, Download, Mail, CheckCircle2 } from "lucide-react";
 import type { Candidate, CandidateApplication, OfferLetter } from "@/types";
 
-type FormState = { designation: string; department: string; joiningDate: string; termsAndConditions: string };
+type FormState = { designation: string; department: string; joiningDate: string; ctcAnnual: string; termsAndConditions: string };
 
 // Joined view: application (per-hiring-request document/decision state) +
 // candidate (person) fields. `id` is the applicationId; `candidateId` is the
@@ -31,6 +31,11 @@ type AppointmentCandidateView = {
   position: string;
   department: string;
   dateOfJoining?: string;
+  negotiatedSalary?: number;
+  // Finalized CTC from the accepted offer letter (falls back to negotiatedSalary).
+  ctcAnnual?: number;
+  // Terms the Principal already selected at negotiate time (application.termsAndConditions).
+  termsAndConditions?: string[];
 };
 
 export default function PrincipalAppointmentLettersPage() {
@@ -54,9 +59,10 @@ export default function PrincipalAppointmentLettersPage() {
       // Offer/appointment letters are still keyed by (candidateId, batchId) directly
       // (unchanged schema) — match on that pair since one candidate can have
       // independent applications/offers across multiple hiring batches.
-      const acceptedKeys = new Set(
-        (offersRes.letters ?? []).filter((l) => l.status === "ACCEPTED").map((l) => `${l.candidateId}:${l.batchId}`)
-      );
+      const acceptedOffers = (offersRes.letters ?? []).filter((l) => l.status === "ACCEPTED");
+      const acceptedKeys = new Set(acceptedOffers.map((l) => `${l.candidateId}:${l.batchId}`));
+      // Finalized CTC comes from the accepted offer letter, keyed by (candidateId, batchId).
+      const offerCtcByKey = new Map(acceptedOffers.map((l) => [`${l.candidateId}:${l.batchId}`, l.ctcAnnual]));
       const alreadyGeneratedKeys = new Set(
         (appointmentsRes.letters ?? []).map((l) => `${l.candidateId}:${l.batchId}`)
       );
@@ -75,6 +81,9 @@ export default function PrincipalAppointmentLettersPage() {
             position: a.position,
             department: a.department,
             dateOfJoining: a.dateOfJoining,
+            negotiatedSalary: a.negotiatedSalary,
+            ctcAnnual: offerCtcByKey.get(`${a.candidateId}:${a.batchId}`) ?? a.negotiatedSalary,
+            termsAndConditions: a.termsAndConditions,
           };
         });
       setCandidates(eligible);
@@ -84,6 +93,7 @@ export default function PrincipalAppointmentLettersPage() {
             designation: c.position,
             department: c.department,
             joiningDate: c.dateOfJoining ?? "",
+            ctcAnnual: c.ctcAnnual != null ? String(c.ctcAnnual) : "",
             // Filled lazily on first expand (see toggleExpand) once collegeInfo
             // has loaded, rather than racing that fetch here.
             termsAndConditions: "",
@@ -113,11 +123,17 @@ export default function PrincipalAppointmentLettersPage() {
         ...prev,
         [candidate.id]: {
           ...prev[candidate.id],
-          termsAndConditions: getDefaultAppointmentTerms({
-            collegeName: collegeInfo.name,
-            collegeAddress: collegeInfo.address,
-            collegePhone: collegeInfo.phone,
-          }),
+          // Prefer the Terms & Conditions the Principal already selected at
+          // negotiate time; fall back to the standard appointment-order template
+          // only when none were set on the application.
+          termsAndConditions: candidate.termsAndConditions?.length
+            ? candidate.termsAndConditions.join("\n")
+            : getDefaultAppointmentTerms({
+                collegeName: collegeInfo.name,
+                collegeAddress: collegeInfo.address,
+                collegePhone: collegeInfo.phone,
+                annualSalary: candidate.ctcAnnual,
+              }),
         },
       };
     });
@@ -129,6 +145,7 @@ export default function PrincipalAppointmentLettersPage() {
       toast({ variant: "destructive", title: "Fill in designation, department, and joining date" });
       return;
     }
+    const ctcAnnual = form.ctcAnnual ? Number(form.ctcAnnual) : undefined;
     setGeneratingId(candidate.id);
     try {
       const res = await fetch("/api/college/appointment-letters", {
@@ -141,11 +158,12 @@ export default function PrincipalAppointmentLettersPage() {
           designation: form.designation,
           department: form.department,
           joiningDate: form.joiningDate,
+          ctcAnnual,
           candidateAddress: candidate.address,
           termsAndConditions: form.termsAndConditions,
         }),
       });
-      const data = await res.json() as { error?: string };
+      const data = await res.json() as { error?: string; ccEmails?: string[] };
       if (!res.ok) throw new Error(data.error ?? "Failed to generate");
 
       const letterFields = {
@@ -157,6 +175,7 @@ export default function PrincipalAppointmentLettersPage() {
         collegeAddress: collegeInfo.address,
         joiningDate: formatDate(new Date(form.joiningDate)),
         letterDate: formatDate(new Date()),
+        ctcAnnual,
         termsAndConditions: form.termsAndConditions,
       };
 
@@ -167,18 +186,23 @@ export default function PrincipalAppointmentLettersPage() {
       let composed = false;
       if (candidate.email) {
         const institution = collegeInfo.name || "the institution";
+        const payLine =
+          ctcAnnual != null && ctcAnnual > 0
+            ? `\nYour consolidated CTC is Rs. ${ctcAnnual.toLocaleString("en-IN")}/- per annum, with the date of joining on or before ${formatDate(new Date(form.joiningDate))}.\n`
+            : "";
         const subject = `Appointment Order – ${form.designation} | ${institution}`;
         const body = `Dear ${candidate.name},
 
 Congratulations! With reference to your application and interview, you have been appointed as ${form.designation} in the Department of ${form.department} at ${institution}, effective from ${formatDate(new Date(form.joiningDate))}.
+${payLine}
+Your appointment is subject to the Terms and Conditions set out in the attached Appointment Order - please read them carefully, in particular the two-year probation period, the pay scale and allowances, and the requirement to deposit your original certificates with the Principal at the time of joining.
 
-Your appointment is subject to the Terms and Conditions set out in the attached Appointment Order - please read them carefully, in particular the probation period and the requirement to deposit your original certificates with the Principal at the time of joining.
-
-The appointment letter PDF has just been downloaded to your computer - please attach it to this email before sending. You are requested to sign and return one copy acknowledging receipt and acceptance of these terms.
+Please find your Appointment Order attached. You are requested to sign and return one copy acknowledging receipt and acceptance of these terms.
 
 Warm regards,
 ${institution}`;
-        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        const cc = (data.ccEmails ?? []).join(",");
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         window.open(gmailUrl, "_blank");
         composed = true;
       }
@@ -209,6 +233,7 @@ ${institution}`;
         collegeAddress: collegeInfo.address,
         joiningDate: formatDate(new Date(form.joiningDate)),
         letterDate: formatDate(new Date()),
+        ctcAnnual: form.ctcAnnual ? Number(form.ctcAnnual) : undefined,
         termsAndConditions: form.termsAndConditions,
       },
       candidate.name
@@ -270,7 +295,7 @@ ${institution}`;
 
                 {isExpanded && form && (
                   <CardContent className="pt-0 space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5">
                         <Label className="text-xs">Designation</Label>
                         <Input value={form.designation} onChange={(e) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], designation: e.target.value } }))} />
@@ -283,6 +308,11 @@ ${institution}`;
                         <Label className="text-xs">Joining Date</Label>
                         <Input type="date" value={form.joiningDate} onChange={(e) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], joiningDate: e.target.value } }))} />
                       </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Annual CTC (₹)</Label>
+                        <Input type="number" min="0" value={form.ctcAnnual} onChange={(e) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], ctcAnnual: e.target.value } }))} placeholder="e.g. 600000" />
+                        <p className="text-xs text-muted-foreground">From the accepted offer letter. Shown on the appointment letter.</p>
+                      </div>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Terms &amp; Conditions</Label>
@@ -293,7 +323,7 @@ ${institution}`;
                         className="font-mono text-xs"
                       />
                       <p className="text-xs text-muted-foreground">
-                        One clause per line — pre-filled from the standard appointment order. Fill in the salary figures in clause 4 before releasing.
+                        One clause per line — pre-filled from the Terms &amp; Conditions the Principal set during negotiation (falls back to the standard appointment order if none were set). Review before releasing.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 pt-2 border-t">

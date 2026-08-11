@@ -117,7 +117,7 @@ export default function FacultyDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? "Faculty"}`}
+        title={`Hello, ${user?.name ?? "Faculty"}`}
         description={user?.department ? `${user.department} Department` : "Faculty Portal"}
       />
 

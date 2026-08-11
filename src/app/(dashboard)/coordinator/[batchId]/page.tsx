@@ -1,14 +1,14 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import QRCode from "react-qr-code";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor, ArrowRight } from "lucide-react";
-import Link from "next/link";
+import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor } from "lucide-react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useAuthStore } from "@/store/authStore";
 import type { HiringBatch, Candidate, CandidateApplication, InterviewMode } from "@/types";
@@ -28,6 +28,7 @@ type CoordinatorCandidateView = {
 
 export default function CoordinatorQRPage({ params }: { params: Promise<{ batchId: string }> }) {
   const { batchId } = use(params);
+  const router = useRouter();
   const role = useAuthStore((s) => s.user?.role);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
@@ -87,6 +88,16 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchId]);
 
+  // Once the demo is complete the QR/demo screen is no longer relevant — send
+  // the coordinator straight to their evaluations view (HOD) or assessment
+  // (panel member) instead of showing it. router.replace so back doesn't return
+  // here. This also fires right after "Mark Demo Complete" sets it locally.
+  useEffect(() => {
+    if (!batch?.demoComplete) return;
+    if (role === "PANEL_MEMBER") router.replace(`/panel/interviews/${batchId}`);
+    else if (role === "HOD") router.replace(`/hod/batches/${batchId}`);
+  }, [batch?.demoComplete, role, batchId, router]);
+
   const candidate = candidates[selectedIndex];
   const feedbackUrl = candidate && batch ? `${origin}/feedback/${batch.collegeId}/${batchId}/${candidate.candidateId}` : "";
 
@@ -122,6 +133,17 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
   }
 
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Session not found</div>;
+
+  // Demo already wrapped up — don't flash the QR/demo screen; the effect above
+  // is redirecting to the evaluations view.
+  if (batch.demoComplete) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Demo Complete" description="Redirecting to evaluations..." />
+        <div className="h-32 bg-muted animate-pulse rounded-lg" />
+      </div>
+    );
+  }
 
   if (candidates.length === 0) {
     return (
@@ -225,35 +247,10 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
         description={`${batch.position} · ${batch.department} · ${formatDate(batch.interviewDate)}`}
         actions={
           <div className="flex gap-2">
-            {batch.demoComplete ? (
-              <>
-                <div className="flex items-center gap-1.5 text-sm text-green-600 font-medium px-3">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Demo Complete
-                </div>
-                {role === "HOD" && (
-                  <Button asChild>
-                    <Link href={`/hod/batches/${batchId}`}>
-                      View Evaluations
-                      <ArrowRight className="h-4 w-4 ml-2" />
-                    </Link>
-                  </Button>
-                )}
-                {role === "PANEL_MEMBER" && (
-                  <Button asChild>
-                    <Link href={`/panel/interviews/${batchId}`}>
-                      Submit Assessment
-                      <ArrowRight className="h-4 w-4 ml-2" />
-                    </Link>
-                  </Button>
-                )}
-              </>
-            ) : (
-              <Button variant="outline" onClick={() => setDemoCompleteDialog(true)}>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Mark Demo Complete
-              </Button>
-            )}
+            <Button variant="outline" onClick={() => setDemoCompleteDialog(true)}>
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Mark Demo Complete
+            </Button>
             <Button onClick={() => setIsFullscreen(true)}>
               <Maximize2 className="h-4 w-4 mr-2" />
               Fullscreen Mode
@@ -380,42 +377,6 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
           </div>
         </CardContent>
       </Card>
-
-      {/* What's next after demo complete */}
-      {batch.demoComplete && (
-        <Card className="border-green-200 bg-green-50/50">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-green-800">Demo day is done - here's what happens next</p>
-                <ol className="mt-2 space-y-1 text-xs text-green-700 list-decimal list-inside">
-                  <li>HOD reviews student demo scores and opens panel scoring</li>
-                  <li>Panel members submit their interview assessments</li>
-                  <li>HOD submits all evaluations to the Principal</li>
-                  <li>Principal makes final hiring decisions</li>
-                </ol>
-              </div>
-              {role === "HOD" && (
-                <Button size="sm" asChild className="shrink-0">
-                  <Link href={`/hod/batches/${batchId}`}>
-                    Go to Evaluations
-                    <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                  </Link>
-                </Button>
-              )}
-              {role === "PANEL_MEMBER" && (
-                <Button size="sm" asChild className="shrink-0">
-                  <Link href={`/panel/interviews/${batchId}`}>
-                    Submit Assessment
-                    <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                  </Link>
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <ConfirmDialog
         open={demoCompleteDialog}

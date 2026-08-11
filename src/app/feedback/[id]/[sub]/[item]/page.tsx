@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
-import { Star, Send, CheckCircle } from "lucide-react";
+import { use, useEffect, useState } from "react";
+import { Star, Send, CheckCircle, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,6 +63,7 @@ function StarRating({ value, onChange, disabled }: { value: number; onChange: (v
 export default function FeedbackPage({ params }: { params: Promise<{ id: string; sub: string; item: string }> }) {
   const { id: collegeId, sub: batchId, item: candidateId } = use(params);
   const [submitted, setSubmitted] = useState(false);
+  const [closed, setClosed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [comments, setComments] = useState("");
   const [ratings, setRatings] = useState({
@@ -72,6 +73,14 @@ export default function FeedbackPage({ params }: { params: Promise<{ id: string;
     timeManagement: 0,
     overallImpression: 0,
   });
+
+  // Close the form once the coordinator has marked the demo complete.
+  useEffect(() => {
+    fetch(`/api/public/student-feedback?collegeId=${collegeId}&batchId=${batchId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.demoComplete) setClosed(true); })
+      .catch(() => {});
+  }, [collegeId, batchId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,6 +96,7 @@ export default function FeedbackPage({ params }: { params: Promise<{ id: string;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ collegeId, batchId, candidateId, ratings, comments }),
       });
+      if (res.status === 403) { setClosed(true); return; }
       if (!res.ok) throw new Error();
       setSubmitted(true);
     } catch {
@@ -94,6 +104,25 @@ export default function FeedbackPage({ params }: { params: Promise<{ id: string;
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (closed) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 flex items-center justify-center p-4">
+        <Toaster />
+        <Card className="max-w-sm w-full text-center">
+          <CardContent className="p-8 space-y-4">
+            <div className="h-16 w-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto">
+              <Lock className="h-9 w-9 text-slate-500" />
+            </div>
+            <h2 className="text-2xl font-bold">Feedback Closed</h2>
+            <p className="text-muted-foreground">
+              This demo class is complete and no longer accepting feedback. Thank you!
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (submitted) {

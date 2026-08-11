@@ -50,6 +50,15 @@ function availabilityKey(applicationId: string, field: EmailField): string {
   return `${applicationId}:${field}`;
 }
 
+// "Past" = the request is fully wrapped up and needs no more office action:
+// COMPLETED with nothing left to reveal (creds already revealed, or none to
+// reveal). Everything else — including a COMPLETED request whose credentials
+// the office still has to reveal — counts as active.
+function isPastRequest(r: FacultyAccountRequest): boolean {
+  const revealPending = !!r.credentialResult && !r.credentialResult.revealed;
+  return r.status === "COMPLETED" && !revealPending;
+}
+
 export default function FacultyCredentialsPage() {
   const searchParams = useSearchParams();
   const [eligible, setEligible] = useState<EligibleCandidate[]>([]);
@@ -61,6 +70,7 @@ export default function FacultyCredentialsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [revealBusyId, setRevealBusyId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [requestScope, setRequestScope] = useState<"active" | "past">("active");
 
   function load() {
     Promise.all([
@@ -226,6 +236,9 @@ export default function FacultyCredentialsPage() {
   }
 
   const selectedCount = selected.size;
+  const activeRequests = useMemo(() => requests.filter((r) => !isPastRequest(r)), [requests]);
+  const pastRequests = useMemo(() => requests.filter(isPastRequest), [requests]);
+  const visibleRequests = requestScope === "past" ? pastRequests : activeRequests;
   const canReveal = useMemo(
     () => new Set(requests.filter((r) => (r.status === "CREDENTIALS_CREATED" || r.status === "COMPLETED") && r.credentialResult && !r.credentialResult.revealed).map((r) => r.id)),
     [requests]
@@ -302,8 +315,24 @@ export default function FacultyCredentialsPage() {
 
       {requests.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Requests</h2>
-          {requests.map((r) => (
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Requests</h2>
+            <div className="flex gap-2">
+              <Button size="sm" variant={requestScope === "active" ? "default" : "outline"} onClick={() => setRequestScope("active")}>
+                Active ({activeRequests.length})
+              </Button>
+              <Button size="sm" variant={requestScope === "past" ? "default" : "outline"} onClick={() => setRequestScope("past")}>
+                Past ({pastRequests.length})
+              </Button>
+            </div>
+          </div>
+          {visibleRequests.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                {requestScope === "past" ? "No past credential requests yet." : "No active credential requests."}
+              </CardContent>
+            </Card>
+          ) : visibleRequests.map((r) => (
             <Card key={r.id}>
               <CardContent className="pt-6 flex items-center justify-between gap-3 flex-wrap">
                 <div>

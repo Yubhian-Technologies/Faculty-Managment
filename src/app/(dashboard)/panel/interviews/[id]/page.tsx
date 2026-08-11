@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,11 +23,13 @@ type PanelCandidateView = {
   email: string;
 };
 
-type MyFeedback = { candidateId: string; panelUid: string; demoRatings?: unknown };
+type MyFeedback = { candidateId: string; panelUid: string; panelScores?: unknown };
 
 export default function PanelInterviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const myUid = useAuthStore((s) => s.user?.uid);
+  const role = useAuthStore((s) => s.user?.role);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [candidates, setCandidates] = useState<PanelCandidateView[]>([]);
@@ -90,6 +93,16 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
     };
   }, [id, myUid]);
 
+  // The batch-owning HOD manages the full flow — per-panelist submission status
+  // and "Submit All Evaluations to Principal" (plus their own scoring) — on their
+  // batch page. Send them there instead of this thin per-scorer panel view. A
+  // panelist HOD on another department's batch stays here and just scores.
+  useEffect(() => {
+    if (batch && role === "HOD" && batch.hodUid === myUid) {
+      router.replace(`/hod/batches/${id}`);
+    }
+  }, [batch, role, myUid, id, router]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -101,14 +114,26 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
 
   if (!batch) return <div className="text-center py-12 text-muted-foreground">Not found</div>;
 
+  // Owning HOD is being redirected to their batch page (effect above) — don't
+  // flash the panel scorer view.
+  if (role === "HOD" && batch.hodUid === myUid) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Evaluations" description="Opening batch evaluations..." />
+        <div className="h-32 bg-muted animate-pulse rounded-lg" />
+      </div>
+    );
+  }
+
+  // Scoring opens only once the HOD opens panel scoring (PANEL_INTERVIEW) —
+  // not while the demo itself is still in progress (IN_PROGRESS).
   const canScore =
-    batch.currentPhase === "IN_PROGRESS" ||
     batch.currentPhase === "PANEL_INTERVIEW" ||
     batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" ||
     batch.currentPhase === "COMPLETED";
 
   const doneIds = new Set(
-    myFeedback.filter((f) => f.demoRatings != null).map((f) => f.candidateId)
+    myFeedback.filter((f) => f.panelScores != null).map((f) => f.candidateId)
   );
 
   return (
@@ -135,7 +160,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
             <p className="font-medium">Scoring Not Yet Open</p>
             <p className="text-sm text-muted-foreground">
-              Evaluation opens once candidates arrive for their demo class.
+              Evaluation opens once the HOD opens panel scoring for this batch.
             </p>
           </CardContent>
         </Card>

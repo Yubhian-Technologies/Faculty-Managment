@@ -12,9 +12,10 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIncomingStudents } from "@/hooks/useIncomingStudents";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
+import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
-import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
+import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { OrgScopeTree } from "./OrgScopeTree";
 import { ROLE_LABELS } from "@/types";
@@ -27,6 +28,12 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   iconName: "CalendarDays",
   roles: ["PANEL_MEMBER"],
 };
+
+// Panel Scoring and Appointment Letters were folded into this tab (see
+// navConfig.ts) - the red badge is the only remaining signal that something
+// across the whole pipeline (including those two stages) needs the
+// Principal/Vice Principal's attention.
+const PENDING_HIRING_HREF = "/principal/vacancies";
 
 interface SidebarProps {
   hiddenModules: string[];
@@ -43,6 +50,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hasIncomingStudents } = useIncomingStudents();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
+  const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { collegeType } = useCollegeType();
 
   if (!user) return null;
@@ -69,7 +77,11 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
     // Skip roles that already have a static "Panel Scoring" tab in navConfig
     // (PANEL_MEMBER included — their static list has no such tab, so this
     // dynamic injection is the only way they ever get one; matches MobileDrawer).
-    if (hasInterviews && !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)) {
+    if (
+      hasInterviews &&
+      !ROLES_WITH_EMBEDDED_PANEL_ACCESS.has(user.role) &&
+      !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)
+    ) {
       injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
     }
     if (coordinatorBatchId) {
@@ -118,6 +130,11 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
               >
                 <NavIcon name={item.iconName} className="h-4 w-4 shrink-0" />
                 {item.label}
+                {item.href === PENDING_HIRING_HREF && pendingHiringCount > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 px-1 flex items-center justify-center font-semibold">
+                    {pendingHiringCount > 99 ? "99+" : pendingHiringCount}
+                  </span>
+                )}
                 {isActive && <ChevronRight className="h-4 w-4 ml-auto shrink-0" />}
               </Link>
             </div>

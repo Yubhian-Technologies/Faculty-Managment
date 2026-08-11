@@ -92,8 +92,8 @@ export default function HODCandidateDetailPage() {
             <Button variant="outline" size="sm" asChild>
               <Link href="/hod/candidates"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Link>
             </Button>
-            <Button size="sm" onClick={() => setAttachOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Attach to Hiring Request
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/candidate-profile/${candidateId}`}>View Full Profile</Link>
             </Button>
           </>
         }

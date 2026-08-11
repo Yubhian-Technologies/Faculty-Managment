@@ -12,7 +12,8 @@ import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIncomingStudents } from "@/hooks/useIncomingStudents";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
-import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
+import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
+import { getNavItemsForRole, isNavItemActive, filterVisibleNavItems, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { ROLE_LABELS } from "@/types";
 
@@ -22,6 +23,9 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   iconName: "CalendarDays",
   roles: ["PANEL_MEMBER"],
 };
+
+// See Sidebar.tsx - same badge, mirrored here for the mobile drawer.
+const PENDING_HIRING_HREF = "/principal/vacancies";
 
 interface MobileDrawerProps {
   hiddenModules: string[];
@@ -37,6 +41,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { coordinatorBatchId } = useAssignedCoordinator();
   const { hasIncomingStudents } = useIncomingStudents();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
+  const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -50,8 +55,13 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   let navItems = baseNavItems;
   {
     const injected: NavItem[] = [];
-    // Skip roles that already have a static "Panel Scoring" tab in navConfig
-    if (hasInterviews && !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)) {
+    // Skip roles that already have a static "Panel Scoring" tab in navConfig,
+    // and roles whose own hiring-pipeline board already links into panel scoring.
+    if (
+      hasInterviews &&
+      !ROLES_WITH_EMBEDDED_PANEL_ACCESS.has(user.role) &&
+      !baseNavItems.some((i) => i.href === INTERVIEW_NAV_ITEM.href)
+    ) {
       injected.push({ ...INTERVIEW_NAV_ITEM, roles: [user.role] });
     }
     if (coordinatorBatchId) {
@@ -118,6 +128,11 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
                 >
                   <NavIcon name={item.iconName} className="h-5 w-5 shrink-0" />
                   {item.label}
+                  {item.href === PENDING_HIRING_HREF && pendingHiringCount > 0 && (
+                    <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 px-1 flex items-center justify-center font-semibold">
+                      {pendingHiringCount > 99 ? "99+" : pendingHiringCount}
+                    </span>
+                  )}
                 </Link>
               </div>
             );

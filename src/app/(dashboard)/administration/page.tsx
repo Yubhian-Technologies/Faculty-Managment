@@ -44,7 +44,7 @@ export default function AdministrationDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name?.split(" ")[0] ?? "Admin"}`}
+        title={`Welcome, ${user?.name ?? "Admin"}`}
         description="Location-level administration overview"
       />
 

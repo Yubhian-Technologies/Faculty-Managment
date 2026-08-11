@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
-import { ShieldCheck, KeyRound } from "lucide-react";
+import { ShieldCheck, KeyRound, UserCheck } from "lucide-react";
 import { ROLE_LABELS } from "@/types";
 import type { VacancyRequest, Candidate, CandidateApplication, FMSUser, HiringBatch } from "@/types";
 
@@ -137,11 +137,12 @@ export default function NewBatchPage() {
     ? applications.filter((a) => !a.batchId && a.vacancyRequestId === selectedVacancyId && a.status !== "REJECTED")
     : [];
 
-  function toggleApplication(id: string) {
-    setSelectedApplications((prev) =>
-      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
-    );
-  }
+  // Every shortlisted candidate for the chosen vacancy is included automatically
+  // (shortlisting already is the selection step) - no separate tick-box here.
+  useEffect(() => {
+    setSelectedApplications(filteredApplications.map((a) => a.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVacancyId, applications]);
 
   function togglePanel(uid: string) {
     if (lockedUids.has(uid)) return; // cannot deselect locked members
@@ -200,7 +201,7 @@ export default function NewBatchPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Vacancy Selection */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Step 1: Select Hiring Request</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Hiring Request</CardTitle></CardHeader>
           <CardContent>
             {vacancies.length === 0 ? (
               <p className="text-sm text-muted-foreground">No approved hiring requests. Get a hiring request approved first.</p>
@@ -217,7 +218,7 @@ export default function NewBatchPage() {
                 ) : (
                   <p className="text-sm text-muted-foreground">Loading…</p>
                 )}
-                <span className="text-[10px] text-primary font-medium">Auto-linked ✓</span>
+               
               </div>
             ) : (
               <Select value={selectedVacancyId} onValueChange={setSelectedVacancyId}>
@@ -268,10 +269,10 @@ export default function NewBatchPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Step 3: Select Candidates
+              Step 3: Shortlisted Candidates
               {selectedApplications.length > 0 && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {selectedApplications.length} selected
+                  {selectedApplications.length} included
                 </span>
               )}
             </CardTitle>
@@ -285,20 +286,19 @@ export default function NewBatchPage() {
               </p>
             ) : (
               <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Every shortlisted candidate for this hiring request is included in the interview session.
+                </p>
                 {filteredApplications.map((a) => {
                   const c = candidatesById.get(a.candidateId);
                   return (
-                    <div key={a.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                      <Checkbox
-                        id={`a-${a.id}`}
-                        checked={selectedApplications.includes(a.id)}
-                        onCheckedChange={() => toggleApplication(a.id)}
-                      />
-                      <label htmlFor={`a-${a.id}`} className="flex-1 cursor-pointer">
+                    <div key={a.id} className="flex items-start gap-3 p-3 border rounded-lg bg-muted/20">
+                      <UserCheck className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                      <div className="flex-1">
                         <p className="font-medium text-sm">{c?.name ?? "Unknown"}</p>
                         <p className="text-xs text-muted-foreground">{c?.email} · {c?.phone}</p>
                         <p className="text-xs text-muted-foreground">{a.position} · {a.department}</p>
-                      </label>
+                      </div>
                     </div>
                   );
                 })}

@@ -61,7 +61,7 @@ export default function HRAdminDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${user?.name?.split(" ")[0] ?? "HR Admin"}`}
+        title={`Welcome, ${user?.name ?? "HR Admin"}`}
         description="Location-level HR management"
       />
       <div className="grid gap-4 sm:grid-cols-2">

@@ -63,6 +63,16 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const now = new Date();
 
+    // An offer can only be sent once the candidate has submitted their bio-data
+    // form (mirrors the UI gate on the documents candidate page / offer form).
+    const candidateSnap = await db.collection("colleges").doc(session.collegeId).collection("candidates").doc(candidateId).get();
+    if (!candidateSnap.exists) {
+      return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
+    }
+    if (!(candidateSnap.data() as { bioDataSubmitted?: boolean }).bioDataSubmitted) {
+      return NextResponse.json({ error: "Candidate has not submitted their bio-data form yet" }, { status: 409 });
+    }
+
     // Fetch actor name
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";

@@ -38,7 +38,7 @@ export default function PurchaseDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? "Purchase"}`}
+        title={`Hello, ${user?.name ?? "Purchase"}`}
         description="Source quotations, track the purchase status of goods, and submit receipts to Finance"
       />
 

@@ -227,7 +227,12 @@ export async function PATCH(
       performedBy: session.uid,
       performedByName: actorName,
       targetId: id,
-      details: { facultyId, assignedEmail },
+      // facultyId/assignedEmail are only set during CREATE_CREDENTIALS — omit
+      // them for other actions so Firestore doesn't reject undefined values.
+      details: {
+        ...(facultyId ? { facultyId } : {}),
+        ...(assignedEmail ? { assignedEmail } : {}),
+      },
       timestamp: now,
     });
 

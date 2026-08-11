@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
+import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { BOTTOM_NAV_ITEMS, isNavItemActive, filterVisibleNavItems, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -17,6 +18,9 @@ const INTERVIEW_NAV_ITEM: NavItem = {
   roles: ["PANEL_MEMBER"],
 };
 
+// See Sidebar.tsx - same badge, mirrored here for the mobile bottom bar.
+const PENDING_HIRING_HREF = "/principal/vacancies";
+
 interface BottomNavProps {
   hiddenModules: string[];
   hiddenItems: string[];
@@ -28,6 +32,7 @@ export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
   const { unreadCount } = useNotifications();
   const { setNotificationDrawerOpen } = useUIStore();
   const { hasInterviews } = useAssignedInterviews();
+  const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
 
   if (!user || user.role === "STUDENT") return null;
 
@@ -52,7 +57,14 @@ export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
                 isActive ? "text-primary" : "text-muted-foreground"
               )}
             >
-              <NavIcon name={item.iconName} className="h-5 w-5 shrink-0" />
+              <div className="relative">
+                <NavIcon name={item.iconName} className="h-5 w-5 shrink-0" />
+                {item.href === PENDING_HIRING_HREF && pendingHiringCount > 0 && (
+                  <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] rounded-full h-4 min-w-4 px-0.5 flex items-center justify-center font-bold">
+                    {pendingHiringCount > 9 ? "9+" : pendingHiringCount}
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] font-medium truncate w-full text-center">
                 {item.label}
               </span>
