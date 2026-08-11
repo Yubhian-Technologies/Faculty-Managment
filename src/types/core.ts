@@ -418,12 +418,31 @@ export interface Department {
   updatedAt?: Timestamp;
 }
 
+// ─── Course Catalog (college-wide master list of course definitions the Principal
+// fixes once in Settings — the single source of truth for course names/codes so a
+// department can only *select* a course, never re-type it. Prevents duplicates like
+// "Bachelor of Technology" vs "Bachelors of Technology"). ──
+
+export interface CourseCatalogItem {
+  id: string;
+  collegeId: string;
+  name: string; // canonical name, e.g. "Bachelor of Technology"
+  code: string; // "BTECH"
+  durationYears: number; // e.g. 4, 2
+  isActive: boolean;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 // ─── Course (a program offered by a Department — engineering, pharmacy, dental, etc.) ──
 
 export interface Course {
   id: string;
   collegeId: string;
   departmentId: string;
+  catalogId?: string; // → CourseCatalogItem.id it was created from (source of truth)
   name: string; // "B.Tech", "B.Pharm", "BDS", "MBA", ...
   code: string; // "BTECH"
   durationYears: number; // e.g. 4, 2

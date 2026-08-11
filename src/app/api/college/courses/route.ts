@@ -70,32 +70,48 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
     const body = (await request.json()) as {
       departmentId: string;
-      name: string;
-      code: string;
-      durationYears: number;
+      catalogId: string;
     };
 
-    const { departmentId, name, code, durationYears } = body;
-    if (!departmentId || !name?.trim() || !code?.trim() || !durationYears) {
-      return NextResponse.json({ error: "departmentId, name, code and durationYears are required" }, { status: 400 });
-    }
-    if (durationYears < 1 || durationYears > 10) {
-      return NextResponse.json({ error: "durationYears must be between 1 and 10" }, { status: 400 });
+    const { departmentId, catalogId } = body;
+    if (!departmentId || !catalogId) {
+      return NextResponse.json({ error: "departmentId and catalogId are required" }, { status: 400 });
     }
 
     const db = getAdminDb();
-    const now = new Date();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    const ref = await db
-      .collection("colleges")
-      .doc(session.collegeId)
+    // A department course can only be created from a catalog entry the Principal
+    // fixed - name/code/duration come from there so they can never drift.
+    const catalogSnap = await collegeRef.collection("courseCatalog").doc(catalogId).get();
+    if (!catalogSnap.exists) {
+      return NextResponse.json({ error: "Selected course is not in the catalog" }, { status: 400 });
+    }
+    const catalog = catalogSnap.data() as { name: string; code: string; durationYears: number; isActive?: boolean };
+    if (catalog.isActive === false) {
+      return NextResponse.json({ error: "Selected course is inactive" }, { status: 400 });
+    }
+
+    // Don't let the same course be added to a department twice.
+    const dupe = await collegeRef.collection("courses")
+      .where("departmentId", "==", departmentId)
+      .where("catalogId", "==", catalogId)
+      .limit(1)
+      .get();
+    if (!dupe.empty) {
+      return NextResponse.json({ error: "This course is already added to the department" }, { status: 409 });
+    }
+
+    const now = new Date();
+    const ref = await collegeRef
       .collection("courses")
       .add({
         collegeId: session.collegeId,
         departmentId,
-        name: name.trim(),
-        code: code.toUpperCase().trim(),
-        durationYears: Number(durationYears),
+        catalogId,
+        name: catalog.name,
+        code: catalog.code,
+        durationYears: Number(catalog.durationYears),
         isActive: true,
         createdAt: now,
         updatedAt: now,

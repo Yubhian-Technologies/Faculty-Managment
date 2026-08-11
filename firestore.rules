@@ -206,6 +206,11 @@ service cloud.firestore {
         allow create, delete: if isPrincipal(collegeId);
       }
 
+      match /courseCatalog/{docId} {
+        allow read: if isStaff(collegeId);
+        allow create, update, delete: if isPrincipal(collegeId);
+      }
+
       match /courses/{courseId} {
         allow read: if isStaff(collegeId);
         allow create, update, delete: if isPrincipal(collegeId);
