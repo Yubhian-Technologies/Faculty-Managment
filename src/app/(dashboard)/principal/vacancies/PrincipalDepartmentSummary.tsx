@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Building2, ChevronRight } from "lucide-react";
@@ -12,11 +11,15 @@ import type { VacancyRequest, CandidateApplication, HiringBatch, FacultyAccountR
 
 type DepartmentSummary = {
   department: string;
+  pendingCount: number;
   activeCount: number;
   closedCount: number;
 };
 
-export default function CollegeOfficeDocumentsPage() {
+// Same department-drilldown pattern as College Office's hiring pipeline
+// (src/app/(dashboard)/college-office/documents/page.tsx) - group vacancy
+// requests by department so Principal reviews one department's flow at a time.
+export function PrincipalDepartmentSummary() {
   const [departments, setDepartments] = useState<DepartmentSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,13 +48,16 @@ export default function CollegeOfficeDocumentsPage() {
             .map((a) => a.candidateId);
           const closed = isHiringClosed(v.status, batch?.currentPhase, approvedCandidateIds, accountRequestStatusByCandidate);
 
-          const existing = summaryByDept.get(v.department) ?? { department: v.department, activeCount: 0, closedCount: 0 };
+          const existing = summaryByDept.get(v.department) ?? { department: v.department, pendingCount: 0, activeCount: 0, closedCount: 0 };
           if (closed) existing.closedCount++;
           else existing.activeCount++;
+          if (v.status === "PENDING") existing.pendingCount++;
           summaryByDept.set(v.department, existing);
         }
 
-        setDepartments(Array.from(summaryByDept.values()).sort((a, b) => a.department.localeCompare(b.department)));
+        setDepartments(
+          Array.from(summaryByDept.values()).sort((a, b) => b.pendingCount - a.pendingCount || a.department.localeCompare(b.department))
+        );
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
@@ -70,48 +76,41 @@ export default function CollegeOfficeDocumentsPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <PageHeader title="Hiring Pipeline" description="Loading..." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />)}
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />)}
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Hiring Pipeline"
-        description="Offer letter → document verification & joining letter → appointment letter → credentials & official email setup"
-      />
+  if (departments.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">No hiring requests yet</div>
+    );
+  }
 
-      {departments.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">No hiring requests yet</div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {departments.map((dept) => (
-            <Link key={dept.department} href={`/college-office/documents/${encodeURIComponent(dept.department)}`}>
-              <Card className="h-full transition-colors hover:border-primary/50">
-                <CardHeader className="flex flex-row items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <CardTitle className="text-base truncate">{dept.department}</CardTitle>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                </CardHeader>
-                <CardContent className="flex items-center gap-2">
-                  {dept.activeCount > 0 && <Badge>{dept.activeCount} active</Badge>}
-                  {dept.closedCount > 0 && <Badge variant="secondary">{dept.closedCount} completed</Badge>}
-                  {dept.activeCount === 0 && dept.closedCount === 0 && (
-                    <span className="text-sm text-muted-foreground">No requests</span>
-                  )}
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {departments.map((dept) => (
+        <Link key={dept.department} href={`/principal/vacancies/department/${encodeURIComponent(dept.department)}`}>
+          <Card className="h-full transition-colors hover:border-primary/50">
+            <CardHeader className="flex flex-row items-start justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                <CardTitle className="text-base truncate">{dept.department}</CardTitle>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </CardHeader>
+            <CardContent className="flex items-center gap-2 flex-wrap">
+              {dept.pendingCount > 0 && <Badge variant="destructive">{dept.pendingCount} awaiting approval</Badge>}
+              {dept.activeCount > 0 && <Badge>{dept.activeCount} active</Badge>}
+              {dept.closedCount > 0 && <Badge variant="secondary">{dept.closedCount} completed</Badge>}
+              {dept.activeCount === 0 && dept.closedCount === 0 && (
+                <span className="text-sm text-muted-foreground">No requests</span>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+      ))}
     </div>
   );
 }
