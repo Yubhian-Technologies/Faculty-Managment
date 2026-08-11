@@ -449,12 +449,31 @@ export interface Department {
   updatedAt?: Timestamp;
 }
 
+// ─── Course Catalog (college-wide master list of course definitions the Principal
+// fixes once in Settings — the single source of truth for course names/codes so a
+// department can only *select* a course, never re-type it. Prevents duplicates like
+// "Bachelor of Technology" vs "Bachelors of Technology"). ──
+
+export interface CourseCatalogItem {
+  id: string;
+  collegeId: string;
+  name: string; // canonical name, e.g. "Bachelor of Technology"
+  code: string; // "BTECH"
+  durationYears: number; // e.g. 4, 2
+  isActive: boolean;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 // ─── Course (a program offered by a Department — engineering, pharmacy, dental, etc.) ──
 
 export interface Course {
   id: string;
   collegeId: string;
   departmentId: string;
+  catalogId?: string; // → CourseCatalogItem.id it was created from (source of truth)
   name: string; // "B.Tech", "B.Pharm", "BDS", "MBA", ...
   code: string; // "BTECH"
   durationYears: number; // e.g. 4, 2
@@ -675,7 +694,7 @@ export interface FacultyMember {
   joiningLetterUrl?: string; // Firebase Storage URL for the signed joining letter (uploaded by HOD)
   appointmentLetterUrl?: string; // Firebase Storage URL for the appointment order (uploaded by HOD)
   resumeUrl?: string; // Resume/CV — Teaching Faculty only, no equivalent on SupportingStaffMember
-  officialEmail?: string; // institutional email address, set by Webmaster once an EmailCreationRequest is fulfilled — distinct from collegeEmail (the FMS login username)
+  officialEmail?: string; // institutional email address, if assigned — distinct from collegeEmail (the FMS login username)
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -1137,16 +1156,14 @@ export type NotificationType =
   | "OFFER_LETTER_GENERATED"
   | "OFFER_RESPONSE_RECEIVED"
   | "CREDENTIAL_REQUESTED"
+  | "FACULTY_ACCOUNT_REQUEST_CREDENTIALS_CREATED"
   | "FACULTY_ACCOUNT_REQUEST_COMPLETED"
+  | "CANDIDATE_HIRED"
   | "COORDINATOR_ASSIGNED"
   // Teaching (cross-department faculty assignment requests)
   | "FACULTY_ASSIGNMENT_REQUESTED"
   | "FACULTY_ASSIGNMENT_ALLOCATED"
   | "FACULTY_ASSIGNMENT_DECLINED"
-  // Webmaster (official email provisioning)
-  | "EMAIL_REQUEST_SUBMITTED"
-  | "OFFICIAL_EMAIL_CREATED"
-  | "EMAIL_REQUEST_CANCELLED"
   // Leave & Attendance
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
@@ -1248,10 +1265,6 @@ export type AuditAction =
   | "HIRING_DECISION_MADE"
   | "OFFER_LETTER_GENERATED"
   | "APPOINTMENT_LETTER_GENERATED"
-  // Webmaster module
-  | "EMAIL_REQUEST_CREATED"
-  | "EMAIL_REQUEST_FULFILLED"
-  | "EMAIL_REQUEST_CANCELLED"
   | "DOCUMENTS_VERIFIED"
   | "JOINING_LETTER_UPLOADED"
   | "CREDENTIAL_REQUESTED"

@@ -49,6 +49,8 @@ export async function POST(request: Request) {
       designation: string;
       department: string;
       joiningDate: string;
+      candidateAddress?: string;
+      termsAndConditions?: string;
     };
 
     const { candidateId, batchId, candidateName, designation, department, joiningDate } = body;
@@ -72,6 +74,8 @@ export async function POST(request: Request) {
       designation,
       department,
       joiningDate: new Date(joiningDate),
+      ...(body.candidateAddress?.trim() ? { candidateAddress: body.candidateAddress.trim() } : {}),
+      ...(body.termsAndConditions?.trim() ? { termsAndConditions: body.termsAndConditions.trim() } : {}),
       status: "SENT",
       generatedBy: actorName,
       generatedByUid: session.uid,

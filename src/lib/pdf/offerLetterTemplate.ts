@@ -91,77 +91,80 @@ export function getOfferLetterHTML({
 </html>`;
 }
 
-export function getAppointmentLetterHTML({
-  candidateName,
-  designation,
-  department,
-  joiningDate,
-  collegeName,
-  collegeAddress,
-  letterDate,
-}: {
+export interface AppointmentLetterData {
   candidateName: string;
+  candidateAddress?: string;
   designation: string;
   department: string;
-  joiningDate: string;
   collegeName: string;
   collegeAddress?: string;
+  joiningDate: string;
   letterDate: string;
-}): string {
+  termsAndConditions?: string;
+}
+
+export function getAppointmentLetterHTML({
+  candidateName,
+  candidateAddress,
+  designation,
+  department,
+  collegeName,
+  collegeAddress,
+  joiningDate,
+  letterDate,
+  termsAndConditions,
+}: AppointmentLetterData): string {
+  const collegeFull = collegeAddress ? `${collegeName}, ${collegeAddress}` : collegeName;
+
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  body { font-family: "Times New Roman", serif; margin: 0; padding: 0; }
+  body { font-family: "Times New Roman", serif; margin: 0; padding: 0; color: #000; }
   .page { width: 210mm; min-height: 297mm; padding: 20mm 25mm; box-sizing: border-box; }
-  .header { text-align: center; border-bottom: 3px double #1d4ed8; padding-bottom: 16px; margin-bottom: 24px; }
-  .college-name { font-size: 24px; font-weight: bold; color: #1d4ed8; margin: 0; }
+  .date { margin-bottom: 24px; font-size: 14px; }
+  .to-block { margin-bottom: 24px; }
+  .to-block p { margin: 0; font-size: 14px; line-height: 1.6; }
   .title { text-align: center; font-size: 16px; font-weight: bold; text-decoration: underline; margin: 24px 0; letter-spacing: 1px; }
   p { font-size: 14px; line-height: 1.8; margin: 12px 0; }
-  .signature { margin-top: 48px; display: flex; justify-content: flex-end; }
-  .sig-block { text-align: center; }
-  .sig-line { width: 150px; border-top: 1px solid #000; margin: 48px auto 8px; }
+  ol { font-size: 14px; line-height: 1.8; padding-left: 20px; }
+  ol li { margin-bottom: 8px; }
+  .signature { margin-top: 40px; }
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="header">
-    <p class="college-name">${collegeName}</p>
-    ${collegeAddress ? `<p style="font-size:12px;color:#555;margin:4px 0 0">${collegeAddress}</p>` : ""}
+  <p class="date">Dt. ${letterDate}</p>
+
+  <div class="to-block">
+    <p>To</p>
+    <p>${candidateName},</p>
+    ${candidateAddress ? candidateAddress.split(",").map((line) => `<p>${line.trim()}</p>`).join("") : ""}
   </div>
 
-  <div class="title">APPOINTMENT LETTER</div>
-
-  <p>Date: ${letterDate}</p>
-  <p>To,<br><strong>${candidateName}</strong></p>
-
-  <p>Dear ${candidateName},</p>
+  <div class="title">APPOINTMENT ORDER</div>
 
   <p>
-    With reference to your interview held recently, we are pleased to appoint you as <strong>${designation}</strong> in the Department of <strong>${department}</strong> at ${collegeName} with effect from <strong>${joiningDate}</strong>.
+    With reference to your application and the personal interview, you are appointed as <strong>${designation}</strong> in the Department of <strong>${department}</strong>, ${collegeFull}.
   </p>
 
-  <p>Your appointment is subject to the following conditions:</p>
-  <ol style="font-size:14px;line-height:1.8;">
-    <li>This appointment is on a probationary basis initially for a period of one year.</li>
-    <li>Your service is liable to be terminated without any notice during the probationary period if your performance is not found satisfactory.</li>
-    <li>You will be governed by the service rules and regulations of the institution as amended from time to time.</li>
-    <li>You shall not take up any other employment, business, or assignment without the prior written permission of the management.</li>
-  </ol>
+  ${
+    termsAndConditions?.trim()
+      ? `<p>The appointment is subject to the following Terms and Conditions.</p>
+  <ol>
+    ${termsAndConditions.trim().split("\n").map((line) => line.trim()).filter(Boolean).map((line) => `<li>${line}</li>`).join("")}
+  </ol>`
+      : ""
+  }
 
-  <p>
-    Please report to the HR department on <strong>${joiningDate}</strong> with all original documents for verification.
-  </p>
+  <p>You are requested to report to duty on or before <strong>${joiningDate}</strong>.</p>
 
-  <p>We welcome you to our institution and wish you a successful career here.</p>
+  <p>We welcome you to our institution and wish you a prosperous career with us.</p>
 
   <div class="signature">
-    <div class="sig-block">
-      <div class="sig-line"></div>
-      <p style="margin:0;"><strong>Principal</strong></p>
-      <p style="margin:4px 0 0;font-size:12px;color:#555;">${collegeName}</p>
-    </div>
+    <p>PRINCIPAL</p>
+    <p>${collegeName}</p>
   </div>
 </div>
 </body>

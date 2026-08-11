@@ -5,16 +5,18 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { downloadAppointmentLetterPdf } from "@/lib/pdf/downloadAppointmentLetter";
+import { getDefaultAppointmentTerms } from "@/lib/pdf/appointmentLetterTerms";
 import { ChevronDown, ChevronUp, FileText, Download, Mail, CheckCircle2 } from "lucide-react";
 import type { Candidate, CandidateApplication, OfferLetter } from "@/types";
 
-type FormState = { designation: string; department: string; joiningDate: string };
+type FormState = { designation: string; department: string; joiningDate: string; termsAndConditions: string };
 
 // Joined view: application (per-hiring-request document/decision state) +
 // candidate (person) fields. `id` is the applicationId; `candidateId` is the
@@ -25,6 +27,7 @@ type AppointmentCandidateView = {
   batchId: string;
   name: string;
   email: string;
+  address?: string;
   position: string;
   department: string;
   dateOfJoining?: string;
@@ -37,7 +40,7 @@ export default function PrincipalAppointmentLettersPage() {
   const [forms, setForms] = useState<Record<string, FormState>>({});
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [generatedIds, setGeneratedIds] = useState<Set<string>>(new Set());
-  const [collegeInfo, setCollegeInfo] = useState<{ name: string; address: string }>({ name: "", address: "" });
+  const [collegeInfo, setCollegeInfo] = useState<{ name: string; address: string; phone: string }>({ name: "", address: "", phone: "" });
 
   async function load() {
     setIsLoading(true);
@@ -68,6 +71,7 @@ export default function PrincipalAppointmentLettersPage() {
             batchId: a.batchId ?? "",
             name: person?.name ?? "Unknown",
             email: person?.email ?? "",
+            address: person?.permanentAddress || person?.residenceAddress,
             position: a.position,
             department: a.department,
             dateOfJoining: a.dateOfJoining,
@@ -80,6 +84,9 @@ export default function PrincipalAppointmentLettersPage() {
             designation: c.position,
             department: c.department,
             joiningDate: c.dateOfJoining ?? "",
+            // Filled lazily on first expand (see toggleExpand) once collegeInfo
+            // has loaded, rather than racing that fetch here.
+            termsAndConditions: "",
           }])
         )
       );
@@ -93,10 +100,28 @@ export default function PrincipalAppointmentLettersPage() {
   useEffect(() => { void load(); }, []);
   useEffect(() => {
     collegeFetch("/api/college/info")
-      .then((r) => r.json() as Promise<{ name: string; address: string }>)
-      .then((d) => setCollegeInfo({ name: d.name, address: d.address }))
+      .then((r) => r.json() as Promise<{ name: string; address: string; phone?: string }>)
+      .then((d) => setCollegeInfo({ name: d.name, address: d.address, phone: d.phone ?? "" }))
       .catch(() => {});
   }, []);
+
+  function toggleExpand(candidate: AppointmentCandidateView) {
+    setExpandedId((prev) => (prev === candidate.id ? null : candidate.id));
+    setForms((prev) => {
+      if (prev[candidate.id]?.termsAndConditions) return prev;
+      return {
+        ...prev,
+        [candidate.id]: {
+          ...prev[candidate.id],
+          termsAndConditions: getDefaultAppointmentTerms({
+            collegeName: collegeInfo.name,
+            collegeAddress: collegeInfo.address,
+            collegePhone: collegeInfo.phone,
+          }),
+        },
+      };
+    });
+  }
 
   async function generateAndRelease(candidate: AppointmentCandidateView) {
     const form = forms[candidate.id];
@@ -116,6 +141,8 @@ export default function PrincipalAppointmentLettersPage() {
           designation: form.designation,
           department: form.department,
           joiningDate: form.joiningDate,
+          candidateAddress: candidate.address,
+          termsAndConditions: form.termsAndConditions,
         }),
       });
       const data = await res.json() as { error?: string };
@@ -123,12 +150,14 @@ export default function PrincipalAppointmentLettersPage() {
 
       const letterFields = {
         candidateName: candidate.name,
+        candidateAddress: candidate.address,
         designation: form.designation,
         department: form.department,
         collegeName: collegeInfo.name,
         collegeAddress: collegeInfo.address,
         joiningDate: formatDate(new Date(form.joiningDate)),
         letterDate: formatDate(new Date()),
+        termsAndConditions: form.termsAndConditions,
       };
 
       // Principal reviews and sends the mail themselves (Gmail compose draft) rather
@@ -138,12 +167,14 @@ export default function PrincipalAppointmentLettersPage() {
       let composed = false;
       if (candidate.email) {
         const institution = collegeInfo.name || "the institution";
-        const subject = `Appointment Letter – ${form.designation} | ${institution}`;
+        const subject = `Appointment Order – ${form.designation} | ${institution}`;
         const body = `Dear ${candidate.name},
 
-Congratulations! Please find attached your formal appointment letter for the position of ${form.designation} in the ${form.department} department, effective from ${formatDate(new Date(form.joiningDate))}.
+Congratulations! With reference to your application and interview, you have been appointed as ${form.designation} in the Department of ${form.department} at ${institution}, effective from ${formatDate(new Date(form.joiningDate))}.
 
-The appointment letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+Your appointment is subject to the Terms and Conditions set out in the attached Appointment Order - please read them carefully, in particular the probation period and the requirement to deposit your original certificates with the Principal at the time of joining.
+
+The appointment letter PDF has just been downloaded to your computer - please attach it to this email before sending. You are requested to sign and return one copy acknowledging receipt and acceptance of these terms.
 
 Warm regards,
 ${institution}`;
@@ -171,12 +202,14 @@ ${institution}`;
     await downloadAppointmentLetterPdf(
       {
         candidateName: candidate.name,
+        candidateAddress: candidate.address,
         designation: form.designation,
         department: form.department,
         collegeName: collegeInfo.name,
         collegeAddress: collegeInfo.address,
         joiningDate: formatDate(new Date(form.joiningDate)),
         letterDate: formatDate(new Date()),
+        termsAndConditions: form.termsAndConditions,
       },
       candidate.name
     );
@@ -218,7 +251,7 @@ ${institution}`;
 
             return (
               <Card key={candidate.id}>
-                <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : candidate.id)}>
+                <CardHeader className="pb-3 cursor-pointer" onClick={() => toggleExpand(candidate)}>
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base">{candidate.name}</CardTitle>
@@ -250,6 +283,18 @@ ${institution}`;
                         <Label className="text-xs">Joining Date</Label>
                         <Input type="date" value={form.joiningDate} onChange={(e) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], joiningDate: e.target.value } }))} />
                       </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Terms &amp; Conditions</Label>
+                      <Textarea
+                        value={form.termsAndConditions}
+                        onChange={(e) => setForms((p) => ({ ...p, [candidate.id]: { ...p[candidate.id], termsAndConditions: e.target.value } }))}
+                        rows={10}
+                        className="font-mono text-xs"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        One clause per line — pre-filled from the standard appointment order. Fill in the salary figures in clause 4 before releasing.
+                      </p>
                     </div>
                     <div className="flex flex-wrap gap-2 pt-2 border-t">
                       <Button size="sm" variant="outline" onClick={() => void downloadPdf(candidate)}>

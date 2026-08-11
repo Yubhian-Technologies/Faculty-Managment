@@ -83,7 +83,10 @@ function buildRelatedNamesResolver(
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    // Importing students is the College Office's responsibility only - no HOD,
+    // Principal, Vice Principal or Panel role may bulk-import. (Super Admin keeps
+    // access as the platform-wide override, consistent with every other route.)
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "SUPER_ADMIN");
     const body = (await request.json()) as { records: BulkImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
