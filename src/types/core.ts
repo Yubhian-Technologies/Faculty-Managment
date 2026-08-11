@@ -397,6 +397,12 @@ export interface College {
   contactEmail?: string;
   contactPhone?: string;
   isActive: boolean;
+  // Campus geofence for face+geo self-attendance check-in/out. Super Admin
+  // only (see PATCH /api/admin/colleges) — faculty must be within the circle
+  // radius, or literally inside the polygon boundary, depending on shape.
+  campusLocation?:
+    | { shape: "circle"; latitude: number; longitude: number; radiusMeters: number }
+    | { shape: "polygon"; points: { latitude: number; longitude: number }[] };
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
