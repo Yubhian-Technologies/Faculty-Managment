@@ -3,11 +3,10 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Eye, Network, Upload } from "lucide-react";
+import { Users, Pencil, Trash2, Plus, GraduationCap, UserCog, Eye } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
@@ -50,7 +49,6 @@ export default function HODSectionsPage() {
   const [activeCourseId, setActiveCourseId] = useState<string>("all");
   const [activeYear, setActiveYear] = useState<number | "all">("all");
   const [deptFilter, setDeptFilter] = useState<string>("all");
-  const [reassigningId, setReassigningId] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<SectionRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -79,17 +77,14 @@ export default function HODSectionsPage() {
     void (async () => { await load(); })();
   }, [load]);
 
-  // Own department + its sub-departments - the set a main HOD can reassign an
-  // existing section between (handing it to a Sub-HOD to run, or pulling it
-  // back). Empty for a Sub-HOD (their department has no children of its own),
-  // so the picker below simply doesn't render for them.
+  // Own department + its sub-departments - the branches this (sub-)HOD manages.
   const ownDept = useMemo(() => departments.find((d) => d.name === user?.department) ?? null, [departments, user]);
   // A grouping container (e.g. "BS-Maths" grouping IT + CSE under a Sub-HOD) is
-  // not a real department, so it's never a section's owner or a target here.
+  // not a real department, so it's never a section's owner.
   const isGroupingContainer = (ownDept?.managedDepartments?.length ?? 0) > 0;
-  // Real departments this HOD can assign a section to: sub-departments and
-  // grouped/managed branches. A grouping container drops itself; a normal HOD
-  // keeps their own department too.
+  // Real departments this (sub-)HOD manages, feeding the branch filter tabs:
+  // sub-departments and grouped/managed branches. A grouping container drops
+  // itself; a normal HOD keeps their own department too.
   const deptOptions = useMemo(() => {
     if (!ownDept) return [];
     const children = departments.filter((d) => d.parentDepartmentId === ownDept.id);
@@ -105,30 +100,6 @@ export default function HODSectionsPage() {
     for (const s of sections) if (s.department && s.department !== ownDept?.name) names.add(s.department);
     return Array.from(names).filter(Boolean).sort();
   }, [deptOptions, sections, ownDept]);
-
-  async function handleReassign(section: SectionRow, departmentId: string) {
-    if (departmentId === deptOptions.find((d) => d.name === section.department)?.id) return;
-    setReassigningId(section.id);
-    try {
-      const res = await fetch(`/api/college/sections/${section.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ departmentId }),
-      });
-      const json = await res.json() as { error?: string };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to reassign section" });
-        return;
-      }
-      const newDeptName = deptOptions.find((d) => d.id === departmentId)?.name ?? "";
-      toast({ variant: "success", title: `Section ${section.name} moved to ${newDeptName}` });
-      void load();
-    } catch {
-      toast({ variant: "destructive", title: "Network error" });
-    } finally {
-      setReassigningId(null);
-    }
-  }
 
   function openCreate() {
     router.push(activeCourseId !== "all" ? `/hod/sections/new?courseId=${activeCourseId}` : "/hod/sections/new");
@@ -184,14 +155,9 @@ export default function HODSectionsPage() {
         title="Sections"
         description="Manage class sections, assign faculty incharge, and track student count"
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <Link href="/hod/students/import"><Upload className="h-4 w-4 mr-2" />Import Students</Link>
-            </Button>
-            <Button onClick={openCreate} disabled={courses.length === 0}>
-              <Plus className="h-4 w-4 mr-2" />Add Section
-            </Button>
-          </div>
+          <Button onClick={openCreate} disabled={courses.length === 0}>
+            <Plus className="h-4 w-4 mr-2" />Add Section
+          </Button>
         }
       />
 
@@ -391,33 +357,6 @@ export default function HODSectionsPage() {
                           )}
                         </div>
                       </div>
-
-                      {/* Department reassignment - only for a MAIN HOD whose department
-                          has sub-departments, to hand a section to a Sub-HOD (or pull it
-                          back). Hidden for a Sub-HOD: their sections already carry the
-                          real branch they created them under, so the picker was just
-                          noise. The section's department is shown as a badge above. */}
-                      {deptOptions.length > 1 && !isGroupingContainer && sec.accessLevel !== "secondary" && (
-                        <div className="flex items-center gap-2">
-                          <Network className="h-4 w-4 opacity-50 shrink-0" />
-                          <Select
-                            value={deptOptions.find((d) => d.name === sec.department)?.id ?? ""}
-                            onValueChange={(v) => void handleReassign(sec, v)}
-                            disabled={reassigningId === sec.id}
-                          >
-                            <SelectTrigger className="h-8 text-sm bg-background/60">
-                              <SelectValue placeholder="Department" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {deptOptions.map((d) => (
-                                <SelectItem key={d.id} value={d.id}>
-                                  {d.id === ownDept?.id ? `${d.name} (yours)` : d.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
 
                       {/* Faculty incharge */}
                       <div className="flex items-center gap-2">
