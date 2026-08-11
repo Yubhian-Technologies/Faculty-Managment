@@ -48,12 +48,13 @@ export const TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]
 // (Principal/College Office, college-wide) - same ownership model as
 // Engineering/Pharmacy/Dental's LEGACY_TECHNICAL_DESIGNATIONS split. School's
 // supporting list is deliberately NOT split (see getHodTechnicalDesignations).
+// Only the Technical subset is listed explicitly per type; the Non-Technical
+// subset is derived as "full supporting list minus Technical" (see
+// getNonTechnicalDesignations) so the two can never drift or overlap.
 const DEGREE_TECHNICAL_DESIGNATIONS = ["Lab Assistant", "Programmer", "Network I/C"];
-const DEGREE_NON_TECHNICAL_DESIGNATIONS = ["AO", "Sr. Office Assistant", "Office Assistant", "Librarian", "Trainee"];
 const POLYTECHNIC_TECHNICAL_DESIGNATIONS = [
   "Sr. Lab Technician", "Drawing Assistant", "Lab Assistant", "Programmer", "Computer Operator", "Lab Technician",
 ];
-const POLYTECHNIC_NON_TECHNICAL_DESIGNATIONS = ["A.A.O", "Office Assistant", "Attender"];
 
 export const SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
   ENGINEERING: ENGINEERING_SUPPORTING,
@@ -107,18 +108,16 @@ export function getHodTechnicalDesignations(type: CollegeType | undefined | null
   }
 }
 
-// Non-Technical designation picklist for College Office/Principal. Only
-// Degree/Polytechnic actually differ from the full supporting list (their
-// Technical subset above is excluded) - every other type's Non-Technical
-// picker keeps showing the same full list it always has (see
-// getSupportingDesignations - untouched, still used by Salary Structures
-// and CSV-import label lookups regardless of category).
+// Non-Technical designation picklist for College Office/Principal - the full
+// supporting list with the HOD-owned Technical subset removed, so a Technical
+// designation (e.g. Lab Assistant, Programmer) never appears here. School has
+// no Technical subset, so it keeps the full list unchanged. getSupportingDesignations
+// itself stays untouched (Salary Structures and CSV-import label lookups still
+// need the full list regardless of category).
 export function getNonTechnicalDesignations(type: CollegeType | undefined | null): string[] {
-  switch (type) {
-    case "DEGREE": return DEGREE_NON_TECHNICAL_DESIGNATIONS;
-    case "POLYTECHNIC": return POLYTECHNIC_NON_TECHNICAL_DESIGNATIONS;
-    default: return getSupportingDesignations(type);
-  }
+  const technical = getHodTechnicalDesignations(type);
+  if (technical.length === 0) return getSupportingDesignations(type);
+  return getSupportingDesignations(type).filter((d) => !technical.includes(d));
 }
 
 // A record created before this per-college-type system existed - including

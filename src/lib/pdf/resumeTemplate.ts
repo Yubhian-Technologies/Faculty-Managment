@@ -93,7 +93,9 @@ interface FacultyProfileFieldsLike {
   highestQualification?: string;
   ugDetails?: DegreeDetail;
   pgDetails?: DegreeDetail;
+  additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
+  additionalPhdDetails?: DegreeDetail[];
   phdStatus?: string;
   phdMode?: string;
   phdSupervisorName?: string;
@@ -363,7 +365,9 @@ export function getResumeHTML(data: ResumeData): string {
   const highestQualification = ap?.highestQualification || data.qualification;
   const educationEntries =
     degreeEntry("Ph.D.", ap?.phdDetails, true) +
+    (ap?.additionalPhdDetails ?? []).map((d) => degreeEntry("Ph.D.", d, true)).join("") +
     degreeEntry("Postgraduate", ap?.pgDetails) +
+    (ap?.additionalPgDetails ?? []).map((d) => degreeEntry("Postgraduate", d)).join("") +
     degreeEntry("Undergraduate", ap?.ugDetails);
   const educationExtras = bullets([
     highestQualification && !ap?.phdDetails && !ap?.pgDetails && !ap?.ugDetails && `Highest Qualification: ${esc(highestQualification)}`,
