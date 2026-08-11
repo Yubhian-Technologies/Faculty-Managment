@@ -11,7 +11,7 @@ export default function RAndDDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${user?.name?.split(" ")[0] ?? "there"}`}
+        title={`Hello, ${user?.name ?? "there"}`}
         description={ROLE_LABELS.R_AND_D}
       />
       <Card>
