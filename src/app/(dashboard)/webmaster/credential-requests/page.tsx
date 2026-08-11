@@ -26,7 +26,7 @@ export default function WebmasterCredentialRequestsPage() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string; employeeId?: string } | null>(null);
+  const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string; employeeId?: string; email?: string } | null>(null);
 
   async function load() {
     try {
@@ -66,11 +66,11 @@ export default function WebmasterCredentialRequestsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
-      const data = await res.json() as { ok?: boolean; employeeId?: string; generatedPassword?: string; error?: string };
+      const data = await res.json() as { ok?: boolean; employeeId?: string; generatedPassword?: string; assignedEmail?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
       if (data.generatedPassword) {
         toast({ variant: "success", title: "Account created", description: `Employee ID: ${data.employeeId ?? ""}` });
-        setRevealedPassword({ name: request.candidateName, password: data.generatedPassword, employeeId: data.employeeId });
+        setRevealedPassword({ name: request.candidateName, password: data.generatedPassword, employeeId: data.employeeId, email: data.assignedEmail });
       } else if (action === "COMPLETE") {
         toast({ variant: "success", title: "Request completed", description: "Office has been notified." });
       } else {
@@ -109,10 +109,13 @@ export default function WebmasterCredentialRequestsPage() {
                   <div>
                     <p className="font-medium text-sm">{request.candidateName}</p>
                     <p className="text-xs text-muted-foreground">{request.designation} · {request.department}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Official email: {request.officialEmail}</p>
-                    {(request.specialization || request.qualification) && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Recommended: {request.officialEmail}
+                      {request.assignedEmail && request.assignedEmail !== request.officialEmail ? ` — assigned: ${request.assignedEmail}` : ""}
+                    </p>
+                    {(request.alternateEmail1 || request.alternateEmail2) && (
                       <p className="text-xs text-muted-foreground">
-                        {[request.qualification, request.specialization].filter(Boolean).join(" · ")}
+                        Alternates: {[request.alternateEmail1, request.alternateEmail2].filter(Boolean).join(", ")}
                       </p>
                     )}
                   </div>
@@ -160,9 +163,16 @@ export default function WebmasterCredentialRequestsPage() {
             <DialogTitle>Account Created</DialogTitle>
             <DialogDescription>
               A login was created for <strong>{revealedPassword?.name}</strong>
-              {revealedPassword?.employeeId ? ` (${revealedPassword.employeeId})` : ""}. Share this temporary password with them securely - it will not be shown again.
+              {revealedPassword?.employeeId ? ` (${revealedPassword.employeeId})` : ""}. College Office can also reveal this
+              once on their own Faculty Credentials page - it will not be shown again after that.
             </DialogDescription>
           </DialogHeader>
+          {revealedPassword?.email && (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+              <p className="text-xs text-muted-foreground">Email</p>
+              <p className="font-mono select-all">{revealedPassword.email}</p>
+            </div>
+          )}
           <div className="rounded-lg border bg-muted/40 p-3 font-mono text-sm text-center select-all">
             {revealedPassword?.password}
           </div>
