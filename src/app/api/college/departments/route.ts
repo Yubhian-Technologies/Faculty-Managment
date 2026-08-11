@@ -90,6 +90,31 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const now = new Date();
 
+    // Department name and code are the join keys the whole scoping model relies
+    // on: getHodDepartmentScope resolves an HOD to their department BY NAME
+    // (where("name","==",name).limit(1)), and sections/students store the
+    // department as that name string. Two departments sharing a name would make
+    // a section under either visible to the other's HOD, so names must be unique
+    // per college. Codes must be unique too - they seed batch IDs and reports
+    // (the import route already enforces this; the manual add didn't). Match is
+    // case-insensitive. This is the single read the secondary/managed blocks
+    // below reuse instead of re-fetching the collection.
+    const trimmedName = name.trim();
+    const upperCode = code.toUpperCase().trim();
+    const existingDeptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+    for (const d of existingDeptsSnap.docs) {
+      const data = d.data() as { name?: string; code?: string };
+      if ((data.name ?? "").trim().toLowerCase() === trimmedName.toLowerCase()) {
+        return NextResponse.json({ error: `A department named "${trimmedName}" already exists` }, { status: 409 });
+      }
+      if ((data.code ?? "").toUpperCase().trim() === upperCode) {
+        return NextResponse.json({ error: `Short code "${upperCode}" is already used by another department` }, { status: 409 });
+      }
+    }
+    const deptByName = new Map(
+      existingDeptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }])
+    );
+
     // Cross-listing can be set on either a top-level department (by
     // Principal/VP) or a sub-department (by its parent's HOD, right here at
     // sub-department creation). The *target* must always be a top-level
@@ -102,8 +127,7 @@ export async function POST(request: Request) {
       if (names.includes(name.trim())) {
         return NextResponse.json({ error: "Secondary department must be different from this department" }, { status: 400 });
       }
-      const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
-      const byName = new Map(deptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }]));
+      const byName = deptByName;
       for (const secName of names) {
         const secDept = byName.get(secName);
         if (!secDept) {
@@ -127,8 +151,7 @@ export async function POST(request: Request) {
       if (names.includes(name.trim())) {
         return NextResponse.json({ error: "Managed department must be different from this department" }, { status: 400 });
       }
-      const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
-      const byName = new Map(deptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }]));
+      const byName = deptByName;
       for (const mName of names) {
         const mDept = byName.get(mName);
         if (!mDept) {
@@ -333,6 +356,31 @@ export async function PATCH(request: Request) {
       if ("secondaryDepartments" in rawUpdates) restricted.secondaryDepartments = rawUpdates.secondaryDepartments;
       if ("managedDepartments" in rawUpdates) restricted.managedDepartments = rawUpdates.managedDepartments;
       updates = restricted;
+    }
+
+    // Renaming (or re-coding) a department must not collide with another one -
+    // the scope model joins departments on their name, and codes seed batch
+    // IDs/reports, so both stay unique per college (same rule as create). Only
+    // runs when name/code is actually part of this update (HOD edits can't
+    // touch either - they're stripped above).
+    if (updates.name !== undefined || updates.code !== undefined) {
+      const [allSnap, currentSnap] = await Promise.all([
+        db.collection("colleges").doc(session.collegeId).collection("departments").get(),
+        deptRef.get(),
+      ]);
+      const cur = currentSnap.data() as { name?: string; code?: string } | undefined;
+      const finalName = (updates.name ?? cur?.name ?? "").trim();
+      const finalCode = (updates.code ?? cur?.code ?? "").toUpperCase().trim();
+      for (const d of allSnap.docs) {
+        if (d.id === deptId) continue;
+        const data = d.data() as { name?: string; code?: string };
+        if (updates.name !== undefined && (data.name ?? "").trim().toLowerCase() === finalName.toLowerCase()) {
+          return NextResponse.json({ error: `A department named "${finalName}" already exists` }, { status: 409 });
+        }
+        if (updates.code !== undefined && (data.code ?? "").toUpperCase().trim() === finalCode) {
+          return NextResponse.json({ error: `Short code "${finalCode}" is already used by another department` }, { status: 409 });
+        }
+      }
     }
 
     if (updates.secondaryDepartments !== undefined) {

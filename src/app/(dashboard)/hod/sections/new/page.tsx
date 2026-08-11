@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import type { Course } from "@/types";
+import { useAuthStore } from "@/store/authStore";
+import type { Course, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
 // `userUid` is the faculty member's actual Firebase Auth uid (set once HOD
@@ -36,8 +37,10 @@ export default function NewSectionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefilledCourseId = searchParams.get("courseId") ?? "";
+  const user = useAuthStore((s) => s.user);
 
   const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [form, setForm] = useState<SectionForm>({
     courseId: prefilledCourseId,
@@ -51,6 +54,13 @@ export default function NewSectionPage() {
   // Empty unless a parent HOD explicitly targets one of their sub-departments.
   const [departmentName, setDepartmentName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  // Shared-first-year flow: when the owning department has Secondary
+  // Departments configured (e.g. Basic Science → CSE/ECE/IT), each section
+  // feeds exactly one of those branches. `branch` is that target department's
+  // name; `letter` is the section letter (A, B) so one branch can have several
+  // sections. The stored section name is derived as `${branchCode}-${letter}`.
+  const [branch, setBranch] = useState("");
+  const [letter, setLetter] = useState("");
 
   useEffect(() => {
     fetch("/api/college/courses")
@@ -64,6 +74,13 @@ export default function NewSectionPage() {
         setFacultyList((d.faculty ?? []).map((f) => ({ id: f.id, name: f.name, designation: f.designation, userUid: f.userUid })));
       })
       .catch(() => { /* non-critical */ });
+
+    // Departments carry `assignedYears` (the "Years Taught" the Principal set) -
+    // needed to scope the Year dropdown to what this department actually teaches.
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => setDepartments(d.departments ?? []))
+      .catch(() => { /* non-critical - falls back to the full course span */ });
   }, []);
 
   function setF(patch: Partial<SectionForm>) {
@@ -84,17 +101,69 @@ export default function NewSectionPage() {
   }
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
-  const formYearOptions = useMemo(
-    () => (formCourse ? Array.from({ length: formCourse.durationYears }, (_, i) => i + 1) : []),
-    [formCourse]
+
+  // The department this section is being created under: the sub-department a
+  // parent HOD explicitly targeted, otherwise their own department. Its
+  // `assignedYears` ("Years Taught") is what the Year dropdown must honour.
+  const activeDeptName = departmentName || user?.department || "";
+  const activeDept = useMemo(
+    () => departments.find((d) => d.name === activeDeptName) ?? null,
+    [departments, activeDeptName]
   );
+
+  // Offer only the years this department is assigned to teach, intersected with
+  // the course's own span. A department set to [1,2,3] never shows Year 4 even
+  // for a 4-year course. When no years are assigned yet (or departments haven't
+  // loaded), fall back to the full course span so creation isn't blocked - the
+  // server still rejects an unassigned year on submit.
+  const formYearOptions = useMemo(() => {
+    if (!formCourse) return [];
+    const courseYears = Array.from({ length: formCourse.durationYears }, (_, i) => i + 1);
+    const assigned = activeDept?.assignedYears ?? [];
+    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+  }, [formCourse, activeDept]);
+
+  // Branch mode: the owning department cross-lists to one or more branches
+  // (Department.secondaryDepartments). When it does, the section feeds a branch
+  // instead of using a free-typed name.
+  const branchOptions = useMemo(() => {
+    if (!activeDept) return [];
+    if (activeDept.secondaryDepartments?.length) return activeDept.secondaryDepartments;
+    // A sub-department inherits its parent's configured branches, so a sub-HOD
+    // can create the shared first-year branch sections too.
+    if (activeDept.parentDepartmentId) {
+      return departments.find((d) => d.id === activeDept.parentDepartmentId)?.secondaryDepartments ?? [];
+    }
+    return [];
+  }, [activeDept, departments]);
+  const isBranchMode = branchOptions.length > 0;
+  const branchCodeOf = (name: string) =>
+    departments.find((d) => d.name === name)?.code?.trim() || name;
+  // Derived section name in branch mode: primary department code + branch code +
+  // letter, e.g. Basic Science → CSE → "BS-CSE-A". The primary prefix makes the
+  // section self-describing (which shared department owns it and which branch it
+  // feeds) everywhere it appears - lists, rosters, promotion dropdowns.
+  const ownerCode = activeDept?.code?.trim() || "";
+  const derivedName = branch && letter
+    ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(branch)}-${letter.trim().toUpperCase()}`
+    : "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.courseId) { toast({ variant: "destructive", title: "Course is required" }); return; }
-    if (!form.name.trim()) { toast({ variant: "destructive", title: "Section name is required" }); return; }
+    if (isBranchMode) {
+      if (!branch) { toast({ variant: "destructive", title: "Branch is required" }); return; }
+      if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
+    } else if (!form.name.trim()) {
+      toast({ variant: "destructive", title: "Section name is required" }); return;
+    }
     if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
     if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
+
+    // In branch mode the section name is derived from the branch + letter and
+    // the chosen branch is sent as the section's secondary department, so its
+    // students inherit it and auto-promote into that branch later.
+    const sectionName = isBranchMode ? derivedName : form.name;
 
     setSaving(true);
     try {
@@ -103,11 +172,12 @@ export default function NewSectionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseId: form.courseId,
-          name: form.name,
+          name: sectionName,
           year: Number(form.year),
           batch: form.batch,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
+          ...(isBranchMode ? { secondaryDepartment: branch } : {}),
           // Omitted unless a parent HOD picked a sub-department; the API then
           // falls back to their own department, as before.
           ...(departmentId ? { departmentId } : {}),
@@ -143,7 +213,12 @@ export default function NewSectionPage() {
             {/* Only rendered for a parent HOD who actually has sub-departments. */}
             <DepartmentScopeSelect
               value={departmentName}
-              onChange={(name, id) => { setDepartmentName(name); setDepartmentId(id); }}
+              onChange={(name, id) => {
+                setDepartmentName(name); setDepartmentId(id);
+                // The owning department changed - its assigned years and its
+                // configured branches both differ, so clear year/branch/letter.
+                setF({ year: "" }); setBranch(""); setLetter("");
+              }}
               hint="Create this section in your own department or one of its sub-departments."
             />
 
@@ -157,30 +232,78 @@ export default function NewSectionPage() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Section Name *</Label>
-                <Input
-                  value={form.name}
-                  onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
-                  placeholder="A, B, C…"
-                  maxLength={5}
-                  className="uppercase"
-                />
-                <p className="text-xs text-muted-foreground">e.g. A, B, C or CS-A</p>
+            {isBranchMode ? (
+              <>
+                {/* Shared-first-year department (e.g. Basic Science): the section
+                    feeds one of the configured branches, so pick the branch +
+                    a section letter instead of typing a free-form name. */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Branch (feeds into) *</Label>
+                    <Select value={branch} onValueChange={setBranch}>
+                      <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                      <SelectContent>
+                        {branchOptions.map((b) => (
+                          <SelectItem key={b} value={b}>{b} ({branchCodeOf(b)})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Students in this section are promoted into this branch next year.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Section Letter *</Label>
+                    <Input
+                      value={letter}
+                      onChange={(e) => setLetter(e.target.value.toUpperCase())}
+                      placeholder="A, B…"
+                      maxLength={2}
+                      className="uppercase"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Section name will be {derivedName ? <strong className="text-foreground">{derivedName}</strong> : "e.g. BS-CSE-A"}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Year *</Label>
+                  <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                    <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+                    <SelectContent>
+                      {formYearOptions.map((y) => (
+                        <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Section Name *</Label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
+                    placeholder="A, B, C…"
+                    maxLength={5}
+                    className="uppercase"
+                  />
+                  <p className="text-xs text-muted-foreground">e.g. A, B, C or CS-A</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Year *</Label>
+                  <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                    <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+                    <SelectContent>
+                      {formYearOptions.map((y) => (
+                        <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Year *</Label>
-                <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
-                  <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-                  <SelectContent>
-                    {formYearOptions.map((y) => (
-                      <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            )}
 
             <div className="space-y-2">
               <Label>Batch *</Label>

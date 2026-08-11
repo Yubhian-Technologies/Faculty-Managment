@@ -139,7 +139,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
+    // Sections are HOD-managed: an HOD (own department, its sub-departments, and
+    // any managed branch) creates them; Super Admin retains an override. Reads
+    // (GET above) stay open to Principal/VP/Office/Panel.
+    const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
     const body = (await request.json()) as {
       courseId: string;
       name: string;
@@ -246,7 +249,7 @@ export async function POST(request: Request) {
         .limit(1)
         .get();
       if (!deptSnap.empty) {
-        const deptDoc = deptSnap.docs[0].data() as { assignedYears?: number[]; secondaryDepartments?: string[] };
+        const deptDoc = deptSnap.docs[0].data() as { assignedYears?: number[]; secondaryDepartments?: string[]; parentDepartmentId?: string };
         const assignedYears = deptDoc.assignedYears ?? [];
         if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
           return NextResponse.json(
@@ -254,7 +257,15 @@ export async function POST(request: Request) {
             { status: 400 }
           );
         }
-        const availableSecondaryDepts = deptDoc.secondaryDepartments ?? [];
+        // Available branches: this department's own configured secondaries, or -
+        // for a sub-department with none of its own - those inherited from its
+        // parent, so a sub-HOD can create the shared first-year branch sections.
+        let availableSecondaryDepts = deptDoc.secondaryDepartments ?? [];
+        if (availableSecondaryDepts.length === 0 && deptDoc.parentDepartmentId) {
+          const parentSnap = await db.collection("colleges").doc(session.collegeId)
+            .collection("departments").doc(deptDoc.parentDepartmentId).get();
+          availableSecondaryDepts = (parentSnap.data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments ?? [];
+        }
         const chosen = body.secondaryDepartment?.trim()
           || (availableSecondaryDepts.length === 1 ? availableSecondaryDepts[0] : "");
         if (chosen) {
