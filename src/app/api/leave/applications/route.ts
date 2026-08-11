@@ -70,7 +70,13 @@ export async function GET(request: Request) {
         const snap = await REQUESTS_COL(session.collegeId, db)
           .where("status", "==", "PENDING_PRINCIPAL")
           .get();
-        const requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest);
+        let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest);
+        // A Vice Principal's own leave request must go to the Principal, not
+        // themselves - drop it from their own queue so there's nothing to
+        // self-approve here (the PATCH handler below is the real guard).
+        if (session.role === "VICE_PRINCIPAL") {
+          requests = requests.filter((r) => r.uid !== session.uid);
+        }
         return NextResponse.json({ requests: sortByCreatedAtDesc(await attachCategory(db, session.collegeId, requests)) });
       }
       return NextResponse.json({ requests: [] });
@@ -120,12 +126,27 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
-    const [profile, identity] = await Promise.all([
+    const [profile, identity, existingSnap] = await Promise.all([
       getOrCreateProfile(db, session.collegeId, session.uid),
       resolveEmployeeIdentity(db, session.collegeId, session.uid),
+      REQUESTS_COL(session.collegeId, db).where("uid", "==", session.uid).get(),
     ]);
     if (!profile || !identity) {
       return NextResponse.json({ error: "Employee record not found" }, { status: 404 });
+    }
+    // One outstanding request at a time - a faculty member can't submit
+    // another while an earlier one is still awaiting HOD/Principal decision
+    // (the Apply button is also disabled client-side for this, but the
+    // server is the actual guard - see LeaveProfileView.tsx).
+    const hasPendingRequest = existingSnap.docs.some((d) => {
+      const status = (d.data() as LeaveRequest).status;
+      return status === "PENDING_HOD" || status === "PENDING_PRINCIPAL" || status === "PENDING_MANAGEMENT";
+    });
+    if (hasPendingRequest) {
+      return NextResponse.json(
+        { error: "You already have a leave request pending approval. Please wait for it to be decided before applying again." },
+        { status: 400 }
+      );
     }
 
     const settings = await loadCollegeSettings(db, session.collegeId);
@@ -150,6 +171,24 @@ export async function POST(request: Request) {
     if (body.fromDate < todayISODate() || body.toDate < todayISODate()) {
       return NextResponse.json({ error: "Leave cannot be applied for a date before today" }, { status: 400 });
     }
+    // hasPendingRequest above already blocks a second submission while one is
+    // still undecided, but says nothing about a request that's already been
+    // decided - an APPROVED leave for these same dates (e.g. tomorrow) must
+    // still block re-applying for them, or the employee ends up with two
+    // approved/overlapping leave records for the same day.
+    const overlapsApprovedLeave = existingSnap.docs.some((d) => {
+      const r = d.data() as LeaveRequest;
+      if (r.status !== "APPROVED") return false;
+      const rFrom = (r.fromDate as unknown as { toDate(): Date }).toDate();
+      const rTo = (r.toDate as unknown as { toDate(): Date }).toDate();
+      return fromDate <= rTo && rFrom <= toDate;
+    });
+    if (overlapsApprovedLeave) {
+      return NextResponse.json(
+        { error: "You already have an approved leave covering one or more of these dates." },
+        { status: 400 }
+      );
+    }
     const totalDays = countLeaveDays(fromDate, toDate, body.isHalfDay);
 
     // Insufficient balance never blocks submission - days beyond what's
@@ -164,9 +203,14 @@ export async function POST(request: Request) {
     // DEAN/IQAC_COORDINATOR/T_AND_P/R_AND_D and any remaining label-only
     // COLLEGE_STAFF logins (Librarian, etc.) have no department and no HOD
     // above them - those correctly skip straight to PENDING_PRINCIPAL, same
-    // as HOD/Principal/office-leadership roles applying for their own leave.
+    // as Vice Principal/office-leadership roles applying for their own leave.
+    // A PRINCIPAL's own leave skips PENDING_PRINCIPAL too - there's no one
+    // else within the college to decide it, so it goes straight to the
+    // global MANAGEMENT role instead (see /api/management/leave-approvals).
     const reportsToHod = session.role === "PANEL_MEMBER" || (session.role === "COLLEGE_STAFF" && !!identity.department);
-    const initialStatus = reportsToHod ? "PENDING_HOD" : "PENDING_PRINCIPAL";
+    const initialStatus = session.role === "PRINCIPAL"
+      ? "PENDING_MANAGEMENT"
+      : reportsToHod ? "PENDING_HOD" : "PENDING_PRINCIPAL";
 
     const newRequest: Omit<LeaveRequest, "id"> = {
       collegeId: session.collegeId,

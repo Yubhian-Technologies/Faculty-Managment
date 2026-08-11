@@ -154,6 +154,19 @@ export default function TeachingAssignmentsPage() {
     ? subjects.filter((s) => !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id))
     : subjects;
 
+  // A "secondary" faculty option (a feeder's, e.g. Basic Science's, own
+  // faculty - see college/faculty/route.ts) is only relevant when the
+  // selected subject actually belongs to that feeder (a shared 1st-year
+  // subject). For a subject that belongs to this HOD's own/managed
+  // department instead (e.g. IT's own 2nd-year subject), the feeder has
+  // nothing to do with it, so its faculty are hidden here - staffing then
+  // has to go through "Or ask another department to lend a faculty member"
+  // below, same as for any other subject with nobody free.
+  const selectedSubjectForAssign = subjects.find((s) => s.id === assignForm.subjectId);
+  const availableFacultyForAssign = selectedSubjectForAssign
+    ? faculty.filter((f) => f.accessLevel !== "secondary" || f.department === selectedSubjectForAssign.department)
+    : faculty;
+
   // Every top-level department in the college is askable, including ones this
   // HOD can already assign from directly (e.g. a managed branch whose own
   // faculty are all busy elsewhere) - only the section's own department is
@@ -398,9 +411,9 @@ export default function TeachingAssignmentsPage() {
                     onValueChange={(v) => setAssignForm((f) => ({ ...f, facultyId: v }))}
                     disabled={!assignForm.subjectId}
                   >
-                    <SelectTrigger><SelectValue placeholder={faculty.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={availableFacultyForAssign.length ? "Select faculty" : "No faculty in your department"} /></SelectTrigger>
                     <SelectContent>
-                      {faculty.map((f) => (
+                      {availableFacultyForAssign.map((f) => (
                         <SelectItem key={f.id} value={f.id}>
                           {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
                         </SelectItem>

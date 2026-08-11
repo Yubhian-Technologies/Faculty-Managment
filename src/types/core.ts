@@ -397,6 +397,12 @@ export interface College {
   contactEmail?: string;
   contactPhone?: string;
   isActive: boolean;
+  // Campus geofence for face+geo self-attendance check-in/out. Super Admin
+  // only (see PATCH /api/admin/colleges) — faculty must be within the circle
+  // radius, or literally inside the polygon boundary, depending on shape.
+  campusLocation?:
+    | { shape: "circle"; latitude: number; longitude: number; radiusMeters: number }
+    | { shape: "polygon"; points: { latitude: number; longitude: number }[] };
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -548,6 +554,19 @@ export interface FacultyNorms {
   // must complete before converting into their vacation/non-vacation leave
   // category - see src/lib/leave/categoryEngine.ts.
   newJoiningYears: number;
+  updatedAt?: Timestamp;
+  updatedByName?: string;
+}
+
+// ─── Academic Regulations ─────────────────────────────────────────────────────
+// A college's curriculum "regulation" (e.g. R20, R23) usually changes only for
+// incoming batches, so the 1st through 4th year of study can each be running a
+// different regulation at the same time. The Principal maintains the list of
+// regulation names in use and fixes which one applies to each year.
+export interface AcademicRegulationSettings {
+  regulations: string[];
+  // Year of study ("1".."4") -> one of `regulations`. Omitted/empty until fixed.
+  yearRegulations: Record<string, string>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -1070,13 +1089,14 @@ export interface Section {
   classLeaderUid?: string;
   classLeaderName?: string;
   studentCount: number;
-  // Secondary — view-only access for one or more other departments' HODs,
-  // e.g. a shared first-year section whose roster splits across several
-  // eventual branches. Auto-copied from the owning Department's own
-  // `secondaryDepartments` at section creation (see college/sections POST) —
-  // not chosen per-section. Mirrors StudentRecord.secondaryDepartment's
-  // primary/secondary access model, just at the section level (and plural)
-  // instead of per-student.
+  // Secondary — the branch this section feeds, e.g. a shared first-year Basic
+  // Science section whose cohort promotes into CSE. Chosen per section from the
+  // owning Department's configured `secondaryDepartments` via the Add/Edit
+  // Section branch picker (see college/sections POST + [id] PATCH); when the
+  // department cross-lists to exactly one branch it's auto-filled. Grants that
+  // branch's HOD view-only access, and every student imported into this section
+  // inherits it as StudentRecord.secondaryDepartment (their promotion target).
+  // Stored plural for legacy shape, but a section commits to a single branch.
   secondaryDepartments?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;

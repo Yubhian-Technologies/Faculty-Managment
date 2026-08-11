@@ -31,7 +31,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
+    // HOD-managed (own dept + sub-departments + managed branches); Super Admin
+    // override. Ownership within the HOD's tree is enforced further below.
+    const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
       courseId?: string;
@@ -42,6 +44,7 @@ export async function PATCH(
       facultyInchargeUid?: string | null;
       facultyInchargeName?: string;
       departmentId?: string;
+      secondaryDepartment?: string | null;
     };
 
     const db = getAdminDb();
@@ -107,6 +110,39 @@ export async function PATCH(
       const availableSecondaryDepts = targetDept.secondaryDepartments ?? [];
       updates.department = targetDeptName;
       updates.secondaryDepartments = availableSecondaryDepts.length === 1 ? [availableSecondaryDepts[0]] : [];
+    }
+
+    // Explicit target-branch (secondary department) change from the Edit Section
+    // branch picker. The owning department must actually cross-list to the
+    // chosen branch (Department.secondaryDepartments) - mirrors the POST
+    // validation in sections/route.ts. An explicit choice overrides the
+    // auto-derive from the departmentId block above; "" / null clears it.
+    if (body.secondaryDepartment !== undefined) {
+      const chosen = body.secondaryDepartment?.trim() ?? "";
+      if (chosen) {
+        const ownerName = (updates.department as string | undefined) ?? sectionDept;
+        const ownerSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("departments").where("name", "==", ownerName).limit(1).get();
+        const ownerData = ownerSnap.empty
+          ? undefined
+          : (ownerSnap.docs[0].data() as { secondaryDepartments?: string[]; parentDepartmentId?: string });
+        // Own configured branches, or a sub-department's inherited parent branches.
+        let available = ownerData?.secondaryDepartments ?? [];
+        if (available.length === 0 && ownerData?.parentDepartmentId) {
+          const parentSnap = await db.collection("colleges").doc(session.collegeId)
+            .collection("departments").doc(ownerData.parentDepartmentId).get();
+          available = (parentSnap.data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments ?? [];
+        }
+        if (!available.includes(chosen)) {
+          return NextResponse.json(
+            { error: `"${chosen}" is not one of this department's configured secondary departments` },
+            { status: 400 }
+          );
+        }
+        updates.secondaryDepartments = [chosen];
+      } else {
+        updates.secondaryDepartments = [];
+      }
     }
 
     if (body.name != null) updates.name = body.name.trim().toUpperCase();
@@ -199,7 +235,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
+    // HOD-managed (own dept + sub-departments + managed branches); Super Admin
+    // override. Ownership within the HOD's tree is enforced further below.
+    const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
     const { id } = await params;
 
     const db = getAdminDb();

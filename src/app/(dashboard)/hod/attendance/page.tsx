@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CalendarDays, Info } from "lucide-react";
+import { CalendarDays, Info, LogIn, LogOut } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
@@ -51,6 +52,8 @@ export default function HODAttendancePage() {
   const [summary, setSummary] = useState<AttendanceSummary | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | undefined>(undefined);
+  const [dialogMode, setDialogMode] = useState<"check-in" | "check-out" | null>(null);
 
   const load = useCallback(async (y: number, m: number) => {
     setIsLoading(true);
@@ -73,6 +76,23 @@ export default function HODAttendancePage() {
     void (async () => { await load(year, month); })();
   }, [load, year, month]);
 
+  useEffect(() => {
+    fetch("/api/college/faculty/me")
+      .then((r) => r.json() as Promise<{ faculty?: { profilePhotoUrl?: string } | null }>)
+      .then((d) => setProfilePhotoUrl(d.faculty?.profilePhotoUrl))
+      .catch(() => { /* non-critical - Mark Attendance will show a clear error if missing */ });
+  }, []);
+
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
+  const todayRecord = isCurrentMonth
+    ? records.find((rec) => {
+        const d = rec.date && typeof (rec.date as { toDate?: () => Date }).toDate === "function"
+          ? (rec.date as { toDate: () => Date }).toDate()
+          : new Date(rec.date as unknown as string);
+        return d.toDateString() === now.toDateString();
+      })
+    : undefined;
+
   const summaryCards: SummaryCard[] = summary
     ? [
         { label: "Present",  value: summary.present,  colorClass: "text-green-600" },
@@ -90,6 +110,33 @@ export default function HODAttendancePage() {
         title="My Attendance"
         description="Monthly attendance records"
       />
+
+      {isCurrentMonth && (
+        <Card>
+          <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+            {todayRecord?.checkOut ? (
+              <p className="text-sm">
+                Today&apos;s attendance is complete — in at <span className="font-medium">{todayRecord.checkIn}</span>, out at{" "}
+                <span className="font-medium">{todayRecord.checkOut}</span>.
+              </p>
+            ) : todayRecord?.checkIn ? (
+              <>
+                <p className="text-sm">Checked in at <span className="font-medium">{todayRecord.checkIn}</span>.</p>
+                <Button onClick={() => setDialogMode("check-out")}>
+                  <LogOut className="h-4 w-4 mr-1.5" /> Check Out
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">You haven&apos;t marked attendance today.</p>
+                <Button onClick={() => setDialogMode("check-in")}>
+                  <LogIn className="h-4 w-4 mr-1.5" /> Check In
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Month / Year selector */}
       <div className="flex flex-wrap items-center gap-3">
@@ -238,6 +285,16 @@ export default function HODAttendancePage() {
             <p className="text-muted-foreground">No attendance records for this month.</p>
           </CardContent>
         </Card>
+      )}
+
+      {dialogMode && (
+        <MarkAttendanceDialog
+          mode={dialogMode}
+          profilePhotoUrl={profilePhotoUrl}
+          open={!!dialogMode}
+          onOpenChange={(o) => { if (!o) setDialogMode(null); }}
+          onSuccess={() => void load(year, month)}
+        />
       )}
     </div>
   );
