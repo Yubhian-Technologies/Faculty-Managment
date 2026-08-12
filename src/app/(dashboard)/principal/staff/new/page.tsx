@@ -26,9 +26,6 @@ import type { Department, UserRole } from "@/types";
 // which create both the login and the profile record.
 const BASE_CREATABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL"];
 
-// One holder per college — matches COLLEGE_SINGLETON_ROLES on the API route.
-const SINGLETON_ROLES: UserRole[] = ["LIBRARY", "EXAM_CELL", "WEBMASTER"];
-
 export default function NewStaffPage() {
   const router = useRouter();
   const { collegeType } = useCollegeType();
@@ -48,6 +45,7 @@ export default function NewStaffPage() {
   const [password, setPassword] = useState("12345678");
   const [role, setRole] = useState<UserRole>("COLLEGE_OFFICE");
   const [department, setDepartment] = useState("");
+  const [dateOfJoining, setDateOfJoining] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -57,7 +55,7 @@ export default function NewStaffPage() {
       .catch(() => { /* only needed for the HOD department picker */ });
   }, []);
 
-  const isValid = !!name.trim() && !!email.trim() && !!password.trim() && !!role &&
+  const isValid = !!name.trim() && !!email.trim() && !!password.trim() && !!role && !!dateOfJoining &&
     (role !== "HOD" || !!department);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -73,6 +71,7 @@ export default function NewStaffPage() {
           email: email.trim(),
           password,
           role,
+          dateOfJoining,
           ...(collegeEmail.trim() ? { collegeEmail: collegeEmail.trim() } : {}),
           ...(employeeId.trim() ? { employeeId: employeeId.trim() } : {}),
           ...(phone.trim() ? { phone: phone.trim() } : {}),
@@ -111,7 +110,7 @@ export default function NewStaffPage() {
                 <SelectContent>
                   {CREATABLE_ROLES.map((r) => (
                     <SelectItem key={r} value={r}>
-                      {ROLE_LABELS[r]}{SINGLETON_ROLES.includes(r) ? " (one per college)" : ""}
+                      {ROLE_LABELS[r]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -159,6 +158,10 @@ export default function NewStaffPage() {
               <div className="space-y-2">
                 <Label>Temporary Password <span className="text-destructive">*</span></Label>
                 <Input value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Date of Joining <span className="text-destructive">*</span></Label>
+                <Input type="date" value={dateOfJoining} onChange={(e) => setDateOfJoining(e.target.value)} />
               </div>
             </div>
 

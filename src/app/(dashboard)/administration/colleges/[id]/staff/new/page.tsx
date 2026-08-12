@@ -34,7 +34,7 @@ export default function NewCollegeStaffPage() {
   const [college, setCollege] = useState<College | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "12345678", role: defaultRole as string });
+  const [form, setForm] = useState({ name: "", email: "", password: "12345678", role: defaultRole as string, dateOfJoining: "" });
 
   useEffect(() => {
     fetch("/api/admin/colleges")
@@ -68,7 +68,7 @@ export default function NewCollegeStaffPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.email || !form.password) return;
+    if (!form.name || !form.email || !form.password || !form.dateOfJoining) return;
     setSaving(true);
     try {
       const res = await fetch("/api/administration/college-staff", {
@@ -163,10 +163,18 @@ export default function NewCollegeStaffPage() {
                 onChange={(e) => set({ password: e.target.value })}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Date of Joining <span className="text-destructive">*</span></Label>
+              <Input
+                type="date"
+                value={form.dateOfJoining}
+                onChange={(e) => set({ dateOfJoining: e.target.value })}
+              />
+            </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-              <Button type="submit" loading={saving} disabled={!form.name || !form.email || !form.password}>Create Account</Button>
+              <Button type="submit" loading={saving} disabled={!form.name || !form.email || !form.password || !form.dateOfJoining}>Create Account</Button>
             </div>
           </form>
         </CardContent>

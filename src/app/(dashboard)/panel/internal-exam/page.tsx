@@ -274,7 +274,7 @@ export default function InternalExamPage() {
                   loading={isLoadingStudents}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  Load Students
+                  Submit
                 </Button>
               </div>
             </CardContent>

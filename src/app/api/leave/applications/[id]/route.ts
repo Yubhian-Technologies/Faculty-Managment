@@ -7,10 +7,12 @@ import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import { REQUESTS_COL, commitApproval, releasePending, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
+import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
-import type { LeaveRequest, LeaveActionRecord } from "@/types/leave";
+import { OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
+import type { LeaveRequest, LeaveActionRecord, OtherLeaveCategory } from "@/types/leave";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,7 +20,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D"
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const db = getAdminDb();
 
@@ -46,12 +49,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D"
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await request.json()) as {
       action?: "APPROVE" | "REJECT" | "CANCEL";
       remarks?: string;
       isPaidLeave?: boolean;
+      otherLeaveCategory?: OtherLeaveCategory;
     };
     if (!body.action) {
       return NextResponse.json({ error: "action is required" }, { status: 400 });
@@ -206,12 +211,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (body.action !== "APPROVE" && body.action !== "REJECT") {
         return NextResponse.json({ error: "action must be APPROVE or REJECT" }, { status: 400 });
       }
+      // Approving an "Other" request is also where the Principal categorizes
+      // it (Maternity/Family Planning/Quarantine/Extraordinary/Compensatory)
+      // for their own record - required, not optional, and stored separately
+      // from the request itself (see OTHER_CATEGORIES_COL) so it's never
+      // visible anywhere else.
+      if (body.action === "APPROVE" && req.isOtherRequest) {
+        if (!body.otherLeaveCategory || !OTHER_LEAVE_CATEGORY_ORDER.includes(body.otherLeaveCategory)) {
+          return NextResponse.json(
+            { error: "Select a leave category (Maternity, Family Planning, Quarantine, Extraordinary, or Compensatory) before approving" },
+            { status: 400 }
+          );
+        }
+      }
       await decideFinalStageLeave({
         db, collegeId: session.collegeId, id, req,
         action: body.action, remarks: body.remarks,
         decidedByUid: session.uid, decidedByEmail: session.email,
         decider: "PRINCIPAL",
       });
+      if (body.action === "APPROVE" && req.isOtherRequest && body.otherLeaveCategory) {
+        await OTHER_CATEGORIES_COL(session.collegeId, db).doc(id).set({
+          id,
+          collegeId: session.collegeId,
+          uid: req.uid,
+          category: body.otherLeaveCategory,
+          setBy: session.uid,
+          setByName: session.email || "Principal",
+          setAt: new Date(),
+        });
+      }
       return NextResponse.json({ ok: true });
     }
 

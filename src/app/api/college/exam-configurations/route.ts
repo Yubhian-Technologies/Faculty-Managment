@@ -3,12 +3,13 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { ExamConfigComponent, ExamConfiguration } from "@/types";
+import { examConfigId } from "@/lib/exams/internalExamMarks";
+import type { ExamConfigComponent, ExamConfiguration, Subject } from "@/types";
 
 // Broad read access — same role set already used for /api/college/subjects —
 // so the Exam Cell dashboard, Principal/HOD oversight, and the Faculty
-// Dashboard's Internal Exam module (which needs to read a subject's config
-// live) can all fetch this.
+// Dashboard's Internal Exam module (which needs to read the config live) can
+// all fetch this.
 const READ_ROLES = ["EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "PANEL_MEMBER"];
 
 export async function GET(request: Request) {
@@ -22,8 +23,23 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const coll = db.collection("colleges").doc(session.collegeId).collection("examConfigurations");
 
+    // Convenience mode for callers that only know the subject (Faculty/HOD/
+    // Principal's Internal Exam views) — resolve it to the course+year the
+    // subject belongs to, then return that shared branch-level config. A
+    // semester-scoped subject (no courseId/year) has no branch-level config
+    // to resolve to, same as before this doc-id change.
     if (subjectId) {
-      const snap = await coll.doc(subjectId).get();
+      const subjSnap = await db.collection("colleges").doc(session.collegeId).collection("subjects").doc(subjectId).get();
+      const subject = subjSnap.exists ? (subjSnap.data() as Subject) : null;
+      if (!subject?.courseId || subject.year == null) {
+        return NextResponse.json({ configuration: null });
+      }
+      const snap = await coll.doc(examConfigId(subject.courseId, subject.year)).get();
+      return NextResponse.json({ configuration: snap.exists ? { id: snap.id, ...snap.data() } : null });
+    }
+
+    if (courseId && year) {
+      const snap = await coll.doc(examConfigId(courseId, Number(year))).get();
       return NextResponse.json({ configuration: snap.exists ? { id: snap.id, ...snap.data() } : null });
     }
 
@@ -34,7 +50,15 @@ export async function GET(request: Request) {
     const snap = await query.get();
     const configurations = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => ((a as { subjectName?: string }).subjectName ?? "").localeCompare((b as { subjectName?: string }).subjectName ?? ""));
+      .sort((a, b) => {
+        const ac = a as { courseName?: string; department?: string; year?: number };
+        const bc = b as { courseName?: string; department?: string; year?: number };
+        return (
+          (ac.courseName ?? "").localeCompare(bc.courseName ?? "") ||
+          (ac.department ?? "").localeCompare(bc.department ?? "") ||
+          (ac.year ?? 0) - (bc.year ?? 0)
+        );
+      });
 
     return NextResponse.json({ configurations });
   } catch (err) {
@@ -46,9 +70,11 @@ export async function GET(request: Request) {
   }
 }
 
-// Upsert — the document id is always the subjectId (one configuration per
-// subject), so re-saving the same subject edits its existing configuration
-// instead of creating a duplicate.
+// Upsert — the document id is always `${courseId}_year${year}` (one
+// configuration per course+year, i.e. per branch since courseId already
+// pins the department), so re-saving the same course+year edits its existing
+// configuration instead of creating a duplicate, and it automatically covers
+// every subject taught under that course+year.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("EXAM_CELL", "SUPER_ADMIN");
@@ -57,9 +83,6 @@ export async function POST(request: Request) {
       courseName?: string;
       department?: string;
       year?: number;
-      subjectId?: string;
-      subjectName?: string;
-      subjectCode?: string;
       internalMaxMarks?: number;
       externalMaxMarks?: number;
       components?: (Omit<ExamConfigComponent, "id"> & { id?: string })[];
@@ -67,12 +90,12 @@ export async function POST(request: Request) {
     };
 
     const {
-      courseId, courseName, department, year, subjectId, subjectName, subjectCode,
+      courseId, courseName, department, year,
       internalMaxMarks, externalMaxMarks, components, status,
     } = body;
 
-    if (!courseId || !department || !year || !subjectId || !subjectName) {
-      return NextResponse.json({ error: "courseId, department, year, subjectId and subjectName are required" }, { status: 400 });
+    if (!courseId || !department || !year) {
+      return NextResponse.json({ error: "courseId, department and year are required" }, { status: 400 });
     }
     if (typeof internalMaxMarks !== "number" || internalMaxMarks <= 0) {
       return NextResponse.json({ error: "Internal Maximum Marks must be a positive number" }, { status: 400 });
@@ -106,7 +129,8 @@ export async function POST(request: Request) {
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Exam Cell";
 
-    const ref = db.collection("colleges").doc(session.collegeId).collection("examConfigurations").doc(subjectId);
+    const id = examConfigId(courseId, year);
+    const ref = db.collection("colleges").doc(session.collegeId).collection("examConfigurations").doc(id);
     const existingSnap = await ref.get();
     const existing = existingSnap.exists ? (existingSnap.data() as ExamConfiguration) : null;
     const now = new Date();
@@ -129,9 +153,6 @@ export async function POST(request: Request) {
       courseName: courseName ?? "",
       department,
       year,
-      subjectId,
-      subjectName,
-      subjectCode: subjectCode ?? "",
       internalMaxMarks,
       externalMaxMarks,
       components: normalizedComponents,
@@ -146,7 +167,7 @@ export async function POST(request: Request) {
 
     await ref.set(data);
 
-    return NextResponse.json({ configuration: { id: subjectId, ...data } }, { status: existing ? 200 : 201 });
+    return NextResponse.json({ configuration: { id, ...data } }, { status: existing ? 200 : 201 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

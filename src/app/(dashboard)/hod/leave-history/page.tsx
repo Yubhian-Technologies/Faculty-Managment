@@ -2,6 +2,7 @@
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LeaveHistoryReport } from "@/components/leave/LeaveHistoryReport";
+import { ActiveLeaveNowCard } from "@/components/leave/ActiveLeaveNowCard";
 
 export default function HodLeaveHistoryPage() {
   return (
@@ -10,6 +11,7 @@ export default function HodLeaveHistoryPage() {
         title="Leave History"
         description="Monthly leave register for your department - click a faculty member to view their full history"
       />
+      <ActiveLeaveNowCard />
       <LeaveHistoryReport
         apiUrl="/api/college/leave-history-report"
         queryKey={["hod-leave-history-report"]}

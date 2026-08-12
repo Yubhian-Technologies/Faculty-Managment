@@ -9,15 +9,21 @@ import type { UserRole } from "@/types";
 
 type ImportRow = {
   ownerName: string;
-  title: string;
-  authorFullNames?: string;
-  authors?: string;
-  sourceTitle?: string;
+  citation: string;
   year: string;
+  sourceTitle?: string;
   indexed?: string;
-  doi?: string;
   paperLink?: string;
   scopusLink?: string;
+  // Extra report columns - see ResearchPublication (src/types/core.ts).
+  department?: string;
+  authorPosition?: string;
+  venueType?: string;
+  facultyOrStudent?: string;
+  impactFactor?: string;
+  sjr?: string;
+  quartile?: string;
+  isbnIssn?: string;
 };
 
 // Case/punctuation-insensitive so "Bharathi D.V.N." and "Bharathi, D.V.N."
@@ -37,12 +43,27 @@ function extractYear(raw: string | undefined): number | undefined {
   return year >= 1900 && year <= 2100 ? year : undefined;
 }
 
-function toLink(doi: string | undefined, paperLink: string | undefined, scopusLink: string | undefined): string {
-  const d = doi?.trim();
-  if (d) return /^https?:\/\//i.test(d) ? d : `https://doi.org/${d.replace(/^doi:\s*/i, "")}`;
-  if (paperLink?.trim()) return paperLink.trim();
+function toLink(paperLink: string | undefined, scopusLink: string | undefined): string {
+  const p = paperLink?.trim();
+  if (p) return /^https?:\/\//i.test(p) ? p : `https://doi.org/${p.replace(/^doi:\s*/i, "")}`;
   if (scopusLink?.trim()) return scopusLink.trim();
   return "";
+}
+
+// "Publication Details" is one free-text citation block - e.g.
+//   Kumar A.R., Rao B.S., et al., "A Deep Feature Fusion Framework for
+//   Pneumonia Detection Using Chest X-Ray Images", Scientific Reports,
+//   vol. 16, no. 1, 2026, doi: https://doi.org/10.1038/s41598-026-52615-3.
+// Title is whatever's inside the first pair of double quotes; the author
+// list is everything before that (trailing comma trimmed). Falls back to
+// treating the whole citation as the title when it isn't quoted at all, so
+// an oddly-formatted row still imports instead of being rejected outright.
+function parseCitation(citation: string): { title: string; coAuthors: string } {
+  const match = citation.match(/"([^"]+)"/);
+  if (!match) return { title: citation.trim(), coAuthors: "" };
+  const title = match[1].trim();
+  const coAuthors = citation.slice(0, match.index).replace(/,\s*$/, "").trim();
+  return { title, coAuthors };
 }
 
 export async function POST(request: Request) {
@@ -91,13 +112,13 @@ export async function POST(request: Request) {
       const rawOwnerName = row.ownerName?.trim() ?? "";
 
       if (!rawOwnerName) { failed.push({ row: rowNum, ownerName: "-", error: "SVECW-First Author is required" }); continue; }
-      if (!row.title?.trim()) { failed.push({ row: rowNum, ownerName: rawOwnerName, error: "Title is required" }); continue; }
+      if (!row.citation?.trim()) { failed.push({ row: rowNum, ownerName: rawOwnerName, error: "Publication Details is required" }); continue; }
 
       const journalOrConference = row.sourceTitle?.trim() || "";
-      if (!journalOrConference) { failed.push({ row: rowNum, ownerName: rawOwnerName, error: "Source Title / Journal / Conference is required" }); continue; }
+      if (!journalOrConference) { failed.push({ row: rowNum, ownerName: rawOwnerName, error: "Name of the Journal / Conference is required" }); continue; }
 
       const publicationYear = extractYear(row.year);
-      if (!publicationYear) { failed.push({ row: rowNum, ownerName: rawOwnerName, error: "A valid Year is required" }); continue; }
+      if (!publicationYear) { failed.push({ row: rowNum, ownerName: rawOwnerName, error: "A valid Month & Year is required" }); continue; }
 
       const owner = byNormalizedName.get(normalizeName(rawOwnerName));
       if (!owner) {
@@ -105,8 +126,9 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const coAuthors = row.authorFullNames?.trim() || row.authors?.trim() || "";
-      const driveLink = toLink(row.doi, row.paperLink, row.scopusLink);
+      const citation = row.citation.trim();
+      const { title, coAuthors } = parseCitation(citation);
+      const driveLink = toLink(row.paperLink, row.scopusLink);
       const indexing = row.indexed?.trim() || "";
 
       const docRef = db.collection("colleges").doc(collegeId).collection("publications").doc();
@@ -115,12 +137,21 @@ export async function POST(request: Request) {
         uid: owner.uid,
         ownerName: owner.name,
         ownerRole: owner.role,
-        title: row.title.trim(),
+        title,
         coAuthors,
+        citation,
         journalOrConference,
         publicationYear,
         ...(indexing ? { indexing } : {}),
         ...(driveLink ? { driveLink } : {}),
+        ...(row.department?.trim() ? { department: row.department.trim() } : {}),
+        ...(row.authorPosition?.trim() ? { authorPosition: row.authorPosition.trim() } : {}),
+        ...(row.venueType?.trim() ? { venueType: row.venueType.trim() } : {}),
+        ...(row.facultyOrStudent?.trim() ? { facultyOrStudent: row.facultyOrStudent.trim() } : {}),
+        ...(row.impactFactor?.trim() ? { impactFactor: row.impactFactor.trim() } : {}),
+        ...(row.sjr?.trim() ? { sjr: row.sjr.trim() } : {}),
+        ...(row.quartile?.trim() ? { quartile: row.quartile.trim() } : {}),
+        ...(row.isbnIssn?.trim() ? { isbnIssn: row.isbnIssn.trim() } : {}),
         addedBy: session.uid,
         addedByName,
         createdAt: now,

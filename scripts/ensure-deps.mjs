@@ -21,7 +21,10 @@ if (stamp === lockHash) {
 }
 
 console.log("[ensure-deps] package-lock.json changed since last install - running npm install...");
-const result = spawnSync("npm", ["install"], {
+// --include=dev is required here: npm defaults `omit` to "dev" whenever
+// NODE_ENV=production (as it is on Vercel), which would otherwise silently
+// strip devDependencies like tailwindcss/@tailwindcss/postcss on this re-install.
+const result = spawnSync("npm", ["install", "--include=dev"], {
   stdio: "inherit",
   cwd: rootDir,
   shell: process.platform === "win32",
