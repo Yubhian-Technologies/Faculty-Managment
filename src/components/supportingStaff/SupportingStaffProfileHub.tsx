@@ -78,6 +78,7 @@ export function SupportingStaffProfileHub({ staff, basePath, backHref, editHref 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Fact label="Employee ID" value={staff.employeeId} />
             <Fact label="College Email" value={staff.collegeEmail} />
+            <Fact label="Email" value={staff.email} />
             <Fact label="Phone" value={staff.phone} />
             <Fact label="Department" value={staff.department || "Centrally managed"} />
             <Fact label="Designation" value={designationLabel} />

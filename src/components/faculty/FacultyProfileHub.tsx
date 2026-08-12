@@ -14,6 +14,7 @@ import { formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { FacultyMember, FacultyStatus } from "@/types";
+import type { Timestamp } from "firebase/firestore";
 
 const STATUS_VARIANTS: Record<FacultyStatus, "default" | "secondary" | "outline" | "destructive"> = {
   INTERVIEW_DONE: "outline",
@@ -34,7 +35,11 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 interface FacultyProfileHubProps {
-  faculty: Partial<FacultyMember>;
+  // Also reused (see principal/staff/[uid]/page.tsx and its siblings) to view a
+  // bare login account (HOD/Principal/VP/College Office/Dean/...) that has no
+  // real FacultyMember record - those store Date of Joining as `dateOfJoining`
+  // (FMSUser's own field name) rather than `joiningDate`, hence the extra field.
+  faculty: Partial<FacultyMember> & { dateOfJoining?: Timestamp };
   basePath: string; // e.g. "/hod/faculty/abc123" - tiles link to "{basePath}/{moduleKey}"
   hideFinancialModule?: boolean;
   excludeModules?: ProfileModuleKey[];
@@ -141,6 +146,7 @@ export function FacultyProfileHub({
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Fact label="Employee ID" value={faculty.employeeId} />
             <Fact label="Email" value={faculty.email} />
+            <Fact label="College Email" value={faculty.collegeEmail} />
             <Fact label="Phone" value={faculty.phone} />
             <Fact
               label="Department"
@@ -154,7 +160,11 @@ export function FacultyProfileHub({
             <Fact label="Designation" value={designationLabel} />
             <Fact
               label={faculty.status === "INTERVIEW_DONE" ? "Expected to Join" : "Date of Joining"}
-              value={faculty.joiningDate ? formatDate(faculty.joiningDate) : undefined}
+              value={
+                faculty.joiningDate ? formatDate(faculty.joiningDate)
+                  : faculty.dateOfJoining ? formatDate(faculty.dateOfJoining)
+                  : undefined
+              }
             />
             <Fact label="Qualification" value={faculty.qualification} />
             <Fact label="Specialization" value={faculty.specialization} />
