@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import { findBranchManager } from "@/lib/departments/managedBranches";
+import { findBranchManager, managerTeachingYears } from "@/lib/departments/managedBranches";
 import type { Course, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -53,6 +53,10 @@ export default function NewSectionPage() {
   // Empty unless a parent HOD explicitly targets one of their sub-departments.
   const [departmentName, setDepartmentName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  // The container the choice was routed through (see DepartmentScopeSelect) -
+  // the sub-department when one was picked, else the HOD's own department.
+  // Drives the section-name prefix.
+  const [viaDepartmentId, setViaDepartmentId] = useState("");
   // Shared-first-year flow: when the owning department has Secondary
   // Departments configured (e.g. Basic Science → CSE/ECE/IT), each section
   // feeds exactly one of those branches. `branch` is that target department's
@@ -136,15 +140,37 @@ export default function NewSectionPage() {
   // managed-branch mode.
   const branchManager = useMemo(
     () => (departmentName && activeDept ? findBranchManager(departments, activeDept.name) : null),
-    [departmentName, departments, activeDept]
+    [departmentName, activeDept, departments]
   );
-  const managingDept = branchManager?.department ?? null;
+
+  // Which container the cascade actually routed through, as reported by
+  // DepartmentScopeSelect. It takes priority over the search above, because
+  // searching can't distinguish the two routes to the same branch: CIVIL is
+  // grouped under BS-ENGLISH *and* reachable straight from Basic Science, so
+  // "who manages CIVIL" always answers BS-ENGLISH and named every such section
+  // BSE-CIVIL-B even when it was created from Basic Science directly.
+  const viaDept = useMemo(
+    () => (viaDepartmentId ? departments.find((d) => d.id === viaDepartmentId) ?? null : null),
+    [departments, viaDepartmentId]
+  );
+  const managingDept = useMemo(() => {
+    if (!activeDept) return null;
+    // Routed through itself - the department IS the target, not a container
+    // feeding one, so there's no branch relationship and no prefix to add.
+    if (viaDept) return viaDept.id === activeDept.id ? null : viaDept;
+    return branchManager?.department ?? null;
+  }, [activeDept, viaDept, branchManager]);
   const isManagedBranchMode = managingDept !== null;
   // The managing sub-department (or, if it has none of its own, its parent
   // common department) is where "Years Taught" for this shared year actually
   // lives - a real branch's own assignedYears (e.g. CIVIL's [2,3,4]) never
   // includes the shared first year on its own.
-  const managingYears = useMemo(() => branchManager?.years ?? [], [branchManager]);
+  // Computed from the manager actually in force rather than branchManager's own
+  // years, since viaDept may have overridden which department that is.
+  const managingYears = useMemo(
+    () => (managingDept ? managerTeachingYears(departments, managingDept) : []),
+    [managingDept, departments]
+  );
   // Derived section name: the managing sub-department's own code (e.g.
   // "BS-ENGLISH" - already self-describing, since sub-department codes are set
   // to read as their parent's shared-year structure) + the real branch's code
@@ -269,8 +295,8 @@ export default function NewSectionPage() {
             {/* Only rendered for a parent HOD who actually has sub-departments. */}
             <DepartmentScopeSelect
               value={departmentName}
-              onChange={(name, id) => {
-                setDepartmentName(name); setDepartmentId(id);
+              onChange={(name, id, via) => {
+                setDepartmentName(name); setDepartmentId(id); setViaDepartmentId(via);
                 // The owning department changed - its assigned years, its
                 // configured branches, and (for a real branch) its own course
                 // list all differ, so clear everything downstream.
@@ -291,12 +317,11 @@ export default function NewSectionPage() {
 
             {isManagedBranchMode ? (
               <>
-                {/* The Sub-Department/Department cascade above already resolved
-                    the real branch (e.g. CIVIL) this section belongs to - all
-                    that's left is the section letter. The name carries the
-                    root common department's code too (e.g. "BS-CIVIL-A"), since
-                    that's the shared-first-year structure this section is
-                    actually routed through. */}
+                {/* The cascade above already resolved the real branch (e.g.
+                    CIVIL) - all that's left is the letter. The name carries the
+                    code of whichever container it was routed through:
+                    "BS-CIVIL-B" straight from Basic Science, "BSE-CIVIL-B" via
+                    BS-ENGLISH. */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Section Letter *</Label>
