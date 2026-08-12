@@ -19,7 +19,7 @@ import { formatDate } from "@/lib/utils";
 import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { MarkOfferAcceptedDialog } from "@/components/hiring/MarkOfferAcceptedDialog";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
-import type { Candidate, CandidateApplication, HiringBatch, OfferLetter, FacultyAccountRequest, CandidateStatus, CandidateStage } from "@/types";
+import type { Candidate, CandidateApplication, HiringBatch, OfferLetter, FacultyAccountRequest, CandidateStatus, CandidateStage, FMSUser } from "@/types";
 import { getDetailedHiringStatus, DETAILED_HIRING_STATUS_LABELS } from "@/lib/hiringPipeline";
 
 type Phase = "AWAITING_OFFER" | "AWAITING_ACCEPTANCE" | "AWAITING_DOCS" | "NOTIFIED" | "APPOINTMENT_SENT";
@@ -331,6 +331,28 @@ export default function CollegeOfficeCandidateDetailPage() {
         offer.candidateName ?? offer.id
       );
 
+      // Coordinator contact — best-effort; omit whichever of phone/email is missing,
+      // and skip the whole block if there's nothing to show at all.
+      const batch = batches[offer.batchId ?? ""];
+      let coordinatorPhone = "";
+      let coordinatorEmail = "";
+      if (batch?.coordinatorUid) {
+        const usersRes = await fetch("/api/college/users?allDepts=true&includeAll=true")
+          .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
+          .catch((): { users: FMSUser[] } => ({ users: [] }));
+        const coordinator = (usersRes.users ?? []).find((u) => u.uid === batch.coordinatorUid);
+        coordinatorPhone = coordinator?.phone ?? "";
+        coordinatorEmail = coordinator?.email ?? "";
+      }
+      const coordinatorLines = [
+        batch?.coordinatorName,
+        coordinatorPhone ? `Phone: ${coordinatorPhone}` : "",
+        coordinatorEmail ? `Email: ${coordinatorEmail}` : "",
+      ].filter(Boolean);
+      const coordinatorBlock = coordinatorLines.length > 0
+        ? `\nFor any queries, please contact your Interview Coordinator:\n${coordinatorLines.join("\n")}\n`
+        : "";
+
       const institution = collegeInfo.name || "the institution";
       const acceptanceUrl = `${window.location.origin}/offer-acceptance/${offer.collegeId}/${offer.id}`;
       const subject = `Offer Letter – ${offer.designation} | ${institution}`;
@@ -339,7 +361,7 @@ export default function CollegeOfficeCandidateDetailPage() {
 Greetings from ${institution}.
 
 We are pleased to offer you the position of ${offer.designation} in the ${offer.department} department, effective from ${formatDate(offer.joiningDate as Parameters<typeof formatDate>[0])}. Please find your offer letter attached.
-
+${coordinatorBlock}
 Please review the Terms & Conditions and confirm your acceptance and date of joining here:
 ${acceptanceUrl}
 

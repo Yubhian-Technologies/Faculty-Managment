@@ -22,6 +22,32 @@ const RENDER_SCALE = 2; // canvas px per CSS px - crisp text at print resolution
 // gets a corrupted (out-of-bounds) /Rect and stops being clickable entirely.
 const ATOMIC_SELECTOR = ".entry, .bullets li, table.data-table tr, .fitem, .section-title, .subheading, .doc-link";
 
+// Plain body copy (letter paragraphs, numbered terms-and-conditions clauses,
+// table cells) isn't a single-line atom like the selector above - a <p> can
+// wrap across many lines, and only the *line currently sitting on the break*
+// needs protecting, not the whole paragraph. Without this, a proposed break
+// landing inside a wrapped line sliced the canvas mid-glyph: the tail of a
+// sentence at the bottom of one page, its head at the top of the next.
+const LINE_TEXT_SELECTOR = "p, li, td, th";
+
+/** Per-rendered-line ranges (not per-element) for LINE_TEXT_SELECTOR elements,
+ *  via Range.getClientRects() - one rect per wrapped line, so a page break can
+ *  be pulled back to just before the line it would otherwise cut through. */
+function lineRanges(container: HTMLElement): { top: number; bottom: number }[] {
+  const originTop = container.getBoundingClientRect().top;
+  const doc = container.ownerDocument;
+  const ranges: { top: number; bottom: number }[] = [];
+  for (const el of Array.from(container.querySelectorAll<HTMLElement>(LINE_TEXT_SELECTOR))) {
+    const range = doc.createRange();
+    range.selectNodeContents(el);
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.height === 0) continue;
+      ranges.push({ top: (rect.top - originTop) * RENDER_SCALE, bottom: (rect.bottom - originTop) * RENDER_SCALE });
+    }
+  }
+  return ranges;
+}
+
 function waitForImages(doc: Document): Promise<void> {
   const imgs = Array.from(doc.images);
   if (imgs.length === 0) return Promise.resolve();
@@ -115,6 +141,7 @@ function atomicRanges(container: HTMLElement): { top: number; bottom: number }[]
     const rect = el.getBoundingClientRect();
     return { top: (rect.top - originTop) * RENDER_SCALE, bottom: (rect.bottom - originTop) * RENDER_SCALE };
   });
+  ranges.push(...lineRanges(container));
   ranges.sort((a, b) => a.top - b.top);
   return ranges;
 }
