@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
@@ -22,11 +23,20 @@ async function loadStudentAndScope(
   role: string
 ) {
   const scope = role === "HOD" ? await getHodDepartmentScope(db, collegeId, uid) : null;
-  const inHodScope = (dept: string) =>
-    !scope ||
-    dept === scope.departmentName ||
-    scope.childDepartmentNames.includes(dept) ||
-    scope.managedDepartmentNames.includes(dept);
+  // Only fetched when actually needed (an HOD scope exists) - a managed
+  // branch (e.g. Basic Science grouping CIVIL for its shared first year) is
+  // year-scoped, so "in scope" for a student depends on their year, not just
+  // their department. Mirrors the students-list GET and distribute POST checks.
+  let allDepts: DepartmentYearRow[] | null = null;
+  const inHodScope = (dept: string, year: number) => {
+    if (!scope) return true;
+    if (!allDepts) return false;
+    return canHodEditDepartmentYear(scope, allDepts, dept, year);
+  };
+  if (scope?.departmentName) {
+    const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+    allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+  }
   return { scope, inHodScope };
 }
 
@@ -67,7 +77,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       if (session.role === "HOD") {
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-        if (!inHodScope(student.department)) {
+        if (!inHodScope(student.department, student.year)) {
           return NextResponse.json({ error: "Outside your department" }, { status: 403 });
         }
       }
@@ -137,7 +147,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     if (session.role === "HOD") {
       const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-      if (!inHodScope(student.department) || !inHodScope(targetSection.department)) {
+      if (!inHodScope(student.department, student.year) || !inHodScope(targetSection.department, targetSection.year)) {
         return NextResponse.json({ error: "Outside your department" }, { status: 403 });
       }
     }
@@ -232,7 +242,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     }
     if (session.role === "HOD") {
       const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-      if (!inHodScope(student.department)) {
+      if (!inHodScope(student.department, student.year)) {
         return NextResponse.json({ error: "Outside your department" }, { status: 403 });
       }
     }
