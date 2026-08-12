@@ -586,7 +586,7 @@ export default function HODSectionsPage() {
                       <div className="flex items-start justify-between">
                         <Link href={`/hod/sections/${sec.id}`} className="hover:underline">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-2xl font-bold tracking-tight">Section {sec.name}</p>
+                            <p className="text-2xl font-bold tracking-tight">{sec.name}</p>
                             {/* The section's own department (branch) - always shown so a
                                 Sub-HOD can tell which of their managed branches it belongs to. */}
                             {sec.department && (

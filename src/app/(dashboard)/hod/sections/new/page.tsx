@@ -133,7 +133,7 @@ export default function NewSectionPage() {
   const isManagedBranchMode = managingDept !== null;
   // The managing sub-department (or, if it has none of its own, its parent
   // common department) is where "Years Taught" for this shared year actually
-  // lives - a real branch's own assignedYears (e.g. IT's [2,3,4]) never
+  // lives - a real branch's own assignedYears (e.g. CIVIL's [2,3,4]) never
   // includes the shared first year on its own.
   const managingYears = useMemo(() => {
     if (!managingDept) return [] as number[];
@@ -143,20 +143,30 @@ export default function NewSectionPage() {
     }
     return [];
   }, [managingDept, departments]);
-  const managedBranchName = `${activeDept?.code?.trim() || activeDeptName}-${letter.trim().toUpperCase()}`;
+  // Derived section name: the managing sub-department's own code (e.g.
+  // "BS-ENGLISH" - already self-describing, since sub-department codes are set
+  // to read as their parent's shared-year structure) + the real branch's code
+  // + the letter, e.g. "BS-ENGLISH-CIVIL-C". When the common department manages
+  // the branch directly with no intermediate sub-department, managingDept IS
+  // that common department, so its own code is used the same way.
+  const managedBranchName = `${managingDept?.code?.trim() ? `${managingDept.code.trim()}-` : ""}${activeDept?.code?.trim() || activeDeptName}-${letter.trim().toUpperCase()}`;
 
   // Offer only the years this department is assigned to teach, intersected with
   // the course's own span. A department set to [1,2,3] never shows Year 4 even
-  // for a 4-year course. Union'd with the managing sub-department's years in
-  // managed-branch mode (see managingYears above). When no years are assigned
-  // yet (or departments haven't loaded), fall back to the full course span so
-  // creation isn't blocked - the server still rejects an unassigned year on submit.
+  // for a 4-year course. In managed-branch mode, ONLY the common structure's
+  // years (managingYears - typically just the shared first year) are offered,
+  // never the branch's own later years: this Sub-Department cascade is how the
+  // shared first year is routed, but Year 2 onward belongs to that branch's own
+  // dedicated HOD (set by the Principal), created through the plain flow
+  // instead. When no years are assigned yet (or departments haven't loaded),
+  // fall back to the full course span so creation isn't blocked - the server
+  // still rejects an unassigned year on submit.
   const formYearOptions = useMemo(() => {
     if (!formCourse) return [];
     const courseYears = Array.from({ length: formCourse.durationYears }, (_, i) => i + 1);
-    const assigned = Array.from(new Set([...(activeDept?.assignedYears ?? []), ...managingYears]));
+    const assigned = isManagedBranchMode ? managingYears : (activeDept?.assignedYears ?? []);
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
-  }, [formCourse, activeDept, managingYears]);
+  }, [formCourse, isManagedBranchMode, managingYears, activeDept]);
 
   // Legacy branch mode: the owning department cross-lists to one or more
   // branches (Department.secondaryDepartments). When it does, the section
@@ -280,9 +290,11 @@ export default function NewSectionPage() {
             {isManagedBranchMode ? (
               <>
                 {/* The Sub-Department/Department cascade above already resolved
-                    the real branch (e.g. IT) this section belongs to - all
-                    that's left is the section letter, and the name is just
-                    "{code}-{letter}" since the department IS the branch. */}
+                    the real branch (e.g. CIVIL) this section belongs to - all
+                    that's left is the section letter. The name carries the
+                    root common department's code too (e.g. "BS-CIVIL-A"), since
+                    that's the shared-first-year structure this section is
+                    actually routed through. */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Section Letter *</Label>
@@ -295,7 +307,9 @@ export default function NewSectionPage() {
                     />
                     <p className="text-xs text-muted-foreground">
                       Section name will be{" "}
-                      {letter.trim() ? <strong className="text-foreground">{managedBranchName}</strong> : `e.g. ${activeDept?.code || "IT"}-A`}
+                      {letter.trim()
+                        ? <strong className="text-foreground">{managedBranchName}</strong>
+                        : `e.g. ${managingDept?.code?.trim() ? `${managingDept.code.trim()}-` : ""}${activeDept?.code || "CIVIL"}-A`}
                     </p>
                   </div>
                   <div className="space-y-2">
