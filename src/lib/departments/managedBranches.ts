@@ -52,3 +52,54 @@ export function branchClaimConflictMessage(conflicts: BranchClaimConflict[]): st
     .map((c) => `"${c.branch}" is already managed by "${c.ownedBy}". Remove it there first.`)
     .join(" ");
 }
+
+export interface DepartmentYearRow extends DepartmentClaimRow {
+  assignedYears?: number[];
+  parentDepartmentId?: string;
+}
+
+export interface BranchManager<T> {
+  department: T;
+  /** Years the manager actually teaches - its own assignedYears, or, if it has
+   * none of its own (the common shape for a sub-department), its parent common
+   * department's. */
+  years: number[];
+}
+
+/**
+ * The department that manages `branchName` via `Department.managedDepartments`
+ * (e.g. a sub-department like "BS-English" grouping "CIVIL" for the shared
+ * first year), and the years it actually teaches. A branch is only reached
+ * through its manager for THOSE years - every other year belongs to the
+ * branch's own dedicated HOD (Department.assignedYears on the branch itself).
+ * Mirrors resolveSubjectDepartment's rule for the older secondaryDepartments
+ * mechanism, generalized to managedDepartments. Returns null when nothing
+ * manages this branch.
+ */
+export function findBranchManager<T extends DepartmentYearRow>(
+  departments: T[],
+  branchName: string
+): BranchManager<T> | null {
+  const manager = departments.find((d) => (d.managedDepartments ?? []).includes(branchName));
+  if (!manager) return null;
+  let years = manager.assignedYears ?? [];
+  if (years.length === 0 && manager.parentDepartmentId) {
+    years = departments.find((p) => p.id === manager.parentDepartmentId)?.assignedYears ?? [];
+  }
+  return { department: manager, years };
+}
+
+/**
+ * Whichever department actually owns (branchName, year): the manager, if one
+ * manages this branch and teaches this year - otherwise the branch itself.
+ * Used to decide access/visibility: a branch's own dedicated HOD should never
+ * see a section for a year their manager owns instead, and vice versa.
+ */
+export function resolveBranchYearOwner<T extends DepartmentYearRow & { name?: string }>(
+  departments: T[],
+  branchName: string,
+  year: number
+): string {
+  const manager = findBranchManager(departments, branchName);
+  return manager && manager.years.includes(year) ? (manager.department.name ?? branchName) : branchName;
+}
