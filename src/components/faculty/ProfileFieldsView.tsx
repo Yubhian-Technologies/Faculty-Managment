@@ -3,6 +3,7 @@
 import {
   Section, SubLabel, Field, DegreeView, DocLink, QualificationsView,
 } from "@/components/shared/ProfileFieldPrimitives";
+import { designationLabel } from "@/lib/designations/config";
 import { PublicationsSection } from "@/components/faculty/PublicationsModuleView";
 import {
   TRAINING_ENTRY_TYPE_LABELS, PROFESSIONAL_BODY_LABELS,
@@ -45,7 +46,9 @@ export function QualificationModule({ profile, collegeType }: { profile: Partial
         <DegreeView label="Intermediate (12th)" degree={p.intermediateDetails} />
         <DegreeView label="UG" degree={p.ugDetails} />
         <DegreeView label="PG" degree={p.pgDetails} />
+        {(p.additionalPgDetails ?? []).map((d, i) => <DegreeView key={`pg-${i}`} label={`PG ${i + 2}`} degree={d} />)}
         <DegreeView label="PhD" degree={p.phdDetails} level="DOCTORAL" />
+        {(p.additionalPhdDetails ?? []).map((d, i) => <DegreeView key={`phd-${i}`} label={`PhD ${i + 2}`} degree={d} level="DOCTORAL" />)}
         <DegreeView label="Post-Doctoral" degree={p.postDoctoralDetails} />
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -94,8 +97,12 @@ export function ExperienceModule({ profile, includeTeachingAssignment = true }: 
           <div className="space-y-2">
             {p.promotionHistory?.map((promo, i) => (
               <div key={i} className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <Field label="From" value={promo.fromDesignation} />
-                <Field label="To" value={promo.toDesignation} />
+                {/* Now stored as catalogue codes (ASSISTANT_PROFESSOR, …) since
+                    these became dropdowns - labelled here so the view doesn't
+                    show the raw code. Free text from older records and from
+                    "Other" passes through designationLabel unchanged. */}
+                <Field label="From" value={designationLabel(promo.fromDesignation)} />
+                <Field label="To" value={designationLabel(promo.toDesignation)} />
                 <Field label="Effective Year" value={promo.effectiveYear} />
                 {promo.orderUrl && (
                   <div className="col-span-2 sm:col-span-3">

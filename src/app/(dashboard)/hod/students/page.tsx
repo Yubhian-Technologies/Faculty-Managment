@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Shuffle, Pencil } from "lucide-react";
+import { Shuffle, Pencil, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -14,10 +14,21 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import type { StudentListItem, Section } from "@/types";
+import { useAuthStore } from "@/store/authStore";
+import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { yearOrdinalLabel } from "@/lib/college/academicYears";
+import type { StudentListItem, Section, Department } from "@/types";
 
 type StudentRow = Record<string, unknown> & StudentListItem;
 type SectionRow = Section & { id: string; accessLevel?: "primary" | "secondary" };
+
+interface CohortBranchResult {
+  branch: string;
+  managedBy?: string;
+  distributed: number;
+  perSection: { section: string; count: number }[];
+  skippedReason?: string;
+}
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   REGULAR: "default",
@@ -26,10 +37,16 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "des
 };
 
 export default function HodStudentsPage() {
+  const myDepartment = useAuthStore((s) => s.user?.department);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [sections, setSections] = useState<SectionRow[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deptFilter, setDeptFilter] = useState("all");
+
+  const [cohortOpen, setCohortOpen] = useState(false);
+  const [cohortResult, setCohortResult] = useState<CohortBranchResult[] | null>(null);
+  const [isDistributingCohort, setIsDistributingCohort] = useState(false);
 
   const [distributeOpen, setDistributeOpen] = useState(false);
   const [distDept, setDistDept] = useState("");
@@ -45,12 +62,14 @@ export default function HodStudentsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const [studentsRes, sectionsRes] = await Promise.all([
+      const [studentsRes, sectionsRes, deptsRes] = await Promise.all([
         fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentRow[] }>),
         fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: SectionRow[] }>),
+        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
       ]);
       setStudents(studentsRes.students ?? []);
       setSections(sectionsRes.sections ?? []);
+      setDepartments(deptsRes.departments ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load students" });
     } finally {
@@ -98,6 +117,51 @@ export default function HodStudentsPage() {
     () => (deptFilter === "all" ? students : students.filter((s) => s.department === deptFilter)),
     [students, deptFilter]
   );
+
+  // The cohort action belongs to the main HOD of a shared first-year department
+  // only - a core branch HOD sections their own students with the per-department
+  // dialog. Derived with the same helper the API uses, so both agree.
+  const structure = useMemo(
+    () => structureFromDepartments(departments as DepartmentWithId[]),
+    [departments]
+  );
+  const cohortYear = structure.commonYears[0];
+  const isCommonYearHod =
+    structure.isCommonFirstYear &&
+    !!myDepartment &&
+    structure.commonDepartment?.name === myDepartment;
+  const cohortUnassignedCount = useMemo(
+    () => (cohortYear ? students.filter((s) => s.year === cohortYear && !s.section).length : 0),
+    [students, cohortYear]
+  );
+
+  async function handleDistributeCohort() {
+    if (!cohortYear) return;
+    setIsDistributingCohort(true);
+    try {
+      const res = await fetch("/api/college/students/distribute-cohort", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year: cohortYear }),
+      });
+      const json = await res.json() as {
+        error?: string; distributed?: number; perBranch?: CohortBranchResult[];
+      };
+      if (!res.ok) {
+        // A failed run can still carry per-branch detail (e.g. every branch is
+        // missing sections) - surface it rather than just the message.
+        setCohortResult(json.perBranch ?? null);
+        throw new Error(json.error ?? "Failed to distribute");
+      }
+      setCohortResult(json.perBranch ?? []);
+      toast({ variant: "success", title: `Distributed ${json.distributed} students` });
+      void load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to distribute" });
+    } finally {
+      setIsDistributingCohort(false);
+    }
+  }
 
   function toggleDistSection(id: string, checked: boolean) {
     setDistSectionIds((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
@@ -191,6 +255,70 @@ export default function HodStudentsPage() {
         title="Students"
         description="Your department's students, plus every branch grouped under it. Divide unassigned students evenly across sections in full-name order."
         actions={
+          <>
+          {isCommonYearHod && (
+            <Dialog open={cohortOpen} onOpenChange={(open) => { setCohortOpen(open); if (!open) setCohortResult(null); }}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Layers className="h-4 w-4 mr-2" />
+                  Distribute All {cohortYear ? yearOrdinalLabel(cohortYear) : ""} Students
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>
+                    Distribute the whole {cohortYear ? yearOrdinalLabel(cohortYear) : ""} intake
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Every unassigned student is placed into a section of <strong>their own branch</strong> - an IT
+                    student always lands in an IT section, never in a sub-department. Within each branch they are
+                    sorted by full name and split evenly across that branch&apos;s sections. Branches with no
+                    sections yet are reported and left untouched.
+                  </p>
+                  <p className="text-sm">
+                    <strong>{cohortUnassignedCount}</strong> unassigned student
+                    {cohortUnassignedCount === 1 ? "" : "s"} across{" "}
+                    {structure.subDepartments.length} sub-department
+                    {structure.subDepartments.length === 1 ? "" : "s"}.
+                  </p>
+
+                  {cohortResult && (
+                    <div className="space-y-2 rounded-md border p-3 max-h-64 overflow-y-auto">
+                      {cohortResult.map((b) => (
+                        <div key={b.branch} className="text-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{b.branch}</span>
+                            {b.skippedReason ? (
+                              <Badge variant="outline" className="text-amber-600 border-amber-300">Skipped</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">{b.distributed} placed</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {b.skippedReason
+                              ?? b.perSection.map((p) => `${p.section}: ${p.count}`).join(", ")}
+                            {b.managedBy && !b.skippedReason ? ` · managed by ${b.managedBy}` : ""}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setCohortOpen(false)}>Close</Button>
+                  <Button
+                    onClick={() => void handleDistributeCohort()}
+                    loading={isDistributingCohort}
+                    disabled={cohortUnassignedCount === 0}
+                  >
+                    Distribute All
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
           <Dialog open={distributeOpen} onOpenChange={(open) => { setDistributeOpen(open); if (!open) setDistSectionIds([]); }}>
             <DialogTrigger asChild>
               <Button><Shuffle className="h-4 w-4 mr-2" />Distribute Unassigned</Button>
@@ -263,6 +391,7 @@ export default function HodStudentsPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </>
         }
       />
 

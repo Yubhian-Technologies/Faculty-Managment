@@ -451,6 +451,13 @@ export interface Department {
   // getHodDepartmentScope (src/lib/departments/scope.ts). Set by the parent
   // department's HOD on the Sub-Departments settings page.
   managedDepartments?: string[];
+  // Approximate period the shared first year runs for, on a common-year
+  // department (yyyy-mm-dd, same shape as StudentRecord.dateOfBirth). Advisory
+  // only: it gives the Principal's cohort-advance screen its context and is
+  // never a gate on any write. See src/lib/college/academicStructure.ts for how
+  // a common-year department is identified.
+  commonYearStart?: string;
+  commonYearEnd?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -966,7 +973,13 @@ export interface FacultyProfileFields {
   intermediateDetails?: DegreeDetail; // 12th
   ugDetails?: DegreeDetail;
   pgDetails?: DegreeDetail;
+  // Extra PG/PhD degrees beyond the primary one above (e.g. a second Master's
+  // or a second doctorate). Kept as separate arrays rather than turning
+  // pgDetails/phdDetails into arrays so every existing record, export, resume
+  // and view that reads the single field keeps working unchanged.
+  additionalPgDetails?: DegreeDetail[];
   phdDetails?: DegreeDetail;
+  additionalPhdDetails?: DegreeDetail[];
   postDoctoralDetails?: DegreeDetail;
   phdStatus?: PhdStatus;
   phdMode?: PhdMode;
@@ -1089,13 +1102,14 @@ export interface Section {
   classLeaderUid?: string;
   classLeaderName?: string;
   studentCount: number;
-  // Secondary — view-only access for one or more other departments' HODs,
-  // e.g. a shared first-year section whose roster splits across several
-  // eventual branches. Auto-copied from the owning Department's own
-  // `secondaryDepartments` at section creation (see college/sections POST) —
-  // not chosen per-section. Mirrors StudentRecord.secondaryDepartment's
-  // primary/secondary access model, just at the section level (and plural)
-  // instead of per-student.
+  // Secondary — the branch this section feeds, e.g. a shared first-year Basic
+  // Science section whose cohort promotes into CSE. Chosen per section from the
+  // owning Department's configured `secondaryDepartments` via the Add/Edit
+  // Section branch picker (see college/sections POST + [id] PATCH); when the
+  // department cross-lists to exactly one branch it's auto-filled. Grants that
+  // branch's HOD view-only access, and every student imported into this section
+  // inherits it as StudentRecord.secondaryDepartment (their promotion target).
+  // Stored plural for legacy shape, but a section commits to a single branch.
   secondaryDepartments?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;

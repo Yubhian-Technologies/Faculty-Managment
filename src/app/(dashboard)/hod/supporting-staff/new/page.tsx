@@ -64,12 +64,12 @@ export default function NewHodSupportingStaffPage() {
     handleSubmit,
     setValue,
     watch,
-    trigger,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "" },
   });
+  const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
   const designation = watch("designation");
   const employmentType = watch("employmentType");
@@ -84,16 +84,28 @@ export default function NewHodSupportingStaffPage() {
 
   const step = steps[stepIndex];
 
-  async function goNext() {
-    if (step.key === "core") {
-      const valid = await trigger();
-      if (!valid) return;
-    }
+  // All required fields live on the "core" step; deferred to submit time so
+  // steps can be navigated freely (see onInvalid).
+  const FIELD_LABELS: Record<string, string> = {
+    employeeId: "Employee ID", name: "Full Name", collegeEmail: "College Email",
+    password: "Login Password", designation: "Designation",
+    experienceYears: "Years of Experience", joiningDate: "Joining Date",
+    employmentType: "Employment Type",
+  };
+
+  function goNext() {
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   }
 
   function goBack() {
     setStepIndex((i) => Math.max(i - 1, 0));
+  }
+
+  function onInvalid(errs: typeof errors) {
+    setErroredSteps(new Set<WizardStepKey>(["core"]));
+    setStepIndex(steps.findIndex((s) => s.key === "core"));
+    const missing = Object.keys(errs).map((f) => FIELD_LABELS[f] ?? f).join(", ");
+    toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${missing}` });
   }
 
   const onSubmit = async (data: FormData) => {
@@ -153,19 +165,22 @@ export default function NewHodSupportingStaffPage() {
 
       <div className="flex flex-wrap gap-2 mb-4">
         {steps.map((s, i) => (
-          <div
+          <button
+            type="button"
             key={s.key}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
-              i === stepIndex ? "bg-primary text-primary-foreground" : i < stepIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+            onClick={() => setStepIndex(i)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              erroredSteps.has(s.key) ? "ring-1 ring-destructive text-destructive bg-destructive/5" :
+              i === stepIndex ? "bg-primary text-primary-foreground" : i < stepIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:bg-muted/70"
             }`}
           >
-            {i < stepIndex && <Check className="h-3 w-3" />}
+            {i < stepIndex && !erroredSteps.has(s.key) && <Check className="h-3 w-3" />}
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit, onInvalid)}>
         <Card>
           <CardHeader><CardTitle className="text-base">{step.label}</CardTitle></CardHeader>
           <CardContent className="space-y-5">
@@ -204,7 +219,7 @@ export default function NewHodSupportingStaffPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone</Label>
-                    <Input id="phone" {...register("phone")} placeholder="+91 98765 43210" />
+                    <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
                   </div>
                 </div>
 

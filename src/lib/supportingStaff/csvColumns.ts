@@ -53,49 +53,12 @@ const PERSONAL_COLUMNS: SupportingStaffCsvColumn[] = [
   { key: "permanentAddress",  label: "Permanent Address",            required: false, sample: "" },
 ];
 
-// Qualifications, Training and Achievements are shared *structures*
-// (StaffQualification[] / TrainingEntry[] / AwardEntry[]).
-const QUALIFICATION_COLUMNS: SupportingStaffCsvColumn[] = [1, 2].flatMap((n) => [
-  { key: `qualification${n}_level`,          label: `Qualification ${n} - Level`,          required: false, sample: n === 1 ? "SSC" : "" } satisfies SupportingStaffCsvColumn,
-  { key: `qualification${n}_degreeAndBranch`, label: `Qualification ${n} - Degree & Branch`, required: false, sample: "" },
-  { key: `qualification${n}_university`,      label: `Qualification ${n} - University/Board`, required: false, sample: "" },
-  { key: `qualification${n}_percentage`,      label: `Qualification ${n} - Percentage/Division`, required: false, sample: "" },
-  { key: `qualification${n}_year`,            label: `Qualification ${n} - Year of Completion`, required: false, sample: "" },
-]);
-
-const TRAINING_COLUMNS: SupportingStaffCsvColumn[] = [1, 2].flatMap((n) => [
-  { key: `training${n}_type`,      label: `Training ${n} - Type`,      required: false, sample: n === 1 ? "FDP" : "" } satisfies SupportingStaffCsvColumn,
-  { key: `training${n}_title`,     label: `Training ${n} - Title`,     required: false, sample: "" },
-  { key: `training${n}_organizer`, label: `Training ${n} - Organizer`, required: false, sample: "" },
-  { key: `training${n}_year`,      label: `Training ${n} - Year`,      required: false, sample: "" },
-]);
-
-const ACHIEVEMENT_COLUMNS: SupportingStaffCsvColumn[] = [1, 2].flatMap((n) => [
-  { key: `achievement${n}_category`,     label: `Achievement ${n} - Category`,     required: false, sample: "" } satisfies SupportingStaffCsvColumn,
-  { key: `achievement${n}_title`,        label: `Achievement ${n} - Title`,        required: false, sample: "" },
-  { key: `achievement${n}_awardingBody`, label: `Achievement ${n} - Awarding Body`, required: false, sample: "" },
-  { key: `achievement${n}_year`,         label: `Achievement ${n} - Year`,         required: false, sample: "" },
-]);
-
-const NON_TECHNICAL_COLUMNS: SupportingStaffCsvColumn[] = [
-  { key: "responsibilities",    label: "Responsibilities (comma-separated)",    required: false, sample: "Office Administration, Documentation" },
-  { key: "otherResponsibility", label: "Other Responsibility (if Other selected)", required: false, sample: "" },
-  { key: "computerSkills",      label: "Computer Skills (comma-separated)",     required: false, sample: "MS Office, Excel" },
-  { key: "otherComputerSkill",  label: "Other Computer Skill (if Other selected)", required: false, sample: "" },
-  { key: "typingSpeedWpm",      label: "Typing Speed (WPM)",                    required: false, sample: "" },
-];
-
-const OTHER_INFO_COLUMN: SupportingStaffCsvColumn = { key: "otherInformation", label: "Other Information", required: false, sample: "" };
-
+// CSV import/export is intentionally limited to identity + personal/statutory
+// details only (PERSONAL_COLUMNS) - the deeper profile modules (qualifications,
+// responsibilities, computer skills, training, achievements, other info) are
+// captured in the app's Add/Edit forms, not via spreadsheet.
 export function getSupportingStaffColumns(): SupportingStaffCsvColumn[] {
-  return [
-    ...PERSONAL_COLUMNS,
-    ...QUALIFICATION_COLUMNS,
-    ...NON_TECHNICAL_COLUMNS,
-    ...TRAINING_COLUMNS,
-    ...ACHIEVEMENT_COLUMNS,
-    OTHER_INFO_COLUMN,
-  ];
+  return [...PERSONAL_COLUMNS];
 }
 
 export function getSupportingStaffHints(): string[] {
@@ -106,13 +69,9 @@ export function getSupportingStaffHints(): string[] {
     "Gender: Male, Female, Other",
     "Marital Status: Single, Married",
     "Dates must be in YYYY-MM-DD format (e.g. 2020-06-01)",
-    "Qualification Level: SSC, Intermediate, Degree, PG, etc. - up to 2 qualifications",
-    "Responsibilities: Office Administration, Student Records, File Management, Accounts, Purchase, Examination Work, Admission Support, Documentation, Other - comma-separate multiple values",
-    "Computer Skills: MS Office, ERP, Excel, Email, Document Management, Other - comma-separate multiple values",
-    "Training Type: FDP, Workshop, MOOC, Certification, Skill Development, Administrative, ERP, Office Automation, Other",
-    "Achievement Category: match whatever categories your college's Awards list uses (e.g. Best Employee, Appreciation)",
     "Department is optional - leave blank for centrally-managed roles, or set it to assign this staff member to a specific department",
     "Department accepts either the full name (e.g. \"Computer Science\") or the short Code (e.g. \"CSE\") - it must already exist under Departments, otherwise it's ignored",
     "Login Password (optional): fill this in to create this staff member's login account automatically during import, using their College Email (or Personal Email if no College Email is given) as the login ID - must be at least 8 characters. Leave it blank to import the record without a login.",
+    "All values are matched case-insensitively (e.g. \"male\", \"MALE\" and \"Male\" all work).",
   ];
 }

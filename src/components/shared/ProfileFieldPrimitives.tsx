@@ -89,7 +89,10 @@ export function NumInput({ label, value, onChange }: { label: string; value: num
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Input type="number" value={value ?? 0} onFocus={(e) => e.target.select()} onChange={(e) => onChange(Number(e.target.value))} />
+      {/* Empty rather than 0 when unset, so a field nobody has filled in reads
+          as blank instead of asserting a value of zero. The leading-zero
+          cleanup when typing over an actual 0 lives in Input itself. */}
+      <Input type="number" value={value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => onChange(Number(e.target.value))} />
     </div>
   );
 }
@@ -184,6 +187,40 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
         onUploaded={(url) => onChange({ ...v, certificateUrl: url })}
         onRemoved={() => onChange({ ...v, certificateUrl: "" })}
       />
+    </div>
+  );
+}
+
+// A list of DegreeFields blocks with Add More / remove - for qualification
+// levels a person can hold more than one of (e.g. two Master's degrees or
+// two doctorates). Each entry is a full DegreeDetail, same shape as the
+// single-block DegreeFields above.
+export function DegreeFieldsList({ label, level, items, onChange }: {
+  label: string; level: DegreeLevel; items: DegreeDetail[] | undefined; onChange: (v: DegreeDetail[]) => void;
+}) {
+  const list = items ?? [];
+  return (
+    <div className="space-y-3">
+      {list.map((item, i) => (
+        <div key={i} className="relative">
+          <DegreeFields
+            label={`${label} ${i + 2}`}
+            level={level}
+            value={item}
+            onChange={(v) => { const next = [...list]; next[i] = v; onChange(next); }}
+          />
+          <Button
+            type="button" variant="ghost" size="sm"
+            className="absolute right-2 top-2 h-7 w-7 p-0 text-destructive hover:text-destructive"
+            onClick={() => onChange(list.filter((_, idx) => idx !== i))}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...list, { ...EMPTY_DEGREE }])}>
+        Add another {label}
+      </Button>
     </div>
   );
 }

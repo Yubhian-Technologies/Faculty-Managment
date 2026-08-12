@@ -151,7 +151,7 @@ export default function EditStaffAccountPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+                  <Input type="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
                 </div>
               </div>
             </div>

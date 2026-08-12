@@ -13,7 +13,10 @@ import type { CollegeType, UserRole } from "@/types";
 // (Dean/IQAC/T&P/R&D/Placement/Library/Exam Cell/Webmaster) are also allowed
 // depends on the college's type - see getCreatableOfficeRoles. Must match
 // the same gating in principal/staff/new/page.tsx's CREATABLE_ROLES.
-const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF"];
+// COLLEGE_STAFF is intentionally omitted - non-teaching staff are created via
+// the Supporting Staff module (which makes both a login and a profile record),
+// not as a bare login here. See principal/staff/new/page.tsx for the rationale.
+const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL"];
 // HOD is included so a main HOD can create a Sub-HOD login (see
 // hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
 // posts role: "HOD" with the not-yet-created sub-department's name as
@@ -137,7 +140,8 @@ export async function POST(request: Request) {
     if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
       const collegeSnap = await db.collection("colleges").doc(collegeId).get();
       const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
-      const principalRoles = [...PRINCIPAL_BASE_ROLES, ...getCreatableOfficeRoles(collegeType)];
+      // Placement Department is Administration-provisioned, not Principal-created.
+      const principalRoles = [...PRINCIPAL_BASE_ROLES, ...getCreatableOfficeRoles(collegeType).filter((r) => r !== "PLACEMENT_DEPT")];
       if (!principalRoles.includes(role)) {
         return NextResponse.json(
           { error: `Principal can only create: ${principalRoles.join(", ")}` },

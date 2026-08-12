@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PromotionFields, FinancialFields } from "@/components/faculty/AcademicProfileModuleFields";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields } from "@/types";
 
@@ -20,6 +21,9 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const facultyId = params.id;
+  // College Office is college-scoped, so the session's college is the one this
+  // faculty member belongs to - its type picks the designation catalogue.
+  const { collegeType } = useCollegeType();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,7 +81,7 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-6">
-            <PromotionFields value={value} onChange={(next) => setValue((v) => ({ ...v, ...next }))} />
+            <PromotionFields value={value} collegeType={collegeType} onChange={(next) => setValue((v) => ({ ...v, ...next }))} />
             <FinancialFields value={value} onChange={(next) => setValue((v) => ({ ...v, ...next }))} />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push("/college-office/faculty")}>Cancel</Button>

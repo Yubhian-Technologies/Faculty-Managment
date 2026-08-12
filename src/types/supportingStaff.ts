@@ -61,11 +61,13 @@ export const COMPUTER_SKILL_LABELS: Record<ComputerSkill, string> = {
   DOCUMENT_MANAGEMENT: "Document Management", OTHER: "Other",
 };
 
+
 export interface NonTechnicalProfile {
   responsibilities: NonTechnicalResponsibility[];
   otherResponsibility?: string;
   computerSkills: ComputerSkill[];
   otherComputerSkill?: string;
+  hardwareSkills?: string[]; // free-text, only captured for hardware-related designations
   typingSpeedWpm?: number;
   training: TrainingEntry[]; // ADMINISTRATIVE/ERP/OFFICE_AUTOMATION types apply here
   achievements: AwardEntry[];

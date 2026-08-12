@@ -124,7 +124,7 @@ export function CreateHodDialog({ department, onCreated }: CreateHodDialogProps)
           </div>
           <div className="space-y-2">
             <Label htmlFor="hod-phone">Phone</Label>
-            <Input id="hod-phone" {...register("phone")} placeholder="Optional" />
+            <Input id="hod-phone" type="tel" autoComplete="off" {...register("phone")} placeholder="Optional" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="hod-password">Temporary Password *</Label>

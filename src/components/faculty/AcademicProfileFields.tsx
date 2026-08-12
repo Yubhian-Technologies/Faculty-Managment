@@ -4,8 +4,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CertificateUploadField } from "@/components/shared/CertificateUploadField";
+import { DesignationSelect } from "@/components/faculty/DesignationOptions";
 import {
-  SectionTitle, NumInput, TextInput, DegreeFields, RepeatingGroup, QualificationsFields,
+  SectionTitle, NumInput, TextInput, DegreeFields, DegreeFieldsList, RepeatingGroup, QualificationsFields,
 } from "@/components/shared/ProfileFieldPrimitives";
 import { SCHOOL_TEACHING_QUALIFICATION_LEVELS } from "@/lib/designations/config";
 import type {
@@ -84,7 +85,9 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           <DegreeFields label="Intermediate (12th) Details" level="INTERMEDIATE" value={value.intermediateDetails} onChange={(v) => set("intermediateDetails", v)} />
           <DegreeFields label="UG Details" level="UG" value={value.ugDetails} onChange={(v) => set("ugDetails", v)} />
           <DegreeFields label="PG Details" level="PG" value={value.pgDetails} onChange={(v) => set("pgDetails", v)} />
+          <DegreeFieldsList label="PG Details" level="PG" items={value.additionalPgDetails} onChange={(v) => set("additionalPgDetails", v)} />
           <DegreeFields label="PhD Details" level="DOCTORAL" value={value.phdDetails} onChange={(v) => set("phdDetails", v)} />
+          <DegreeFieldsList label="PhD Details" level="DOCTORAL" items={value.additionalPhdDetails} onChange={(v) => set("additionalPhdDetails", v)} />
           <DegreeFields label="Post-Doctoral Details" level="POST_DOCTORAL" value={value.postDoctoralDetails} onChange={(v) => set("postDoctoralDetails", v)} />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -151,8 +154,11 @@ export function AcademicProfileFields({ value, onChange, includeTeachingAssignme
           onChange={(v) => set("promotionHistory", v)}
           renderRow={(item, update) => (
             <>
-              <TextInput label="From Designation" value={item.fromDesignation} onChange={(v) => update({ fromDesignation: v })} />
-              <TextInput label="To Designation" value={item.toDesignation} onChange={(v) => update({ toDesignation: v })} />
+              {/* Same catalogue-backed picker as the College Office promotion
+                  page - this form writes the identical promotionHistory field,
+                  so leaving it free-text here would let the two disagree. */}
+              <DesignationSelect label="From Designation" value={item.fromDesignation} collegeType={collegeType} onChange={(v) => update({ fromDesignation: v })} />
+              <DesignationSelect label="To Designation" value={item.toDesignation} collegeType={collegeType} onChange={(v) => update({ toDesignation: v })} />
               <NumInput label="Effective Year" value={item.effectiveYear} onChange={(v) => update({ effectiveYear: v })} />
               <div className="sm:col-span-2">
                 <Label className="text-xs">Promotion Order</Label>
