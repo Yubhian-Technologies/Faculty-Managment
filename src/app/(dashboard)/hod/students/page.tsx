@@ -17,6 +17,7 @@ import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
+import { disambiguateSectionLabels } from "@/lib/sections/sectionLabel";
 import type { StudentListItem, Section, Department } from "@/types";
 
 type StudentRow = Record<string, unknown> & StudentListItem;
@@ -116,6 +117,14 @@ export default function HodStudentsPage() {
       .filter((s) => s.department === distDept && String(s.year) === distYear)
       .sort((a, b) => a.name.localeCompare(b.name)),
     [managedSections, distDept, distYear]
+  );
+  // A department can run the same section name under more than one course
+  // (e.g. "IT-A" under both B.Tech and M.Tech) - this list isn't scoped to a
+  // single course, so identical-looking checkboxes need the course name added
+  // to tell them apart. Sections that are already unique are left as-is.
+  const distSectionLabels = useMemo(
+    () => disambiguateSectionLabels(distTargetSections, departments),
+    [distTargetSections, departments]
   );
   const unassignedCount = useMemo(
     () => unassignedStudents.filter((s) => s.department === distDept && String(s.year) === distYear).length,
@@ -376,7 +385,7 @@ export default function HodStudentsPage() {
                               checked={distSectionIds.includes(s.id)}
                               onCheckedChange={(checked) => toggleDistSection(s.id, !!checked)}
                             />
-                            {s.name}
+                            {distSectionLabels.get(s.id) ?? s.name}
                           </label>
                         ))}
                       </div>
