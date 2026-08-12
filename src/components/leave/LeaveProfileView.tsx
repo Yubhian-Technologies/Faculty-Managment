@@ -267,7 +267,13 @@ function CountBadge({ count, title }: { count: number; title: string }) {
   );
 }
 
-export function LeaveHistoryRow({ request }: { request: LeaveRequest }) {
+// categoryLabel (Maternity/Family Planning/Quarantine/Extraordinary/
+// Compensatory) is opt-in and passed in by the caller, never fetched here -
+// only the Principal's own Staff Leave History view ever supplies it (see
+// LeaveTypeHistoryView's showOtherLeaveCategory prop) so it stays invisible
+// everywhere else this same row renders (the requester's own history, HOD's
+// view, etc.) - see OtherLeaveCategory in src/types/leave.ts.
+export function LeaveHistoryRow({ request, categoryLabel }: { request: LeaveRequest; categoryLabel?: string }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">
@@ -276,6 +282,9 @@ export function LeaveHistoryRow({ request }: { request: LeaveRequest }) {
           <span className="text-muted-foreground font-normal">&middot; {request.totalDays} day(s)</span>
           {request.extendsRequestId && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">Extension</Badge>
+          )}
+          {categoryLabel && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">{categoryLabel}</Badge>
           )}
         </p>
         <p className="text-xs text-muted-foreground mt-0.5">

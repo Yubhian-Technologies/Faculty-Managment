@@ -26,6 +26,7 @@ export interface PeriodLeaveSummary {
 export interface MonthlyLeaveSummary extends PeriodLeaveSummary {
   uid: string;
   category: EffectiveLeaveCategory | null;
+  dateOfJoining: Date | null;
 }
 
 export interface YearlyMonthSummary extends PeriodLeaveSummary {
@@ -35,6 +36,7 @@ export interface YearlyMonthSummary extends PeriodLeaveSummary {
 export interface YearlyLeaveSummary {
   uid: string;
   category: EffectiveLeaveCategory | null;
+  dateOfJoining: Date | null;
   months: YearlyMonthSummary[]; // January (1) through December (12)
   totals: PeriodLeaveSummary;   // taken summed across the year; opb = January's opb, clb = December's clb
 }
@@ -117,12 +119,13 @@ async function loadEmployeeLeaveData(db: Firestore, collegeId: string, uid: stri
   ]);
 
   const category = profile ? computeEffectiveCategory(profile, settings.newJoiningYears) : null;
+  const dateOfJoining = profile ? toDate(profile.dateOfJoining) : null;
   const balanceByType = new Map(balances.map((b) => [b.leaveTypeCode, b]));
   const allApproved = reqSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
     .filter((r) => r.status === "APPROVED");
 
-  return { category, balanceByType, allApproved };
+  return { category, dateOfJoining, balanceByType, allApproved };
 }
 
 // For a single employee: this month's days taken per leave type, plus the
@@ -137,9 +140,9 @@ export async function computeMonthlyLeaveSummary(
   year: number,
   month: number // 1-12
 ): Promise<MonthlyLeaveSummary> {
-  const { category, balanceByType, allApproved } = await loadEmployeeLeaveData(db, collegeId, uid, year);
+  const { category, dateOfJoining, balanceByType, allApproved } = await loadEmployeeLeaveData(db, collegeId, uid, year);
   const summary = computeMonthSummary(allApproved, category, balanceByType, year, month);
-  return { uid, category, ...summary };
+  return { uid, category, dateOfJoining, ...summary };
 }
 
 // For a single employee: every month of the given year (same shape as
@@ -151,7 +154,7 @@ export async function computeYearlyLeaveSummary(
   uid: string,
   year: number
 ): Promise<YearlyLeaveSummary> {
-  const { category, balanceByType, allApproved } = await loadEmployeeLeaveData(db, collegeId, uid, year);
+  const { category, dateOfJoining, balanceByType, allApproved } = await loadEmployeeLeaveData(db, collegeId, uid, year);
 
   const months: YearlyMonthSummary[] = [];
   for (let month = 1; month <= 12; month++) {
@@ -177,5 +180,5 @@ export async function computeYearlyLeaveSummary(
   totals.lopDays = months.reduce((s, m) => s + m.lopDays, 0);
   totals.otherDays = months.reduce((s, m) => s + m.otherDays, 0);
 
-  return { uid, category, months, totals };
+  return { uid, category, dateOfJoining, months, totals };
 }

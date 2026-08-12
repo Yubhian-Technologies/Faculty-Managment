@@ -139,6 +139,29 @@ export const LEAVE_REQUEST_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
   CANCELLED: "Cancelled",
 };
 
+// The Principal/Vice Principal must pick one of these when approving an
+// isOtherRequest at PENDING_PRINCIPAL - a further breakdown of "Other" for
+// the Principal's own record-keeping. Deliberately NOT a field on
+// LeaveRequest itself - it's kept in a separate collection
+// (colleges/{collegeId}/otherLeaveCategories/{requestId}, see
+// src/lib/leave/otherCategories.ts) that only the Principal-only
+// staff-leave-history surface ever reads, so it never appears in the
+// requester's own leave history, the HOD's queue/history, or the general
+// approval queue - see api/leave/other-categories/route.ts.
+export type OtherLeaveCategory = "MATERNITY" | "FAMILY_PLANNING" | "QUARANTINE" | "EXTRAORDINARY" | "COMPENSATORY";
+
+export const OTHER_LEAVE_CATEGORY_LABELS: Record<OtherLeaveCategory, string> = {
+  MATERNITY: "Maternity",
+  FAMILY_PLANNING: "Family Planning",
+  QUARANTINE: "Quarantine",
+  EXTRAORDINARY: "Extraordinary",
+  COMPENSATORY: "Compensatory",
+};
+
+export const OTHER_LEAVE_CATEGORY_ORDER: OtherLeaveCategory[] = [
+  "MATERNITY", "FAMILY_PLANNING", "QUARANTINE", "EXTRAORDINARY", "COMPENSATORY",
+];
+
 export interface LeaveActionRecord {
   action: "APPROVED" | "REJECTED";
   by: string;

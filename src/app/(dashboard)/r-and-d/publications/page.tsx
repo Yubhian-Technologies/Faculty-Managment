@@ -72,16 +72,10 @@ export default function RAndDPublicationsPage() {
       render: (row) => <span className="text-sm text-muted-foreground">{row.indexing || "-"}</span>,
     },
     {
-      key: "documentType",
+      key: "venueType",
       header: "Type",
       hideOnMobile: true,
-      render: (row) => <span className="text-sm text-muted-foreground">{row.documentType || row.venueType || "-"}</span>,
-    },
-    {
-      key: "citedBy",
-      header: "Cited By",
-      hideOnMobile: true,
-      render: (row) => <span className="text-sm text-muted-foreground">{row.citedBy ?? "-"}</span>,
+      render: (row) => <span className="text-sm text-muted-foreground">{row.venueType || "-"}</span>,
     },
     {
       key: "actions",

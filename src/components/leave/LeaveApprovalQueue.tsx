@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { cn, formatDate } from "@/lib/utils";
 import { CalendarClock, Check, X, ChevronDown, ChevronUp } from "lucide-react";
-import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS } from "@/types/leave";
-import type { EffectiveLeaveCategory, LeaveRequest } from "@/types/leave";
+import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
+import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
 
 const CATEGORY_TABS = EFFECTIVE_CATEGORY_ORDER.map((key) => ({ key, label: EFFECTIVE_CATEGORY_LABELS[key] }));
 
@@ -30,6 +30,7 @@ export function LeaveApprovalQueue() {
   const [isLoading, setIsLoading] = useState(true);
   const [remarksById, setRemarksById] = useState<Record<string, string>>({});
   const [paidById, setPaidById] = useState<Record<string, boolean>>({});
+  const [categoryById, setCategoryById] = useState<Record<string, OtherLeaveCategory>>({});
   const [actingId, setActingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [category, setCategory] = useState<EffectiveLeaveCategory>("vacation");
@@ -54,8 +55,13 @@ export function LeaveApprovalQueue() {
 
   async function act(r: LeaveRequest, action: "APPROVE" | "REJECT") {
     const isHodOtherDecision = r.status === "PENDING_HOD" && !!r.isOtherRequest;
+    const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && !!r.isOtherRequest;
     if (action === "APPROVE" && isHodOtherDecision && paidById[r.id] === undefined) {
       toast({ variant: "destructive", title: "Select whether this is paid or unpaid leave" });
+      return;
+    }
+    if (action === "APPROVE" && isPrincipalOtherDecision && categoryById[r.id] === undefined) {
+      toast({ variant: "destructive", title: "Select a leave category before approving" });
       return;
     }
     setActingId(r.id);
@@ -67,6 +73,7 @@ export function LeaveApprovalQueue() {
           action,
           remarks: remarksById[r.id],
           isPaidLeave: isHodOtherDecision ? paidById[r.id] : undefined,
+          otherLeaveCategory: isPrincipalOtherDecision ? categoryById[r.id] : undefined,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -106,6 +113,7 @@ export function LeaveApprovalQueue() {
           {visibleRequests.map((r) => {
             const isOtherRequest = !!r.isOtherRequest;
             const isHodOtherDecision = r.status === "PENDING_HOD" && isOtherRequest;
+            const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && isOtherRequest;
             const isExpanded = expandedId === r.id;
             return (
               <Card key={r.id} className={cn("transition-colors", isExpanded && "ring-1 ring-primary/20")}>
@@ -169,6 +177,26 @@ export function LeaveApprovalQueue() {
                             <SelectItem value="false">Unpaid</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                    )}
+
+                    {isPrincipalOtherDecision && (
+                      <div className="max-w-xs space-y-1.5">
+                        <label className="text-xs text-muted-foreground">Leave category (required to approve)</label>
+                        <Select
+                          value={categoryById[r.id] ?? ""}
+                          onValueChange={(v) => setCategoryById((prev) => ({ ...prev, [r.id]: v as OtherLeaveCategory }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {OTHER_LEAVE_CATEGORY_ORDER.map((c) => (
+                              <SelectItem key={c} value={c}>{OTHER_LEAVE_CATEGORY_LABELS[c]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[11px] text-muted-foreground">Only visible in your own Staff Leave History - never shown to the requester, their HOD, or anyone else.</p>
                       </div>
                     )}
 

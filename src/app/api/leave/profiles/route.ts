@@ -11,19 +11,20 @@ import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { NON_DEPARTMENTAL_STAFF_ROLES } from "@/lib/leave/nonDepartmentalStaffRoles";
 import { ROLE_LABELS } from "@/types";
 
-// Roster of department (HOD) or college-wide (Principal/VP) staff, split
-// into the three tabs the UI shows: "Faculty" (Teaching designations only),
-// "Supporting Staff" (everything else with a FacultyMember/SupportingStaff
-// record) and "Institutional Staff" (Principal/VP only - Vice Principal,
-// College Office, Dean, IQAC Coordinator, T&P, R&D, Library, Exam Cell,
-// Webmaster; see NON_DEPARTMENTAL_STAFF_ROLES). Technical designations (Lab
+// Roster of department (HOD) or college-wide (Principal/VP/College Office)
+// staff, split into the three tabs the UI shows: "Faculty" (Teaching
+// designations only), "Supporting Staff" (everything else with a
+// FacultyMember/SupportingStaff record) and "Institutional Staff"
+// (non-HOD callers only - Vice Principal, College Office, Dean, IQAC
+// Coordinator, T&P, R&D, Library, Exam Cell, Webmaster; see
+// NON_DEPARTMENTAL_STAFF_ROLES). Technical designations (Lab
 // Assistant/Programmer/System Administrator/Network Engineer,
 // LEGACY_TECHNICAL_DESIGNATIONS) now belong in the Supporting Staff module,
 // but any FacultyMember record not yet moved there by
 // scripts/migrate-technical-staff-to-supporting-staff.mjs still has one of
 // these designations - those still get tagged "supportingStaff" here so
 // they show up on the right tab, dept-scoped for HOD and college-wide for
-// Principal/VP - plus, for Principal/VP only, every record from the
+// everyone else - plus, for non-HOD callers, every record from the
 // separate college-wide supportingStaff collection, and every login holding
 // a NON_DEPARTMENTAL_STAFF_ROLES role (these never belong to a department,
 // so an HOD - department-scoped only - never sees them at all, same gating
@@ -35,7 +36,7 @@ import { ROLE_LABELS } from "@/types";
 // "faculty"/"supportingStaff"/"institutional" for the roster/report UI's tabs.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 

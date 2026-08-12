@@ -2,21 +2,23 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { History, ChevronRight, Users, Layers } from "lucide-react";
+import Link from "next/link";
+import { History, ChevronRight, Users, Layers, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ActiveLeaveNowCard } from "@/components/leave/ActiveLeaveNowCard";
 import { NON_DEPARTMENTAL_STAFF_ROLES } from "@/lib/leave/nonDepartmentalStaffRoles";
 import { ROLE_LABELS } from "@/types";
 import type { Department } from "@/types";
 
-export default function PrincipalLeaveHistoryDepartmentsPage() {
+export default function CollegeOfficeLeaveHistoryDepartmentsPage() {
   const router = useRouter();
 
   const { data: departments = [], isLoading } = useQuery({
-    queryKey: ["principal-leave-history-departments"],
+    queryKey: ["college-office-leave-history-departments"],
     queryFn: () =>
       fetch("/api/college/departments")
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
@@ -26,7 +28,7 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
   // Keyed by department name (how LeaveRequest.department is stored, same
   // string the HOD-scoped queries elsewhere in the leave module match on).
   const { data: absentToday = {} } = useQuery({
-    queryKey: ["principal-leave-history-absent-today"],
+    queryKey: ["college-office-leave-history-absent-today"],
     queryFn: () =>
       fetch("/api/college/leave-history-report/absent-today")
         .then((r) => r.json() as Promise<{ counts: Record<string, number> }>)
@@ -41,7 +43,18 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Leave History" description="Select a department to view its leave register" />
+      <PageHeader
+        title="Leave History"
+        description="Select a department to view its leave register"
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/college-office/leave-history/import">
+              <Upload className="h-4 w-4 mr-1" />
+              Import
+            </Link>
+          </Button>
+        }
+      />
 
       <ActiveLeaveNowCard />
 
@@ -53,7 +66,7 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
           <Card
             key={role}
             className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200"
-            onClick={() => router.push(`/principal/leave-history/${role}`)}
+            onClick={() => router.push(`/college-office/leave-history/${role}`)}
           >
             <CardContent className="p-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -86,7 +99,7 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
             <Card
               key={d.id}
               className="cursor-pointer hover:border-primary hover:shadow-md transition-all duration-200"
-              onClick={() => router.push(`/principal/leave-history/${d.id}`)}
+              onClick={() => router.push(`/college-office/leave-history/${d.id}`)}
             >
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="flex items-center gap-3">

@@ -27,7 +27,6 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
   const [isSaving, setIsSaving] = useState(false);
 
   const [staffCategory, setStaffCategory] = useState<StaffCategory>("vacation");
-  const [isTeachingStaff, setIsTeachingStaff] = useState(true);
   const [dateOfJoining, setDateOfJoining] = useState("");
 
   useEffect(() => {
@@ -36,7 +35,6 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
       .then(({ profile: p }) => {
         setProfile(p);
         setStaffCategory(p.staffCategory);
-        setIsTeachingStaff(p.isTeachingStaff);
         const doj = (p.dateOfJoining as unknown as { toDate?: () => Date }).toDate?.() ?? new Date(p.dateOfJoining as unknown as string);
         setDateOfJoining(doj.toISOString().slice(0, 10));
       })
@@ -50,7 +48,7 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
       const res = await fetch("/api/leave/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: params.uid, staffCategory, isTeachingStaff, dateOfJoining }),
+        body: JSON.stringify({ uid: params.uid, staffCategory, dateOfJoining }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
@@ -92,19 +90,6 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
               Auto-derived from their designation. The category this employee converts into once past the
               college&apos;s new-joining threshold.
             </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Is Teaching Staff</Label>
-            <Select value={isTeachingStaff ? "yes" : "no"} onValueChange={(v) => setIsTeachingStaff(v === "yes")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="yes">Yes</SelectItem>
-                <SelectItem value="no">No</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="space-y-2">

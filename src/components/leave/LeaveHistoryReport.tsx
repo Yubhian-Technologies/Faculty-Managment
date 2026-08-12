@@ -3,12 +3,14 @@
 import { useState, Fragment } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { History, Search } from "lucide-react";
+import { History, Search, Download } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toCSV, downloadCSV } from "@/lib/utils/csv";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveTypeCode } from "@/types/leave";
 import { ROLE_LABELS } from "@/types";
@@ -49,6 +51,7 @@ export interface LeaveHistoryReportRow extends PeriodSummary {
   name: string;
   role: string;
   category: EffectiveLeaveCategory | null;
+  dateOfJoining?: string | null;
 }
 
 interface YearlyMonthSummary extends PeriodSummary {
@@ -61,8 +64,58 @@ interface LeaveYearlyReportRow {
   name: string;
   role: string;
   category: EffectiveLeaveCategory | null;
+  dateOfJoining?: string | null;
   months: YearlyMonthSummary[];
   totals: PeriodSummary;
+}
+
+// Flat, single-header-row CSV export shape - the register format College
+// Office already maintains outside the app, so a filled sheet from here
+// round-trips back through the Leave History import as-is. VC OPB/CLB are
+// always 0 - VC (On Duty) is unlimited, no balance is ever tracked for it,
+// same as OD everywhere else in this module.
+const EXPORT_HEADERS = [
+  "Sno", "Employee Code", "Employee Name", "Department", "Date of Joining", "Payroll Month",
+  "Leaves Taken", "Days Attended", "Weekly Offs", "Holidays", "LOP",
+  "CL OPB", "SL OPB", "EL OPB", "VC OPB",
+  "CL", "SL", "EL", "VC",
+  "CL CLB", "SL CLB", "EL CLB", "VC CLB",
+  "Category", "Location",
+];
+
+function formatPayrollMonth(year: number, month: number): string {
+  return `${year}/${String(month).padStart(2, "0")}/01`;
+}
+
+function formatJoinDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function exportRow(params: {
+  sno: number;
+  employeeId: string;
+  name: string;
+  department: string;
+  dateOfJoining: string | null | undefined;
+  payrollMonth: string;
+  period: PeriodSummary;
+  category: EffectiveLeaveCategory | null;
+  location: string;
+}): string[] {
+  const { sno, employeeId, name, department, dateOfJoining, payrollMonth, period, category, location } = params;
+  const t = period.types;
+  const leavesTaken =
+    (t.CL?.taken ?? 0) + (t.SL?.taken ?? 0) + (t.EL?.taken ?? 0) + (t.OD?.taken ?? 0) + period.otherDays + period.lopDays;
+  return [
+    String(sno), employeeId, name, department, formatJoinDate(dateOfJoining), payrollMonth,
+    String(leavesTaken), "", "", "", String(period.lopDays || 0),
+    String(t.CL?.opb ?? ""), String(t.SL?.opb ?? ""), String(t.EL?.opb ?? ""), "0",
+    String(t.CL?.taken ?? 0), String(t.SL?.taken ?? 0), String(t.EL?.taken ?? 0), String(t.OD?.taken ?? 0),
+    String(t.CL?.clb ?? ""), String(t.SL?.clb ?? ""), String(t.EL?.clb ?? ""), "0",
+    category ? EFFECTIVE_CATEGORY_LABELS[category] : "", location,
+  ];
 }
 
 interface LeaveHistoryReportProps {
@@ -174,7 +227,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     queryKey: [...queryKey, "month", year, month],
     queryFn: () =>
       fetch(`${apiUrl}${apiUrl.includes("?") ? "&" : "?"}year=${year}&month=${month}`)
-        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[] }>),
+        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[]; location?: string }>),
     enabled: mode === "month",
   });
 
@@ -183,7 +236,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     queryKey: [...queryKey, "year", year],
     queryFn: () =>
       fetch(`${yearlyApiUrl}${yearlyApiUrl.includes("?") ? "&" : "?"}year=${year}`)
-        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveYearlyReportRow[] }>),
+        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveYearlyReportRow[]; location?: string }>),
     enabled: mode === "year",
   });
 
@@ -199,6 +252,52 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
           row.name.toLowerCase().includes(searchTerm)
       )
     : categoryRows;
+
+  function handleExport() {
+    const department = data?.department?.name ?? "";
+    const location = data?.location ?? "";
+    const csvRows = mode === "month"
+      ? (rows as LeaveHistoryReportRow[]).map((row, i) =>
+          exportRow({
+            sno: i + 1,
+            employeeId: row.employeeId,
+            name: row.name,
+            department,
+            dateOfJoining: row.dateOfJoining,
+            payrollMonth: formatPayrollMonth(year, month),
+            period: row,
+            category: row.category,
+            location,
+          })
+        )
+      : (rows as LeaveYearlyReportRow[]).flatMap((row, i) => [
+          ...row.months.map((m) =>
+            exportRow({
+              sno: i + 1,
+              employeeId: row.employeeId,
+              name: row.name,
+              department,
+              dateOfJoining: row.dateOfJoining,
+              payrollMonth: formatPayrollMonth(year, m.month),
+              period: m,
+              category: row.category,
+              location,
+            })
+          ),
+          exportRow({
+            sno: i + 1,
+            employeeId: row.employeeId,
+            name: row.name,
+            department,
+            dateOfJoining: row.dateOfJoining,
+            payrollMonth: "Total",
+            period: row.totals,
+            category: row.category,
+            location,
+          }),
+        ]);
+    downloadCSV(toCSV([EXPORT_HEADERS, ...csvRows]), `leave-history-${mode === "month" ? `${year}-${String(month).padStart(2, "0")}` : year}.csv`);
+  }
 
   return (
     <div className="space-y-6">
@@ -242,6 +341,10 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={rows.length === 0}>
+            <Download className="h-4 w-4 mr-1" />
+            Export
+          </Button>
         </div>
       </div>
 

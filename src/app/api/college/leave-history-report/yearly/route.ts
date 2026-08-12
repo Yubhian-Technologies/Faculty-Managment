@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { computeYearlyLeaveSummary } from "@/lib/leave/monthlySummary";
 import { resolveReportRoster } from "@/lib/leave/reportRoster";
+import { resolveCollegeLocationName } from "@/lib/college/locationName";
 
 interface YearlyReportRow {
   uid: string;
@@ -12,6 +13,7 @@ interface YearlyReportRow {
   name: string;
   role: string;
   category: string | null;
+  dateOfJoining: Date | null;
   months: Awaited<ReturnType<typeof computeYearlyLeaveSummary>>["months"];
   totals: Awaited<ReturnType<typeof computeYearlyLeaveSummary>>["totals"];
 }
@@ -21,7 +23,7 @@ interface YearlyReportRow {
 // see computeYearlyLeaveSummary for why this doesn't refetch Firestore 12x.
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "HOD");
     const { searchParams } = new URL(request.url);
     const now = new Date();
     const year = parseInt(searchParams.get("year") ?? String(now.getFullYear()), 10);
@@ -31,14 +33,23 @@ export async function GET(request: Request) {
     if ("error" in roster) return NextResponse.json({ error: roster.error }, { status: roster.status });
     const { department, people } = roster;
 
-    const rows: YearlyReportRow[] = await Promise.all(
-      people.map(async (p) => {
-        const summary = await computeYearlyLeaveSummary(db, session.collegeId, p.uid, year);
-        return { ...p, category: summary.category, months: summary.months, totals: summary.totals };
-      })
-    );
+    const [rows, location] = await Promise.all([
+      Promise.all(
+        people.map(async (p): Promise<YearlyReportRow> => {
+          const summary = await computeYearlyLeaveSummary(db, session.collegeId, p.uid, year);
+          return {
+            ...p,
+            category: summary.category,
+            dateOfJoining: summary.dateOfJoining,
+            months: summary.months,
+            totals: summary.totals,
+          };
+        })
+      ),
+      resolveCollegeLocationName(db, session.collegeId),
+    ]);
 
-    return NextResponse.json({ department, year, rows });
+    return NextResponse.json({ department, year, rows, location });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
