@@ -10,20 +10,31 @@ import { getAdminDb } from "@/lib/firebase/admin";
 // gets blocked as a tainted-canvas security violation. Proxying the bytes
 // through our own origin sidesteps that without needing bucket-level CORS
 // config. Self-serve only: always the caller's own reference photo.
+//
+// Same PANEL_MEMBER/HOD roles as check-in/check-out, and the same "faculty
+// member doc, else own user doc" fallback as /api/college/faculty/me - HODs
+// have no separate FacultyMember record, so their photo lives on users/{uid}.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD");
     const db = getAdminDb();
-    const facultySnap = await db
-      .collection("colleges").doc(session.collegeId)
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    const facultySnap = await collegeRef
       .collection("facultyMembers")
       .where("userUid", "==", session.uid)
       .limit(1)
       .get();
 
-    const photoUrl = facultySnap.empty
+    let photoUrl = facultySnap.empty
       ? undefined
       : (facultySnap.docs[0].data() as { profilePhotoUrl?: string }).profilePhotoUrl;
+
+    if (!photoUrl) {
+      const userSnap = await collegeRef.collection("users").doc(session.uid).get();
+      photoUrl = userSnap.exists ? (userSnap.data() as { profilePhotoUrl?: string }).profilePhotoUrl : undefined;
+    }
+
     if (!photoUrl) {
       return NextResponse.json({ error: "No profile photo on file" }, { status: 404 });
     }
