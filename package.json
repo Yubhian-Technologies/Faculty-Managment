@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/ensure-deps.mjs",
     "dev": "node node_modules/next/dist/bin/next dev",
+    "prebuild": "node scripts/ensure-deps.mjs",
     "build": "node node_modules/next/dist/bin/next build",
+    "prestart": "node scripts/ensure-deps.mjs",
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "test:e2e": "playwright test"

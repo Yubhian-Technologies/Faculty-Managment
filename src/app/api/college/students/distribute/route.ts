@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { evenSplit } from "@/lib/students/evenSplit";
 import type { Section, StudentRecord } from "@/types";
@@ -48,11 +49,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "department or departmentId is required" }, { status: 400 });
     }
 
-    // An HOD/Sub-HOD may only distribute within a department they own or manage.
+    // An HOD/Sub-HOD may only distribute within a department they own or
+    // manage, and - for a managed branch reached only via `managedDepartments`
+    // (e.g. Basic Science grouping CIVIL for its shared first year) - only for
+    // the years that grouping actually covers. CIVIL's own years (2-4) stay
+    // exclusively CIVIL's own dedicated HOD's to distribute, even though Basic
+    // Science manages CIVIL for year 1. Mirrors the read-side check in
+    // `college/students` GET and `college/sections` GET.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, deptName)) {
-        return NextResponse.json({ error: "That department is not yours or one you manage" }, { status: 403 });
+      const deptsSnap = await collegeRef.collection("departments").get();
+      const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+      if (!canHodEditDepartmentYear(scope, allDepts, deptName, year)) {
+        return NextResponse.json({ error: "That department/year is not yours or one you manage" }, { status: 403 });
       }
     }
 

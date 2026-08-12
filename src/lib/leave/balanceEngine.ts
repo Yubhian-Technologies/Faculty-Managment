@@ -55,14 +55,33 @@ export async function initBalancesForYear(
     const snap = await docRef.get();
     if (snap.exists) continue;
 
+    let entitled = computeEntitlement(lt, effectiveCategory);
+    // Earned Leave carries forward: whatever was left unused at the end of
+    // last year is added on top of this year's base entitlement (e.g. 6 base
+    // + 3 unused last year = 9). Computed once, here, at the moment this
+    // year's doc is first created - never recomputed afterwards, so later
+    // changes to last year's `used` (e.g. an approval landing after this ran)
+    // don't retroactively change an already-settled year.
+    let carriedForward: number | undefined;
+    if (lt.code === "EL") {
+      const prevBalances = await loadBalances(db, collegeId, uid, year - 1);
+      const prevEL = prevBalances.find((b) => b.leaveTypeCode === "EL");
+      if (prevEL) {
+        const prevEntitled = prevEL.entitled ?? entitled;
+        carriedForward = Math.max(0, prevEntitled - (prevEL.used ?? 0));
+        entitled += carriedForward;
+      }
+    }
+
     const balance: Omit<LeaveBalance, "id"> = {
       collegeId,
       uid,
       leaveTypeCode: lt.code,
       year,
-      entitled: computeEntitlement(lt, effectiveCategory),
+      entitled,
       used: 0,
       pending: 0,
+      ...(carriedForward ? { carriedForward } : {}),
       updatedAt: now as unknown as LeaveBalance["updatedAt"],
     };
 

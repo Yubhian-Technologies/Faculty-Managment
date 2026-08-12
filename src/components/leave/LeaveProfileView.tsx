@@ -11,7 +11,7 @@ import { Plus, ChevronRight, History } from "lucide-react";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode } from "@/types/leave";
 
-interface BalanceEntry {
+export interface BalanceEntry {
   code: LeaveTypeCode;
   label: string;
   shortLabel: string;
@@ -21,6 +21,10 @@ interface BalanceEntry {
   used?: number;
   pending?: number;
   remaining?: number;
+  // Earned Leave only - see LeaveBalance.carriedForward. Already folded into
+  // `entitled` above; kept separately so a "6 base + 3 carried" breakdown can
+  // be shown (currently only on the EL history page - see LeaveTypeHistoryView).
+  carriedForward?: number;
 }
 
 interface LeaveProfileViewProps {
@@ -171,11 +175,17 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
               <CardContent className="p-4 flex flex-col justify-between h-full">
                 <div>
                   <p className="text-sm text-muted-foreground">{b.label}</p>
-                  <p className="text-3xl font-bold mt-1">{b.remaining}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    of {b.entitled}
-                    {b.used ? ` · ${b.used} used` : ""}
-                  </p>
+                  {/* Earned Leave's balance is tracked the same as any other type
+                      (see balanceEngine.ts) - just not shown here, per request. */}
+                  {b.code !== "EL" && (
+                    <>
+                      <p className="text-3xl font-bold mt-1">{b.remaining}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        of {b.entitled}
+                        {b.used ? ` · ${b.used} used` : ""}
+                      </p>
+                    </>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
                   View history <ChevronRight className="h-3.5 w-3.5" />
@@ -251,7 +261,22 @@ function CountBadge({ count, title }: { count: number; title: string }) {
   );
 }
 
-export function LeaveHistoryRow({ request }: { request: LeaveRequest }) {
+const CANCELLABLE_STATUSES: LeaveRequestStatus[] = ["PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT"];
+
+export function LeaveHistoryRow({
+  request,
+  onCancel,
+  cancelling,
+}: {
+  request: LeaveRequest;
+  // Omitted entirely when viewing someone else's history (e.g. an HOD
+  // browsing a faculty member's) - the server only lets the original
+  // requester cancel their own request anyway (see applications/[id]/route.ts
+  // PATCH's CANCEL branch), so the button isn't offered there at all.
+  onCancel?: (request: LeaveRequest) => void;
+  cancelling?: boolean;
+}) {
+  const canCancel = !!onCancel && CANCELLABLE_STATUSES.includes(request.status);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">
@@ -277,6 +302,18 @@ export function LeaveHistoryRow({ request }: { request: LeaveRequest }) {
           </>
         )}
         <Badge variant={STATUS_VARIANT[request.status]}>{LEAVE_REQUEST_STATUS_LABELS[request.status]}</Badge>
+        {canCancel && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+            disabled={cancelling}
+            loading={cancelling}
+            onClick={() => onCancel!(request)}
+          >
+            Cancel
+          </Button>
+        )}
       </div>
     </div>
   );

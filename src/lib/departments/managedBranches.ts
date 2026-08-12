@@ -123,3 +123,32 @@ export function resolveBranchYearOwner<T extends DepartmentYearRow & { name?: st
   const manager = findBranchManager(departments, branchName);
   return manager && manager.years.includes(year) ? (manager.department.name ?? branchName) : branchName;
 }
+
+/**
+ * Year-aware counterpart of `canHodEditDepartment` (scope.ts) - true when
+ * `departmentName` at `year` is actually this HOD's to read/write. A true
+ * sub-department (childDepartmentNames) is owned outright, no year check -
+ * only a MANAGED branch (own department, or a grouped branch reached via
+ * `managedDepartments`) is year-scoped, since that's the relationship split
+ * between a shared-year manager and the branch's own dedicated HOD.
+ * Mirrors the inline check `college/sections` GET already applies per
+ * section - the students routes (list, distribute, per-student edit) need
+ * the exact same rule so a manager can never see or move a branch's
+ * non-shared-year students, and the branch's own HOD can never see or move
+ * the shared-year ones. `departments` must be the full department list (for
+ * `resolveBranchYearOwner` to resolve who manages `departmentName`).
+ */
+export function canHodEditDepartmentYear<T extends DepartmentYearRow & { name?: string }>(
+  scope: { departmentName: string; childDepartmentNames: string[]; managedDepartmentNames: string[] },
+  departments: T[],
+  departmentName: string,
+  year: number
+): boolean {
+  if (!departmentName || !scope.departmentName) return false;
+  if (scope.childDepartmentNames.includes(departmentName)) return true;
+  if (departmentName !== scope.departmentName && !scope.managedDepartmentNames.includes(departmentName)) {
+    return false;
+  }
+  const owner = resolveBranchYearOwner(departments, departmentName, year);
+  return owner === scope.departmentName || scope.childDepartmentNames.includes(owner);
+}

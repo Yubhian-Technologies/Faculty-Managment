@@ -94,13 +94,22 @@ export default function HodStudentsPage() {
     () => Array.from(new Set(students.map((s) => s.department).filter(Boolean))).sort(),
     [students]
   );
+  // Unassigned students this HOD can actually section - excludes view-only
+  // ("secondary") cross-listed students, e.g. someone else's branch merely
+  // pre-registered here. Drives the Department/Year pickers below so a branch
+  // with unassigned students but no sections *yet* still shows up (steering
+  // the HOD to create sections first) instead of the pickers looking empty.
+  const unassignedStudents = useMemo(
+    () => students.filter((s) => !s.section && s.accessLevel !== "secondary"),
+    [students]
+  );
   const distDepartments = useMemo(
-    () => Array.from(new Set(managedSections.map((s) => s.department).filter(Boolean))).sort(),
-    [managedSections]
+    () => Array.from(new Set(unassignedStudents.map((s) => s.department).filter(Boolean))).sort(),
+    [unassignedStudents]
   );
   const distYears = useMemo(
-    () => Array.from(new Set(managedSections.filter((s) => s.department === distDept).map((s) => s.year))).sort((a, b) => a - b),
-    [managedSections, distDept]
+    () => Array.from(new Set(unassignedStudents.filter((s) => s.department === distDept).map((s) => s.year))).sort((a, b) => a - b),
+    [unassignedStudents, distDept]
   );
   const distTargetSections = useMemo(
     () => managedSections
@@ -109,8 +118,8 @@ export default function HodStudentsPage() {
     [managedSections, distDept, distYear]
   );
   const unassignedCount = useMemo(
-    () => students.filter((s) => s.department === distDept && String(s.year) === distYear && !s.section).length,
-    [students, distDept, distYear]
+    () => unassignedStudents.filter((s) => s.department === distDept && String(s.year) === distYear).length,
+    [unassignedStudents, distDept, distYear]
   );
 
   const filtered = useMemo(
