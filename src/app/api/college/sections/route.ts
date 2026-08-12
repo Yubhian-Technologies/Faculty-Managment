@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 
 export async function GET(request: Request) {
@@ -34,9 +35,20 @@ export async function GET(request: Request) {
     // tree. Same shape as the students route.
     let childDeptQuery: FirebaseFirestore.Query | null = null;
     let secondaryDeptQuery: FirebaseFirestore.Query | null = null;
+    // A branch can be BOTH a standalone department with its own dedicated HOD
+    // (its own assignedYears, e.g. CIVIL's [2,3,4]) AND grouped under a
+    // sub-department for the shared first year (e.g. BS-English managing
+    // CIVIL for year 1). The two never overlap in years, so which HOD a given
+    // (department, year) section actually belongs to depends on the year, not
+    // just the department name - resolveBranchYearOwner below decides that.
+    // Populated only for an HOD (this college's departments), and only used
+    // when there's an actual managed-branch relationship to disambiguate.
+    let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
+    let hodDepartments: DepartmentYearRow[] = [];
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      hodScope = scope;
       if (scope.departmentName) {
         primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
         secondaryDeptQuery = withCommonFilters(sectionsColl.where("secondaryDepartments", "array-contains", scope.departmentName));
@@ -46,6 +58,10 @@ export async function GET(request: Request) {
       const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
       if (ownedDeptNames.length > 0) {
         childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
+      }
+      if (scope.departmentName) {
+        const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+        hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
       }
     } else if (session.role === "PANEL_MEMBER") {
       const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
@@ -63,14 +79,32 @@ export async function GET(request: Request) {
     const seenIds = new Set<string>();
     const sections: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] = [];
     for (const d of primarySnap.docs) {
+      const data = d.data();
+      // Own-department match: only actually "mine" if this year isn't claimed
+      // by whoever manages this branch elsewhere (e.g. a shared first year
+      // routed through a common department's sub-department instead).
+      if (hodScope && hodDepartments.length > 0) {
+        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number);
+        if (owner !== hodScope.departmentName) continue;
+      }
       seenIds.add(d.id);
-      sections.push({ id: d.id, ...d.data(), accessLevel: "primary" });
+      sections.push({ id: d.id, ...data, accessLevel: "primary" });
     }
     if (childDeptSnap) {
       for (const d of childDeptSnap.docs) {
         if (seenIds.has(d.id)) continue;
+        const data = d.data();
+        const deptName = data.department as string;
+        // A direct sub-department (childDepartmentNames) is fully owned
+        // regardless of year - only a MANAGED branch needs this check, since
+        // that's the relationship that's year-scoped (only the years the
+        // manager - this HOD, or one of their own children - actually teaches).
+        if (hodScope!.managedDepartmentNames.includes(deptName) && hodDepartments.length > 0) {
+          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number);
+          if (owner !== hodScope!.departmentName && !hodScope!.childDepartmentNames.includes(owner)) continue;
+        }
         seenIds.add(d.id);
-        sections.push({ id: d.id, ...d.data(), accessLevel: "primary" });
+        sections.push({ id: d.id, ...data, accessLevel: "primary" });
       }
     }
     if (secondaryDeptSnap) {
@@ -197,6 +231,14 @@ export async function POST(request: Request) {
     // to deriving it from the course for any older caller that doesn't send
     // departmentId.
     let dept = "";
+    // True only when the HOD explicitly named a department they reach via
+    // `managedDepartments` (the Sub-Department -> Department cascade) rather
+    // than acting on their own department directly. Gates the shared-year
+    // fallback below - CSE's own dedicated HOD naming CSE plainly must never
+    // get the fallback that lets Basic Science/BS-Maths create CSE's shared
+    // first year, even though something elsewhere manages CSE for that year.
+    // Super Admin keeps the override (not HOD-scoped, so never restricted here).
+    let viaManagedBranch = session.role !== "HOD";
     if (session.role === "HOD") {
       // A parent department's HOD runs its sub-departments too, so they may
       // create a section directly in one by naming it. Omitting departmentId
@@ -209,6 +251,7 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
+      viaManagedBranch = !!body.departmentId && scope.managedDepartmentIds.includes(body.departmentId);
       if (body.departmentId) {
         const deptSnap = await db.collection("colleges").doc(session.collegeId)
           .collection("departments").doc(body.departmentId).get();
@@ -241,15 +284,11 @@ export async function POST(request: Request) {
     // its whole cohort promotes into that one branch together.
     let secondaryDepartments: string[] = [];
     if (dept) {
-      const deptSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("departments")
-        .where("name", "==", dept)
-        .limit(1)
-        .get();
-      if (!deptSnap.empty) {
-        const deptDoc = deptSnap.docs[0].data() as { assignedYears?: number[]; secondaryDepartments?: string[]; parentDepartmentId?: string };
+      const allDeptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+      const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as
+        (DepartmentYearRow & { name?: string; secondaryDepartments?: string[] })[];
+      const deptDoc = allDepts.find((d) => d.name === dept);
+      if (deptDoc) {
         const assignedYears = deptDoc.assignedYears ?? [];
         if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
           // A real branch (e.g. IT) reached through a sub-department's managed
@@ -258,20 +297,13 @@ export async function POST(request: Request) {
           // managing sub-department (or its parent common department) instead.
           // Before rejecting, check whether whoever manages this branch teaches
           // the requested year - if so, this section is exactly that shared-year
-          // section and should be allowed.
-          const managingSnap = await db.collection("colleges").doc(session.collegeId)
-            .collection("departments").where("managedDepartments", "array-contains", dept).limit(1).get();
-          let allowedViaManager = false;
-          if (!managingSnap.empty) {
-            const manager = managingSnap.docs[0].data() as { assignedYears?: number[]; parentDepartmentId?: string };
-            let managerYears = manager.assignedYears ?? [];
-            if (managerYears.length === 0 && manager.parentDepartmentId) {
-              const parentSnap = await db.collection("colleges").doc(session.collegeId)
-                .collection("departments").doc(manager.parentDepartmentId).get();
-              managerYears = (parentSnap.data() as { assignedYears?: number[] } | undefined)?.assignedYears ?? [];
-            }
-            allowedViaManager = managerYears.includes(Number(body.year));
-          }
+          // section and should be allowed. Only applies when the caller actually
+          // reached `dept` via that managed-branch relationship (viaManagedBranch) -
+          // otherwise this is the branch's own dedicated HOD naming their own
+          // department directly, who must stay strictly within their own
+          // assignedYears even though someone elsewhere also manages this branch.
+          const manager = viaManagedBranch ? findBranchManager(allDepts, dept) : null;
+          const allowedViaManager = manager?.years.includes(Number(body.year)) ?? false;
           if (!allowedViaManager) {
             return NextResponse.json(
               { error: `Your department is not assigned to teach Year ${body.year}` },
@@ -284,9 +316,8 @@ export async function POST(request: Request) {
         // parent, so a sub-HOD can create the shared first-year branch sections.
         let availableSecondaryDepts = deptDoc.secondaryDepartments ?? [];
         if (availableSecondaryDepts.length === 0 && deptDoc.parentDepartmentId) {
-          const parentSnap = await db.collection("colleges").doc(session.collegeId)
-            .collection("departments").doc(deptDoc.parentDepartmentId).get();
-          availableSecondaryDepts = (parentSnap.data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments ?? [];
+          const parent = allDepts.find((d) => d.id === deptDoc.parentDepartmentId);
+          availableSecondaryDepts = parent?.secondaryDepartments ?? [];
         }
         const chosen = body.secondaryDepartment?.trim()
           || (availableSecondaryDepts.length === 1 ? availableSecondaryDepts[0] : "");
