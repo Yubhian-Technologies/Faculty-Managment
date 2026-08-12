@@ -1,3 +1,9 @@
+// Same logo used on the login page (src/app/(auth)/login/page.tsx).
+const VISHNU_LOGO_URL =
+  "https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png";
+
+const LETTERHEAD = `<div class="letterhead"><img src="${VISHNU_LOGO_URL}" alt="Vishnu Logo" /></div>`;
+
 export interface OfferLetterData {
   candidateName: string;
   candidateAddress?: string;
@@ -35,6 +41,8 @@ export function getOfferLetterHTML({
 <style>
   body { font-family: "Times New Roman", serif; margin: 0; padding: 0; color: #000; }
   .page { width: 210mm; min-height: 297mm; padding: 20mm 25mm; box-sizing: border-box; }
+  .letterhead { margin-bottom: 16px; }
+  .letterhead img { height: 56px; width: auto; object-fit: contain; }
   .date { text-align: right; margin-bottom: 24px; font-size: 14px; }
   p { font-size: 14px; line-height: 1.8; margin: 12px 0; }
   .signature { margin-top: 32px; }
@@ -44,6 +52,7 @@ export function getOfferLetterHTML({
 </head>
 <body>
 <div class="page">
+  ${LETTERHEAD}
   <p class="date">Dt. ${letterDate}</p>
 
   <p>Dear Sir/Madam,</p>
@@ -125,6 +134,8 @@ export function getAppointmentLetterHTML({
 <style>
   body { font-family: "Times New Roman", serif; margin: 0; padding: 0; color: #000; }
   .page { width: 210mm; min-height: 297mm; padding: 20mm 25mm; box-sizing: border-box; }
+  .letterhead { margin-bottom: 16px; }
+  .letterhead img { height: 56px; width: auto; object-fit: contain; }
   .date { margin-bottom: 24px; font-size: 14px; }
   .to-block { margin-bottom: 24px; }
   .to-block p { margin: 0; font-size: 14px; line-height: 1.6; }
@@ -137,6 +148,7 @@ export function getAppointmentLetterHTML({
 </head>
 <body>
 <div class="page">
+  ${LETTERHEAD}
   <p class="date">Dt. ${letterDate}</p>
 
   <div class="to-block">
