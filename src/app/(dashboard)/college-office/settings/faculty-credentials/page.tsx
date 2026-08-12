@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import { KeyRound, UserCog, Eye, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { KeyRound, UserCog, Eye, CheckCircle2, XCircle, Loader2, Search } from "lucide-react";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
 import type {
   Candidate,
@@ -183,8 +183,13 @@ export default function FacultyCredentialsPage() {
         toast({ variant: "destructive", title: `${c.name}: recommended email is required` });
         return;
       }
-      if (availability[availabilityKey(c.applicationId, "officialEmail")] === "taken") {
+      const status = availability[availabilityKey(c.applicationId, "officialEmail")];
+      if (status === "taken") {
         toast({ variant: "destructive", title: `${c.name}: recommended email is already in use`, description: "Pick a different email before sending the request." });
+        return;
+      }
+      if (status !== "available") {
+        toast({ variant: "destructive", title: `${c.name}: search the email first`, description: "Click Search and confirm the email is available before requesting the account." });
         return;
       }
     }
@@ -292,7 +297,7 @@ export default function FacultyCredentialsPage() {
                         value={form.officialEmail}
                         status={availability[availabilityKey(c.applicationId, "officialEmail")] ?? "unchecked"}
                         onChange={(v) => updateForm(c.applicationId, "officialEmail", v)}
-                        onBlur={() => void checkAvailability(c.applicationId, "officialEmail", form.officialEmail)}
+                        onSearch={() => void checkAvailability(c.applicationId, "officialEmail", form.officialEmail)}
                         placeholder="name@college.edu"
                       />
                     </div>
@@ -389,36 +394,43 @@ function EmailFieldInput({
   value,
   status,
   onChange,
-  onBlur,
+  onSearch,
   placeholder,
 }: {
   label: string;
   value: string;
   status: Availability;
   onChange: (value: string) => void;
-  onBlur: () => void;
+  onSearch: () => void;
   placeholder?: string;
 }) {
   return (
     <div className="space-y-1.5">
       <Label className="text-xs">{label}</Label>
-      <div className="relative">
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          placeholder={placeholder}
-          className={status === "taken" ? "border-red-400 pr-8 focus-visible:ring-red-400" : "pr-8"}
-        />
-        {status !== "unchecked" && (
-          <span className="absolute right-2 top-1/2 -translate-y-1/2">
-            {status === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-            {status === "available" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-            {status === "taken" && <XCircle className="h-4 w-4 text-red-600" />}
-          </span>
-        )}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSearch(); } }}
+            placeholder={placeholder}
+            className={status === "taken" ? "border-red-400 pr-8 focus-visible:ring-red-400" : "pr-8"}
+          />
+          {status !== "unchecked" && (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2">
+              {status === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {status === "available" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+              {status === "taken" && <XCircle className="h-4 w-4 text-red-600" />}
+            </span>
+          )}
+        </div>
+        <Button type="button" variant="outline" onClick={onSearch} disabled={!value.trim() || status === "checking"}>
+          {status === "checking" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          <span className="ml-1.5">Search</span>
+        </Button>
       </div>
       {status === "taken" && <p className="text-xs text-red-600">Already in use — pick a different email</p>}
+      {status === "available" && <p className="text-xs text-green-600">Available — you can now request the account</p>}
     </div>
   );
 }

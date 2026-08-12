@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { getOrCreateProfile } from "@/lib/leave/profile";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
-import { loadBalances, computeEntitlement } from "@/lib/leave/balanceEngine";
+import { loadBalances, computeEntitlement, initBalancesForYear } from "@/lib/leave/balanceEngine";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 
@@ -44,6 +44,13 @@ export async function GET(request: Request) {
     const settings = await loadCollegeSettings(db, session.collegeId);
     const effectiveCategory = computeEffectiveCategory(profile, settings.newJoiningYears);
 
+    // Ensures this year's balance docs actually exist (idempotent - a no-op
+    // once created) rather than relying on GET /api/leave/profile happening
+    // to run first. This is also where Earned Leave's carry-forward from last
+    // year gets computed and persisted, the one time this year's doc is
+    // first created - see initBalancesForYear.
+    await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year);
+
     const balances = await loadBalances(db, session.collegeId, targetUid, year);
     const balancesByType = new Map(balances.map((b) => [b.leaveTypeCode, b]));
 
@@ -67,6 +74,7 @@ export async function GET(request: Request) {
           used,
           pending,
           remaining: Math.max(0, entitled - used - pending),
+          ...(bal?.carriedForward ? { carriedForward: bal.carriedForward } : {}),
         };
       });
 

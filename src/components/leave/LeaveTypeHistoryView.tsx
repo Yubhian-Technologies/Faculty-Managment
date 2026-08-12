@@ -6,9 +6,10 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { ArrowLeft, History } from "lucide-react";
-import { LeaveHistoryRow } from "./LeaveProfileView";
+import { LeaveHistoryRow, type BalanceEntry } from "./LeaveProfileView";
 import { LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode, OtherLeaveCategory } from "@/types/leave";
 
@@ -54,8 +55,29 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<Record<string, OtherLeaveCategory>>({});
+  // A cancel here just flips the request to CANCELLED - it stays in this same
+  // history list (per request), it just moves out of the pending stage. The
+  // balance is untouched: nothing is ever reserved at submission (see
+  // applications/route.ts POST), so releasing a pending amount that was never
+  // added releases nothing - cancelling never reduces the shown balance.
+  const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  // Earned Leave's carry-forward breakdown (e.g. "6 base + 3 carried from
+  // last year = 9") - fetched only for the EL history view specifically per
+  // request; every other tab (the main balance-card grid, Apply for Leave's
+  // type picker, etc.) shows nothing extra for it.
+  const [elBalance, setElBalance] = useState<BalanceEntry | null>(null);
 
   const label = type === "ALL" ? "Full" : type === "OTHER" ? "Other" : LEAVE_TYPE_LABELS[type];
+
+  useEffect(() => {
+    if (type !== "EL") return;
+    const qs = uid ? `?uid=${uid}` : "";
+    fetch(`/api/leave/balances${qs}`)
+      .then((r) => r.json() as Promise<{ leaveTypes: BalanceEntry[] }>)
+      .then((data) => setElBalance((data.leaveTypes ?? []).find((b) => b.code === "EL") ?? null))
+      .catch(() => {}); // purely informational - the request list below still loads fine either way
+  }, [type, uid]);
 
   useEffect(() => {
     const qs = uid ? `?uid=${uid}` : "";
@@ -86,6 +108,27 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
       .catch(() => { /* non-critical - rows just render without the category badge */ });
   }, [uid, showOtherLeaveCategory]);
 
+  async function handleCancel() {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/leave/applications/${cancelTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "CANCEL" }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to cancel");
+      toast({ variant: "success", title: "Leave request cancelled" });
+      setRequests((prev) => prev.map((r) => (r.id === cancelTarget.id ? { ...r, status: "CANCELLED" } : r)));
+      setCancelTarget(null);
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to cancel" });
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -100,6 +143,22 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
           </Button>
         }
       />
+
+      {type === "EL" && elBalance && !!elBalance.carriedForward && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4 text-sm">
+            <p className="font-medium">
+              {elBalance.entitled} day(s) available this year
+            </p>
+            <p className="text-muted-foreground mt-0.5">
+              {(elBalance.entitled ?? 0) - elBalance.carriedForward} base + {elBalance.carriedForward} carried forward
+              from last year&rsquo;s unused Earned Leave
+              {elBalance.used ? ` · ${elBalance.used} used so far` : ""}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-4">
           {isLoading ? (
@@ -120,12 +179,27 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
                   key={r.id}
                   request={r}
                   categoryLabel={categories[r.id] ? OTHER_LEAVE_CATEGORY_LABELS[categories[r.id]] : undefined}
+                  // Only offer cancelling one's own requests - viewing someone
+                  // else's history (uid set) is read-only.
+                  onCancel={uid ? undefined : (target) => setCancelTarget(target)}
+                  cancelling={cancelling && cancelTarget?.id === r.id}
                 />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!cancelTarget}
+        onOpenChange={(open) => { if (!open) setCancelTarget(null); }}
+        title="Cancel this leave request?"
+        description="It moves to Cancelled in your history. Your leave balance is unaffected either way."
+        confirmLabel="Cancel Request"
+        variant="destructive"
+        loading={cancelling}
+        onConfirm={() => void handleCancel()}
+      />
     </div>
   );
 }

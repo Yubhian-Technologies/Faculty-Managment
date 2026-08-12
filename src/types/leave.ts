@@ -99,6 +99,11 @@ export interface LeaveBalance {
   entitled: number;
   used: number;
   pending: number;
+  // Earned Leave only - the previous year's unused EL already folded into
+  // `entitled` above (see initBalancesForYear's carry-forward step), kept
+  // separately so the EL history view can show the "6 base + 3 carried" split
+  // rather than just the combined total.
+  carriedForward?: number;
   updatedAt: Timestamp;
 }
 

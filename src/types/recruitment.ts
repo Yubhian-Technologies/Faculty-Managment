@@ -132,7 +132,9 @@ export interface CandidateBioData {
   aadharNo?: string;
   panNo?: string;
   bloodGroup?: string;
+  religion?: string;
   caste?: string; // reservation category (OC/BC-*/SC/ST/EWS/Other)
+  subCaste?: string; // free-text community / sub-caste within the category
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   // Hiring-specific, self-reported — not on FacultyMember
