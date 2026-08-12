@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { evenSplit } from "@/lib/students/evenSplit";
 import type { Section, StudentRecord } from "@/types";
 
 // Bulk-distribute a department's UNASSIGNED students (section == "") across a
@@ -91,19 +92,14 @@ export async function POST(request: Request) {
     // Even split in order: with N students over K sections, the first (N mod K)
     // sections get one extra, so sizes differ by at most one and earliest names
     // fill the earliest sections.
-    const K = sections.length;
-    const base = Math.floor(cohort.length / K);
-    const remainder = cohort.length % K;
+    const slices = evenSplit(cohort, sections.length);
 
     const now = new Date();
     const batch = new ChunkedBatch(db);
     const perSection: { section: string; count: number }[] = [];
 
-    let cursor = 0;
-    for (let i = 0; i < K; i++) {
-      const size = base + (i < remainder ? 1 : 0);
-      const slice = cohort.slice(cursor, cursor + size);
-      cursor += size;
+    for (let i = 0; i < sections.length; i++) {
+      const slice = slices[i];
       const section = sections[i];
       for (const student of slice) {
         const ref = collegeRef.collection("students").doc(student.id);
