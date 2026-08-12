@@ -82,11 +82,31 @@ export function findBranchManager<T extends DepartmentYearRow>(
 ): BranchManager<T> | null {
   const manager = departments.find((d) => (d.managedDepartments ?? []).includes(branchName));
   if (!manager) return null;
-  let years = manager.assignedYears ?? [];
-  if (years.length === 0 && manager.parentDepartmentId) {
-    years = departments.find((p) => p.id === manager.parentDepartmentId)?.assignedYears ?? [];
+  return { department: manager, years: managerTeachingYears(departments, manager) };
+}
+
+/**
+ * The years a managing department actually teaches: its own assignedYears, or,
+ * when it has none of its own (the common shape for a sub-department, which
+ * college/departments POST won't let an HOD set), its parent common
+ * department's.
+ *
+ * Exported because a manager isn't always found by searching for it - the Add
+ * Section cascade knows which container it routed a branch through, and a
+ * branch can be reachable through more than one (grouped under a
+ * sub-department AND directly under the common parent). Those callers need
+ * this same rule applied to the manager they already hold.
+ */
+export function managerTeachingYears<T extends DepartmentYearRow>(
+  departments: T[],
+  manager: T
+): number[] {
+  const own = manager.assignedYears ?? [];
+  if (own.length > 0) return own;
+  if (manager.parentDepartmentId) {
+    return departments.find((p) => p.id === manager.parentDepartmentId)?.assignedYears ?? [];
   }
-  return { department: manager, years };
+  return [];
 }
 
 /**
