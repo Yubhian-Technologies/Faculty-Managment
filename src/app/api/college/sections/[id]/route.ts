@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
@@ -16,14 +17,25 @@ import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMem
 // section reached solely via `secondaryDepartments` cross-listing stays
 // view-only. Firestore security rules aren't in play here (admin SDK), so this
 // is the only enforcement point.
+//
+// A managed branch is only actually owned by the managing (sub-)HOD for the
+// YEARS that relationship covers (e.g. CIVIL under BS-English, for the shared
+// first year only) - Year 2 onward stays with CIVIL's own dedicated HOD, even
+// though the department name matches. canHodEditDepartment alone can't tell
+// the two apart since it only looks at the name, so resolveBranchYearOwner
+// disambiguates using the section's year - mirrors sections GET's own check.
 async function assertHodOwnsSection(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
-  uid: string,
-  sectionDepartment: string
+  scope: Awaited<ReturnType<typeof getHodDepartmentScope>>,
+  sectionDepartment: string,
+  sectionYear: number
 ): Promise<boolean> {
-  const scope = await getHodDepartmentScope(db, collegeId, uid);
-  return canHodEditDepartment(scope, sectionDepartment);
+  if (!canHodEditDepartment(scope, sectionDepartment)) return false;
+  const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+  const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+  const owner = resolveBranchYearOwner(departments, sectionDepartment, sectionYear);
+  return owner === scope.departmentName || scope.childDepartmentNames.includes(owner);
 }
 
 export async function PATCH(
@@ -54,13 +66,14 @@ export async function PATCH(
 
     const oldSection = snap.data() as { department?: string; name?: string; year?: number };
     const sectionDept = oldSection.department ?? "";
+    const sectionYear = oldSection.year ?? 0;
 
     // Computed once and reused below for the reassignment check - avoids a
     // second getHodDepartmentScope round-trip for HOD callers moving a section.
     let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
     if (session.role === "HOD") {
       hodScope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(hodScope, sectionDept)) {
+      if (!(await assertHodOwnsSection(db, session.collegeId, hodScope, sectionDept, sectionYear))) {
         return NextResponse.json({ error: "You can only edit sections in your own department" }, { status: 403 });
       }
     }
@@ -248,7 +261,8 @@ export async function DELETE(
     const data = snap.data() as { department?: string; name?: string; year?: number; courseId?: string; secondaryDepartments?: string[] };
 
     if (session.role === "HOD") {
-      if (!(await assertHodOwnsSection(db, session.collegeId, session.uid, data.department ?? ""))) {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!(await assertHodOwnsSection(db, session.collegeId, scope, data.department ?? "", data.year ?? 0))) {
         return NextResponse.json({ error: "You can only delete sections in your own department" }, { status: 403 });
       }
     }

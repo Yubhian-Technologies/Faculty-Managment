@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
+import { findBranchManager } from "@/lib/departments/managedBranches";
 import type { SectionListItem, Course, Department } from "@/types";
 
 type SectionRow = SectionListItem;
@@ -244,15 +245,19 @@ export default function HODSectionsPage() {
     for (const d of departments) {
       for (const branchName of d.managedDepartments ?? []) {
         if (m.has(branchName)) continue;
-        let years = d.assignedYears ?? [];
-        if (years.length === 0 && d.parentDepartmentId) {
-          years = departments.find((p) => p.id === d.parentDepartmentId)?.assignedYears ?? [];
-        }
-        m.set(branchName, years);
+        m.set(branchName, findBranchManager(departments, branchName)?.years ?? []);
       }
     }
     return m;
   }, [departments]);
+
+  // Whether THIS (sub-)HOD actually views branches through a managed
+  // relationship - as the main common HOD via the cascade, or as a sub-HOD who
+  // IS the grouping container. A plain HOD (e.g. CSE's own dedicated HOD) is
+  // neither, even when CSE happens to be managed by some sub-department
+  // elsewhere for a shared year - that shared year is never theirs to see, so
+  // managedBranchYears must never apply to their own department for them.
+  const viewsManagedBranchYears = useCascadeFilter || isGroupingContainer;
 
   // Year filter tabs follow the department's assigned years ("Years Taught"),
   // not the raw course span - so a department teaching [1,2,3] shows only those,
@@ -270,10 +275,12 @@ export default function HODSectionsPage() {
     const assigned = new Set<number>();
     for (const d of relevant) {
       for (const y of d.assignedYears ?? []) assigned.add(y);
-      for (const y of managedBranchYears.get(d.name) ?? []) assigned.add(y);
+      if (viewsManagedBranchYears) {
+        for (const y of managedBranchYears.get(d.name) ?? []) assigned.add(y);
+      }
     }
     return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
-  }, [activeGroup, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren, plainChildren, isGroupingContainer, managedBranchYears]);
+  }, [activeGroup, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren, plainChildren, isGroupingContainer, managedBranchYears, viewsManagedBranchYears]);
 
   // Each section is scoped to the years its OWN department is assigned to teach
   // ("Years Taught"). A section whose year the department no longer teaches
@@ -282,7 +289,9 @@ export default function HODSectionsPage() {
   // Departments with no assigned years yet are left unrestricted. A managed
   // branch (see managedBranchYears above) also stays visible for any year its
   // managing sub-department teaches, even though the branch's own Years Taught
-  // doesn't include it.
+  // doesn't include it - but only for a viewer who actually reaches it that way
+  // (viewsManagedBranchYears); the branch's own dedicated HOD stays strictly
+  // within its own assignedYears.
   const assignedYearsByDept = useMemo(() => {
     const m = new Map<string, number[]>();
     for (const d of departments) m.set(d.name, d.assignedYears ?? []);
@@ -294,8 +303,8 @@ export default function HODSectionsPage() {
   const yearScopedSections = useMemo(() => sections.filter((s) => {
     const assigned = assignedYearsByDept.get(s.department);
     if (!assigned || assigned.length === 0 || assigned.includes(s.year)) return true;
-    return (managedBranchYears.get(s.department) ?? []).includes(s.year);
-  }), [sections, assignedYearsByDept, managedBranchYears]);
+    return viewsManagedBranchYears && (managedBranchYears.get(s.department) ?? []).includes(s.year);
+  }), [sections, assignedYearsByDept, managedBranchYears, viewsManagedBranchYears]);
 
   // Sub-department drill-down (only reachable when useCascadeFilter is active):
   // with a sub-department picked but no specific branch yet, show every section
@@ -586,7 +595,7 @@ export default function HODSectionsPage() {
                       <div className="flex items-start justify-between">
                         <Link href={`/hod/sections/${sec.id}`} className="hover:underline">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-2xl font-bold tracking-tight">Section {sec.name}</p>
+                            <p className="text-2xl font-bold tracking-tight">{sec.name}</p>
                             {/* The section's own department (branch) - always shown so a
                                 Sub-HOD can tell which of their managed branches it belongs to. */}
                             {sec.department && (

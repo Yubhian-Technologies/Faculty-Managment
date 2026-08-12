@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
 import { toast } from "@/hooks/useToast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, toDate } from "@/lib/utils";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -85,12 +85,7 @@ export default function HODAttendancePage() {
 
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
   const todayRecord = isCurrentMonth
-    ? records.find((rec) => {
-        const d = rec.date && typeof (rec.date as { toDate?: () => Date }).toDate === "function"
-          ? (rec.date as { toDate: () => Date }).toDate()
-          : new Date(rec.date as unknown as string);
-        return d.toDateString() === now.toDateString();
-      })
+    ? records.find((rec) => toDate(rec.date)?.toDateString() === now.toDateString())
     : undefined;
 
   const summaryCards: SummaryCard[] = summary
