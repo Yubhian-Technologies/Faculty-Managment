@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
+import { findBranchManager } from "@/lib/departments/managedBranches";
 import type { Course, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -26,7 +27,6 @@ function ordinalYear(year: number) {
 
 type SectionForm = {
   courseId: string;
-  name: string;
   year: string;
   batch: string;
   facultyInchargeUid: string;
@@ -44,7 +44,6 @@ export default function NewSectionPage() {
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [form, setForm] = useState<SectionForm>({
     courseId: prefilledCourseId,
-    name: "",
     year: "",
     batch: "",
     facultyInchargeUid: "",
@@ -126,23 +125,26 @@ export default function NewSectionPage() {
   // over the legacy secondaryDepartments branch mode below - a real branch
   // reached this way already IS the final department, so there's nothing left
   // to pick except the section letter.
-  const managingDept = useMemo(
-    () => (activeDept ? departments.find((d) => (d.managedDepartments ?? []).includes(activeDept.name)) ?? null : null),
-    [departments, activeDept]
+  //
+  // Gated on `departmentName` (an explicit DepartmentScopeSelect pick) rather
+  // than a blanket "is this department managed by anyone, anywhere" check on
+  // activeDept alone - CSE's own dedicated HOD lands here with departmentName
+  // still "" (their own department used directly, no cascade shown at all),
+  // and must see CSE's own assignedYears even if some sub-department
+  // elsewhere ALSO manages CSE for a shared year. Only a caller who actually
+  // picked their way through the cascade (departmentName set) is in
+  // managed-branch mode.
+  const branchManager = useMemo(
+    () => (departmentName && activeDept ? findBranchManager(departments, activeDept.name) : null),
+    [departmentName, departments, activeDept]
   );
+  const managingDept = branchManager?.department ?? null;
   const isManagedBranchMode = managingDept !== null;
   // The managing sub-department (or, if it has none of its own, its parent
   // common department) is where "Years Taught" for this shared year actually
   // lives - a real branch's own assignedYears (e.g. CIVIL's [2,3,4]) never
   // includes the shared first year on its own.
-  const managingYears = useMemo(() => {
-    if (!managingDept) return [] as number[];
-    if ((managingDept.assignedYears?.length ?? 0) > 0) return managingDept.assignedYears ?? [];
-    if (managingDept.parentDepartmentId) {
-      return departments.find((d) => d.id === managingDept.parentDepartmentId)?.assignedYears ?? [];
-    }
-    return [];
-  }, [managingDept, departments]);
+  const managingYears = useMemo(() => branchManager?.years ?? [], [branchManager]);
   // Derived section name: the managing sub-department's own code (e.g.
   // "BS-ENGLISH" - already self-describing, since sub-department codes are set
   // to read as their parent's shared-year structure) + the real branch's code
@@ -194,18 +196,18 @@ export default function NewSectionPage() {
   const derivedName = branch && letter
     ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(branch)}-${letter.trim().toUpperCase()}`
     : "";
+  // Plain mode: this department's own code + letter, e.g. CSE's own dedicated
+  // HOD creating a 2nd-year section gets "CSE-A" - no shared-structure prefix,
+  // since this department owns every year it's creating a section for directly.
+  const plainDerivedName = `${activeDept?.code?.trim() || activeDeptName}-${letter.trim().toUpperCase()}`;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.courseId) { toast({ variant: "destructive", title: "Course is required" }); return; }
-    if (isManagedBranchMode) {
-      if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
-    } else if (isBranchMode) {
-      if (!branch) { toast({ variant: "destructive", title: "Branch is required" }); return; }
-      if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
-    } else if (!form.name.trim()) {
-      toast({ variant: "destructive", title: "Section name is required" }); return;
+    if (isBranchMode && !isManagedBranchMode && !branch) {
+      toast({ variant: "destructive", title: "Branch is required" }); return;
     }
+    if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
     if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
     if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
 
@@ -215,8 +217,8 @@ export default function NewSectionPage() {
     // Legacy branch mode: name carries the owning (common) department's prefix
     // too, and the chosen branch is sent as the section's secondary department
     // so its students inherit it and auto-promote into that branch later.
-    // Otherwise: whatever the HOD typed.
-    const sectionName = isManagedBranchMode ? managedBranchName : isBranchMode ? derivedName : form.name;
+    // Otherwise (plain): this department's own code + letter.
+    const sectionName = isManagedBranchMode ? managedBranchName : isBranchMode ? derivedName : plainDerivedName;
 
     setSaving(true);
     try {
@@ -374,15 +376,20 @@ export default function NewSectionPage() {
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Section Name *</Label>
+                  <Label>Section Letter *</Label>
                   <Input
-                    value={form.name}
-                    onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
-                    placeholder="A, B, C…"
-                    maxLength={5}
+                    value={letter}
+                    onChange={(e) => setLetter(e.target.value.toUpperCase())}
+                    placeholder="A, B…"
+                    maxLength={2}
                     className="uppercase"
                   />
-                  <p className="text-xs text-muted-foreground">e.g. A, B, C or CS-A</p>
+                  <p className="text-xs text-muted-foreground">
+                    Section name will be{" "}
+                    {letter.trim()
+                      ? <strong className="text-foreground">{plainDerivedName}</strong>
+                      : `e.g. ${activeDept?.code || "CSE"}-A`}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Year *</Label>
