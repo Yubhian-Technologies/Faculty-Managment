@@ -14,10 +14,16 @@ export function departmentCode(name: string, departments: Department[]): string 
 // at a glance wherever sections are listed.
 //
 // Sections created through the branch picker (hod/sections/new) already store
-// the composed form as their name, e.g. "BS-CSE-A". Prefixing those again would
-// read "BS CSE BS-CSE-A", so they are returned as-is. Older sections, which
+// the composed form as their name, e.g. "BS-CSE-A" or "BSE-CIVIL-A". A code the
+// name already carries is dropped from the prefix rather than repeated, so
+// those read "BSE-CIVIL-A" and not "CIVIL BSE-CIVIL-A". Older sections, which
 // store just the letter, are still composed here - both shapes coexist and
 // render the same way.
+//
+// Each code is tested on its own, because which one repeats depends on how the
+// section was created: a managed-branch section is owned BY the branch, so it's
+// the primary code (CIVIL) that its name already contains, while a cross-listed
+// one is owned by the common department and repeats the secondary instead.
 export function sectionDisplayLabel(
   section: { department?: string; secondaryDepartments?: string[]; name: string },
   departments: Department[]
@@ -26,10 +32,11 @@ export function sectionDisplayLabel(
   const secondary = section.secondaryDepartments?.[0];
   const secondaryCode = secondary ? departmentCode(secondary, departments) : "";
 
-  if (secondaryCode && nameAlreadyCarries(section.name, secondaryCode)) {
-    return section.name;
-  }
-  return [primary, secondaryCode, section.name].filter(Boolean).join(" ");
+  const parts: string[] = [];
+  if (primary && !nameAlreadyCarries(section.name, primary)) parts.push(primary);
+  if (secondaryCode && !nameAlreadyCarries(section.name, secondaryCode)) parts.push(secondaryCode);
+  parts.push(section.name);
+  return parts.filter(Boolean).join(" ");
 }
 
 /**
