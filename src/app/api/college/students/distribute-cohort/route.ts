@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { canHodEditDepartmentYear } from "@/lib/departments/managedBranches";
 import { getAcademicStructure } from "@/lib/college/academicStructure";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { evenSplit } from "@/lib/students/evenSplit";
@@ -103,9 +104,12 @@ export async function POST(request: Request) {
       const managedBy = structure.managedBranchOwner.get(branch);
       const base = { branch, ...(managedBy ? { managedBy } : {}), distributed: 0, perSection: [] };
 
-      // A (sub-)HOD may only section branches they own or manage; a branch
+      // A (sub-)HOD may only section branches they own or manage FOR THIS YEAR -
+      // a branch's own dedicated HOD never owns the shared year of a branch
+      // grouped elsewhere (e.g. Basic Science manages CIVIL for year 1, even
+      // though CIVIL's own HOD owns CIVIL for every other year). A branch
       // outside their scope is reported, not silently dropped.
-      if (scope && !canHodEditDepartment(scope, branch)) {
+      if (scope && !canHodEditDepartmentYear(scope, structure.allDepartments, branch, year)) {
         perBranch.push({ ...base, skippedReason: "Not yours or one you manage" });
         continue;
       }

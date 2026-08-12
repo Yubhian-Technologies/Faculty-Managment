@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
@@ -50,6 +51,15 @@ export async function GET(request: Request) {
     // sees the whole college unscoped, so nothing they see is ever "secondary".
     let secondaryQuery: FirebaseFirestore.Query | null = null;
     let childDeptQuery: FirebaseFirestore.Query | null = null;
+    // A branch can be BOTH a standalone department with its own dedicated HOD
+    // (its own assignedYears, e.g. CIVIL's [2,3,4]) AND grouped under a
+    // sub-department for the shared first year (e.g. BS-English managing
+    // CIVIL for year 1). Which HOD a given (department, year) student
+    // actually belongs to depends on the year, not just the department name -
+    // resolveBranchYearOwner below decides that. Same shape as the sections
+    // route's identical split; kept in sync with it deliberately.
+    let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
+    let hodDepartments: DepartmentYearRow[] = [];
 
     if (session.role === "PANEL_MEMBER") {
       const sections = await getInchargeSections(db, session.collegeId, session.uid);
@@ -86,12 +96,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ students });
     } else if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      hodScope = scope;
       if (scope.departmentName) {
         primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
         secondaryQuery = withCommonFilters(studentsColl.where("secondaryDepartment", "==", scope.departmentName));
+        const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+        hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
       }
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
-      // both fully-owned - a single `in` query covers both, tagged primary.
+      // both queried together - a single `in` query covers both - but only
+      // sub-departments are unconditionally "primary"; a managed branch is
+      // filtered down to the years its manager relationship actually covers
+      // below, once we have each student's year.
       const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
       if (ownedDeptNames.length > 0) {
         childDeptQuery = withCommonFilters(studentsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
@@ -109,8 +125,16 @@ export async function GET(request: Request) {
     const seenIds = new Set<string>();
     const students: (Omit<StudentRecord, "id"> & { id: string; accessLevel: "primary" | "secondary" })[] = [];
     for (const d of primarySnap.docs) {
+      const data = d.data() as Omit<StudentRecord, "id">;
+      // Own-department match: only actually "mine" if this year isn't claimed
+      // by whoever manages this branch elsewhere (e.g. a shared first year
+      // routed through a common department's sub-department instead).
+      if (hodScope && hodDepartments.length > 0) {
+        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number);
+        if (owner !== hodScope.departmentName) continue;
+      }
       seenIds.add(d.id);
-      students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "primary" });
+      students.push({ id: d.id, ...data, accessLevel: "primary" });
     }
     // Sub-department students are "primary": a parent HOD runs the whole
     // department tree. Only genuinely cross-listed students - registered to an
@@ -119,8 +143,18 @@ export async function GET(request: Request) {
     if (childDeptSnap) {
       for (const d of childDeptSnap.docs) {
         if (seenIds.has(d.id)) continue;
+        const data = d.data() as Omit<StudentRecord, "id">;
+        const deptName = data.department as string;
+        // A direct sub-department (childDepartmentNames) is fully owned
+        // regardless of year - only a MANAGED branch needs this check, since
+        // that's the relationship that's year-scoped (only the years the
+        // manager - this HOD, or one of their own children - actually teaches).
+        if (hodScope!.managedDepartmentNames.includes(deptName) && hodDepartments.length > 0) {
+          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number);
+          if (owner !== hodScope!.departmentName && !hodScope!.childDepartmentNames.includes(owner)) continue;
+        }
         seenIds.add(d.id);
-        students.push({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">), accessLevel: "primary" });
+        students.push({ id: d.id, ...data, accessLevel: "primary" });
       }
     }
     if (secondarySnap) {
