@@ -8,10 +8,15 @@ import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { getOrCreateProfile } from "@/lib/leave/profile";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
+import { NON_DEPARTMENTAL_STAFF_ROLES } from "@/lib/leave/nonDepartmentalStaffRoles";
+import { ROLE_LABELS } from "@/types";
 
 // Roster of department (HOD) or college-wide (Principal/VP) staff, split
-// into the two tabs the UI shows: "Faculty" (Teaching designations only)
-// and "Supporting Staff" (everything else). Technical designations (Lab
+// into the three tabs the UI shows: "Faculty" (Teaching designations only),
+// "Supporting Staff" (everything else with a FacultyMember/SupportingStaff
+// record) and "Institutional Staff" (Principal/VP only - Vice Principal,
+// College Office, Dean, IQAC Coordinator, T&P, R&D, Library, Exam Cell,
+// Webmaster; see NON_DEPARTMENTAL_STAFF_ROLES). Technical designations (Lab
 // Assistant/Programmer/System Administrator/Network Engineer,
 // LEGACY_TECHNICAL_DESIGNATIONS) now belong in the Supporting Staff module,
 // but any FacultyMember record not yet moved there by
@@ -19,12 +24,15 @@ import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 // these designations - those still get tagged "supportingStaff" here so
 // they show up on the right tab, dept-scoped for HOD and college-wide for
 // Principal/VP - plus, for Principal/VP only, every record from the
-// separate college-wide supportingStaff collection. Every entry's leave
-// profile is auto-created here if it
-// doesn't already exist yet (from their FacultyMember/SupportingStaff
-// designation), so there is never a "not set up" state to show - only ever
-// an existing, editable profile. staffType tags each entry "faculty" vs
-// "supportingStaff" for the roster/report UI's tabs.
+// separate college-wide supportingStaff collection, and every login holding
+// a NON_DEPARTMENTAL_STAFF_ROLES role (these never belong to a department,
+// so an HOD - department-scoped only - never sees them at all, same gating
+// as the Leave History page's per-role registers - see reportRoster.ts).
+// Every entry's leave profile is auto-created here if it doesn't already
+// exist yet (from their FacultyMember/SupportingStaff/role default), so
+// there is never a "not set up" state to show - only ever an existing,
+// editable profile. staffType tags each entry
+// "faculty"/"supportingStaff"/"institutional" for the roster/report UI's tabs.
 export async function GET() {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
@@ -38,10 +46,13 @@ export async function GET() {
     }
     const supportingStaffQuery: FirebaseFirestore.Query | null =
       session.role === "HOD" ? null : collegeRef.collection("supportingStaff");
+    const institutionalStaffQuery: FirebaseFirestore.Query | null =
+      session.role === "HOD" ? null : collegeRef.collection("users").where("role", "in", NON_DEPARTMENTAL_STAFF_ROLES);
 
-    const [facultyMembersSnap, supportingStaffSnap, settings] = await Promise.all([
+    const [facultyMembersSnap, supportingStaffSnap, institutionalStaffSnap, settings] = await Promise.all([
       facultyMembersQuery.get(),
       supportingStaffQuery?.get(),
+      institutionalStaffQuery?.get(),
       loadCollegeSettings(db, session.collegeId),
     ]);
 
@@ -61,9 +72,21 @@ export async function GET() {
       .map((d) => d.data() as { userUid?: string; name: string; department?: string; designation: string })
       .filter((f) => !!f.userUid)
       .map((f) => ({ ...f, staffType: "supportingStaff" as const }));
+    // No department (these roles are college-wide) and no designation of
+    // their own to show - the role itself (e.g. "R&D", "Dean") is the
+    // closest thing, same as reportRoster.ts's own-role registers. Excludes
+    // the viewer's own login (relevant when a Vice Principal, itself one of
+    // NON_DEPARTMENTAL_STAFF_ROLES, is browsing) - nobody edits their own
+    // leave category from someone else's roster view.
+    const institutionalStaffList = (institutionalStaffSnap?.docs ?? [])
+      .filter((d) => d.id !== session.uid)
+      .map((d) => {
+        const u = d.data() as { name?: string; role?: string };
+        return { userUid: d.id, name: u.name ?? "Unknown", department: undefined, designation: ROLE_LABELS[u.role as keyof typeof ROLE_LABELS] ?? u.role ?? "-", staffType: "institutional" as const };
+      });
 
     const roster = await Promise.all(
-      [...facultyList, ...legacyTechnicalStaffList, ...supportingStaffList].map(async (f) => {
+      [...facultyList, ...legacyTechnicalStaffList, ...supportingStaffList, ...institutionalStaffList].map(async (f) => {
         const profile = await getOrCreateProfile(db, session.collegeId, f.userUid!);
         return {
           uid: f.userUid!,

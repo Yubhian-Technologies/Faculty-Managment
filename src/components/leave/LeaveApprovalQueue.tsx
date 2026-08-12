@@ -132,6 +132,11 @@ export function LeaveApprovalQueue() {
                       <Badge variant="secondary">
                         {isOtherRequest ? "Other" : LEAVE_TYPE_LABELS[r.leaveTypeCode!]}
                       </Badge>
+                      {r.extendsRequestId && (
+                        <Badge variant="outline" title="This extends a leave that was already approved">
+                          Extension
+                        </Badge>
+                      )}
                       {isOtherRequest && !isHodOtherDecision && r.isPaidLeave !== undefined && (
                         <Badge variant={r.isPaidLeave ? "approved" : "modified"}>
                           {r.isPaidLeave ? "Paid" : "Unpaid"}

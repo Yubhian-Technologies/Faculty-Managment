@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
-import { Plus, ChevronRight, History } from "lucide-react";
+import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode } from "@/types/leave";
 
@@ -148,10 +148,26 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
           )}
         </div>
         {applyHref && (
-          applyBlockedReason ? (
+          // Currently on leave (already started, not just approved for a
+          // future date) - offer "Extend Leave" instead of a dead-end
+          // disabled button. Common for Sick Leave especially (you often
+          // don't know your return date until you're already out), but not
+          // restricted to it - any ongoing approved leave can be extended.
+          // It submits as a brand-new request through the same
+          // HOD/Principal/Management approval chain as any other request -
+          // see applications/route.ts POST - just tagged with which request
+          // it extends for the approver's context.
+          isOngoingLeave && unfinishedApprovedLeave ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`${applyHref}?extend=${unfinishedApprovedLeave.id}`}>
+                <CalendarPlus className="h-4 w-4 mr-1" />
+                Extend Leave
+              </Link>
+            </Button>
+          ) : applyBlockedReason ? (
             <Button size="sm" disabled title={applyBlockedReason}>
               <Plus className="h-4 w-4 mr-1" />
-              {unfinishedApprovedLeave ? (isOngoingLeave ? "On Leave" : "Leave Scheduled") : "Request Pending"}
+              {unfinishedApprovedLeave ? "Leave Scheduled" : "Request Pending"}
             </Button>
           ) : (
             <Button asChild size="sm">
@@ -255,9 +271,12 @@ export function LeaveHistoryRow({ request }: { request: LeaveRequest }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">
-        <p className="text-sm font-medium">
+        <p className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
           {request.isOtherRequest && !request.leaveTypeCode ? "Other" : LEAVE_TYPE_LABELS[request.leaveTypeCode!] ?? request.leaveTypeCode}
-          <span className="text-muted-foreground font-normal"> &middot; {request.totalDays} day(s)</span>
+          <span className="text-muted-foreground font-normal">&middot; {request.totalDays} day(s)</span>
+          {request.extendsRequestId && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">Extension</Badge>
+          )}
         </p>
         <p className="text-xs text-muted-foreground mt-0.5">
           {formatDate(request.fromDate)} - {formatDate(request.toDate)}

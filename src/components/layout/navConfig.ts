@@ -79,15 +79,18 @@ export const NAV_ITEMS: NavItem[] = [
   // Placement Department
   { label: "Dashboard", href: "/placement-dept", iconName: "LayoutDashboard", roles: ["PLACEMENT_DEPT"] },
   { label: "My Profile", href: "/placement-dept/profile", iconName: "UserCircle", roles: ["PLACEMENT_DEPT"], section: "Personal" },
+  { label: "My Leave", href: "/placement-dept/leave", iconName: "CalendarClock", roles: ["PLACEMENT_DEPT"] },
 
   // Library
   { label: "Dashboard", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
   { label: "My Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"], section: "Personal" },
+  { label: "My Leave", href: "/library/leave", iconName: "CalendarClock", roles: ["LIBRARY"] },
 
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
   { label: "My Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"], section: "Personal" },
+  { label: "My Leave", href: "/exam-cell/leave", iconName: "CalendarClock", roles: ["EXAM_CELL"] },
 
   // Location Dept Head
   { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
@@ -253,6 +256,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Hiring" },
   { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"], section: "Accounts" },
   { label: "My Profile", href: "/webmaster/profile", iconName: "UserCircle", roles: ["WEBMASTER"], section: "Personal" },
+  { label: "My Leave", href: "/webmaster/leave", iconName: "CalendarClock", roles: ["WEBMASTER"] },
 
   // Purchase Department
   { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
@@ -263,6 +267,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "By Goods / Non-Goods", href: "/purchase/by-type", iconName: "PackageCheck", roles: ["PURCHASE_DEPT"] },
   { label: "Browse by Location", href: "/purchase/browse", iconName: "MapPin", roles: ["PURCHASE_DEPT"], section: "Organization" },
   { label: "My Profile", href: "/purchase/profile", iconName: "UserCircle", roles: ["PURCHASE_DEPT"], section: "Personal" },
+  { label: "My Leave", href: "/purchase/leave", iconName: "CalendarClock", roles: ["PURCHASE_DEPT"] },
 ];
 
 export function getNavItemsForRole(role: UserRole): NavItem[] {
