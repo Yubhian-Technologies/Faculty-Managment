@@ -114,15 +114,21 @@ export async function POST(request: Request) {
       sectionId?: string; // required when role === "CLASS_LEADER" - the Section this login is bound to
       academicProfile?: Record<string, unknown>;
       profilePhotoUrl?: string;
+      // yyyy-mm-dd - see FMSUser.dateOfJoining. Not required for CLASS_LEADER
+      // (a rotating student-rep login, not a real staff hire).
+      dateOfJoining?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, sectionId } = body;
+    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, sectionId, dateOfJoining } = body;
 
     if (!email || !password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     if (role !== "CLASS_LEADER" && !name) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    if (dateOfJoining && Number.isNaN(new Date(dateOfJoining).getTime())) {
+      return NextResponse.json({ error: "Invalid dateOfJoining" }, { status: 400 });
     }
     if (role === "CLASS_LEADER" && !sectionId) {
       return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -236,6 +242,7 @@ export async function POST(request: Request) {
         ...(body.phone ? { phone: body.phone } : {}),
         role,
         department: resolvedDepartment,
+        ...(dateOfJoining ? { dateOfJoining: new Date(dateOfJoining) } : {}),
         ...(body.staffType ? { staffType: body.staffType } : {}),
         ...(designation ? { designation } : {}),
         ...(role === "CLASS_LEADER" ? { sectionId, sectionName: sectionData?.name ?? "" } : {}),

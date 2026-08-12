@@ -22,25 +22,66 @@ const LOCKED_KEYS = ["department", "section", "year"];
 // college's intake, across every department, in one go.
 
 // The Office only knows a fresh student's basic details and which branch
-// (department) they're admitted into - not their roll number or section. Those
-// are assigned later by the department (the sub-HOD divides students into
-// sections; roll numbers follow), so they're deliberately NOT columns here.
+// (department) they're admitted into - section is still assigned later by the
+// department (the sub-HOD divides students into sections), so it's
+// deliberately NOT a column here (see LOCKED_KEYS above for the one case
+// where it's already known). Roll Number IS accepted, but only as an
+// optional admission-office reference (e.g. a provisional number from the
+// admissions sheet) - it's not validated for department/section uniqueness
+// until the department later assigns the real one.
+//
+// "Course" and "Branch" are both accepted as alternate headers for the same
+// Department column - this app doesn't model a separate "Course" (e.g.
+// B.Tech) field, since a college's set of courses is already implied by its
+// college type. Photo is not collected via this import at all - there is no
+// bulk-upload path for an image asset; it would need its own per-student
+// feature.
 const COLUMNS = [
   { key: "sno",             label: "S.No",             required: false, sample: "1" },
   { key: "name",            label: "Name",             required: true,  sample: "P. Sai Kumar", aliases: ["Student Name", "Full Name"] },
-  { key: "department",      label: "Department",       required: true,  sample: "IT", aliases: ["Dept", "Department Code", "Branch"] },
+  { key: "department",      label: "Department",       required: true,  sample: "IT", aliases: ["Dept", "Department Code", "Branch", "Course"] },
   { key: "year",            label: "Academic Year",    required: true,  sample: "1", aliases: ["Year"] },
+  { key: "semester",        label: "Semester",         required: false, sample: "1st Semester", aliases: ["Sem"] },
+  { key: "rollNumber",      label: "Roll No",          required: false, sample: "", aliases: ["Roll Number"] },
+  { key: "admissionNo",     label: "Admission No",     required: false, sample: "" },
+  { key: "hallTicketNo",    label: "Hall Ticket No",   required: false, sample: "" },
+  { key: "dateOfAdmission", label: "Date of Admission (YYYY-MM-DD)", required: false, sample: "2026-06-01" },
+  { key: "admissionType",   label: "Admission Type",   required: false, sample: "Direct" },
+  { key: "entranceType",    label: "Entrance Type",    required: false, sample: "EAMCET" },
+  { key: "entranceRank",    label: "Entrance Rank",    required: false, sample: "" },
+  { key: "seatType",        label: "Seat Type",        required: false, sample: "Convenor" },
+  { key: "scholarship",     label: "Scholarship (Yes/No)", required: false, sample: "No" },
   { key: "gender",          label: "Gender",           required: false, sample: "Male" },
   { key: "dateOfBirth",     label: "Date of Birth (YYYY-MM-DD)", required: false, sample: "2004-08-12", aliases: ["DOB", "Date of Birth"] },
+  { key: "bloodGroup",      label: "Blood Group",      required: false, sample: "O+" },
+  { key: "religion",        label: "Religion",         required: false, sample: "Hindu" },
+  { key: "category",        label: "Category",         required: false, sample: "OC" },
+  { key: "nationality",     label: "Nationality",      required: false, sample: "Indian" },
+  { key: "motherTongue",    label: "Mother Tongue",    required: false, sample: "Telugu" },
   { key: "guardianContact", label: "Guardian Contact", required: false, sample: "9876543210", aliases: ["Parent Contact", "Guardian Phone", "Parent Phone"] },
+  { key: "mobileNo",        label: "Student Mobile No", required: false, sample: "9876543210" },
+  { key: "landLineNo",      label: "Land Line No",     required: false, sample: "" },
   { key: "email",           label: "Email",            required: false, sample: "sai@gmail.com", aliases: ["Email ID"] },
+  { key: "aadharNo",        label: "Aadhar Card No.",  required: false, sample: "", aliases: ["Aadhar No"] },
+  { key: "rationCardNo",    label: "Ration Card No",   required: false, sample: "" },
+  { key: "bankAccountNo",   label: "Student Bank A/C No.", required: false, sample: "" },
+  { key: "lastAttendedInstitution", label: "Last Attended Institution", required: false, sample: "" },
+  { key: "distanceFromResidenceKm", label: "Distance From Res. To College (km)", required: false, sample: "" },
+  { key: "hosteller",       label: "Hosteller (Yes/No)", required: false, sample: "No" },
+  { key: "physicallyHandicapped", label: "Physically Handicapped (Yes/No)", required: false, sample: "No" },
+  { key: "handicappedType", label: "If Yes (Handicapped) - H/V/O", required: false, sample: "" },
+  { key: "identificationMarks", label: "Identification Marks", required: false, sample: "" },
+  { key: "remarks",         label: "Remarks",          required: false, sample: "" },
 ];
 
 const HINTS = [
-  "Only the basic details you know at admission are needed - Name, Department (branch) and Academic Year are required; Gender, Date of Birth, Guardian Contact and Email are optional.",
-  "Roll number and section are NOT collected here - the department assigns them later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\".",
-  "Department accepts either the full name (e.g. \"Information Technology\") or the short Code (e.g. \"IT\")",
+  "Only the basic details you know at admission are needed - Name, Department (branch) and Academic Year are required; everything else is optional.",
+  "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then. Roll No, if you already have a provisional one, is accepted but not checked for uniqueness until the department assigns the real one.",
+  "Department accepts either the full name (e.g. \"Information Technology\") or the short Code (e.g. \"IT\") - a \"Course\" or \"Branch\" column in your sheet is read the same way.",
   "A single file may mix multiple departments and years",
+  "Gender: Male, Female, Other. Scholarship / Hosteller / Physically Handicapped: Yes or No.",
+  "If Yes (Handicapped) accepts H (Hearing), V (Visual) or O (Other).",
+  "Photo is not part of this import - there's no bulk photo-upload path.",
 ];
 
 type ParsedRow = Record<string, string>;

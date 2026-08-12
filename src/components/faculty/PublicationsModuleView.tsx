@@ -7,20 +7,46 @@ import type { FacultyProfileFields, ResearchPublication } from "@/types";
 
 const PREVIEW_COUNT = 3;
 
+// Bibliometric/report fields (from R&D's import) are only shown when
+// present, so older hand-entered records don't sprout a wall of "-".
 function PublicationRow({ pub }: { pub: ResearchPublication }) {
+  const extras: { label: string; value: string | number | undefined }[] = [
+    { label: "Dept.", value: pub.department },
+    { label: "Author Position", value: pub.authorPosition },
+    { label: "Indexed", value: pub.indexing },
+    { label: "Journal / Conference / Book Chapter", value: pub.venueType },
+    { label: "Faculty / Student", value: pub.facultyOrStudent },
+    { label: "Impact Factor", value: pub.impactFactor },
+    { label: "SJR", value: pub.sjr },
+    { label: "Quartile", value: pub.quartile },
+    { label: "ISBN / ISSN", value: pub.isbnIssn },
+  ].filter((f) => f.value !== undefined && f.value !== "");
+
   return (
-    <div className="rounded-md border bg-muted/20 shadow-sm p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
-      <Field label="Title" value={pub.title} />
-      <Field label="Co-Authors" value={pub.coAuthors} />
-      <Field label="Journal / Conference" value={pub.journalOrConference} />
-      <Field label="Year" value={pub.publicationYear} />
-      <Field label="Indexing" value={pub.indexing} />
+    <div className="rounded-md border bg-muted/20 shadow-sm p-2 space-y-2">
+      {pub.citation ? (
+        // "Publication Details" - the full citation, exactly as imported -
+        // is the primary, display-ready version of this record.
+        <p className="text-sm leading-snug">{pub.citation}</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Field label="Title" value={pub.title} />
+          <Field label="Co-Authors" value={pub.coAuthors} />
+          <Field label="Journal / Conference" value={pub.journalOrConference} />
+          <Field label="Year" value={pub.publicationYear} />
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {pub.citation && <Field label="Year" value={pub.publicationYear} />}
+        {pub.citation && <Field label="Journal / Conference" value={pub.journalOrConference} />}
+        {extras.map((f) => <Field key={f.label} label={f.label} value={f.value} />)}
+      </div>
       {pub.driveLink && (
         <a
           href={pub.driveLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="col-span-2 sm:col-span-5 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
           <ExternalLink className="h-3.5 w-3.5" />View Publication
         </a>

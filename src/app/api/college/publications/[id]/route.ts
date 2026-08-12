@@ -39,10 +39,20 @@ export async function PATCH(
     const body = (await request.json()) as Partial<{
       title: string;
       coAuthors: string;
+      citation: string;
       journalOrConference: string;
       publicationYear: number;
       indexing: string;
       driveLink: string;
+      // Extra report fields - see ResearchPublication (src/types/core.ts).
+      department: string;
+      authorPosition: string;
+      venueType: string;
+      facultyOrStudent: string;
+      impactFactor: string;
+      sjr: string;
+      quartile: string;
+      isbnIssn: string;
     }>;
 
     const db = getAdminDb();
@@ -55,9 +65,18 @@ export async function PATCH(
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.title !== undefined) updates.title = body.title;
     if (body.coAuthors !== undefined) updates.coAuthors = body.coAuthors;
+    if (body.citation !== undefined) updates.citation = body.citation;
     if (body.journalOrConference !== undefined) updates.journalOrConference = body.journalOrConference;
     if (body.publicationYear !== undefined) updates.publicationYear = body.publicationYear;
     if (body.indexing !== undefined) updates.indexing = body.indexing;
+    if (body.department !== undefined) updates.department = body.department;
+    if (body.authorPosition !== undefined) updates.authorPosition = body.authorPosition;
+    if (body.venueType !== undefined) updates.venueType = body.venueType;
+    if (body.facultyOrStudent !== undefined) updates.facultyOrStudent = body.facultyOrStudent;
+    if (body.impactFactor !== undefined) updates.impactFactor = body.impactFactor;
+    if (body.sjr !== undefined) updates.sjr = body.sjr;
+    if (body.quartile !== undefined) updates.quartile = body.quartile;
+    if (body.isbnIssn !== undefined) updates.isbnIssn = body.isbnIssn;
     if (body.driveLink !== undefined) updates.driveLink = body.driveLink;
 
     await ref.update(updates);

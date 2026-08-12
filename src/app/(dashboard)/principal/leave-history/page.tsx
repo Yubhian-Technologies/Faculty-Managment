@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { ActiveLeaveNowCard } from "@/components/leave/ActiveLeaveNowCard";
 import { NON_DEPARTMENTAL_STAFF_ROLES } from "@/lib/leave/nonDepartmentalStaffRoles";
 import { ROLE_LABELS } from "@/types";
 import type { Department } from "@/types";
@@ -41,6 +42,8 @@ export default function PrincipalLeaveHistoryDepartmentsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Leave History" description="Select a department to view its leave register" />
+
+      <ActiveLeaveNowCard />
 
       {/* College-wide roles (Vice Principal, College Office, Dean, IQAC, T&P,
           R&D, Library, Exam Cell, Webmaster) never belong to a department -

@@ -15,7 +15,8 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D"
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const targetUid = new URL(request.url).searchParams.get("uid") || session.uid;
 
@@ -45,14 +46,14 @@ export async function GET(request: Request) {
   }
 }
 
-// HOD (own dept) / Principal / Vice Principal override an auto-derived
-// profile - e.g. correcting isTeachingStaff/dateOfJoining, or manually
-// re-categorizing vacation <-> non-vacation. Every profile already exists by
-// the time this is reachable (GET/the roster auto-create it) - this is a
-// pure edit, never a required setup step.
+// HOD (own dept) / Principal / Vice Principal / College Office override an
+// auto-derived profile - e.g. correcting isTeachingStaff/dateOfJoining, or
+// manually re-categorizing vacation <-> non-vacation. Every profile already
+// exists by the time this is reachable (GET/the roster auto-create it) -
+// this is a pure edit, never a required setup step.
 export async function PUT(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
     const body = (await request.json()) as {
       uid?: string;
       staffCategory?: StaffCategory;

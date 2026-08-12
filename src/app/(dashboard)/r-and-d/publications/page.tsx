@@ -72,6 +72,12 @@ export default function RAndDPublicationsPage() {
       render: (row) => <span className="text-sm text-muted-foreground">{row.indexing || "-"}</span>,
     },
     {
+      key: "venueType",
+      header: "Type",
+      hideOnMobile: true,
+      render: (row) => <span className="text-sm text-muted-foreground">{row.venueType || "-"}</span>,
+    },
+    {
       key: "actions",
       header: "",
       render: (row) => (

@@ -63,12 +63,16 @@ export async function POST(request: Request) {
       password: string;
       role: string;
       collegeId: string;
+      dateOfJoining?: string; // yyyy-mm-dd - see FMSUser.dateOfJoining
     };
 
-    const { name, email, password, role, collegeId } = body;
+    const { name, email, password, role, collegeId, dateOfJoining } = body;
 
-    if (!name || !email || !password || !collegeId || !role) {
+    if (!name || !email || !password || !collegeId || !role || !dateOfJoining) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    if (Number.isNaN(new Date(dateOfJoining).getTime())) {
+      return NextResponse.json({ error: "Invalid dateOfJoining" }, { status: 400 });
     }
 
     if (!COLLEGE_STAFF_ROLES.includes(role)) {
@@ -118,6 +122,7 @@ export async function POST(request: Request) {
     await db.collection("colleges").doc(collegeId).collection("users").doc(uid).set({
       uid, collegeId, name, email, role,
       department: "",
+      dateOfJoining: new Date(dateOfJoining),
       isActive: true, createdAt: now, updatedAt: now,
     });
 
