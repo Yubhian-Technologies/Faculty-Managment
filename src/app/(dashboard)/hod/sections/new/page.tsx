@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
+import { findBranchManager, managerTeachingYears } from "@/lib/departments/managedBranches";
 import type { Course, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -26,7 +27,6 @@ function ordinalYear(year: number) {
 
 type SectionForm = {
   courseId: string;
-  name: string;
   year: string;
   batch: string;
   facultyInchargeUid: string;
@@ -44,7 +44,6 @@ export default function NewSectionPage() {
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [form, setForm] = useState<SectionForm>({
     courseId: prefilledCourseId,
-    name: "",
     year: "",
     batch: "",
     facultyInchargeUid: "",
@@ -130,12 +129,26 @@ export default function NewSectionPage() {
   // over the legacy secondaryDepartments branch mode below - a real branch
   // reached this way already IS the final department, so there's nothing left
   // to pick except the section letter.
-  // The container this section is routed through. Reported by
-  // DepartmentScopeSelect rather than searched for: CIVIL is grouped under
-  // BS-ENGLISH *and* reachable straight from Basic Science, so searching for
-  // "who manages CIVIL" always answered BS-ENGLISH and named every such section
-  // BSE-CIVIL-B even when it was created from Basic Science directly. Falls
-  // back to the search for any caller that doesn't report one.
+  //
+  // Gated on `departmentName` (an explicit DepartmentScopeSelect pick) rather
+  // than a blanket "is this department managed by anyone, anywhere" check on
+  // activeDept alone - CSE's own dedicated HOD lands here with departmentName
+  // still "" (their own department used directly, no cascade shown at all),
+  // and must see CSE's own assignedYears even if some sub-department
+  // elsewhere ALSO manages CSE for a shared year. Only a caller who actually
+  // picked their way through the cascade (departmentName set) is in
+  // managed-branch mode.
+  const branchManager = useMemo(
+    () => (departmentName && activeDept ? findBranchManager(departments, activeDept.name) : null),
+    [departmentName, activeDept, departments]
+  );
+
+  // Which container the cascade actually routed through, as reported by
+  // DepartmentScopeSelect. It takes priority over the search above, because
+  // searching can't distinguish the two routes to the same branch: CIVIL is
+  // grouped under BS-ENGLISH *and* reachable straight from Basic Science, so
+  // "who manages CIVIL" always answers BS-ENGLISH and named every such section
+  // BSE-CIVIL-B even when it was created from Basic Science directly.
   const viaDept = useMemo(
     () => (viaDepartmentId ? departments.find((d) => d.id === viaDepartmentId) ?? null : null),
     [departments, viaDepartmentId]
@@ -143,23 +156,21 @@ export default function NewSectionPage() {
   const managingDept = useMemo(() => {
     if (!activeDept) return null;
     // Routed through itself - the department IS the target, not a container
-    // feeding one, so there's no branch relationship to name.
+    // feeding one, so there's no branch relationship and no prefix to add.
     if (viaDept) return viaDept.id === activeDept.id ? null : viaDept;
-    return departments.find((d) => (d.managedDepartments ?? []).includes(activeDept.name)) ?? null;
-  }, [departments, activeDept, viaDept]);
+    return branchManager?.department ?? null;
+  }, [activeDept, viaDept, branchManager]);
   const isManagedBranchMode = managingDept !== null;
   // The managing sub-department (or, if it has none of its own, its parent
   // common department) is where "Years Taught" for this shared year actually
   // lives - a real branch's own assignedYears (e.g. CIVIL's [2,3,4]) never
   // includes the shared first year on its own.
-  const managingYears = useMemo(() => {
-    if (!managingDept) return [] as number[];
-    if ((managingDept.assignedYears?.length ?? 0) > 0) return managingDept.assignedYears ?? [];
-    if (managingDept.parentDepartmentId) {
-      return departments.find((d) => d.id === managingDept.parentDepartmentId)?.assignedYears ?? [];
-    }
-    return [];
-  }, [managingDept, departments]);
+  // Computed from the manager actually in force rather than branchManager's own
+  // years, since viaDept may have overridden which department that is.
+  const managingYears = useMemo(
+    () => (managingDept ? managerTeachingYears(departments, managingDept) : []),
+    [managingDept, departments]
+  );
   // Derived section name: the managing sub-department's own code (e.g.
   // "BS-ENGLISH" - already self-describing, since sub-department codes are set
   // to read as their parent's shared-year structure) + the real branch's code
@@ -211,38 +222,18 @@ export default function NewSectionPage() {
   const derivedName = branch && letter
     ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(branch)}-${letter.trim().toUpperCase()}`
     : "";
-
-  // Own-department mode: the section belongs to this department itself, with no
-  // branch involved - named "{code}-{letter}" (BS-A), not free-typed. Only for
-  // departments that are part of a tree (have sub-departments, are one, or group
-  // branches), because those are the ones whose sections sit alongside derived
-  // names like BS-CIVIL-B and would otherwise be the odd one out. An ordinary
-  // standalone department keeps the free-text box it has always had.
-  const isOwnLetterMode =
-    !isManagedBranchMode && !isBranchMode && !!activeDept &&
-    (Boolean(activeDept.hasSubDepartments) ||
-      !!activeDept.parentDepartmentId ||
-      (activeDept.managedDepartments?.length ?? 0) > 0);
-  const ownLetterName = `${ownerCode || activeDeptName}-${letter.trim().toUpperCase()}`;
-
-  // Both derive "prefix(es) + letter", so they share one block of form fields.
-  const isLetterMode = isManagedBranchMode || isOwnLetterMode;
-  const letterModeName = isManagedBranchMode ? managedBranchName : ownLetterName;
-  const letterModePlaceholder = isManagedBranchMode
-    ? `e.g. ${managingDept?.code?.trim() ? `${managingDept.code.trim()}-` : ""}${activeDept?.code || "CIVIL"}-A`
-    : `e.g. ${ownerCode || "BS"}-A`;
+  // Plain mode: this department's own code + letter, e.g. CSE's own dedicated
+  // HOD creating a 2nd-year section gets "CSE-A" - no shared-structure prefix,
+  // since this department owns every year it's creating a section for directly.
+  const plainDerivedName = `${activeDept?.code?.trim() || activeDeptName}-${letter.trim().toUpperCase()}`;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.courseId) { toast({ variant: "destructive", title: "Course is required" }); return; }
-    if (isLetterMode) {
-      if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
-    } else if (isBranchMode) {
-      if (!branch) { toast({ variant: "destructive", title: "Branch is required" }); return; }
-      if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
-    } else if (!form.name.trim()) {
-      toast({ variant: "destructive", title: "Section name is required" }); return;
+    if (isBranchMode && !isManagedBranchMode && !branch) {
+      toast({ variant: "destructive", title: "Branch is required" }); return;
     }
+    if (!letter.trim()) { toast({ variant: "destructive", title: "Section letter is required (e.g. A, B)" }); return; }
     if (!form.year) { toast({ variant: "destructive", title: "Year is required" }); return; }
     if (!form.batch.trim()) { toast({ variant: "destructive", title: "Batch is required (e.g. 2023-2027)" }); return; }
 
@@ -252,8 +243,8 @@ export default function NewSectionPage() {
     // Legacy branch mode: name carries the owning (common) department's prefix
     // too, and the chosen branch is sent as the section's secondary department
     // so its students inherit it and auto-promote into that branch later.
-    // Otherwise: whatever the HOD typed.
-    const sectionName = isLetterMode ? letterModeName : isBranchMode ? derivedName : form.name;
+    // Otherwise (plain): this department's own code + letter.
+    const sectionName = isManagedBranchMode ? managedBranchName : isBranchMode ? derivedName : plainDerivedName;
 
     setSaving(true);
     try {
@@ -324,13 +315,13 @@ export default function NewSectionPage() {
               </Select>
             </div>
 
-            {isLetterMode ? (
+            {isManagedBranchMode ? (
               <>
-                {/* Either the cascade above resolved a real branch (e.g. CIVIL)
-                    and only the letter is left - the name carrying the code of
-                    whichever container it was routed through, "BS-CIVIL-B" from
-                    Basic Science or "BSE-CIVIL-B" via BS-ENGLISH - or the target
-                    is a tree department itself, named "BS-A". */}
+                {/* The cascade above already resolved the real branch (e.g.
+                    CIVIL) - all that's left is the letter. The name carries the
+                    code of whichever container it was routed through:
+                    "BS-CIVIL-B" straight from Basic Science, "BSE-CIVIL-B" via
+                    BS-ENGLISH. */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Section Letter *</Label>
@@ -344,8 +335,8 @@ export default function NewSectionPage() {
                     <p className="text-xs text-muted-foreground">
                       Section name will be{" "}
                       {letter.trim()
-                        ? <strong className="text-foreground">{letterModeName}</strong>
-                        : letterModePlaceholder}
+                        ? <strong className="text-foreground">{managedBranchName}</strong>
+                        : `e.g. ${managingDept?.code?.trim() ? `${managingDept.code.trim()}-` : ""}${activeDept?.code || "CIVIL"}-A`}
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -410,15 +401,20 @@ export default function NewSectionPage() {
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Section Name *</Label>
+                  <Label>Section Letter *</Label>
                   <Input
-                    value={form.name}
-                    onChange={(e) => setF({ name: e.target.value.toUpperCase() })}
-                    placeholder="A, B, C…"
-                    maxLength={5}
+                    value={letter}
+                    onChange={(e) => setLetter(e.target.value.toUpperCase())}
+                    placeholder="A, B…"
+                    maxLength={2}
                     className="uppercase"
                   />
-                  <p className="text-xs text-muted-foreground">e.g. A, B, C or CS-A</p>
+                  <p className="text-xs text-muted-foreground">
+                    Section name will be{" "}
+                    {letter.trim()
+                      ? <strong className="text-foreground">{plainDerivedName}</strong>
+                      : `e.g. ${activeDept?.code || "CSE"}-A`}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Year *</Label>
