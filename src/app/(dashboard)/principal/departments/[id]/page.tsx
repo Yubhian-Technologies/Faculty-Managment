@@ -220,8 +220,20 @@ export default function DepartmentDetailPage() {
                   // Year-1 timing/academic-year row it can never use. When no
                   // years are assigned yet, fall back to the full course span so
                   // the department isn't left with nothing to configure.
+                  //
+                  // A sub-department inherits its parent's years before that
+                  // fallback applies. It borrows the parent's course rather than
+                  // owning one (see getRelatedDepartmentIds), so it runs that
+                  // course over the parent's span, not the catalogue's full
+                  // duration - and it can never have years of its own to state,
+                  // because college/departments POST strips assignedYears from
+                  // anything an HOD creates (years are Principal territory).
+                  // Without this a shared first-year department's children each
+                  // advertised all 4 years of a B.Tech the parent runs year 1 of.
+                  // Same own-then-parent fallback the HOD sections pages use.
                   const allYears = Array.from({ length: c.durationYears }, (_, i) => i + 1);
-                  const assigned = department?.assignedYears ?? [];
+                  const ownYears = department?.assignedYears ?? [];
+                  const assigned = ownYears.length > 0 ? ownYears : parentDepartment?.assignedYears ?? [];
                   const years = assigned.length > 0 ? allYears.filter((y) => assigned.includes(y)) : allYears;
                   return (
                     <div key={c.id} className="rounded-lg border p-3 space-y-3">
@@ -230,6 +242,16 @@ export default function DepartmentDetailPage() {
                           <Badge variant="secondary" className="text-xs font-mono mb-1">{c.code}</Badge>
                           <p className="font-semibold text-sm">{c.name}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{c.durationYears} year{c.durationYears !== 1 ? "s" : ""}</p>
+                          {/* The programme's own length stays above - a B.Tech
+                              is 4 years wherever it appears. This says which
+                              slice of it THIS department runs, which is the part
+                              that differs between a shared first-year parent and
+                              the branches that continue the course. */}
+                          {years.length > 0 && years.length < c.durationYears && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Runs year{years.length !== 1 ? "s" : ""} {years.join(", ")} here
+                            </p>
+                          )}
                         </div>
                         {!isSubDepartment && (
                           <div className="flex gap-1 shrink-0">
