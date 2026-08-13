@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { countEntered } from "@/lib/exams/internalExamMarks";
+import { countEntered, examConfigId } from "@/lib/exams/internalExamMarks";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
 import type { ExamConfiguration, InternalExamMarkEntry, InternalExamMarksBatch, Section, StudentRecord, TeachingAssignment } from "@/types";
@@ -15,9 +15,10 @@ import type { ExamConfiguration, InternalExamMarkEntry, InternalExamMarksBatch, 
 // regardless of status, so the dashboard can also surface a "Pending" (not
 // yet submitted) count — they still can't act on a DRAFT batch since editing
 // is gated to status === 'SUBMITTED' in the PATCH handler either way.
-// Each batch is enriched with its subject's courseId/courseName (read from
-// the Exam Cell's ExamConfiguration, which every batch requires to exist) so
-// callers can filter/display by Course without a schema change to the batch.
+// Every batch created after courseId/courseName were added to
+// InternalExamMarksBatch already carries them; only a batch saved before that
+// (or from a semester-scoped assignment) needs the teachingAssignments
+// fallback below.
 export async function GET() {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
@@ -40,21 +41,21 @@ export async function GET() {
     const snap = await query.get();
     const rawBatches = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InternalExamMarksBatch));
 
-    const subjectIds = [...new Set(rawBatches.map((b) => b.subjectId))];
-    const configSnaps = await Promise.all(
-      subjectIds.map((sid) => collegeRef.collection("examConfigurations").doc(sid).get())
+    const legacyAssignmentIds = [...new Set(rawBatches.filter((b) => !b.courseId).map((b) => b.assignmentId))];
+    const legacySnaps = await Promise.all(
+      legacyAssignmentIds.map((aid) => collegeRef.collection("teachingAssignments").doc(aid).get())
     );
-    const courseBySubjectId = new Map(
-      configSnaps
+    const legacyByAssignmentId = new Map(
+      legacySnaps
         .filter((s) => s.exists)
         .map((s) => {
-          const c = s.data() as ExamConfiguration;
-          return [s.id, { courseId: c.courseId, courseName: c.courseName }];
+          const a = s.data() as TeachingAssignment;
+          return [s.id, { courseId: a.courseId ?? "", courseName: a.courseName ?? "" }];
         })
     );
 
     const batches = rawBatches
-      .map((b) => ({ ...b, ...(courseBySubjectId.get(b.subjectId) ?? { courseId: "", courseName: "" }) }))
+      .map((b) => (b.courseId ? b : { ...b, ...(legacyByAssignmentId.get(b.assignmentId) ?? { courseId: "", courseName: "" }) }))
       .sort((a, b) => (a.subjectName ?? "").localeCompare(b.subjectName ?? ""));
 
     return NextResponse.json({ batches });
@@ -94,23 +95,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You are not assigned to teach this subject" }, { status: 403 });
     }
 
-    // The Exam Cell's configuration for this subject is the single source of
-    // truth for what "internal marks" means here — no config, no marks entry.
-    const configSnap = await collegeRef.collection("examConfigurations").doc(assignment.subjectId).get();
-    if (!configSnap.exists) {
-      return NextResponse.json(
-        { error: "This subject's internal exam has not been configured yet. Contact your Exam Cell." },
-        { status: 404 }
-      );
-    }
-    const config = { id: configSnap.id, ...configSnap.data() } as ExamConfiguration;
-    if (config.status !== "ACTIVE") {
-      return NextResponse.json(
-        { error: "This subject's internal exam configuration is currently inactive. Contact your Exam Cell." },
-        { status: 404 }
-      );
-    }
-
     // Two independent teachingAssignments shapes (see TeachingAssignment):
     // course/section-scoped ones link to a real Section doc; semester-scoped
     // ones (HOD's "Teaching Assignments" page) only carry a free-text section
@@ -130,6 +114,32 @@ export async function POST(request: Request) {
       year = section.year;
     } else {
       sectionName = assignment.section?.trim() || "Section";
+    }
+
+    // The Exam Cell's configuration for this course+year (shared by every
+    // subject taught under it) is the single source of truth for what
+    // "internal marks" means here — no config, no marks entry. A semester-
+    // scoped assignment has no courseId/year to resolve one by (it was never
+    // reachable from the Exam Cell's Course→Year→Branch selector either).
+    if (!assignment.courseId || year == null) {
+      return NextResponse.json(
+        { error: "This subject's internal exam has not been configured yet. Contact your Exam Cell." },
+        { status: 404 }
+      );
+    }
+    const configSnap = await collegeRef.collection("examConfigurations").doc(examConfigId(assignment.courseId, year)).get();
+    if (!configSnap.exists) {
+      return NextResponse.json(
+        { error: "This course/year/branch's internal exam has not been configured yet. Contact your Exam Cell." },
+        { status: 404 }
+      );
+    }
+    const config = { id: configSnap.id, ...configSnap.data() } as ExamConfiguration;
+    if (config.status !== "ACTIVE") {
+      return NextResponse.json(
+        { error: "This course/year/branch's internal exam configuration is currently inactive. Contact your Exam Cell." },
+        { status: 404 }
+      );
     }
 
     // One batch per assignment (== per faculty+section+subject) — the config
@@ -171,6 +181,8 @@ export async function POST(request: Request) {
         ...(sectionId ? { sectionId } : {}),
         sectionName,
         ...(year != null ? { year } : {}),
+        courseId: assignment.courseId,
+        courseName: assignment.courseName ?? "",
         subjectId: assignment.subjectId,
         subjectName: assignment.subjectName,
         subjectCode: assignment.subjectCode,

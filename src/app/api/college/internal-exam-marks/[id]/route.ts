@@ -3,9 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { countEntered } from "@/lib/exams/internalExamMarks";
+import { countEntered, resolveExamConfigForBatch } from "@/lib/exams/internalExamMarks";
 import { resolveUserName } from "@/lib/budget/departmentScope";
-import type { ExamConfiguration, InternalExamMarkEntry, InternalExamMarksBatch } from "@/types";
+import type { InternalExamMarkEntry, InternalExamMarksBatch } from "@/types";
 
 const PRINCIPAL_TIER_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"];
 
@@ -52,18 +52,18 @@ export async function PATCH(
       }
     }
 
-    // The Exam Cell's configuration is re-fetched live on every save — it's
-    // the single source of truth for which components exist and their
-    // maximums, so a stale client can never write a value the current
-    // configuration wouldn't allow.
-    const configSnap = await collegeRef.collection("examConfigurations").doc(existing.subjectId).get();
-    if (!configSnap.exists) {
+    // The Exam Cell's configuration (shared by every subject in this course+
+    // year) is re-fetched live on every save — it's the single source of
+    // truth for which components exist and their maximums, so a stale client
+    // can never write a value the current configuration wouldn't allow.
+    const resolved = await resolveExamConfigForBatch(db, collegeRef, existing);
+    if (!resolved) {
       return NextResponse.json(
-        { error: "This subject's internal exam configuration is no longer available. Contact your Exam Cell." },
+        { error: "This course/year/branch's internal exam configuration is no longer available. Contact your Exam Cell." },
         { status: 404 }
       );
     }
-    const config = { id: configSnap.id, ...configSnap.data() } as ExamConfiguration;
+    const { config } = resolved;
     const componentsById = new Map(config.components.map((c) => [c.id, c]));
 
     let entries: InternalExamMarkEntry[] = existing.entries;
