@@ -54,6 +54,14 @@ export default function NewCandidatePage() {
   const [interviewMode, setInterviewMode] = useState<"OFFLINE" | "ONLINE">("OFFLINE");
   const [sameAddress, setSameAddress] = useState(false);
 
+  const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
+  // An Online vacancy decided its interview mode at creation - every candidate
+  // attached to it follows automatically, no per-candidate choice (the manual
+  // toggle below stays exactly as-is for Offline/unset vacancies).
+  useEffect(() => {
+    if (selectedVacancy?.hiringMode === "ONLINE") setInterviewMode("ONLINE");
+  }, [selectedVacancy?.hiringMode]);
+
   // Resume upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -526,7 +534,14 @@ export default function NewCandidatePage() {
                 </div>
               )}
 
-              {selectedVacancyId && (
+              {selectedVacancyId && selectedVacancy?.hiringMode === "ONLINE" && (
+                <div className="pt-2 flex items-center gap-2 text-sm text-primary">
+                  <Monitor className="h-4 w-4 shrink-0" />
+                  This is an Online hiring request — interview mode is Online for every candidate.
+                </div>
+              )}
+
+              {selectedVacancyId && selectedVacancy?.hiringMode !== "ONLINE" && (
                 <div className="space-y-2 pt-2">
                   <Label>Interview Mode</Label>
                   <div className="grid grid-cols-2 gap-3">

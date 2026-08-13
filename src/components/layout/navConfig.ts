@@ -86,6 +86,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"], section: "Personal" },
   { label: "My Leave", href: "/library/leave", iconName: "CalendarClock", roles: ["LIBRARY"] },
 
+  // College Accounts
+  { label: "Dashboard", href: "/college-accounts", iconName: "LayoutDashboard", roles: ["COLLEGE_ACCOUNTS"] },
+  { label: "Hiring Journey", href: "/college-accounts/hiring", iconName: "FolderOpen", roles: ["COLLEGE_ACCOUNTS"], section: "Hiring" },
+  { label: "Candidates", href: "/college-accounts/candidates", iconName: "UserCog", roles: ["COLLEGE_ACCOUNTS"] },
+  { label: "My Profile", href: "/college-accounts/profile", iconName: "UserCircle", roles: ["COLLEGE_ACCOUNTS"], section: "Personal" },
+  { label: "My Leave", href: "/college-accounts/leave", iconName: "CalendarClock", roles: ["COLLEGE_ACCOUNTS"] },
+
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
@@ -421,6 +428,12 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   LIBRARY: [
     { label: "Home", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
     { label: "Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"] },
+  ],
+  COLLEGE_ACCOUNTS: [
+    { label: "Home", href: "/college-accounts", iconName: "LayoutDashboard", roles: ["COLLEGE_ACCOUNTS"] },
+    { label: "Hiring", href: "/college-accounts/hiring", iconName: "FolderOpen", roles: ["COLLEGE_ACCOUNTS"] },
+    { label: "Candidates", href: "/college-accounts/candidates", iconName: "UserCog", roles: ["COLLEGE_ACCOUNTS"] },
+    { label: "Profile", href: "/college-accounts/profile", iconName: "UserCircle", roles: ["COLLEGE_ACCOUNTS"] },
   ],
   EXAM_CELL: [
     { label: "Home", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },

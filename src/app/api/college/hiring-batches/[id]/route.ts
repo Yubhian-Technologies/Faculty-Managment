@@ -76,6 +76,7 @@ export async function PATCH(
       // HOD finalization
       demoClassroom?: string;
       meetingLink?: string;
+      meetingPlatform?: string;
       coordinatorFacultyId?: string;
       panelMemberUids?: string[];
       applicationIds?: string[];
@@ -179,7 +180,7 @@ export async function PATCH(
     }
 
     if (
-      (body.demoClassroom !== undefined || body.meetingLink !== undefined || body.coordinatorFacultyId !== undefined ||
+      (body.demoClassroom !== undefined || body.meetingLink !== undefined || body.meetingPlatform !== undefined || body.coordinatorFacultyId !== undefined ||
         body.panelMemberUids !== undefined || body.applicationIds !== undefined ||
         body.interviewDate !== undefined || body.interviewTime !== undefined) &&
       !isOwnerHod && !isPrincipalRole
@@ -220,6 +221,7 @@ export async function PATCH(
     // HOD: demo + coordinator (resolved from faculty register)
     if (body.demoClassroom !== undefined) updates.demoClassroom = body.demoClassroom;
     if (body.meetingLink !== undefined) updates.meetingLink = body.meetingLink;
+    if (body.meetingPlatform !== undefined) updates.meetingPlatform = body.meetingPlatform;
     if (body.coordinatorFacultyId !== undefined) {
       const facultySnap = await db
         .collection("colleges")

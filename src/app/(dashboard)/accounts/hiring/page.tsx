@@ -122,6 +122,26 @@ export default function AccountsHiringPage() {
       .catch(() => {});
   }, []);
 
+  // Coordinator contact - best-effort; omit whichever of phone/email is
+  // missing, and skip the whole block if there's no coordinator at all
+  // (matches the same lookup college-office/documents/candidate/[applicationId]/page.tsx uses).
+  async function coordinatorBlockFor(batchId?: string): Promise<string> {
+    if (!batchId) return "";
+    type BatchRes = { batch?: { coordinatorUid?: string; coordinatorName?: string } };
+    type UsersRes = { users?: { uid: string; phone?: string; email?: string }[] };
+    const batchRes = await fetch(`/api/college/hiring-batches/${batchId}`).then((r) => r.json() as Promise<BatchRes>).catch((): BatchRes => ({}));
+    const coordinatorUid = batchRes.batch?.coordinatorUid;
+    if (!coordinatorUid) return "";
+    const usersRes = await fetch("/api/college/users?allDepts=true&includeAll=true").then((r) => r.json() as Promise<UsersRes>).catch((): UsersRes => ({}));
+    const coordinator = (usersRes.users ?? []).find((u) => u.uid === coordinatorUid);
+    const lines = [
+      batchRes.batch?.coordinatorName,
+      coordinator?.phone ? `Phone: ${coordinator.phone}` : "",
+      coordinator?.email ? `Email: ${coordinator.email}` : "",
+    ].filter(Boolean);
+    return lines.length > 0 ? `\nFor any queries, please contact your Interview Coordinator:\n${lines.join("\n")}\n` : "";
+  }
+
   function openForm(c: DecisionCandidateView) {
     setSelected(c);
     setForm({
@@ -182,13 +202,14 @@ export default function AccountsHiringPage() {
 
       if (selected?.email) {
         const institution = collegeInfo.name || "the institution";
+        const coordinatorBlock = await coordinatorBlockFor(batchId);
         const subject = `Offer Letter – ${designation} | ${institution}`;
         const body = `Dear ${selected.name},
 
 Greetings from ${institution}.
 
 We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}. Please find your offer letter attached.
-
+${coordinatorBlock}
 Congratulations, and welcome aboard!
 
 Warm regards,

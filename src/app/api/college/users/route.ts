@@ -16,7 +16,7 @@ import type { CollegeType, UserRole } from "@/types";
 // COLLEGE_STAFF is intentionally omitted - non-teaching staff are created via
 // the Supporting Staff module (which makes both a login and a profile record),
 // not as a bare login here. See principal/staff/new/page.tsx for the rationale.
-const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL"];
+const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ACCOUNTS"];
 // HOD is included so a main HOD can create a Sub-HOD login (see
 // hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
 // posts role: "HOD" with the not-yet-created sub-department's name as
@@ -29,7 +29,7 @@ const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD"];
 // this were removed; sections are managed from the HOD and Principal views.)
 const OFFICE_ROLES: UserRole[] = ["CLASS_LEADER"];
 // One holder per role per college — same rule as administration/college-staff route.
-const COLLEGE_SINGLETON_ROLES: UserRole[] = ["LIBRARY", "EXAM_CELL", "WEBMASTER"];
+const COLLEGE_SINGLETON_ROLES: UserRole[] = ["LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS"];
 
 export async function GET(request: Request) {
   try {

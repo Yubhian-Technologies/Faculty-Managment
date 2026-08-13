@@ -102,9 +102,15 @@ export default function CollegeOfficeOffersPage() {
   // Candidate address and interview date aren't stored on the OfferLetter row itself -
   // fetch them from the candidate/batch docs at generation time (both the download and
   // email flows need the same extras for the letter body).
-  async function fetchLetterExtras(letter: OfferRow): Promise<{ candidateAddress?: string; candidateEmail?: string; interviewDate?: string }> {
+  async function fetchLetterExtras(letter: OfferRow): Promise<{
+    candidateAddress?: string;
+    candidateEmail?: string;
+    interviewDate?: string;
+    coordinatorUid?: string;
+    coordinatorName?: string;
+  }> {
     type CandRes = { candidate?: { email?: string; permanentAddress?: string; residenceAddress?: string } };
-    type BatchRes = { batch?: { interviewDate?: Parameters<typeof formatDate>[0] } };
+    type BatchRes = { batch?: { interviewDate?: Parameters<typeof formatDate>[0]; coordinatorUid?: string; coordinatorName?: string } };
     const [candData, batchData] = await Promise.all([
       fetch(`/api/college/candidates/${letter.candidateId}`).then((r) => r.json() as Promise<CandRes>).catch((): CandRes => ({})),
       fetch(`/api/college/hiring-batches/${letter.batchId}`).then((r) => r.json() as Promise<BatchRes>).catch((): BatchRes => ({})),
@@ -114,7 +120,27 @@ export default function CollegeOfficeOffersPage() {
       candidateAddress: candidate?.permanentAddress || candidate?.residenceAddress,
       candidateEmail: candidate?.email,
       interviewDate: batchData.batch?.interviewDate ? formatDate(batchData.batch.interviewDate) : undefined,
+      coordinatorUid: batchData.batch?.coordinatorUid,
+      coordinatorName: batchData.batch?.coordinatorName,
     };
+  }
+
+  // Coordinator contact - best-effort; omit whichever of phone/email is
+  // missing, and skip the whole block if there's no coordinator at all
+  // (matches the same lookup college-office/documents/candidate/[applicationId]/page.tsx uses).
+  async function coordinatorBlockFor(coordinatorUid?: string, coordinatorName?: string): Promise<string> {
+    if (!coordinatorUid) return "";
+    type UsersRes = { users?: { uid: string; phone?: string; email?: string }[] };
+    const usersRes = await fetch("/api/college/users?allDepts=true&includeAll=true")
+      .then((r) => r.json() as Promise<UsersRes>)
+      .catch((): UsersRes => ({}));
+    const coordinator = (usersRes.users ?? []).find((u) => u.uid === coordinatorUid);
+    const lines = [
+      coordinatorName,
+      coordinator?.phone ? `Phone: ${coordinator.phone}` : "",
+      coordinator?.email ? `Email: ${coordinator.email}` : "",
+    ].filter(Boolean);
+    return lines.length > 0 ? `\nFor any queries, please contact your Interview Coordinator:\n${lines.join("\n")}\n` : "";
   }
 
   async function generatePdf(letter: OfferRow) {
@@ -149,7 +175,7 @@ export default function CollegeOfficeOffersPage() {
   async function composeEmail(letter: OfferRow) {
     setDownloadingId(letter.id);
     try {
-      const [{ candidateAddress, candidateEmail, interviewDate }, ccRes] = await Promise.all([
+      const [{ candidateAddress, candidateEmail, interviewDate, coordinatorUid, coordinatorName }, ccRes] = await Promise.all([
         fetchLetterExtras(letter),
         // Recomputed live, not read off `letter` - covers letters sent before
         // ccEmails was persisted, and stays correct if the roster changed since.
@@ -159,6 +185,7 @@ export default function CollegeOfficeOffersPage() {
         toast({ variant: "destructive", title: "Candidate has no email on file" });
         return;
       }
+      const coordinatorBlock = await coordinatorBlockFor(coordinatorUid, coordinatorName);
 
       await downloadOfferLetterPdf(
         {
@@ -185,7 +212,7 @@ Greetings from ${institution}.
 We are pleased to offer you the position of ${letter.designation} in the ${letter.department} department, effective from ${formatDate(letter.joiningDate as Parameters<typeof formatDate>[0])}.
 
 The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
-
+${coordinatorBlock}
 Please review the Terms & Conditions and confirm your acceptance and date of joining here:
 ${acceptanceUrl}
 

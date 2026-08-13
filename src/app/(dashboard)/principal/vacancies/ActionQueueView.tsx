@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { Users, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Users, ChevronRight, CheckCircle2, Monitor, MapPin } from "lucide-react";
 import type { HiringBatch } from "@/types";
 
 type BatchRow = Record<string, unknown> & HiringBatch;
@@ -66,6 +66,16 @@ export function ActionQueueView({ scope }: { scope: "active" | "past" }) {
       key: "interviewDate",
       header: "Proposed Date",
       render: (row) => formatDate(row.interviewDate as Parameters<typeof formatDate>[0]),
+    },
+    {
+      key: "hiringMode",
+      header: "Mode",
+      render: (row) =>
+        row.hiringMode === "ONLINE" ? (
+          <span className="flex items-center gap-1 text-xs font-medium text-blue-600"><Monitor className="h-3.5 w-3.5" />Online</span>
+        ) : (
+          <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><MapPin className="h-3.5 w-3.5" />Offline</span>
+        ),
     },
     {
       key: "panelMemberUids",

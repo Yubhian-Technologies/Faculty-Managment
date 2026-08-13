@@ -18,7 +18,7 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS"
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS", "COLLEGE_ACCOUNTS"
     );
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
@@ -86,11 +86,17 @@ export async function POST(request: Request) {
       applicationIds: string[];
       interviewDate: string;
       interviewTime?: string;
+      hiringMode?: "ONLINE" | "OFFLINE";
+      meetingPlatform?: string;
+      meetingLink?: string;
     };
 
-    const { vacancyId, department, position, panelMemberUids, applicationIds, interviewDate, interviewTime } = body;
+    const { vacancyId, department, position, panelMemberUids, applicationIds, interviewDate, interviewTime, hiringMode, meetingPlatform, meetingLink } = body;
     if (!vacancyId || !department || !position || !panelMemberUids?.length || !applicationIds?.length || !interviewDate) {
       return NextResponse.json({ error: "vacancyId, department, position, panelMemberUids, applicationIds, interviewDate required" }, { status: 400 });
+    }
+    if (hiringMode === "ONLINE" && (!meetingPlatform || !meetingLink)) {
+      return NextResponse.json({ error: "meetingPlatform and meetingLink required for an online interview" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -133,6 +139,9 @@ export async function POST(request: Request) {
           demoClassroom: "",
           coordinatorName: "",
           requiredDocuments: [],
+          hiringMode: hiringMode === "ONLINE" ? "ONLINE" : "OFFLINE",
+          meetingPlatform: meetingPlatform ?? "",
+          meetingLink: meetingLink ?? "",
           status: "PENDING",
           currentPhase: "PRINCIPAL_REVIEW",
           principalApprovalStatus: "PENDING",

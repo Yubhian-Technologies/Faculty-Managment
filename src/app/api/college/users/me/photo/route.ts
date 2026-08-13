@@ -22,7 +22,8 @@ export async function PATCH(request: Request) {
       "PLACEMENT_DEPT",
       "LIBRARY",
       "EXAM_CELL",
-      "WEBMASTER"
+      "WEBMASTER",
+      "COLLEGE_ACCOUNTS"
     );
 
     const body = (await request.json()) as { photoUrl?: string };

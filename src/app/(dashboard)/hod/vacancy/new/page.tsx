@@ -174,6 +174,7 @@ export default function NewVacancyPage() {
   const [reqLoading, setReqLoading] = useState(true);
   const [entries, setEntries] = useState<PositionEntry[]>([newEntry()]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hiringMode, setHiringMode] = useState<"OFFLINE" | "ONLINE">("OFFLINE");
 
   useEffect(() => {
     // reqLoading already starts true, so nothing is set synchronously here -
@@ -258,6 +259,7 @@ export default function NewVacancyPage() {
             department: user?.department ?? "",
             position: finalPosition,
             positionCategory: entry.category,
+            hiringMode,
             requiredCount: entry.requiredCount,
             availableCount: entry.availableCount,
             qualification: resolvedQualification(entry),
@@ -320,6 +322,30 @@ export default function NewVacancyPage() {
               <p className="text-sm font-medium">{user?.department ?? "-"}</p>
             </div>
             <Badge variant="secondary" className="text-xs shrink-0">Auto-filled</Badge>
+          </CardContent>
+        </Card>
+
+        {/* Shared hiring mode - applies to every position submitted together */}
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <Label className="text-xs text-muted-foreground">Hiring Mode</Label>
+            <div className="grid grid-cols-2 gap-3">
+              {(["OFFLINE", "ONLINE"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setHiringMode(mode)}
+                  className={`rounded-lg border-2 p-3 text-left transition-all ${
+                    hiringMode === mode
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
+                  }`}
+                >
+                  <p className="text-sm font-medium">{mode === "OFFLINE" ? "Offline" : "Online"}</p>
+                  <p className="text-xs opacity-70">{mode === "OFFLINE" ? "In-person interview & demo class" : "Video call interview, no physical demo"}</p>
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
 

@@ -12,11 +12,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { ShieldCheck, KeyRound, UserCheck } from "lucide-react";
-import { ROLE_LABELS } from "@/types";
-import type { VacancyRequest, Candidate, CandidateApplication, FMSUser, HiringBatch } from "@/types";
+import { ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, FMSUser, HiringBatch, MeetingPlatform } from "@/types";
 
 const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL"] as const;
 const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
+const MEETING_PLATFORMS = Object.keys(MEETING_PLATFORM_LABELS) as MeetingPlatform[];
 
 interface FacultyRecord {
   id: string;
@@ -50,6 +51,8 @@ export default function NewBatchPage() {
   );
   const [interviewDate, setInterviewDate] = useState("");
   const [interviewTime, setInterviewTime] = useState("");
+  const [meetingPlatform, setMeetingPlatform] = useState<MeetingPlatform | "">("");
+  const [meetingLink, setMeetingLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -160,6 +163,10 @@ export default function NewBatchPage() {
 
     const vacancy = vacancies.find((v) => v.id === selectedVacancyId);
     if (!vacancy) { toast({ variant: "destructive", title: "That hiring request is no longer available — refresh and try again" }); return; }
+    if (vacancy.hiringMode === "ONLINE" && (!meetingPlatform || !meetingLink.trim())) {
+      toast({ variant: "destructive", title: "Select a platform and enter a meeting link" });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/college/hiring-batches", {
@@ -173,6 +180,8 @@ export default function NewBatchPage() {
           applicationIds: selectedApplications,
           interviewDate,
           interviewTime,
+          hiringMode: vacancy.hiringMode,
+          ...(vacancy.hiringMode === "ONLINE" ? { meetingPlatform, meetingLink: meetingLink.trim() } : {}),
         }),
       });
       const json = await res.json() as { id?: string; error?: string };
@@ -264,6 +273,43 @@ export default function NewBatchPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Meeting Details - only for an Online hiring request */}
+        {selectedVacancy?.hiringMode === "ONLINE" && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Meeting Details</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="meetingPlatform">Platform *</Label>
+                  <Select value={meetingPlatform} onValueChange={(v) => setMeetingPlatform(v as MeetingPlatform)}>
+                    <SelectTrigger id="meetingPlatform">
+                      <SelectValue placeholder="Select a platform" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MEETING_PLATFORMS.map((p) => (
+                        <SelectItem key={p} value={p}>{MEETING_PLATFORM_LABELS[p]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="meetingLink">Meeting Link *</Label>
+                  <Input
+                    id="meetingLink"
+                    type="url"
+                    value={meetingLink}
+                    onChange={(e) => setMeetingLink(e.target.value)}
+                    placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Shared with the Principal for approval, and shown to panel members while they evaluate.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Candidate Selection */}
         <Card>

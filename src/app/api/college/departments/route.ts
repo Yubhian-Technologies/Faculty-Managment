@@ -40,7 +40,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "EXAM_CELL", "DEAN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "COLLEGE_ACCOUNTS", "PANEL_MEMBER", "EXAM_CELL", "DEAN");
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);

@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2, Clock, Video } from "lucide-react";
+import { MEETING_PLATFORM_LABELS } from "@/types";
 import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
 
 // Joined view for the candidate list this panel member scores: person fields
@@ -132,6 +133,15 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
     batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" ||
     batch.currentPhase === "COMPLETED";
 
+  // The meeting link only becomes visible once the HOD opens the interview
+  // session (INTERVIEW_READY → IN_PROGRESS) - not before, so panel members
+  // don't join before candidates are ready.
+  const sessionOpen =
+    batch.currentPhase === "IN_PROGRESS" ||
+    batch.currentPhase === "PANEL_INTERVIEW" ||
+    batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" ||
+    batch.currentPhase === "COMPLETED";
+
   const doneIds = new Set(
     myFeedback.filter((f) => f.panelScores != null).map((f) => f.candidateId)
   );
@@ -146,12 +156,49 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
       {/* Batch Info */}
       <Card>
         <CardContent className="p-4 grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
-          <div><p className="text-xs text-muted-foreground">Venue</p><p className="font-medium">{batch.interviewVenue || "TBA"}</p></div>
-          <div><p className="text-xs text-muted-foreground">Date & Time</p><p className="font-medium">{formatDate(batch.interviewDate)}{batch.interviewTime && <span className="ml-1 text-muted-foreground">{batch.interviewTime}</span>}</p></div>
-          <div><p className="text-xs text-muted-foreground">Demo Room</p><p className="font-medium">{batch.demoClassroom || "TBA"}</p></div>
+          {batch.hiringMode === "ONLINE" ? (
+            <>
+              <div><p className="text-xs text-muted-foreground">Platform</p><p className="font-medium">{batch.meetingPlatform ? MEETING_PLATFORM_LABELS[batch.meetingPlatform] : "TBA"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Date & Time</p><p className="font-medium">{formatDate(batch.interviewDate)}{batch.interviewTime && <span className="ml-1 text-muted-foreground">{batch.interviewTime}</span>}</p></div>
+            </>
+          ) : (
+            <>
+              <div><p className="text-xs text-muted-foreground">Venue</p><p className="font-medium">{batch.interviewVenue || "TBA"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Date & Time</p><p className="font-medium">{formatDate(batch.interviewDate)}{batch.interviewTime && <span className="ml-1 text-muted-foreground">{batch.interviewTime}</span>}</p></div>
+              <div><p className="text-xs text-muted-foreground">Demo Room</p><p className="font-medium">{batch.demoClassroom || "TBA"}</p></div>
+            </>
+          )}
           <div><p className="text-xs text-muted-foreground">Status</p><StatusBadge status={batch.status} /></div>
         </CardContent>
       </Card>
+
+      {batch.hiringMode === "ONLINE" && !sessionOpen && (
+        <Card className="border-dashed">
+          <CardContent className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
+            <Clock className="h-4 w-4 shrink-0" />
+            The meeting link will appear here once the HOD opens the interview session.
+          </CardContent>
+        </Card>
+      )}
+
+      {batch.hiringMode === "ONLINE" && sessionOpen && batch.meetingLink && (
+        <Card className="border-blue-200 bg-blue-50/40">
+          <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 text-sm text-blue-800">
+              <Video className="h-4 w-4 shrink-0" />
+              Join the meeting to interview each candidate before scoring.
+            </div>
+            <a
+              href={batch.meetingLink}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-medium text-primary underline break-all"
+            >
+              {batch.meetingLink}
+            </a>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Gate: batch must be set up before scoring */}
       {!canScore ? (
