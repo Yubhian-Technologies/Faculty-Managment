@@ -223,10 +223,30 @@ export async function POST(request: Request) {
           failed.push({ row: rowNum, rollNumber: "-", error: `"${row.name.trim()}" is already an unassigned ${departmentName} Year ${row.year} student` });
           continue;
         }
+        // Secondary Department is a column on the Office's template, and the
+        // Office's rows are exactly the ones that need it: a 1st-year sitting
+        // under a common department (Basic Science) while registered to the
+        // core branch they'll be promoted into. It used to be forced to
+        // undefined here, so the only path that could set it was the placed
+        // (section-named) one - which the Office template never takes, since
+        // it has no Section column. That made the field unreachable for the
+        // people it exists for.
+        let unassignedSecondary: string | undefined;
+        if (row.secondaryDepartment?.trim()) {
+          unassignedSecondary = resolveDepartment(row.secondaryDepartment);
+          if (!unassignedSecondary) {
+            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Secondary Department "${row.secondaryDepartment}" not found` });
+            continue;
+          }
+          if (unassignedSecondary === departmentName) {
+            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Secondary Department must differ from Department" });
+            continue;
+          }
+        }
         const docRef = studentsColl.doc();
         batch.set(docRef, buildStudentDoc(
           { collegeId, department: departmentName!, name: "", year: Number(row.year) },
-          { ...row, rollNumber: roll, secondaryDepartment: undefined },
+          { ...row, rollNumber: roll, secondaryDepartment: unassignedSecondary },
           now
         ));
         const history = departmentHistoryEntry(db, collegeId, docRef.id, departmentName!, "", Number(row.year), now);

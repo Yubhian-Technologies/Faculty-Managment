@@ -18,10 +18,10 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { RosterFormFields, RosterDetailView } from "@/components/students/RosterFieldInputs";
 import {
-  EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS,
+  EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS,
   rosterFieldDisplay, rosterFieldFormValue, rosterFormToPayload,
 } from "@/lib/students/rosterFields";
-import type { StudentListItem, Department, AcademicYear } from "@/types";
+import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
 // The Add and Edit forms collect every field the roster import collects, in the
 // template's order - see src/lib/students/rosterFields.ts, the one definition
@@ -48,6 +48,7 @@ export default function OfficeStudentsPage() {
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [years, setYears] = useState<number[]>([]);
+  const [courseNames, setCourseNames] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -68,14 +69,23 @@ export default function OfficeStudentsPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [studentsRes, deptsRes, yearsRes] = await Promise.all([
+      const [studentsRes, deptsRes, yearsRes, coursesRes] = await Promise.all([
         fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentListItem[] }>),
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears?: AcademicYear[] }>).catch(() => ({ academicYears: [] })),
+        fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
       ]);
       const loaded = studentsRes.students ?? [];
       setStudents(loaded);
       setDepartments(deptsRes.departments ?? []);
+      // Every department owns its own Course doc for the same programme, so
+      // the raw list repeats "Bachelor of Technology" once per department -
+      // the picker wants the distinct programme names, which is also what
+      // `course` stores (free text, see StudentRecord.course).
+      setCourseNames(
+        Array.from(new Set((coursesRes.courses ?? []).map((c) => c.name?.trim()).filter(Boolean) as string[]))
+          .sort((a, b) => a.localeCompare(b))
+      );
       // Prefer the college's configured academic years; fall back to whatever
       // years already appear on students, then to a sensible 1-4 default so the
       // dropdowns are never empty for a freshly set-up college.
@@ -265,7 +275,7 @@ export default function OfficeStudentsPage() {
                 <thead>
                   <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                     <th className="p-3 font-medium">S.No</th>
-                    {PRIMARY_ROSTER_FIELDS.map((f) => (
+                    {LIST_ROSTER_FIELDS.map((f) => (
                       <th key={f.key} className="p-3 font-medium whitespace-nowrap">{f.label}</th>
                     ))}
                     <th className="p-3 font-medium text-right">Actions</th>
@@ -279,7 +289,7 @@ export default function OfficeStudentsPage() {
                       className={`border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors ${i % 2 === 0 ? "" : "bg-muted/20"}`}
                     >
                       <td className="p-3 text-muted-foreground whitespace-nowrap">{i + 1}</td>
-                      {PRIMARY_ROSTER_FIELDS.map((f) => {
+                      {LIST_ROSTER_FIELDS.map((f) => {
                         const value = rosterFieldDisplay(f, s);
                         return (
                           <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
@@ -369,6 +379,7 @@ export default function OfficeStudentsPage() {
             values={form}
             onChange={setF}
             departments={activeDepartments}
+            courses={courseNames}
             years={years}
             readOnlyKeys={editTarget ? ["rollNumber"] : []}
           />

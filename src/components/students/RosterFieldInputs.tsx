@@ -9,7 +9,7 @@ import {
   EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS,
   rosterFieldDisplay, type RosterField,
 } from "@/lib/students/rosterFields";
-import type { StudentRecord } from "@/types";
+import type { Department, StudentRecord } from "@/types";
 
 // Renders the roster fields for the Office students page - the Add/Edit form
 // body and the read-only detail view - straight from the shared spec, so both
@@ -24,11 +24,37 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
+/**
+ * The branches a department can register a student into as their Secondary
+ * Department - the core branch a 1st-year is bound for while enrolled under a
+ * common department. Two independent mechanisms express that, and a college
+ * uses one or the other, so both are offered: `secondaryDepartments`
+ * (cross-listing) and the branches grouped under the department or its
+ * sub-departments (`managedDepartments`). Same rollup the Add Section flow
+ * uses - without the managed half, a college like Test Engineering (whose
+ * Basic Science groups CIVIL/IT/CSE/ECE/EEE through its sub-departments and
+ * sets no secondaryDepartments at all) would never see the field.
+ */
+export function secondaryDepartmentOptions(departments: Department[], departmentName: string): string[] {
+  const own = departments.find((d) => d.name === departmentName);
+  if (!own) return [];
+  const names = new Set<string>(own.secondaryDepartments ?? []);
+  for (const n of own.managedDepartments ?? []) names.add(n);
+  for (const child of departments.filter((d) => d.parentDepartmentId === own.id)) {
+    for (const n of child.managedDepartments ?? []) names.add(n);
+  }
+  names.delete(departmentName);
+  return Array.from(names).sort((a, b) => a.localeCompare(b));
+}
+
 interface FormProps {
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
-  /** Department names offered by the Department select. */
-  departments: { id: string; name: string }[];
+  /** Full department records - the Department select's options, and the source
+   *  for the Secondary Department rollup above. */
+  departments: Department[];
+  /** Distinct course names offered by the Course select. */
+  courses: string[];
   /** Academic years offered by the Year select. */
   years: number[];
   /**
@@ -39,7 +65,7 @@ interface FormProps {
   readOnlyKeys?: string[];
 }
 
-function FieldInput({ field, values, onChange, departments, years, readOnlyKeys }: FormProps & { field: RosterField }) {
+function FieldInput({ field, values, onChange, departments, courses, years, readOnlyKeys }: FormProps & { field: RosterField }) {
   const value = values[field.key] ?? "";
   const id = `roster-${field.key}`;
   const label = `${field.label}${field.required ? " *" : ""}`;
@@ -54,16 +80,62 @@ function FieldInput({ field, values, onChange, departments, years, readOnlyKeys 
     );
   }
 
+  if (field.key === "course") {
+    return (
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <Select value={value || NONE} onValueChange={(v) => onChange(field.key, v === NONE ? "" : v)}>
+          <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>Not specified</SelectItem>
+            {courses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+
   if (field.key === "department") {
     return (
       <div className="space-y-2">
         <Label>{label}</Label>
-        <Select value={value} onValueChange={(v) => onChange(field.key, v)}>
+        <Select
+          value={value}
+          onValueChange={(v) => {
+            onChange(field.key, v);
+            // The branch list is the new department's, so a choice made under
+            // the old one can't carry over.
+            onChange("secondaryDepartment", "");
+          }}
+        >
           <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
           <SelectContent>
             {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
           </SelectContent>
         </Select>
+      </div>
+    );
+  }
+
+  if (field.key === "secondaryDepartment") {
+    // Only shown once a department is chosen AND that department actually
+    // feeds branches - an ordinary standalone department has none, and an
+    // empty dropdown would just be a dead control.
+    const branches = values.department ? secondaryDepartmentOptions(departments, values.department) : [];
+    if (branches.length === 0) return null;
+    return (
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <Select value={value || NONE} onValueChange={(v) => onChange(field.key, v === NONE ? "" : v)}>
+          <SelectTrigger><SelectValue placeholder="Not specified" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>Not specified</SelectItem>
+            {branches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          The branch this student is registered to and will be promoted into.
+        </p>
       </div>
     );
   }
