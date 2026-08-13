@@ -1,15 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, User, IdCard, GraduationCap } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
-import { SectionCard } from "@/components/shared/SectionCard";
-import { Avatar } from "@/components/shared/Avatar";
-import { ProfileFieldsView } from "@/components/faculty/ProfileFieldsView";
-import { PersonalDetailsView } from "@/components/shared/PersonalDetailsView";
-import type { FMSUser, FacultyProfileFields, UserRole, College, ResearchPublication } from "@/types";
+import { FacultyProfileHub } from "@/components/faculty/FacultyProfileHub";
+import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
+import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
+import type { FacultyMember, UserRole, College, ResearchPublication } from "@/types";
 
 interface Props {
   collegeId: string;
@@ -19,17 +19,75 @@ interface Props {
   backHref: string;
 }
 
-export function StaffProfileView({ collegeId, role, title, department, backHref }: Props) {
-  const router = useRouter();
-
-  const { data, isLoading } = useQuery({
+// PRINCIPAL/VICE_PRINCIPAL have no FacultyMember record of their own (their
+// academicProfile lives directly on the FMSUser doc - see AGENTS.md /
+// principal/profile/[module]/page.tsx) - the `/staff` endpoint below returns
+// that FMSUser shape, cast to Partial<FacultyMember> here since the two share
+// every field FacultyProfileHub/FacultyProfileModuleContent actually read
+// (same convention as principal/staff/[uid]/page.tsx).
+function useManagementStaff(collegeId: string, role: Props["role"], department?: string) {
+  return useQuery({
     queryKey: ["mgmt-staff", collegeId, role, department],
     queryFn: () => {
       const qs = new URLSearchParams({ role, ...(department ? { department } : {}) });
       return fetch(`/api/management/colleges/${collegeId}/staff?${qs}`)
-        .then((r) => r.json() as Promise<{ profile: (FMSUser & { academicProfile?: FacultyProfileFields }) | null; publications?: ResearchPublication[] }>);
+        .then((r) => r.json() as Promise<{ profile: Partial<FacultyMember> | null; publications?: ResearchPublication[] }>);
     },
   });
+}
+
+function staffBasePath(collegeId: string, role: Props["role"]) {
+  const segment = role === "PRINCIPAL" ? "principal" : role === "VICE_PRINCIPAL" ? "vice-principal" : "hod";
+  return `/management/faculty/${collegeId}/${segment}`;
+}
+
+// Landing page for Principal/Vice Principal/HOD details under Management -
+// identity summary + one tile per module (Personal, Academic Qualification,
+// Research, ...), same FacultyProfileHub every other role's faculty/staff
+// detail page uses, instead of one long scroll of every module dumped flat.
+// Read-only (no editHref) - Management never edits these records.
+export function StaffProfileView({ collegeId, role, title, department, backHref }: Props) {
+  const router = useRouter();
+  const { data, isLoading } = useManagementStaff(collegeId, role, department);
+  const profile = data?.profile;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={title} actions={<Button variant="outline" onClick={() => router.push(backHref)}><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>} />
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={title} actions={<Button variant="outline" onClick={() => router.push(backHref)}><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>} />
+        <p className="text-sm text-muted-foreground">No {title.toLowerCase()} is currently assigned.</p>
+      </div>
+    );
+  }
+
+  return (
+    <FacultyProfileHub
+      faculty={profile}
+      basePath={staffBasePath(collegeId, role)}
+      backHref={backHref}
+      // Principal/Vice Principal don't carry a teaching load - HOD does.
+      excludeModules={role === "HOD" ? [] : ["teaching-load"]}
+    />
+  );
+}
+
+// Counterpart to StaffProfileView for the per-module tile pages
+// (/management/faculty/[collegeId]/principal/[module], .../vice-principal/[module]).
+export function StaffProfileModuleView({ collegeId, role, department, backHref }: Omit<Props, "title">) {
+  const params = useParams<{ module: string }>();
+  const moduleKey = params.module as ProfileModuleKey;
+  const moduleDef = PROFILE_MODULES[moduleKey];
+
+  const { data, isLoading } = useManagementStaff(collegeId, role, department);
   const profile = data?.profile;
   const publications = data?.publications;
 
@@ -41,46 +99,33 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
   });
   const collegeType = collegeData?.college?.type;
 
+  if (!moduleDef) {
+    return <p className="text-sm text-muted-foreground">Unknown section.</p>;
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title={title}
-        description={profile?.name ?? "No profile on record"}
+        title={moduleDef.label}
+        description={profile?.name}
         actions={
-          <Button variant="outline" onClick={() => router.push(backHref)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />Back
+          <Button variant="outline" asChild>
+            <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
           </Button>
         }
       />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : !profile ? (
-        <p className="text-sm text-muted-foreground">No {title.toLowerCase()} is currently assigned.</p>
+      ) : profile ? (
+        <FacultyProfileModuleContent
+          moduleKey={moduleKey}
+          faculty={profile}
+          collegeType={collegeType}
+          publications={publications}
+        />
       ) : (
-        <>
-          <SectionCard icon={User} title="Identity" accent="blue">
-            <div className="flex items-center gap-4 mb-4">
-              <Avatar name={profile.name} photoUrl={profile.profilePhotoUrl} size="lg" />
-            </div>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div><p className="text-xs text-muted-foreground">Name</p><p className="text-sm font-medium">{profile.name}</p></div>
-              <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium">{profile.email}</p></div>
-              <div><p className="text-xs text-muted-foreground">Phone</p><p className="text-sm font-medium">{profile.phone || "-"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Employee ID</p><p className="text-sm font-medium">{profile.employeeId || "-"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Designation</p><p className="text-sm font-medium">{profile.designation || "-"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Department</p><p className="text-sm font-medium">{profile.department || "-"}</p></div>
-            </div>
-          </SectionCard>
-
-          <SectionCard icon={IdCard} title="Personal Details" accent="violet">
-            <PersonalDetailsView value={profile} />
-          </SectionCard>
-
-          <SectionCard icon={GraduationCap} title="Academic Profile" accent="emerald">
-            <ProfileFieldsView profile={profile.academicProfile} includeTeachingAssignment={role === "HOD"} collegeType={collegeType} publications={publications} />
-          </SectionCard>
-        </>
+        <p className="text-sm text-muted-foreground">No profile on record.</p>
       )}
     </div>
   );
