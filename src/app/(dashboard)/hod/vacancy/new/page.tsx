@@ -105,6 +105,7 @@ type PositionEntry = {
   qualification: string;
   qualificationOther: string;
   justification: string;
+  hodJustification: string;
 };
 
 function newEntry(): PositionEntry {
@@ -118,6 +119,7 @@ function newEntry(): PositionEntry {
     qualification: "",
     qualificationOther: "",
     justification: "",
+    hodJustification: "",
   };
 }
 
@@ -132,7 +134,8 @@ function isEntryValid(entry: PositionEntry): boolean {
     (entry.designation !== "Others" || entry.customDesignation.trim().length > 0) &&
     entry.requiredCount >= 1 &&
     resolvedQualification(entry).length > 0 &&
-    entry.justification.trim().length >= 10
+    entry.justification.trim().length >= 10 &&
+    entry.hodJustification.trim().length >= 10
   );
 }
 
@@ -150,6 +153,7 @@ function getFirstValidationError(entries: PositionEntry[]): string | null {
     if (!entry.qualification) return `Select a Required Qualification for ${label}.`;
     if (entry.qualification === "Others" && !entry.qualificationOther.trim()) return `Specify the Qualification for ${label}.`;
     if (entry.justification.trim().length < 10) return `Enter a Justification of at least 10 characters for ${label}.`;
+    if (entry.hodJustification.trim().length < 10) return `Enter your (HOD's) Justification of at least 10 characters for ${label}.`;
   }
   return null;
 }
@@ -219,6 +223,7 @@ export default function NewVacancyPage() {
       requiredCount: 1,
       availableCount: 0,
       justification: "",
+      hodJustification: "",
     });
   }
 
@@ -257,6 +262,7 @@ export default function NewVacancyPage() {
             availableCount: entry.availableCount,
             qualification: resolvedQualification(entry),
             justification: entry.justification.trim(),
+            hodJustification: entry.hodJustification.trim(),
             studentStrength: requirement?.totalStudents ?? 0,
             totalFacultyRequired: requirement?.totalRequired ?? 0,
             cadreRatioData: requirement?.cadre ?? [],
@@ -480,6 +486,19 @@ export default function NewVacancyPage() {
                       rows={3}
                     />
                     {entry.justification.length > 0 && entry.justification.trim().length < 10 && (
+                      <p className="text-xs text-destructive">Minimum 10 characters required</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>HOD&apos;s Justification <span className="text-destructive">*</span></Label>
+                    <Textarea
+                      value={entry.hodJustification}
+                      onChange={(e) => updateEntry(entry.key, { hodJustification: e.target.value })}
+                      placeholder="Add your own reasoning for this request, in your own words..."
+                      rows={3}
+                    />
+                    {entry.hodJustification.length > 0 && entry.hodJustification.trim().length < 10 && (
                       <p className="text-xs text-destructive">Minimum 10 characters required</p>
                     )}
                   </div>

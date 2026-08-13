@@ -6,6 +6,7 @@ import { getOfferLetterHTML, getAppointmentLetterHTML } from "@/lib/pdf/offerLet
 import { getFinanceReportHTML, getFinanceReceiptHTML } from "@/lib/pdf/financeReportTemplate";
 import { getResumeHTML } from "@/lib/pdf/resumeTemplate";
 import { getDocumentAcknowledgementHTML } from "@/lib/pdf/documentAcknowledgementTemplate";
+import { getCandidateProfileHTML } from "@/lib/pdf/candidateProfileTemplate";
 
 async function verifyToken(request: Request): Promise<string | null> {
   const auth = request.headers.get("Authorization");
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as {
-      type: "OFFER_LETTER" | "APPOINTMENT_LETTER" | "FINANCE_REPORT" | "FINANCE_RECEIPT" | "RESUME" | "DOCUMENT_ACKNOWLEDGEMENT";
+      type: "OFFER_LETTER" | "APPOINTMENT_LETTER" | "FINANCE_REPORT" | "FINANCE_RECEIPT" | "RESUME" | "DOCUMENT_ACKNOWLEDGEMENT" | "CANDIDATE_PROFILE";
       data: Record<string, unknown>;
     };
 
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
       FINANCE_RECEIPT: "finance-receipt.html",
       RESUME: "resume.html",
       DOCUMENT_ACKNOWLEDGEMENT: "document-acknowledgement.html",
+      CANDIDATE_PROFILE: "candidate-profile.html",
     };
     const filename = filenames[body.type];
 
@@ -60,6 +62,8 @@ export async function POST(request: Request) {
       html = getFinanceReceiptHTML(body.data as Parameters<typeof getFinanceReceiptHTML>[0]);
     } else if (body.type === "DOCUMENT_ACKNOWLEDGEMENT") {
       html = getDocumentAcknowledgementHTML(body.data as Parameters<typeof getDocumentAcknowledgementHTML>[0]);
+    } else if (body.type === "CANDIDATE_PROFILE") {
+      html = getCandidateProfileHTML(body.data as unknown as Parameters<typeof getCandidateProfileHTML>[0]);
     } else {
       html = getResumeHTML(body.data as unknown as Parameters<typeof getResumeHTML>[0]);
     }

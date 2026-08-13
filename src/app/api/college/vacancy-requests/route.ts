@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       availableCount?: number;
       qualification?: string;
       justification?: string;
+      hodJustification?: string;
       studentStrength?: number;
       totalFacultyRequired?: number;
       cadreRatioData?: unknown[];
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
         availableCount: Number(availableCount ?? 0),
         qualification: qualification?.trim() ?? "",
         justification: justification?.trim() ?? "",
+        hodJustification: body.hodJustification?.trim() ?? "",
         status: "PENDING",
         // Ratio-backed justification data
         studentStrength: body.studentStrength ?? 0,

@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDateInputValue } from "@/lib/utils";
 import { CheckCircle2, XCircle } from "lucide-react";
+import { PublicFormHeader } from "@/components/shared/PublicFormHeader";
 
 interface OfferSummary {
   candidateName: string;
@@ -99,24 +100,27 @@ export default function OfferAcceptancePage() {
 
   if (finalDecision === "ACCEPTED" || finalDecision === "REJECTED") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/30">
-        <Card className="max-w-sm w-full mx-4">
-          <CardContent className="pt-6 text-center space-y-3">
-            {finalDecision === "ACCEPTED" ? (
-              <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto" />
-            ) : (
-              <XCircle className="h-12 w-12 text-muted-foreground mx-auto" />
-            )}
-            <h2 className="font-semibold">
-              {finalDecision === "ACCEPTED" ? "Offer Accepted" : "Offer Response Recorded"}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {finalDecision === "ACCEPTED"
-                ? `Thank you, ${offer.candidateName}! Your response has been recorded. The office will be in touch about next steps.`
-                : "Your response has been recorded. Thank you for letting us know."}
-            </p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
+        <div className="max-w-sm w-full space-y-4">
+          <PublicFormHeader collegeName={offer.collegeName} />
+          <Card>
+            <CardContent className="pt-6 text-center space-y-3">
+              {finalDecision === "ACCEPTED" ? (
+                <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto" />
+              ) : (
+                <XCircle className="h-12 w-12 text-muted-foreground mx-auto" />
+              )}
+              <h2 className="font-semibold">
+                {finalDecision === "ACCEPTED" ? "Offer Accepted" : "Offer Response Recorded"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {finalDecision === "ACCEPTED"
+                  ? `Thank you, ${offer.candidateName}! Your response has been recorded. The office will be in touch about next steps.`
+                  : "Your response has been recorded. Thank you for letting us know."}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -124,8 +128,9 @@ export default function OfferAcceptancePage() {
   return (
     <div className="min-h-screen bg-muted/30 py-8 px-4">
       <div className="max-w-xl mx-auto space-y-5">
+        <PublicFormHeader collegeName={offer.collegeName} />
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold">Offer Letter — {offer.collegeName}</h1>
+          <h1 className="text-xl font-bold">Offer Letter</h1>
           <p className="text-sm text-muted-foreground">Please review your offer and respond below</p>
         </div>
 

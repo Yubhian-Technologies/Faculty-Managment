@@ -18,9 +18,10 @@ export async function GET(
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(collegeId);
-    const [candidateSnap, applicationSnap] = await Promise.all([
+    const [candidateSnap, applicationSnap, collegeSnap] = await Promise.all([
       collegeRef.collection("candidates").doc(candidateId).get(),
       collegeRef.collection("candidateApplications").doc(applicationId).get(),
+      collegeRef.get(),
     ]);
 
     if (!candidateSnap.exists || !applicationSnap.exists) {
@@ -46,6 +47,7 @@ export async function GET(
         department: applicationData.department,
         bioDataSubmitted: candidateData.bioDataSubmitted ?? false,
       },
+      collegeName: (collegeSnap.data() as { name?: string } | undefined)?.name ?? "",
       requiredDocuments,
     });
   } catch (err) {
