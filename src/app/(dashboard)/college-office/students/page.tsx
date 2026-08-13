@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Upload, Search, Users } from "lucide-react";
+import { Plus, Trash2, Upload, Search, Users, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -17,28 +16,28 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import type { StudentListItem, Department, AcademicYear } from "@/types";
+import { RosterFormFields, RosterDetailView } from "@/components/students/RosterFieldInputs";
+import {
+  EDITABLE_ROSTER_FIELDS, LIST_ROSTER_FIELDS,
+  rosterFieldDisplay, rosterFieldFormValue, rosterFormToPayload,
+} from "@/lib/students/rosterFields";
+import type { StudentListItem, Department, AcademicYear, Course } from "@/types";
 
-// Fields collected here mirror the Excel/CSV import (Name, Department, Academic
-// Year + optional Gender, Date of Birth, Guardian Contact, Email) so a student
-// added manually carries exactly the same information as an imported one. Roll
-// number and section are deliberately NOT collected - like the import, every
-// manual add is "unassigned"; the department (sub-)HOD sections the student and
-// assigns a roll number later.
-type AddForm = {
-  name: string;
-  department: string;
-  year: string;
-  gender: string;
-  dateOfBirth: string;
-  guardianContact: string;
-  email: string;
-};
+// The Add and Edit forms collect every field the roster import collects, in the
+// template's order - see src/lib/students/rosterFields.ts, the one definition
+// all of this reads from. Previously Add asked for 7 of the 35, so a manually
+// added student silently carried less than an imported one.
+//
+// Section is still not collected: like the import, every manual add is
+// "unassigned" and the department (sub-)HOD sections the student later. Roll No
+// IS offered at intake (it's a template column, provisional only), but is
+// read-only when editing - correcting it afterwards is the department's, and
+// theirs is the only path that checks it for uniqueness.
+type RosterForm = Record<string, string>;
 
-const EMPTY_FORM: AddForm = {
-  name: "", department: "", year: "", gender: "",
-  dateOfBirth: "", guardianContact: "", email: "",
-};
+const EMPTY_FORM: RosterForm = Object.fromEntries(
+  EDITABLE_ROSTER_FIELDS.map((f) => [f.key, ""])
+);
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -49,6 +48,7 @@ export default function OfficeStudentsPage() {
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [years, setYears] = useState<number[]>([]);
+  const [courseNames, setCourseNames] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -56,23 +56,36 @@ export default function OfficeStudentsPage() {
   const [yearFilter, setYearFilter] = useState<string>("all");
 
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState<AddForm>(EMPTY_FORM);
+  // Set when the dialog is editing an existing student rather than adding one -
+  // both use the same form body, so this is what tells them apart.
+  const [editTarget, setEditTarget] = useState<StudentListItem | null>(null);
+  const [form, setForm] = useState<RosterForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
+  const [viewTarget, setViewTarget] = useState<StudentListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StudentListItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [studentsRes, deptsRes, yearsRes] = await Promise.all([
+      const [studentsRes, deptsRes, yearsRes, coursesRes] = await Promise.all([
         fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentListItem[] }>),
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears?: AcademicYear[] }>).catch(() => ({ academicYears: [] })),
+        fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
       ]);
       const loaded = studentsRes.students ?? [];
       setStudents(loaded);
       setDepartments(deptsRes.departments ?? []);
+      // Every department owns its own Course doc for the same programme, so
+      // the raw list repeats "Bachelor of Technology" once per department -
+      // the picker wants the distinct programme names, which is also what
+      // `course` stores (free text, see StudentRecord.course).
+      setCourseNames(
+        Array.from(new Set((coursesRes.courses ?? []).map((c) => c.name?.trim()).filter(Boolean) as string[]))
+          .sort((a, b) => a.localeCompare(b))
+      );
       // Prefer the college's configured academic years; fall back to whatever
       // years already appear on students, then to a sensible 1-4 default so the
       // dropdowns are never empty for a freshly set-up college.
@@ -112,37 +125,55 @@ export default function OfficeStudentsPage() {
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [students, search, deptFilter, yearFilter]);
 
-  function setF(patch: Partial<AddForm>) { setForm((f) => ({ ...f, ...patch })); }
+  function setF(key: string, value: string) { setForm((f) => ({ ...f, [key]: value })); }
 
   function openAdd() {
+    setEditTarget(null);
     setForm(EMPTY_FORM);
     setAddOpen(true);
   }
 
-  async function handleAdd() {
-    if (!form.name.trim()) { toast({ variant: "destructive", title: "Name is required" }); return; }
+  function openEdit(s: StudentListItem) {
+    setEditTarget(s);
+    setForm(
+      Object.fromEntries(
+        EDITABLE_ROSTER_FIELDS.map((f) => [f.key, rosterFieldFormValue(f, s)])
+      ) as RosterForm
+    );
+    setViewTarget(null);
+    setAddOpen(true);
+  }
+
+  async function handleSave() {
+    if (!form.name?.trim()) { toast({ variant: "destructive", title: "Name is required" }); return; }
     if (!form.department) { toast({ variant: "destructive", title: "Department is required" }); return; }
     if (!form.year) { toast({ variant: "destructive", title: "Academic Year is required" }); return; }
 
     setSaving(true);
     try {
-      const res = await fetch("/api/college/students", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          department: form.department,
-          year: Number(form.year),
-          gender: form.gender || undefined,
-          dateOfBirth: form.dateOfBirth || undefined,
-          guardianContact: form.guardianContact || undefined,
-          email: form.email || undefined,
-        }),
-      });
+      const payload = rosterFormToPayload(form);
+      // Editing sends only the detail fields - name/department/year stay as
+      // they are, since moving a student between departments or years is the
+      // promotion/section flow's job, not a field edit.
+      const res = editTarget
+        ? await fetch(`/api/college/students/${editTarget.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ details: payload }),
+          })
+        : await fetch("/api/college/students", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
       const json = await res.json() as { id?: string; error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Failed to add student" }); return; }
-      toast({ variant: "success", title: `${form.name.trim()} added` });
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? (editTarget ? "Failed to save changes" : "Failed to add student") });
+        return;
+      }
+      toast({ variant: "success", title: `${form.name.trim()} ${editTarget ? "updated" : "added"}` });
       setAddOpen(false);
+      setEditTarget(null);
       setForm(EMPTY_FORM);
       void load();
     } catch {
@@ -236,39 +267,48 @@ export default function OfficeStudentsPage() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
+                {/* The template's identity columns and nothing else - the rest
+                    of the admission detail (gender, contacts, email …) is a
+                    click away in the detail dialog rather than widening this
+                    table. S.No is the row's position in the current filtered
+                    list, matching the sheet column it's named after. */}
                 <thead>
                   <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-                    <th className="p-3 font-medium">Name</th>
-                    <th className="p-3 font-medium whitespace-nowrap">Department</th>
-                    <th className="p-3 font-medium whitespace-nowrap">Year</th>
-                    <th className="p-3 font-medium whitespace-nowrap">Section</th>
-                    <th className="p-3 font-medium whitespace-nowrap">Roll No.</th>
-                    <th className="p-3 font-medium whitespace-nowrap">Gender</th>
-                    <th className="p-3 font-medium whitespace-nowrap">Date of Birth</th>
-                    <th className="p-3 font-medium whitespace-nowrap">Guardian Contact</th>
-                    <th className="p-3 font-medium whitespace-nowrap">Email</th>
+                    <th className="p-3 font-medium">S.No</th>
+                    {LIST_ROSTER_FIELDS.map((f) => (
+                      <th key={f.key} className="p-3 font-medium whitespace-nowrap">{f.label}</th>
+                    ))}
                     <th className="p-3 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((s, i) => (
-                    <tr key={s.id} className={`border-b last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
-                      <td className="p-3 font-medium whitespace-nowrap">{s.name}</td>
-                      <td className="p-3 whitespace-nowrap">{s.department}</td>
-                      <td className="p-3 whitespace-nowrap">{ordinalYear(s.year)}</td>
-                      <td className="p-3 whitespace-nowrap">
-                        {s.section
-                          ? <Badge variant="secondary" className="text-xs">{s.section}</Badge>
-                          : <span className="text-muted-foreground italic text-xs">Unassigned</span>}
-                      </td>
-                      <td className="p-3 whitespace-nowrap">{s.rollNumber || <span className="text-muted-foreground/50">—</span>}</td>
-                      <td className="p-3 whitespace-nowrap">{s.gender || <span className="text-muted-foreground/50">—</span>}</td>
-                      <td className="p-3 whitespace-nowrap">{s.dateOfBirth || <span className="text-muted-foreground/50">—</span>}</td>
-                      <td className="p-3 whitespace-nowrap">{s.guardianContact || <span className="text-muted-foreground/50">—</span>}</td>
-                      <td className="p-3 whitespace-nowrap">{s.email || <span className="text-muted-foreground/50">—</span>}</td>
-                      <td className="p-3 text-right">
+                    <tr
+                      key={s.id}
+                      onClick={() => setViewTarget(s)}
+                      className={`border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors ${i % 2 === 0 ? "" : "bg-muted/20"}`}
+                    >
+                      <td className="p-3 text-muted-foreground whitespace-nowrap">{i + 1}</td>
+                      {LIST_ROSTER_FIELDS.map((f) => {
+                        const value = rosterFieldDisplay(f, s);
+                        return (
+                          <td key={f.key} className={`p-3 whitespace-nowrap ${f.key === "name" ? "font-medium" : ""}`}>
+                            {value || <span className="text-muted-foreground/50">—</span>}
+                          </td>
+                        );
+                      })}
+                      {/* stopPropagation so the row's own "open details" click
+                          doesn't fire behind the action being taken. */}
+                      <td className="p-3 text-right whitespace-nowrap">
                         <button
-                          onClick={() => setDeleteTarget(s)}
+                          onClick={(e) => { e.stopPropagation(); openEdit(s); }}
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Edit student"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(s); }}
                           className="p-1.5 rounded-md hover:bg-red-100 text-red-600 transition-colors"
                           title="Remove student"
                         >
@@ -284,78 +324,71 @@ export default function OfficeStudentsPage() {
         </Card>
       )}
 
-      {/* ── Add Student dialog ── */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-lg">
+      {/* ── Student detail ── */}
+      <Dialog open={!!viewTarget} onOpenChange={(o) => { if (!o) setViewTarget(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Student</DialogTitle>
+            <DialogTitle>{viewTarget?.name}</DialogTitle>
             <DialogDescription>
-              Same details as the roster import. The student is added as unassigned - the
-              department assigns their section and roll number later.
+              Every field the roster template carries, in its order - identity first,
+              then the rest of the admission detail.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="stu-name">Name *</Label>
-              <Input id="stu-name" value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="P. Sai Kumar" />
+          {/* Section and status aren't roster-template fields (the department
+              assigns the section later, so the sheet has no column for it) but
+              they're the Office's cue for who still needs sectioning - shown
+              here since the list no longer carries a Section column. */}
+          {viewTarget && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Section:</span>
+              {viewTarget.section
+                ? <Badge variant="secondary" className="text-xs">{viewTarget.section}</Badge>
+                : <span className="italic text-muted-foreground">Unassigned</span>}
+              <span className="text-muted-foreground ml-3">Status:</span>
+              <Badge variant="secondary" className="text-xs">{viewTarget.status}</Badge>
             </div>
+          )}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Department *</Label>
-                <Select value={form.department} onValueChange={(v) => setF({ department: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                  <SelectContent>
-                    {activeDepartments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Academic Year *</Label>
-                <Select value={form.year} onValueChange={(v) => setF({ year: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-                  <SelectContent>
-                    {years.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Gender</Label>
-                <Select value={form.gender || "__none__"} onValueChange={(v) => setF({ gender: v === "__none__" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Not specified" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Not specified</SelectItem>
-                    <SelectItem value="Male">Male</SelectItem>
-                    <SelectItem value="Female">Female</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="stu-dob">Date of Birth</Label>
-                <Input id="stu-dob" type="date" value={form.dateOfBirth} onChange={(e) => setF({ dateOfBirth: e.target.value })} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="stu-guardian">Guardian Contact</Label>
-                <Input id="stu-guardian" value={form.guardianContact} onChange={(e) => setF({ guardianContact: e.target.value })} placeholder="9876543210" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="stu-email">Email</Label>
-                <Input id="stu-email" type="email" value={form.email} onChange={(e) => setF({ email: e.target.value })} placeholder="student@example.com" />
-              </div>
-            </div>
-          </div>
+          {viewTarget && <RosterDetailView student={viewTarget} />}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleAdd()} loading={saving}>Add Student</Button>
+            <Button variant="outline" onClick={() => setViewTarget(null)}>Close</Button>
+            {viewTarget && (
+              <Button onClick={() => openEdit(viewTarget)}>
+                <Pencil className="h-4 w-4 mr-2" />Edit
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add / Edit Student dialog ── */}
+      <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) setEditTarget(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? `Edit ${editTarget.name}` : "Add Student"}</DialogTitle>
+            <DialogDescription>
+              {editTarget
+                ? "The same fields as the roster import. Department and Academic Year are shown for context - moving a student between them is done through sectioning and promotion, not here."
+                : "The same fields as the roster import. The student is added as unassigned - the department assigns their section later."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <RosterFormFields
+            values={form}
+            onChange={setF}
+            departments={activeDepartments}
+            courses={courseNames}
+            years={years}
+            readOnlyKeys={editTarget ? ["rollNumber"] : []}
+          />
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAddOpen(false); setEditTarget(null); }}>Cancel</Button>
+            <Button onClick={() => void handleSave()} loading={saving}>
+              {editTarget ? "Save Changes" : "Add Student"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

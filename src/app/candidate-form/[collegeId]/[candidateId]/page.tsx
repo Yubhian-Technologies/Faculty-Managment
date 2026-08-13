@@ -13,11 +13,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileUpload } from "@/components/shared/FileUpload";
 import { DocumentTypeCombobox } from "@/components/shared/DocumentTypeCombobox";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { PublicFormHeader } from "@/components/shared/PublicFormHeader";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
 import { DOCUMENT_TYPE_GROUPS, EDUCATION_DOCUMENT_TEMPLATES } from "@/lib/documentTypes";
 import { Trash2, Plus, CheckCircle2 } from "lucide-react";
-import type { CandidateBioData, AcademicQualification, WorkExperienceEntry, RelativeInSociety } from "@/types";
+import { SUB_CASTES_BY_CASTE } from "@/types";
+import type { CandidateBioData, AcademicQualification, WorkExperienceEntry, RelativeInSociety, Caste } from "@/types";
 
 const OTHER_DOCUMENTS_CATEGORY = "Other Documents";
 
@@ -35,6 +37,16 @@ function decimalOnly(value: string): string {
   const cleaned = value.replace(/[^\d.]/g, "");
   const [whole, ...rest] = cleaned.split(".");
   return rest.length ? `${whole}.${rest.join("")}` : whole;
+}
+
+// This form's Caste categories split BC into BC-A..BC-E (the paper form's
+// AP/Telangana sub-groups), but the shared SUB_CASTES_BY_CASTE picklist
+// (also used by the faculty Personal Details form) only has one bucket for
+// all of BC - so every BC-* group shares that same sub-caste list.
+function subCasteOptionsFor(caste: string): string[] {
+  if (caste === "OC" || caste === "SC" || caste === "ST") return SUB_CASTES_BY_CASTE[caste as Caste] ?? [];
+  if (caste.startsWith("BC")) return SUB_CASTES_BY_CASTE.BC ?? [];
+  return []; // EWS / Other - no fixed list, falls back to free text
 }
 
 function categoryForDocument(label: string): string {
@@ -100,6 +112,7 @@ export default function CandidateFormPage() {
   const applicationId = searchParams.get("applicationId") ?? "";
 
   const [candidate, setCandidate] = useState<CandidateInfo | null>(null);
+  const [collegeName, setCollegeName] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,10 +130,11 @@ export default function CandidateFormPage() {
   useEffect(() => {
     if (!applicationId) { setLoading(false); return; }
     fetch(`/api/public/candidate-form/${collegeId}/${candidateId}?applicationId=${applicationId}`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ candidate: CandidateInfo; requiredDocuments?: string[] }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ candidate: CandidateInfo; collegeName?: string; requiredDocuments?: string[] }>) : null))
       .then((d) => {
         if (!d) return;
         setCandidate(d.candidate);
+        setCollegeName(d.collegeName ?? "");
         const required = d.requiredDocuments ?? [];
         setRequiredDocuments(required);
         const templatedLabels = required.filter((label) => EDUCATION_DOCUMENT_TEMPLATES[label]);
@@ -186,7 +200,6 @@ export default function CandidateFormPage() {
     const errors: string[] = [];
     const currentYear = new Date().getFullYear();
 
-    if (!form.fatherName?.trim()) errors.push("Missing Father's Name");
     if (!form.dateOfBirth) errors.push("Missing Date of Birth");
     if (!form.gender) errors.push("Missing Gender");
     if (!form.bloodGroup) errors.push("Missing Blood Group");
@@ -342,17 +355,20 @@ export default function CandidateFormPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/30">
-        <Card className="max-w-sm w-full mx-4">
-          <CardContent className="pt-6 text-center space-y-3">
-            <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto" />
-            <h2 className="font-semibold">Details Submitted Successfully</h2>
-            <p className="text-sm text-muted-foreground">
-              Thank you, <strong>{candidate.name}</strong>! Your bio data and certificates have been received.
-              We look forward to meeting you at the interview.
-            </p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
+        <div className="max-w-sm w-full space-y-4">
+          <PublicFormHeader collegeName={collegeName} />
+          <Card>
+            <CardContent className="pt-6 text-center space-y-3">
+              <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto" />
+              <h2 className="font-semibold">Details Submitted Successfully</h2>
+              <p className="text-sm text-muted-foreground">
+                Thank you, <strong>{candidate.name}</strong>! Your bio data and certificates have been received.
+                We look forward to meeting you at the interview.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -360,6 +376,7 @@ export default function CandidateFormPage() {
   return (
     <div className="min-h-screen bg-muted/30 py-8 px-4">
       <div className="max-w-5xl mx-auto space-y-5">
+        <PublicFormHeader collegeName={collegeName} />
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold">Interview — Bio Data Form</h1>
           <p className="text-sm text-muted-foreground">Please fill all details and upload your certificates before your interview</p>
@@ -380,7 +397,7 @@ export default function CandidateFormPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="fatherName">Father&apos;s Name <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="fatherName">Father&apos;s Name</Label>
                   <Input id="fatherName" value={form.fatherName ?? ""} onChange={(e) => updateForm({ fatherName: e.target.value })} placeholder="Father's full name" />
                 </div>
                 <div className="space-y-2">
@@ -456,7 +473,7 @@ export default function CandidateFormPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="caste">Caste / Category <span className="text-destructive">*</span></Label>
-                  <Select value={form.caste ?? ""} onValueChange={(v) => updateForm({ caste: v })}>
+                  <Select value={form.caste ?? ""} onValueChange={(v) => updateForm({ caste: v, subCaste: undefined })}>
                     <SelectTrigger id="caste"><SelectValue placeholder="Select..." /></SelectTrigger>
                     <SelectContent>
                       {CASTE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -465,7 +482,36 @@ export default function CandidateFormPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="subCaste">Sub-caste / Community</Label>
-                  <Input id="subCaste" value={form.subCaste ?? ""} onChange={(e) => updateForm({ subCaste: e.target.value })} placeholder="e.g. Kapu, Reddy, Naidu..." />
+                  {(() => {
+                    const subCasteOptions = subCasteOptionsFor(form.caste ?? "");
+                    if (subCasteOptions.length === 0) {
+                      return (
+                        <Input id="subCaste" value={form.subCaste ?? ""} onChange={(e) => updateForm({ subCaste: e.target.value })} placeholder="e.g. Kapu, Reddy, Naidu..." />
+                      );
+                    }
+                    const isOther = !!form.subCaste && (form.subCaste === "OTHER" || !subCasteOptions.includes(form.subCaste));
+                    return (
+                      <>
+                        <Select
+                          value={isOther ? "OTHER" : (form.subCaste ?? "")}
+                          onValueChange={(v) => updateForm({ subCaste: v })}
+                        >
+                          <SelectTrigger id="subCaste"><SelectValue placeholder="Select sub-caste..." /></SelectTrigger>
+                          <SelectContent>
+                            {subCasteOptions.map((sc) => <SelectItem key={sc} value={sc}>{sc}</SelectItem>)}
+                            <SelectItem value="OTHER">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {isOther && (
+                          <Input
+                            value={form.subCaste === "OTHER" ? "" : form.subCaste ?? ""}
+                            onChange={(e) => updateForm({ subCaste: e.target.value || "OTHER" })}
+                            placeholder="Please specify"
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
