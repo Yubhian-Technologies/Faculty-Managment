@@ -78,9 +78,15 @@ export async function GET() {
     // closest thing, same as reportRoster.ts's own-role registers. Excludes
     // the viewer's own login (relevant when a Vice Principal, itself one of
     // NON_DEPARTMENTAL_STAFF_ROLES, is browsing) - nobody edits their own
-    // leave category from someone else's roster view.
+    // leave category from someone else's roster view. Also excludes anyone
+    // already listed under Supporting Staff - COLLEGE_STAFF (Non-Technical)
+    // is itself in NON_DEPARTMENTAL_STAFF_ROLES, so a COLLEGE_STAFF login
+    // with a real SupportingStaffMember record would otherwise show up
+    // twice: once correctly under Supporting Staff, once again here with
+    // just its role label ("College Staff") standing in for a designation.
+    const supportingStaffUids = new Set(supportingStaffList.map((f) => f.userUid));
     const institutionalStaffList = (institutionalStaffSnap?.docs ?? [])
-      .filter((d) => d.id !== session.uid)
+      .filter((d) => d.id !== session.uid && !supportingStaffUids.has(d.id))
       .map((d) => {
         const u = d.data() as { name?: string; role?: string };
         return { userUid: d.id, name: u.name ?? "Unknown", department: undefined, designation: ROLE_LABELS[u.role as keyof typeof ROLE_LABELS] ?? u.role ?? "-", staffType: "institutional" as const };

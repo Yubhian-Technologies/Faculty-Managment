@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Trash2, Send } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -17,7 +17,7 @@ import { managerTeachingYears } from "@/lib/departments/managedBranches";
 import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
-type FacultyRow = FacultyMember & { accessLevel?: "primary" | "secondary" };
+type FacultyRow = FacultyMember;
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -29,7 +29,22 @@ const ALL_DEPARTMENTS = "__all__";
 
 export default function TeachingAssignmentsPage() {
   const user = useAuthStore((s) => s.user);
-  const [courses, setCourses] = useState<Course[]>([]);
+  // Two sources, kept apart and merged below rather than written into one
+  // `courses` list. load()'s own-scope fetch and the scope-wide fetch further
+  // down resolve independently, so a single list meant whichever landed second
+  // overwrote the other: when /departments beat /courses, the scope fetch
+  // merged the branches' Course docs in and load() then replaced the lot with
+  // the HOD's own department's single doc. The programme was left with one
+  // course id, so the shared first-year sections filed against a branch's doc
+  // were never queried and the page read "No sections for this year". load()
+  // running again after an assign/remove clobbered them the same way.
+  const [ownCourses, setOwnCourses] = useState<Course[]>([]);
+  const [scopeCourses, setScopeCourses] = useState<Course[]>([]);
+  const courses = useMemo(() => {
+    const byId = new Map(ownCourses.map((c) => [c.id, c]));
+    for (const c of scopeCourses) byId.set(c.id, c);
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [ownCourses, scopeCourses]);
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,7 +71,7 @@ export default function TeachingAssignmentsPage() {
   function load() {
     setIsLoading(true);
     Promise.all([
-      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)))),
+      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => setOwnCourses(d.courses ?? [])),
       fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty(d.faculty ?? [])),
       fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>).then((d) => setAssignments(d.assignments ?? [])),
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
@@ -100,11 +115,7 @@ export default function TeachingAssignmentsPage() {
           )
         );
         if (cancelled) return;
-        setCourses((prev) => {
-          const byId = new Map(prev.map((c) => [c.id, c]));
-          for (const list of lists) for (const c of list) byId.set(c.id, c);
-          return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
-        });
+        setScopeCourses(lists.flat());
       } catch {
         // Non-fatal - the own-scope fetch from load() still covers a plain HOD.
       }
@@ -160,7 +171,10 @@ export default function TeachingAssignmentsPage() {
     return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
   }, [course, subDepartmentOptions, scope.ownDept, departments]);
 
-  const key = `${courseKey}_${year}`;
+  // Keyed on the course ids, not just the group: if the scope-wide course fetch
+  // lands after a year was already picked, the id set grows and this key changes
+  // rather than leaving the earlier, incomplete result cached forever.
+  const key = `${activeCourseIds.join("|")}_${year}`;
   // Everything this HOD may actually edit for the chosen course+year: their own
   // department's sections plus every sub-department's (a main HOD runs the whole
   // tree). Only genuinely cross-listed sections from an unrelated department
@@ -223,12 +237,26 @@ export default function TeachingAssignmentsPage() {
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
-  async function handleYearChange(v: string) {
+  function handleYearChange(v: string) {
     setYear(v);
     setDepartmentFilter("");
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
-    await ensureCourseYearData(activeCourseIds, `${courseKey}_${v}`, v);
   }
+
+  // Driven by the key rather than by the Year click, so a course list that
+  // grows after a year was already picked refetches instead of leaving the
+  // panels empty. The ref stops it re-firing for a key already in flight;
+  // ensureCourseYearData's own cache checks handle the settled ones.
+  const fetchedKeys = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (activeCourseIds.length === 0 || !year) return;
+    if (fetchedKeys.current.has(key)) return;
+    fetchedKeys.current.add(key);
+    void (async () => { await ensureCourseYearData(activeCourseIds, key, year); })();
+    // ensureCourseYearData is redefined every render but reads only its
+    // arguments and the caches it guards on, so it is deliberately not a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, year, activeCourseIds]);
 
   function handleDepartmentChange(v: string) {
     // ALL is a sentinel: Radix Select can't hold "" as an item value.
@@ -259,18 +287,12 @@ export default function TeachingAssignmentsPage() {
     ? subjects.filter((s) => !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id))
     : subjects;
 
-  // A "secondary" faculty option (a feeder's, e.g. Basic Science's, own
-  // faculty - see college/faculty/route.ts) is only relevant when the
-  // selected subject actually belongs to that feeder (a shared 1st-year
-  // subject). For a subject that belongs to this HOD's own/managed
-  // department instead (e.g. IT's own 2nd-year subject), the feeder has
-  // nothing to do with it, so its faculty are hidden here - staffing then
-  // has to go through "Or ask another department to lend a faculty member"
-  // below, same as for any other subject with nobody free.
-  const selectedSubjectForAssign = subjects.find((s) => s.id === assignForm.subjectId);
-  const availableFacultyForAssign = selectedSubjectForAssign
-    ? faculty.filter((f) => f.accessLevel !== "secondary" || f.department === selectedSubjectForAssign.department)
-    : faculty;
+  // Faculty offered here are always this HOD's own/managed department's -
+  // never another department's, even for a shared 1st-year subject filed
+  // under a feeder like Basic Science (see college/faculty/route.ts).
+  // Staffing that instead goes through "Or ask another department to lend a
+  // faculty member" below, same as for any other subject with nobody free.
+  const availableFacultyForAssign = faculty;
 
   // Every top-level department in the college is askable, including ones this
   // HOD can already assign from directly (e.g. a managed branch whose own
@@ -532,7 +554,7 @@ export default function TeachingAssignmentsPage() {
                     <SelectContent>
                       {availableFacultyForAssign.map((f) => (
                         <SelectItem key={f.id} value={f.id}>
-                          {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
+                          {f.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

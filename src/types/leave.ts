@@ -206,9 +206,10 @@ export interface LeaveRequest {
   // for these days). Undefined/0 when the whole request fit within balance.
   lopDays?: number;
   // Set when this request was submitted via the "Extend Leave" action on an
-  // already-approved, currently-ongoing leave (e.g. still sick past the
-  // originally approved return date) - id of that original request. It's a
-  // brand-new request in every other respect (own id, own approval chain -
+  // already-approved, currently-ongoing Sick Leave (still sick past the
+  // originally approved return date) - id of that original request. Sick
+  // Leave only - see LeaveProfileView.tsx / applications/route.ts POST. It's
+  // a brand-new request in every other respect (own id, own approval chain -
   // same HOD/Principal/Management routing as any other request by this
   // person - own balance/LOP handling), this is purely informational so the
   // approver has context and the requester's history shows the link.

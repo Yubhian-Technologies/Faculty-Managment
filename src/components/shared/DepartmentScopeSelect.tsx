@@ -199,7 +199,10 @@ export function DepartmentScopeSelect({
             derived name (BSE-CIVIL-A) either way. */}
         {!selectedChild && rolledUpBranches.length > 0 && (
           <div className="space-y-1.5">
-            <Label htmlFor="department-scope-rollup">Department</Label>
+            {/* "Secondary Department" is the term used for the Principal's own
+                branches (CIVIL, IT, EEE …) as distinct from a sub-department
+                (BS-MATHS, BS-ENGLISH …), which is what the field above picks. */}
+            <Label htmlFor="department-scope-rollup">Secondary Department</Label>
             <select
               id="department-scope-rollup"
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
@@ -226,7 +229,8 @@ export function DepartmentScopeSelect({
 
         {selectedChild && childIsGrouping && (
           <div className="space-y-1.5">
-            <Label htmlFor="department-scope">Department</Label>
+            {/* Same field as the rollup above, reached via a sub-department. */}
+            <Label htmlFor="department-scope">Secondary Department</Label>
             <select
               id="department-scope"
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
