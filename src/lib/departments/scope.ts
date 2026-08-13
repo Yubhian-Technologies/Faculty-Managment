@@ -241,6 +241,43 @@ export async function getRelatedDepartmentIds(
   return Array.from(ids).slice(0, 30);
 }
 
+// Same-hierarchy counterpart of getRelatedDepartmentNames, for callers that
+// must NOT cross into a feeder/fed department's own faculty (see
+// api/college/faculty/route.ts) - own name, plus its parent (if it's a
+// sub-department) and its children (if it has sub-departments). Deliberately
+// excludes the secondaryDepartments feeder link: that's a subject/section
+// sharing relationship, not a statement that the two departments' staff
+// belong to each other.
+export async function getDepartmentTreeNames(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  departmentName: string
+): Promise<string[]> {
+  const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
+  const deptSnap = await deptsColl.where("name", "==", departmentName).limit(1).get();
+  if (deptSnap.empty) return [departmentName];
+
+  const deptDoc = deptSnap.docs[0];
+  const dept = deptDoc.data() as { parentDepartmentId?: string; hasSubDepartments?: boolean };
+  const names = new Set<string>([departmentName]);
+
+  if (dept.parentDepartmentId) {
+    const parentSnap = await deptsColl.doc(dept.parentDepartmentId).get();
+    const parentName = (parentSnap.data() as { name?: string } | undefined)?.name;
+    if (parentName) names.add(parentName);
+  }
+
+  if (dept.hasSubDepartments) {
+    const childrenSnap = await deptsColl.where("parentDepartmentId", "==", deptDoc.id).get();
+    for (const d of childrenSnap.docs) {
+      const name = (d.data() as { name?: string }).name;
+      if (name) names.add(name);
+    }
+  }
+
+  return Array.from(names).slice(0, 30);
+}
+
 // A department fed by another (Department.secondaryDepartments - e.g. a shared
 // first-year "Basic Science" feeding every other department in the college)
 // doesn't own the years the feeder has reserved for itself

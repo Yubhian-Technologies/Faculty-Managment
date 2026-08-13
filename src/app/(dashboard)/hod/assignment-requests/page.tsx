@@ -42,11 +42,9 @@ export default function AssignmentRequestsPage() {
         fetch("/api/college/faculty?status=ACTIVE"),
       ]);
       const reqData = await reqRes.json() as { requests: FacultyAssignmentRequest[] };
-      const facData = await facRes.json() as { faculty: (FacultyMember & { accessLevel?: string })[] };
+      const facData = await facRes.json() as { faculty: FacultyMember[] };
       setRequests(reqData.requests ?? []);
-      // Only faculty this HOD actually owns (not a feeder's "secondary" pool)
-      // can be allocated to fulfil someone else's request.
-      setFaculty((facData.faculty ?? []).filter((f) => f.accessLevel !== "secondary"));
+      setFaculty(facData.faculty ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load assignment requests" });
     } finally {

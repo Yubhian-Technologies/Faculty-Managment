@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { getHodDepartmentScope, getRelatedDepartmentNames, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
@@ -27,14 +27,15 @@ export async function GET(request: Request) {
     // specialist when assigning a shared/parent-owned subject, and to administer
     // those faculty directly (see canHodEditDepartment in lib/departments/scope).
     let childDeptQuery: FirebaseFirestore.Query | null = null;
-    // A feeder's faculty pool (e.g. Basic Science, for any department it
-    // feeds via secondaryDepartments - see resolveSubjectDepartment) is
-    // staffable for that department's shared 1st-year subjects - a fed
-    // department's own faculty roster is often empty since the feeder's
-    // faculty already cover it - but stays view-only below: this HOD doesn't
-    // manage the feeder's own faculty records.
-    let feederDeptQuery: FirebaseFirestore.Query | null = null;
 
+    // Deliberately does NOT cross into a feeder/fed department's own faculty
+    // (e.g. Basic Science's faculty showing up under CSE, or vice versa) -
+    // that used to be included view-only via secondaryDepartments, but a
+    // department's faculty register only ever shows faculty who actually
+    // belong to that department (or a sub-department/managed branch it fully
+    // owns). Staffing a shared subject with another department's faculty now
+    // goes through the explicit lend/request flow (faculty-assignment-requests)
+    // instead - see hod/teaching-assignments/page.tsx.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.departmentName) primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
@@ -45,21 +46,13 @@ export async function GET(request: Request) {
       if (ownedNames.length > 0) {
         childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
       }
-
-      if (scope.departmentName) {
-        const relatedNames = await getRelatedDepartmentNames(db, session.collegeId, scope.departmentName);
-        const feederNames = relatedNames.filter((n) => n !== scope.departmentName && !ownedNames.includes(n));
-        if (feederNames.length > 0) {
-          feederDeptQuery = withStatus(facultyColl.where("department", "in", feederNames.slice(0, 30)));
-        }
-      }
     } else if (deptFilter) {
       // Office/Principal/VP picking faculty for a specific department (e.g.
       // a section's Faculty Incharge) also see faculty registered under that
       // department's parent or sub-departments - a sub-department's own
       // faculty pool is often thin, and the main HOD's faculty may teach
       // there too.
-      const relatedNames = await getRelatedDepartmentNames(db, session.collegeId, deptFilter);
+      const relatedNames = await getDepartmentTreeNames(db, session.collegeId, deptFilter);
       primaryQuery = relatedNames.length > 1
         ? primaryQuery.where("department", "in", relatedNames)
         : primaryQuery.where("department", "==", deptFilter);
@@ -67,27 +60,19 @@ export async function GET(request: Request) {
 
     primaryQuery = withStatus(primaryQuery);
 
-    const [primarySnap, childDeptSnap, feederDeptSnap] = await Promise.all([
+    const [primarySnap, childDeptSnap] = await Promise.all([
       primaryQuery.get(),
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
-      feederDeptQuery ? feederDeptQuery.get() : Promise.resolve(null),
     ]);
 
-    const faculty: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] =
+    const faculty: { id: string; accessLevel: "primary"; [key: string]: unknown }[] =
       primarySnap.docs.map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" }));
     if (childDeptSnap) {
-      // "primary", not "secondary": for an HOD this query holds their own
-      // sub-departments' faculty, which they fully manage (canHodEditDepartment),
-      // so the UI must not mark them view-only.
+      // "primary": for an HOD this query holds their own sub-departments'
+      // faculty, which they fully manage (canHodEditDepartment), so the UI
+      // must not mark them view-only.
       for (const d of childDeptSnap.docs) {
         faculty.push({ id: d.id, ...d.data(), accessLevel: "primary" });
-      }
-    }
-    if (feederDeptSnap) {
-      // "secondary": staffable for a shared subject, but this HOD doesn't
-      // manage the feeder's own faculty records.
-      for (const d of feederDeptSnap.docs) {
-        faculty.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
       }
     }
     // Technical designations belong to Supporting Staff now (see

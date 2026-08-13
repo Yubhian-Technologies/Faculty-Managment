@@ -6,12 +6,12 @@ import {
   QualificationModule, ExperienceModule, GrantsModule,
   MentorshipModule, FinancialModule, OthersModule,
 } from "@/components/faculty/ProfileFieldsView";
-import { PublicationsModuleView } from "@/components/faculty/PublicationsModuleView";
+import { PublicationsModuleView, PublicationsSection } from "@/components/faculty/PublicationsModuleView";
 import { TeachingLoadTable } from "@/components/faculty/TeachingLoadTable";
 import { buildTeachingLoadRows } from "@/lib/teaching/buildTeachingLoadRows";
 import type { PersonalDetailsSource } from "@/components/shared/PersonalDetailsView";
 import type { ProfileModuleKey } from "@/lib/faculty/profileModules";
-import type { FacultyProfileFields, TeachingAssignment, CollegeType } from "@/types";
+import type { FacultyProfileFields, TeachingAssignment, CollegeType, ResearchPublication } from "@/types";
 
 // Structurally covers both FacultyMember (HOD/Principal viewing someone else,
 // or a self-profile backed by a real record - see MyProfileModulePage) and
@@ -36,6 +36,12 @@ interface Props {
   // School-type colleges show a different qualifications list instead of
   // UG/PG/PhD - see QualificationModule.
   collegeType?: CollegeType;
+  // Only for callers that already fetched the publications list server-side
+  // alongside `faculty` itself (e.g. Management's combined faculty-detail
+  // endpoint) - skips the Research tile's own client-side fetch/route
+  // (/api/college/publications), which only college-scoped roles can call.
+  // Omitted entirely, every other caller keeps the self-fetching behavior.
+  publications?: ResearchPublication[] | null;
 }
 
 // Renders exactly one module's content for the per-module View pages - the
@@ -43,14 +49,18 @@ interface Props {
 // pieces as the old single-scroll views (ProfileFieldsView's per-module
 // exports, PersonalDetailsView, TeachingLoadTable) so nothing here
 // duplicates field-rendering logic.
-export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType }: Props) {
+export function FacultyProfileModuleContent({ moduleKey, faculty, teachingAssignments = [], includeTeachingAssignment = true, collegeType, publications }: Props) {
   return (
     <Card>
       <CardContent className="pt-6">
         {moduleKey === "personal" && <PersonalDetailsView value={faculty} />}
         {moduleKey === "qualification" && <QualificationModule profile={faculty.academicProfile} collegeType={collegeType} />}
         {moduleKey === "experience" && <ExperienceModule profile={faculty.academicProfile} includeTeachingAssignment={includeTeachingAssignment} />}
-        {moduleKey === "research" && <PublicationsModuleView uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} />}
+        {moduleKey === "research" && (
+          publications !== undefined
+            ? <PublicationsSection publications={publications} academicProfile={faculty.academicProfile} />
+            : <PublicationsModuleView uid={faculty.userUid ?? faculty.uid} academicProfile={faculty.academicProfile} />
+        )}
         {moduleKey === "grants" && <GrantsModule profile={faculty.academicProfile} />}
         {moduleKey === "mentorship" && <MentorshipModule profile={faculty.academicProfile} />}
         {moduleKey === "financial" && <FinancialModule profile={faculty.academicProfile} />}
