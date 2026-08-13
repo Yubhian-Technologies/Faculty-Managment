@@ -148,11 +148,11 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="p-4 text-sm">
             <p className="font-medium">
-              {elBalance.entitled} day(s) available this year
+              {elBalance.entitled} day(s) available &mdash; total Earned Leave, carried forward every year
             </p>
             <p className="text-muted-foreground mt-0.5">
-              {(elBalance.entitled ?? 0) - elBalance.carriedForward} base + {elBalance.carriedForward} carried forward
-              from last year&rsquo;s unused Earned Leave
+              {(elBalance.entitled ?? 0) - elBalance.carriedForward} new this year + {elBalance.carriedForward} carried
+              forward from previous years (capped at 300 total)
               {elBalance.used ? ` · ${elBalance.used} used so far` : ""}
             </p>
           </CardContent>

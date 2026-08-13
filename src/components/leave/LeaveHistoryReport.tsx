@@ -93,6 +93,23 @@ function formatJoinDate(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// "Weekly Offs" isn't stored anywhere - it's just how many Sundays fall in
+// the month, read straight off the calendar rather than tracked per employee.
+function countSundaysInMonth(year: number, month: number): number {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let count = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    if (new Date(year, month - 1, day).getDay() === 0) count++;
+  }
+  return count;
+}
+
+function totalSundaysInYear(year: number): number {
+  let count = 0;
+  for (let month = 1; month <= 12; month++) count += countSundaysInMonth(year, month);
+  return count;
+}
+
 function exportRow(params: {
   sno: number;
   employeeId: string;
@@ -103,8 +120,10 @@ function exportRow(params: {
   period: PeriodSummary;
   category: EffectiveLeaveCategory | null;
   location: string;
+  weeklyOffs: number;
+  holidays: number;
 }): string[] {
-  const { sno, employeeId, name, department, dateOfJoining, payrollMonth, period, category, location } = params;
+  const { sno, employeeId, name, department, dateOfJoining, payrollMonth, period, category, location, weeklyOffs, holidays } = params;
   const t = period.types;
   // Each type's `taken` (computeMonthSummary in monthlySummary.ts) is the
   // request's full totalDays, LOP overflow included - lopDays must NOT be
@@ -113,7 +132,7 @@ function exportRow(params: {
     (t.CL?.taken ?? 0) + (t.SL?.taken ?? 0) + (t.EL?.taken ?? 0) + (t.OD?.taken ?? 0) + period.otherDays;
   return [
     String(sno), employeeId, name, department, formatJoinDate(dateOfJoining), payrollMonth,
-    String(leavesTaken), "", "", "", String(period.lopDays || 0),
+    String(leavesTaken), "", String(weeklyOffs), String(holidays), String(period.lopDays || 0),
     String(t.CL?.opb ?? ""), String(t.SL?.opb ?? ""), String(t.EL?.opb ?? ""), "0",
     String(t.CL?.taken ?? 0), String(t.SL?.taken ?? 0), String(t.EL?.taken ?? 0), String(t.OD?.taken ?? 0),
     String(t.CL?.clb ?? ""), String(t.SL?.clb ?? ""), String(t.EL?.clb ?? ""), "0",
@@ -151,13 +170,18 @@ const td = "border px-3 py-2 text-sm text-center whitespace-nowrap";
 
 // The Attendance/CL/SL/SCL/EL/OD/Others cells - identical structure for a
 // month row in either view, so both the monthly table and each month/total
-// row of the yearly table render through this.
-function PeriodCells({ period }: { period: PeriodSummary }) {
+// row of the yearly table render through this. `weeklyOffs` is the Sundays
+// count for the month(s) this row covers - see countSundaysInMonth/
+// totalSundaysInYear, computed straight off the calendar, not stored data.
+// `holidays` is the count of Office-maintained Academic Calendar Holidays
+// (see api/college/holidays) falling in the same month(s) - real data, not
+// calendar math like weeklyOffs.
+function PeriodCells({ period, weeklyOffs, holidays }: { period: PeriodSummary; weeklyOffs: number; holidays: number }) {
   return (
     <>
       <td className={td}>-</td>
-      <td className={td}>-</td>
-      <td className={td}>-</td>
+      <td className={td}>{weeklyOffs || "-"}</td>
+      <td className={td}>{holidays || "-"}</td>
       <td className={td}>{period.lopDays || "-"}</td>
       {BALANCE_TYPES.map((code) => {
         const t = period.types[code];
@@ -230,7 +254,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     queryKey: [...queryKey, "month", year, month],
     queryFn: () =>
       fetch(`${apiUrl}${apiUrl.includes("?") ? "&" : "?"}year=${year}&month=${month}`)
-        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[]; location?: string }>),
+        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveHistoryReportRow[]; location?: string; holidaysCount?: number; holidaysByMonth?: number[] }>),
     enabled: mode === "month",
   });
 
@@ -239,7 +263,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
     queryKey: [...queryKey, "year", year],
     queryFn: () =>
       fetch(`${yearlyApiUrl}${yearlyApiUrl.includes("?") ? "&" : "?"}year=${year}`)
-        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveYearlyReportRow[]; location?: string }>),
+        .then((r) => r.json() as Promise<{ department: Department; rows: LeaveYearlyReportRow[]; location?: string; holidaysCount?: number; holidaysByMonth?: number[] }>),
     enabled: mode === "year",
   });
 
@@ -259,6 +283,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
   function handleExport() {
     const department = data?.department?.name ?? "";
     const location = data?.location ?? "";
+    const holidaysByMonth = data?.holidaysByMonth ?? [];
     const csvRows = mode === "month"
       ? (rows as LeaveHistoryReportRow[]).map((row, i) =>
           exportRow({
@@ -271,6 +296,8 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
             period: row,
             category: row.category,
             location,
+            weeklyOffs: countSundaysInMonth(year, month),
+            holidays: data?.holidaysCount ?? 0,
           })
         )
       : (rows as LeaveYearlyReportRow[]).flatMap((row, i) => [
@@ -285,6 +312,8 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
               period: m,
               category: row.category,
               location,
+              weeklyOffs: countSundaysInMonth(year, m.month),
+              holidays: holidaysByMonth[m.month - 1] ?? 0,
             })
           ),
           exportRow({
@@ -297,6 +326,8 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
             period: row.totals,
             category: row.category,
             location,
+            weeklyOffs: totalSundaysInYear(year),
+            holidays: holidaysByMonth.reduce((s, n) => s + n, 0),
           }),
         ]);
     downloadCSV(toCSV([EXPORT_HEADERS, ...csvRows]), `leave-history-${mode === "month" ? `${year}-${String(month).padStart(2, "0")}` : year}.csv`);
@@ -389,7 +420,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                             {roleTag(row.role) && <span className="text-xs text-muted-foreground"> ({roleTag(row.role)})</span>}
                           </td>
                           <td className={td}>{row.category ? EFFECTIVE_CATEGORY_LABELS[row.category] : "-"}</td>
-                          <PeriodCells period={row} />
+                          <PeriodCells period={row} weeklyOffs={countSundaysInMonth(year, month)} holidays={data?.holidaysCount ?? 0} />
                         </tr>
                       ))
                     : (rows as LeaveYearlyReportRow[]).map((row, i) => (
@@ -410,12 +441,12 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
                                 </>
                               )}
                               <td className={td}>{MONTH_NAMES[m.month - 1]}</td>
-                              <PeriodCells period={m} />
+                              <PeriodCells period={m} weeklyOffs={countSundaysInMonth(year, m.month)} holidays={data?.holidaysByMonth?.[m.month - 1] ?? 0} />
                             </tr>
                           ))}
                           <tr className="bg-muted/60 font-semibold">
                             <td className={td}>Total</td>
-                            <PeriodCells period={row.totals} />
+                            <PeriodCells period={row.totals} weeklyOffs={totalSundaysInYear(year)} holidays={(data?.holidaysByMonth ?? []).reduce((s, n) => s + n, 0)} />
                           </tr>
                         </Fragment>
                       ))}

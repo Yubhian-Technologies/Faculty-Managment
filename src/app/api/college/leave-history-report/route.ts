@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { computeMonthlyLeaveSummary } from "@/lib/leave/monthlySummary";
 import { resolveReportRoster } from "@/lib/leave/reportRoster";
 import { resolveCollegeLocationName } from "@/lib/college/locationName";
+import { countHolidaysInRange } from "@/lib/leave/holidaysCount";
 
 interface ReportRow {
   uid: string;
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
     if ("error" in roster) return NextResponse.json({ error: roster.error }, { status: roster.status });
     const { department, people } = roster;
 
-    const [rows, location] = await Promise.all([
+    const [rows, location, holidaysCount] = await Promise.all([
       Promise.all(
         people.map(async (p): Promise<ReportRow> => {
           const summary = await computeMonthlyLeaveSummary(db, session.collegeId, p.uid, year, month);
@@ -51,9 +52,10 @@ export async function GET(request: Request) {
         })
       ),
       resolveCollegeLocationName(db, session.collegeId),
+      countHolidaysInRange(db, session.collegeId, new Date(year, month - 1, 1), new Date(year, month, 1)),
     ]);
 
-    return NextResponse.json({ department, rows, location });
+    return NextResponse.json({ department, rows, location, holidaysCount });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
