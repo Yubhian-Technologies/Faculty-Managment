@@ -12,6 +12,7 @@ import { formatDate, formatCurrency } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
 import { downloadAppointmentLetterPdf } from "@/lib/pdf/downloadAppointmentLetter";
+import { downloadCandidateProfilePdf } from "@/lib/pdf/downloadCandidateProfile";
 import { CANDIDATE_STAGE_LABELS } from "@/types";
 import type { Candidate, CandidateApplication, OfferLetter, AppointmentLetter } from "@/types";
 
@@ -76,6 +77,65 @@ export default function CandidateProfilePage() {
     }
   }
 
+  async function downloadProfile() {
+    if (!candidate) return;
+    setDownloading("profile");
+    try {
+      const bio = candidate.bioData;
+      await downloadCandidateProfilePdf({
+        name: candidate.name,
+        email: candidate.email,
+        phone: candidate.phone,
+        collegeName: college.name,
+        source: candidate.source,
+        referralName: candidate.referralName,
+        referralDescription: candidate.referralDescription,
+        residenceAddress: candidate.residenceAddress,
+        permanentAddress: candidate.permanentAddress,
+        resumeUrl: candidate.resumeUrl,
+        certificates: candidate.certificates,
+        fatherName: bio?.fatherName,
+        motherName: bio?.motherName,
+        dateOfBirth: bio?.dateOfBirth,
+        gender: bio?.gender,
+        maritalStatus: bio?.maritalStatus,
+        spouseName: bio?.spouseName,
+        bloodGroup: bio?.bloodGroup,
+        religion: bio?.religion,
+        caste: bio?.caste,
+        subCaste: bio?.subCaste,
+        aadharNo: bio?.aadharNo,
+        panNo: bio?.panNo,
+        emergencyContactName: bio?.emergencyContactName,
+        emergencyContactPhone: bio?.emergencyContactPhone,
+        currentEmployer: bio?.currentEmployer,
+        totalExperienceYears: bio?.totalExperienceYears,
+        currentCTC: bio?.currentCTC,
+        expectedCTC: bio?.expectedCTC,
+        noticePeriod: bio?.noticePeriod,
+        references: bio?.references,
+        additionalInfo: bio?.additionalInfo,
+        qualifications: bio?.qualifications,
+        experiences: bio?.experiences,
+        hasRelativesInSociety: bio?.hasRelativesInSociety,
+        relatives: bio?.relatives,
+        researchProfile: bio?.researchProfile,
+        applications: applications.map((a) => ({
+          position: a.position,
+          department: a.department,
+          currentStage: a.currentStage,
+          status: a.status,
+          negotiatedSalary: a.negotiatedSalary,
+          dateOfJoining: a.dateOfJoining,
+        })),
+      }, candidate.name);
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to generate candidate profile", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setDownloading(null);
+    }
+  }
+
   async function downloadAppointment(appt: AppointmentLetter) {
     setDownloading(`appt-${appt.id}`);
     try {
@@ -124,7 +184,14 @@ export default function CandidateProfilePage() {
       <PageHeader
         title={candidate.name}
         description={`${candidate.email}${candidate.phone ? ` · ${candidate.phone}` : ""}`}
-        actions={<Button variant="outline" size="sm" onClick={() => router.back()}><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>}
+        actions={
+          <>
+            <Button variant="outline" size="sm" loading={downloading === "profile"} onClick={() => void downloadProfile()}>
+              <Download className="h-4 w-4 mr-1" /> Download Profile
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => router.back()}><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
+          </>
+        }
       />
 
       {/* Bio-data — shown once the candidate submits the self-service form */}

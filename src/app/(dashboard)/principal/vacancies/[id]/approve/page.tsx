@@ -77,8 +77,15 @@ export default function ApproveVacancyPage() {
 
           {vacancy?.justification && (
             <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">HOD&apos;s Justification</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Justification</p>
               <p className="text-sm whitespace-pre-wrap">{vacancy.justification}</p>
+            </div>
+          )}
+
+          {vacancy?.hodJustification && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">HOD&apos;s Justification</p>
+              <p className="text-sm whitespace-pre-wrap">{vacancy.hodJustification}</p>
             </div>
           )}
 
