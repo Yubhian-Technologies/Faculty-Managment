@@ -17,7 +17,7 @@ import { managerTeachingYears } from "@/lib/departments/managedBranches";
 import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
-type FacultyRow = FacultyMember & { accessLevel?: "primary" | "secondary" };
+type FacultyRow = FacultyMember;
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -259,18 +259,12 @@ export default function TeachingAssignmentsPage() {
     ? subjects.filter((s) => !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id))
     : subjects;
 
-  // A "secondary" faculty option (a feeder's, e.g. Basic Science's, own
-  // faculty - see college/faculty/route.ts) is only relevant when the
-  // selected subject actually belongs to that feeder (a shared 1st-year
-  // subject). For a subject that belongs to this HOD's own/managed
-  // department instead (e.g. IT's own 2nd-year subject), the feeder has
-  // nothing to do with it, so its faculty are hidden here - staffing then
-  // has to go through "Or ask another department to lend a faculty member"
-  // below, same as for any other subject with nobody free.
-  const selectedSubjectForAssign = subjects.find((s) => s.id === assignForm.subjectId);
-  const availableFacultyForAssign = selectedSubjectForAssign
-    ? faculty.filter((f) => f.accessLevel !== "secondary" || f.department === selectedSubjectForAssign.department)
-    : faculty;
+  // Faculty offered here are always this HOD's own/managed department's -
+  // never another department's, even for a shared 1st-year subject filed
+  // under a feeder like Basic Science (see college/faculty/route.ts).
+  // Staffing that instead goes through "Or ask another department to lend a
+  // faculty member" below, same as for any other subject with nobody free.
+  const availableFacultyForAssign = faculty;
 
   // Every top-level department in the college is askable, including ones this
   // HOD can already assign from directly (e.g. a managed branch whose own
@@ -532,7 +526,7 @@ export default function TeachingAssignmentsPage() {
                     <SelectContent>
                       {availableFacultyForAssign.map((f) => (
                         <SelectItem key={f.id} value={f.id}>
-                          {f.name}{f.accessLevel === "secondary" ? ` (${f.department})` : ""}
+                          {f.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

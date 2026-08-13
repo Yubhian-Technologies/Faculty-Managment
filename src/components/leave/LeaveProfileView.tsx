@@ -154,14 +154,16 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
         {applyHref && (
           // Currently on leave (already started, not just approved for a
           // future date) - offer "Extend Leave" instead of a dead-end
-          // disabled button. Common for Sick Leave especially (you often
-          // don't know your return date until you're already out), but not
-          // restricted to it - any ongoing approved leave can be extended.
-          // It submits as a brand-new request through the same
+          // disabled button. Sick Leave only (you often don't know your
+          // return date until you're already out) - every other leave type
+          // has a planned return date decided up front, so it stays a
+          // dead-end disabled button instead (the applyBlockedReason branch
+          // below). It submits as a brand-new request through the same
           // HOD/Principal/Management approval chain as any other request -
           // see applications/route.ts POST - just tagged with which request
-          // it extends for the approver's context.
-          isOngoingLeave && unfinishedApprovedLeave ? (
+          // it extends for the approver's context. Server enforces the same
+          // SL-only restriction - see applications/route.ts POST.
+          isOngoingLeave && unfinishedApprovedLeave && unfinishedApprovedLeave.leaveTypeCode === "SL" ? (
             <Button asChild size="sm" variant="outline">
               <Link href={`${applyHref}?extend=${unfinishedApprovedLeave.id}`}>
                 <CalendarPlus className="h-4 w-4 mr-1" />

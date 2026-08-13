@@ -176,12 +176,6 @@ export default function HODFacultyPage() {
           <div className="space-y-0.5 min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="font-medium leading-tight">{row.name as string}</p>
-              {row.accessLevel === "secondary" && (
-                <>
-                  <Badge variant="secondary" className="text-xs">{row.department as string}</Badge>
-                  <Badge variant="secondary" className="text-xs">View only</Badge>
-                </>
-              )}
             </div>
             {(row.collegeEmail as string) && (
               <p className="text-xs text-muted-foreground">{row.collegeEmail as string}</p>
@@ -257,7 +251,7 @@ export default function HODFacultyPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-1">
-          {row.accessLevel !== "secondary" && !(row.userUid as string) && (
+          {!(row.userUid as string) && (
             <Button
               variant="ghost"
               size="sm"
@@ -268,11 +262,9 @@ export default function HODFacultyPage() {
               <LogIn className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Set Login</span>
             </Button>
           )}
-          {row.accessLevel !== "secondary" && (
-            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}`); }}>
-              <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/hod/faculty/${row.id}`); }}>
+            <Eye className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">View</span>
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -282,12 +274,10 @@ export default function HODFacultyPage() {
           >
             <FileDown className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Download</span>
           </Button>
-          {row.accessLevel !== "secondary" && (
-            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
         </div>
       ),
     },

@@ -158,11 +158,18 @@ export async function POST(request: Request) {
     // already-APPROVED requests it's extending, so the approver has context
     // and the requester's history shows the link. Only ever points at one of
     // their own APPROVED requests - never someone else's, and never a
-    // still-pending or rejected one (nothing to "extend" there).
+    // still-pending or rejected one (nothing to "extend" there). Sick Leave
+    // only - every other type has a planned return date decided up front, so
+    // there's nothing to extend (the client already only offers the button
+    // for SL - see LeaveProfileView.tsx - this is the server-side guard).
     if (body.extendsRequestId) {
       const source = existingSnap.docs.find((d) => d.id === body.extendsRequestId);
-      if (!source || (source.data() as LeaveRequest).status !== "APPROVED") {
+      const sourceData = source?.data() as LeaveRequest | undefined;
+      if (!source || sourceData?.status !== "APPROVED") {
         return NextResponse.json({ error: "The leave request you're trying to extend was not found" }, { status: 400 });
+      }
+      if (sourceData.leaveTypeCode !== "SL") {
+        return NextResponse.json({ error: "Only Sick Leave can be extended" }, { status: 400 });
       }
     }
 

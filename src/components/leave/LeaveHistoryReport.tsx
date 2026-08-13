@@ -106,8 +106,11 @@ function exportRow(params: {
 }): string[] {
   const { sno, employeeId, name, department, dateOfJoining, payrollMonth, period, category, location } = params;
   const t = period.types;
+  // Each type's `taken` (computeMonthSummary in monthlySummary.ts) is the
+  // request's full totalDays, LOP overflow included - lopDays must NOT be
+  // added again here, or any month with LOP double-counts those same days.
   const leavesTaken =
-    (t.CL?.taken ?? 0) + (t.SL?.taken ?? 0) + (t.EL?.taken ?? 0) + (t.OD?.taken ?? 0) + period.otherDays + period.lopDays;
+    (t.CL?.taken ?? 0) + (t.SL?.taken ?? 0) + (t.EL?.taken ?? 0) + (t.OD?.taken ?? 0) + period.otherDays;
   return [
     String(sno), employeeId, name, department, formatJoinDate(dateOfJoining), payrollMonth,
     String(leavesTaken), "", "", "", String(period.lopDays || 0),
