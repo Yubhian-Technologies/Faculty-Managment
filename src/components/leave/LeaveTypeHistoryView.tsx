@@ -194,7 +194,11 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
         open={!!cancelTarget}
         onOpenChange={(open) => { if (!open) setCancelTarget(null); }}
         title="Cancel this leave request?"
-        description="It moves to Cancelled in your history. Your leave balance is unaffected either way."
+        description={
+          cancelTarget?.status === "APPROVED"
+            ? "It moves to Cancelled in your history and the days already deducted for it are added back to your balance."
+            : "It moves to Cancelled in your history. Your leave balance is unaffected either way."
+        }
         confirmLabel="Cancel Request"
         variant="destructive"
         loading={cancelling}
