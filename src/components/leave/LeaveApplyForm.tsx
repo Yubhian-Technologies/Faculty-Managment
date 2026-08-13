@@ -46,6 +46,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDaySession, setHalfDaySession] = useState<"FN" | "AN">("FN");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
@@ -132,6 +133,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           fromDate,
           toDate,
           isHalfDay,
+          halfDaySession: isHalfDay ? halfDaySession : undefined,
           reason: reason.trim(),
           extendsRequestId: extendId ?? undefined,
         }),
@@ -212,6 +214,21 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               <span className="text-xs text-muted-foreground">(not available for this leave type)</span>
             )}
           </label>
+
+          {isHalfDay && isHalfDayEligible && (
+            <div className="space-y-2">
+              <Label>Which half?</Label>
+              <Select value={halfDaySession} onValueChange={(v) => setHalfDaySession(v as "FN" | "AN")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FN">Forenoon</SelectItem>
+                  <SelectItem value="AN">Afternoon</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {lopPreviewDays > 0 && selectedType && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">

@@ -193,17 +193,11 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
               <CardContent className="p-4 flex flex-col justify-between h-full">
                 <div>
                   <p className="text-sm text-muted-foreground">{b.label}</p>
-                  {/* Earned Leave's balance is tracked the same as any other type
-                      (see balanceEngine.ts) - just not shown here, per request. */}
-                  {b.code !== "EL" && (
-                    <>
-                      <p className="text-3xl font-bold mt-1">{b.remaining}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        of {b.entitled}
-                        {b.used ? ` · ${b.used} used` : ""}
-                      </p>
-                    </>
-                  )}
+                  <p className="text-3xl font-bold mt-1">{b.remaining}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    of {b.entitled}
+                    {b.used ? ` · ${b.used} used` : ""}
+                  </p>
                 </div>
                 <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
                   View history <ChevronRight className="h-3.5 w-3.5" />
@@ -322,6 +316,11 @@ export function LeaveHistoryRow({
         <p className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
           {request.isOtherRequest && !request.leaveTypeCode ? "Other" : LEAVE_TYPE_LABELS[request.leaveTypeCode!] ?? request.leaveTypeCode}
           <span className="text-muted-foreground font-normal">&middot; {request.totalDays} day(s)</span>
+          {request.isHalfDay && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+              Half Day &middot; {request.halfDaySession === "AN" ? "Afternoon" : "Forenoon"}
+            </Badge>
+          )}
           {request.extendsRequestId && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">Extension</Badge>
           )}
@@ -333,6 +332,11 @@ export function LeaveHistoryRow({
           {formatDate(request.fromDate)} - {formatDate(request.toDate)}
         </p>
         <p className="text-xs text-muted-foreground truncate mt-0.5">{request.reason}</p>
+        {request.status === "CANCELLED" && request.cancelReason && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <span className="font-medium text-foreground/80">Cancellation reason:</span> {request.cancelReason}
+          </p>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {request.isPaidLeave !== undefined && (

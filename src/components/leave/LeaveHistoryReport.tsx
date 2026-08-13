@@ -3,7 +3,7 @@
 import { useState, Fragment } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { History, Search, Download } from "lucide-react";
+import { History, Search, FileSpreadsheet, FileDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toCSV, downloadCSV } from "@/lib/utils/csv";
+import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import { toast } from "@/hooks/useToast";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveTypeCode } from "@/types/leave";
 import { ROLE_LABELS } from "@/types";
@@ -249,6 +251,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
   const [year, setYear] = useState(now.getFullYear());
   const [category, setCategory] = useState<EffectiveLeaveCategory>("vacation");
   const [search, setSearch] = useState("");
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const monthlyQuery = useQuery({
     queryKey: [...queryKey, "month", year, month],
@@ -280,11 +283,11 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
       )
     : categoryRows;
 
-  function handleExport() {
+  function buildExportRows(): string[][] {
     const department = data?.department?.name ?? "";
     const location = data?.location ?? "";
     const holidaysByMonth = data?.holidaysByMonth ?? [];
-    const csvRows = mode === "month"
+    return mode === "month"
       ? (rows as LeaveHistoryReportRow[]).map((row, i) =>
           exportRow({
             sno: i + 1,
@@ -330,7 +333,36 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
             holidays: holidaysByMonth.reduce((s, n) => s + n, 0),
           }),
         ]);
-    downloadCSV(toCSV([EXPORT_HEADERS, ...csvRows]), `leave-history-${mode === "month" ? `${year}-${String(month).padStart(2, "0")}` : year}.csv`);
+  }
+
+  const exportFilenameBase = `leave-history-${mode === "month" ? `${year}-${String(month).padStart(2, "0")}` : year}`;
+
+  function handleExportExcel() {
+    downloadCSV(toCSV([EXPORT_HEADERS, ...buildExportRows()]), `${exportFilenameBase}.csv`);
+  }
+
+  // Renders the same register data as a landscape-fit HTML table and rasterizes
+  // it into a real .pdf client-side (see htmlToPdf.ts) - no server round-trip,
+  // same pipeline the resume/document-acknowledgement downloads already use.
+  async function handleExportPdf() {
+    setIsExportingPdf(true);
+    try {
+      const exportRows = buildExportRows();
+      const title = `Leave History Register - ${data?.department?.name ?? ""} (${mode === "month" ? `${MONTH_NAMES[month - 1]} ${year}` : year})`;
+      const tableHead = `<tr>${EXPORT_HEADERS.map((h) => `<th style="border:1px solid #999;background:#0a0a7a;color:#fff;padding:4px 6px;font-size:9px;white-space:nowrap;">${h}</th>`).join("")}</tr>`;
+      const tableBody = exportRows
+        .map(
+          (r) =>
+            `<tr>${r.map((c) => `<td style="border:1px solid #ccc;padding:4px 6px;font-size:9px;text-align:center;white-space:nowrap;">${c}</td>`).join("")}</tr>`
+        )
+        .join("");
+      const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;margin:16px;}table{border-collapse:collapse;}</style></head><body><h3 style="margin:0 0 12px;">${title}</h3><table>${tableHead}${tableBody}</table></body></html>`;
+      await renderHtmlToPdf(html, `${exportFilenameBase}.pdf`);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to export PDF" });
+    } finally {
+      setIsExportingPdf(false);
+    }
   }
 
   return (
@@ -375,9 +407,13 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={rows.length === 0}>
-            <Download className="h-4 w-4 mr-1" />
-            Export
+          <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={rows.length === 0}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void handleExportPdf()} loading={isExportingPdf} disabled={rows.length === 0}>
+            <FileDown className="h-4 w-4 mr-1" />
+            PDF
           </Button>
         </div>
       </div>
