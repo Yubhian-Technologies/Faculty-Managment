@@ -206,6 +206,27 @@ export async function releasePending(
   );
 }
 
+// Inverse of commitApproval - the requester cancelling an already-APPROVED
+// request (see applications/[id]/route.ts CANCEL branch) restores whatever
+// days that approval had committed to `used`, same as if it had never been
+// approved. Never touches `pending` - approval already zeroed out whatever
+// was reserved for it.
+export async function releaseApproval(
+  db: Firestore,
+  collegeId: string,
+  uid: string,
+  leaveTypeCode: LeaveTypeCode,
+  year: number,
+  days: number
+): Promise<void> {
+  const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
+  const data = (await ref.get()).data() ?? {};
+  await ref.set(
+    { collegeId, uid, leaveTypeCode, year, used: Math.max(0, (data.used ?? 0) - days), updatedAt: new Date() },
+    { merge: true }
+  );
+}
+
 // Balance is never reserved at submission (see applications/route.ts POST),
 // and insufficient balance never blocks approval either - days beyond what's
 // remaining are accepted and split off as Loss of Pay instead. If no balance

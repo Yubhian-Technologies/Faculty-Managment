@@ -17,6 +17,9 @@ export interface VacancyRequest {
   requiredCount: number;
   availableCount: number;
   justification?: string;
+  // Free-text reasoning the HOD writes themselves, kept separate from the
+  // generic ratio-backed `justification` above so neither overwrites the other.
+  hodJustification?: string;
   status: WorkflowStatus;
   // Ratio-backed justification data (attached when HOD submits from the requirement panel)
   studentStrength?: number;

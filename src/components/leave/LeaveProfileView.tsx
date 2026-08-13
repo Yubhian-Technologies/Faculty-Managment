@@ -279,7 +279,20 @@ function CountBadge({ count, title }: { count: number; title: string }) {
   );
 }
 
-const CANCELLABLE_STATUSES: LeaveRequestStatus[] = ["PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT"];
+const PENDING_STATUSES: LeaveRequestStatus[] = ["PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT"];
+
+// An APPROVED request is only cancellable up until its own leave period ends
+// - cancelling something already lived through doesn't make sense. Pending
+// requests have no such restriction (the server enforces both the same way -
+// see applications/[id]/route.ts's CANCEL branch).
+function isCancellable(request: LeaveRequest): boolean {
+  if (PENDING_STATUSES.includes(request.status)) return true;
+  if (request.status !== "APPROVED") return false;
+  const to = toDate(request.toDate);
+  if (!to) return false;
+  const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+  return toEnd >= new Date();
+}
 
 // categoryLabel (Maternity/Family Planning/Quarantine/Extraordinary/
 // Compensatory) is opt-in and passed in by the caller, never fetched here -
@@ -302,7 +315,7 @@ export function LeaveHistoryRow({
   onCancel?: (request: LeaveRequest) => void;
   cancelling?: boolean;
 }) {
-  const canCancel = !!onCancel && CANCELLABLE_STATUSES.includes(request.status);
+  const canCancel = !!onCancel && isCancellable(request);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">

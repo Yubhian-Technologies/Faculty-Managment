@@ -20,9 +20,10 @@ export interface StudentImportRow {
   secondaryDepartment?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional; see the matching fields on StudentRecord (src/types/core.ts)
-  // for what each one means. "Course"/"Branch" columns in the source sheet
-  // are aliases of the department column, not collected here - see the
-  // importer page's COLUMNS. Photo is not collected via CSV at all.
+  // for what each one means. "Branch" in the source sheet is still an alias of
+  // the department column; "Course" is its own column now (the roster template
+  // carries both) and is recorded verbatim. Photo is not collected via CSV.
+  course?: string;
   semester?: string;
   dateOfAdmission?: string;
   admissionNo?: string;
@@ -105,6 +106,7 @@ export function buildStudentDoc(
     ...(row.guardianContact?.trim() ? { guardianContact: row.guardianContact.trim() } : {}),
     ...(row.email?.trim() ? { email: row.email.trim().toLowerCase() } : {}),
     ...(row.secondaryDepartment?.trim() ? { secondaryDepartment: row.secondaryDepartment.trim() } : {}),
+    ...(row.course?.trim() ? { course: row.course.trim() } : {}),
     ...(parseSemester(row.semester) !== undefined ? { semester: parseSemester(row.semester) } : {}),
     ...(row.dateOfAdmission?.trim() ? { dateOfAdmission: row.dateOfAdmission.trim() } : {}),
     ...(row.admissionNo?.trim() ? { admissionNo: row.admissionNo.trim() } : {}),

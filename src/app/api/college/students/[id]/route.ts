@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
+import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
@@ -51,7 +52,47 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       secondaryDepartment?: string | null;
       rollNumber?: string;
       status?: StudentStatus;
+      /** Admission details from the Office's per-student Edit form. */
+      details?: Record<string, unknown>;
     };
+
+    // Roster-detail edit: the admission information the Office owns (the CSV
+    // template's fields - course, admission no, contact details and so on).
+    // Open to the College Office as well as the department, because this is
+    // the same information the Office already enters when it imports or adds
+    // the student in the first place.
+    //
+    // rollNumber is deliberately NOT reachable here even though it's a
+    // template column: it stays on the path below, which is the department's
+    // alone and is the only one that checks uniqueness. The Office can set a
+    // provisional one at intake (import/add); correcting it afterwards is the
+    // HOD's call.
+    if (!body.targetSectionId && body.details) {
+      const updates = normalizeRosterDetails(body.details);
+      delete updates.rollNumber;
+      if (Object.keys(updates).length === 0) {
+        return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+      }
+
+      const db = getAdminDb();
+      const collegeRef = db.collection("colleges").doc(session.collegeId);
+      const studentRef = collegeRef.collection("students").doc(id);
+      const studentSnap = await studentRef.get();
+      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      const student = studentSnap.data() as StudentRecord;
+
+      if (session.role === "HOD") {
+        const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+        if (!inHodScope(student.department, student.year)) {
+          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        }
+      } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
+        return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
+      }
+
+      await studentRef.update({ ...updates, updatedAt: new Date() });
+      return NextResponse.json({ ok: true });
+    }
 
     // Field-only edit (no section move): assign/correct a student's roll number
     // or status. Roll numbers are the department's responsibility - the assigned

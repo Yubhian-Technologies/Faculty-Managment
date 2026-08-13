@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
-import { REQUESTS_COL, commitApproval, releasePending, splitLeaveDays } from "@/lib/leave/balanceEngine";
+import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
@@ -71,24 +71,50 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const now = new Date();
     const year = (req.fromDate as unknown as { toDate(): Date }).toDate().getFullYear();
 
-    // ─── Cancel (requester only, while still pending) ───────────────────────
+    // ─── Cancel (requester only) ─────────────────────────────────────────────
+    // Works both while still pending (any stage - HOD/Principal/Management)
+    // and after it's already been APPROVED, as long as the leave period
+    // itself hasn't finished yet - cancelling something already lived
+    // through doesn't make sense. Only the original requester can do this,
+    // at either point.
     if (body.action === "CANCEL") {
       if (req.uid !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL" && req.status !== "PENDING_MANAGEMENT") {
-        return NextResponse.json({ error: "Only pending requests can be cancelled" }, { status: 400 });
+      const wasApproved = req.status === "APPROVED";
+      if (
+        req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL" &&
+        req.status !== "PENDING_MANAGEMENT" && !wasApproved
+      ) {
+        return NextResponse.json({ error: "Only a pending or approved request can be cancelled" }, { status: 400 });
+      }
+      if (wasApproved) {
+        const toD = (req.toDate as unknown as { toDate(): Date }).toDate();
+        const toEnd = new Date(toD.getFullYear(), toD.getMonth(), toD.getDate(), 23, 59, 59, 999);
+        if (toEnd < now) {
+          return NextResponse.json({ error: "This leave has already been completed and can no longer be cancelled" }, { status: 400 });
+        }
       }
       if (req.leaveTypeCode) {
         const lt = LEAVE_TYPE_SEED.find((t) => t.code === req.leaveTypeCode);
         if (lt && !lt.rules.unlimited) {
-          await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
+          if (wasApproved) {
+            // Restore whatever days approval had committed to `used` -
+            // the extra beyond balance (lopDays) was never committed in the
+            // first place, so only the within-balance portion is reversed.
+            const committedDays = req.totalDays - (req.lopDays ?? 0);
+            if (committedDays > 0) {
+              await releaseApproval(db, session.collegeId, req.uid, req.leaveTypeCode, year, committedDays);
+            }
+          } else {
+            await releasePending(db, session.collegeId, req.uid, req.leaveTypeCode, year, req.totalDays);
+          }
         }
       }
       await ref.update({ status: "CANCELLED", updatedAt: now });
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_CANCELLED", performedBy: session.uid,
-        performedByName: req.employeeName, targetId: id, details: {}, timestamp: now,
+        performedByName: req.employeeName, targetId: id, details: { wasApproved }, timestamp: now,
       });
       return NextResponse.json({ ok: true });
     }
@@ -223,12 +249,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             { status: 400 }
           );
         }
+        // Normally an HOD already tagged paid/unpaid when forwarding it here.
+        // A Vice Principal's own Other leave skips the HOD stage entirely
+        // though, landing here untagged - the Principal decides it themselves.
+        if (req.isPaidLeave === undefined && typeof body.isPaidLeave !== "boolean") {
+          return NextResponse.json({ error: "Select paid or unpaid before approving" }, { status: 400 });
+        }
       }
       await decideFinalStageLeave({
         db, collegeId: session.collegeId, id, req,
         action: body.action, remarks: body.remarks,
         decidedByUid: session.uid, decidedByEmail: session.email,
         decider: "PRINCIPAL",
+        isPaidLeave: body.isPaidLeave,
       });
       if (body.action === "APPROVE" && req.isOtherRequest && body.otherLeaveCategory) {
         await OTHER_CATEGORIES_COL(session.collegeId, db).doc(id).set({

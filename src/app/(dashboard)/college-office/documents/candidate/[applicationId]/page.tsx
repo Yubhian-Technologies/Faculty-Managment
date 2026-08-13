@@ -586,10 +586,22 @@ ${institution}`;
                 </div>
                 {offer && (
                   accountRequest ? (
-                    <Badge variant="outline" className="text-xs">
-                      {accountRequest.status === "COMPLETED" ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
-                      Faculty Account: {FACULTY_ACCOUNT_REQUEST_STATUS_LABELS[accountRequest.status]}
-                    </Badge>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="text-xs">
+                        {accountRequest.status === "COMPLETED" ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                        Faculty Account: {FACULTY_ACCOUNT_REQUEST_STATUS_LABELS[accountRequest.status]}
+                      </Badge>
+                      {/* Reveal only happens on the settings page (one-time-view dialog) -
+                          link there instead of a dead-end badge once creds are ready. */}
+                      {accountRequest.credentialResult && !accountRequest.credentialResult.revealed && (
+                        <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" asChild>
+                          <Link href="/college-office/settings/faculty-credentials">
+                            <KeyRound className="h-3.5 w-3.5 mr-1.5" />
+                            Reveal Credentials →
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
                   ) : !offer.candidateConfirmedJoiningDate ? (
                     <p className="text-xs text-muted-foreground" title="The candidate hasn't confirmed a date of joining via the offer acceptance form yet">
                       Awaiting candidate&apos;s confirmed date of joining before the faculty account can be requested

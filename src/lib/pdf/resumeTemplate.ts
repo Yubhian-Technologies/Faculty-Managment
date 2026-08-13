@@ -222,7 +222,7 @@ export interface ResumeData {
   }[];
 }
 
-function esc(value: unknown): string {
+export function esc(value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   return String(value)
     .replace(/&/g, "&amp;")
@@ -233,14 +233,14 @@ function esc(value: unknown): string {
 /** Centered, ruled section heading, e.g. "EDUCATION" - always renders (rather than
  *  disappearing when a module is empty) so the document reads as complete even when
  *  a person's record hasn't had that module filled in yet. */
-function sectionTitle(title: string): string {
+export function sectionTitle(title: string): string {
   return `<div class="section-title">${esc(title)}</div>`;
 }
 
 /** Two-line entry header used by Education / Experience / Projects - bold title
  *  + right-aligned meta on the first line, plain subtitle + bold right-aligned
  *  meta (usually dates) on the second. Either line's right side may be omitted. */
-function entry(title: string, titleRight: string, subtitle?: string, subtitleRight?: string): string {
+export function entry(title: string, titleRight: string, subtitle?: string, subtitleRight?: string): string {
   const t = esc(title);
   if (!t) return "";
   const row1 = `<div class="entry-row"><span class="l">${t}</span><span class="r">${esc(titleRight)}</span></div>`;
@@ -252,7 +252,7 @@ function entry(title: string, titleRight: string, subtitle?: string, subtitleRig
 
 /** Hollow-bullet list of achievement/fact lines under an entry. Falsy items are
  *  dropped so a bullet never renders for a field the record doesn't have. */
-function bullets(items: unknown[]): string {
+export function bullets(items: unknown[]): string {
   const rows = items.filter((i): i is string => typeof i === "string" && i.length > 0);
   if (!rows.length) return "";
   return `<ul class="bullets">${rows.map((i) => `<li>${i}</li>`).join("")}</ul>`;
@@ -260,15 +260,25 @@ function bullets(items: unknown[]): string {
 
 /** A key/value cell in the compact personal/financial fact grid. Long free-text
  *  values pass wide=true to span the full grid width instead of a half column. */
-function detail(label: string, value: unknown, wide = false): string {
+export function detail(label: string, value: unknown, wide = false): string {
   const v = esc(value);
   if (!v) return "";
   return `<div class="fitem${wide ? " fitem-wide" : ""}"><span class="fk">${esc(label)}</span><span class="fv">${v}</span></div>`;
 }
 
-function detailTable(rows: string): string {
+export function detailTable(rows: string): string {
   if (!rows.trim()) return "";
   return `<div class="fgrid">${rows}</div>`;
+}
+
+/** Simple bordered doc-link row (name + "View" link) - used for lists of
+ *  uploaded certificates/documents, distinct from the inline .doc-link used
+ *  under an education/publication entry. */
+export function docLinkRow(label: string, url?: string): string {
+  if (!label) return "";
+  return `<div class="entry"><div class="entry-row"><span class="l">${esc(label)}</span>${
+    url ? `<span class="r"><a href="${esc(url)}" target="_blank" style="color:#1d4ed8;text-decoration:none;">View ↗</a></span>` : ""
+  }</div></div>`;
 }
 
 /** Renders one Teaching Load table - Academic Year / Year-Branch-Semester-Section /
@@ -302,7 +312,7 @@ function renderTeachingLoadGroups(groups: { current: TeachingLoadRow[]; past: Te
 /** Renders a section's heading + body together, or nothing at all when the
  *  body is empty - a person's record with no data for a module simply
  *  doesn't get a module in their resume, rather than a placeholder. */
-function renderSection(title: string, body: string): string {
+export function renderSection(title: string, body: string): string {
   return body.trim() ? `${sectionTitle(title)}${body}` : "";
 }
 
@@ -545,7 +555,50 @@ export function getResumeHTML(data: ResumeData): string {
 <html>
 <head>
 <meta charset="utf-8">
-<style>
+<style>${DOCUMENT_STYLES}</style>
+</head>
+<body>
+<div class="page">
+  <div class="resume-header">
+    <div class="header-left">
+      ${data.profilePhotoUrl
+        ? `<img class="avatar" src="${esc(data.profilePhotoUrl)}" alt="">`
+        : `<div class="avatar-fallback">${esc(initials(data.name))}</div>`}
+      <div>
+        <div class="name">${esc(data.name)}</div>
+        ${subtitle ? `<div class="subtitle">${esc(subtitle)}</div>` : ""}
+        ${data.collegeName ? `<div class="college">${esc(data.collegeName)}</div>` : ""}
+      </div>
+    </div>
+    <div class="contact-block">
+      ${contactLines.map((l) => `<div>${l}</div>`).join("")}
+    </div>
+  </div>
+
+  ${renderSection("Personal & Contact Details", personalBody)}
+  ${renderSection("Education", educationBody)}
+  ${renderSection("Previous Experience", experienceBody)}
+  ${renderSection("Teaching Load", teachingLoadBody)}
+  ${renderSection("Research Publications", publicationsBody)}
+  ${renderSection("Projects, Grants & Consultancy", grantsBody)}
+  ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
+  ${renderSection("Certifications & Professional Memberships", certificationsBody)}
+  ${renderSection("Other Information", otherInfoBody)}
+  ${renderSection("Financial Standing", financialBody)}
+
+  <div class="footer">Generated on ${esc(formatDate(new Date()))} - Confidential, for internal institutional use only.</div>
+</div>
+</body>
+</html>`;
+}
+
+/** Shared print-document CSS (page geometry, section headings, entry/bullet/
+ *  fact-grid layout) - reused as-is by every htmlToPdf.ts-rendered document
+ *  (resume, candidate profile, ...) so they share one visual language and one
+ *  place to fix layout/pagination bugs. Class names are part of this contract:
+ *  entry()/bullets()/detail()/docLinkRow()/sectionTitle() above all emit markup
+ *  built against these exact selectors. */
+export const DOCUMENT_STYLES = `
   * { box-sizing: border-box; }
   html { background: #ffffff; color-scheme: light only; }
   html, body { margin: 0; padding: 0; }
@@ -609,39 +662,4 @@ export function getResumeHTML(data: ResumeData): string {
   .doc-link a:hover { text-decoration: underline; }
 
   .footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #d1d5db; font-size: 10px; color: #6b7280; text-align: center; }
-</style>
-</head>
-<body>
-<div class="page">
-  <div class="resume-header">
-    <div class="header-left">
-      ${data.profilePhotoUrl
-        ? `<img class="avatar" src="${esc(data.profilePhotoUrl)}" alt="">`
-        : `<div class="avatar-fallback">${esc(initials(data.name))}</div>`}
-      <div>
-        <div class="name">${esc(data.name)}</div>
-        ${subtitle ? `<div class="subtitle">${esc(subtitle)}</div>` : ""}
-        ${data.collegeName ? `<div class="college">${esc(data.collegeName)}</div>` : ""}
-      </div>
-    </div>
-    <div class="contact-block">
-      ${contactLines.map((l) => `<div>${l}</div>`).join("")}
-    </div>
-  </div>
-
-  ${renderSection("Personal & Contact Details", personalBody)}
-  ${renderSection("Education", educationBody)}
-  ${renderSection("Previous Experience", experienceBody)}
-  ${renderSection("Teaching Load", teachingLoadBody)}
-  ${renderSection("Research Publications", publicationsBody)}
-  ${renderSection("Projects, Grants & Consultancy", grantsBody)}
-  ${renderSection("Mentorship & Institutional Contribution", mentorshipBody)}
-  ${renderSection("Certifications & Professional Memberships", certificationsBody)}
-  ${renderSection("Other Information", otherInfoBody)}
-  ${renderSection("Financial Standing", financialBody)}
-
-  <div class="footer">Generated on ${esc(formatDate(new Date()))} - Confidential, for internal institutional use only.</div>
-</div>
-</body>
-</html>`;
-}
+`;
