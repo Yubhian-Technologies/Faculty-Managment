@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { EffectiveLeaveCategory, LeaveBalance, LeaveRequest, LeaveTypeCode } from "@/types/leave";
 import { LEAVE_TYPE_SEED } from "./seedData";
-import { REQUESTS_COL, computeEntitlement, loadBalances } from "./balanceEngine";
+import { REQUESTS_COL, computeEntitlement, loadBalances, initBalancesForYear } from "./balanceEngine";
 import { computeEffectiveCategory } from "./categoryEngine";
 import { getOrCreateProfile } from "./profile";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
@@ -95,14 +95,23 @@ function computeMonthSummary(
     };
   }
 
-  const lopDays = approved
+  const standardLopDays = approved
     .filter((r) => toDate(r.fromDate) >= monthStart && toDate(r.fromDate) < monthEndExclusive)
     .reduce((s, r) => s + (r.lopDays ?? 0), 0);
 
-  const otherDays = allApproved
+  const otherInMonth = allApproved
     .filter((r) => r.isOtherRequest)
-    .filter((r) => toDate(r.fromDate) >= monthStart && toDate(r.fromDate) < monthEndExclusive)
+    .filter((r) => toDate(r.fromDate) >= monthStart && toDate(r.fromDate) < monthEndExclusive);
+  const otherDays = otherInMonth.reduce((s, r) => s + r.totalDays, 0);
+  // An "Other" request the HOD tagged unpaid (isPaidLeave: false) when
+  // forwarding it - see types/leave.ts - is Loss of Pay by definition, so
+  // those days count toward LOP same as a standard type's balance overflow,
+  // on top of still showing under the Others column above. A paid Other
+  // request contributes nothing here.
+  const otherLopDays = otherInMonth
+    .filter((r) => r.isPaidLeave === false)
     .reduce((s, r) => s + r.totalDays, 0);
+  const lopDays = standardLopDays + otherLopDays;
 
   return { types, lopDays, otherDays };
 }
@@ -111,9 +120,23 @@ function computeMonthSummary(
 // computeYearlyLeaveSummary (all 12) - the profile/settings/balances/requests
 // don't change per-month, only which slice of `allApproved` counts.
 async function loadEmployeeLeaveData(db: Firestore, collegeId: string, uid: string, year: number) {
-  const [profile, settings, balances, reqSnap] = await Promise.all([
+  const [profile, settings] = await Promise.all([
     getOrCreateProfile(db, collegeId, uid),
     loadCollegeSettings(db, collegeId),
+  ]);
+
+  // Ensures `year`'s balance docs actually exist (idempotent - a no-op once
+  // created, same guard as GET /api/leave/balances) rather than assuming
+  // someone already viewed their own balance that year first. Without this, a
+  // report for a year nobody's touched yet falls back to a bare base
+  // entitlement below (no `bal` found), silently dropping Earned Leave's
+  // carried-forward total - see initBalancesForYear's own recursive backfill
+  // for why a whole chain of skipped years doesn't lose it either.
+  if (profile) {
+    await initBalancesForYear(db, collegeId, uid, profile, settings.newJoiningYears, year);
+  }
+
+  const [balances, reqSnap] = await Promise.all([
     loadBalances(db, collegeId, uid, year),
     REQUESTS_COL(collegeId, db).where("uid", "==", uid).get(),
   ]);

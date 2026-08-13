@@ -9,7 +9,8 @@ import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
-import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
+import { countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
+import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
@@ -213,7 +214,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const totalDays = countLeaveDays(fromDate, toDate, body.isHalfDay);
+    // Sundays and declared holidays within the range were never working days
+    // to begin with, so they don't draw down balance - see countWorkingDays.
+    const holidayDates = await getHolidayDateKeys(db, session.collegeId, fromDate, toDate);
+    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay);
 
     // Insufficient balance never blocks submission - days beyond what's
     // remaining are accepted and split into Loss of Pay at approval time

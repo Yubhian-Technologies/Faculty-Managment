@@ -12,11 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
 import { AlertTriangle, CalendarPlus } from "lucide-react";
-import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
+import { countWorkingDays, dateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { toDate as toJsDate, formatDate } from "@/lib/utils";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
+import type { Holiday } from "@/types";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -47,15 +48,31 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [isHalfDay, setIsHalfDay] = useState(false);
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
 
   const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
+
+  useEffect(() => {
+    fetch("/api/college/holidays")
+      .then((r) => r.json() as Promise<{ holidays: Holiday[] }>)
+      .then((d) => {
+        const keys = (d.holidays ?? []).map((h) => toJsDate(h.date)).filter((d): d is Date => !!d).map(dateKey);
+        setHolidayDates(new Set(keys));
+      })
+      .catch(() => {
+        // Non-fatal - the preview just won't exclude holidays; the server
+        // (applications/route.ts) is still the authoritative count.
+      });
+  }, []);
 
   // Live preview only - the server never blocks on this (see applications/route.ts),
   // it just warns the requester before they submit that some days will exceed
   // their balance and be treated as Loss of Pay (final split happens at approval).
+  // Matches the server's countWorkingDays exactly - Sundays and declared
+  // holidays within the range don't count, same rule the server enforces.
   const selectedType = types.find((t) => t.code === leaveTypeCode);
   const previewTotalDays =
-    fromDate && toDate && toDate >= fromDate ? countLeaveDays(new Date(fromDate), new Date(toDate), isHalfDay) : 0;
+    fromDate && toDate && toDate >= fromDate ? countWorkingDays(new Date(fromDate), new Date(toDate), holidayDates, isHalfDay) : 0;
   const lopPreviewDays =
     selectedType && !selectedType.unlimited && selectedType.remaining !== undefined && previewTotalDays > selectedType.remaining
       ? previewTotalDays - selectedType.remaining
