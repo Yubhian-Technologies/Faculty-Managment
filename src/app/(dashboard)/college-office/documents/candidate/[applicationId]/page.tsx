@@ -18,7 +18,7 @@ import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate } from "@/lib/utils";
 import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
 import { MarkOfferAcceptedDialog } from "@/components/hiring/MarkOfferAcceptedDialog";
-import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
+import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS, ROLE_LABELS } from "@/types";
 import type { Candidate, CandidateApplication, HiringBatch, OfferLetter, FacultyAccountRequest, CandidateStatus, CandidateStage, FMSUser } from "@/types";
 import { getDetailedHiringStatus, DETAILED_HIRING_STATUS_LABELS } from "@/lib/hiringPipeline";
 
@@ -227,6 +227,7 @@ export default function CollegeOfficeCandidateDetailPage() {
           department: candidate.department,
           checkedDocs: checklist,
           verifiedByName: user?.name ?? "College Office",
+          verifiedByRole: user?.role ? ROLE_LABELS[user.role] : "College Office",
           verifiedAt: new Date().toISOString(),
         },
         candidate.name

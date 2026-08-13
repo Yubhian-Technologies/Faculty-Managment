@@ -1,7 +1,10 @@
+import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
+
 const BASE_STYLE = `
   body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color: #111; }
   .page { width: 210mm; min-height: 297mm; padding: 18mm 20mm; box-sizing: border-box; }
   .header { text-align: center; border-bottom: 3px double #1d4ed8; padding-bottom: 14px; margin-bottom: 20px; }
+  .header img { height: 56px; width: auto; object-fit: contain; margin-bottom: 8px; }
   .college-name { font-size: 22px; font-weight: bold; color: #1d4ed8; margin: 0; }
   .title { text-align: center; font-size: 16px; font-weight: bold; text-decoration: underline; margin: 16px 0; letter-spacing: 1px; }
   .meta { margin-bottom: 16px; font-size: 12px; color: #444; }
@@ -12,6 +15,9 @@ const BASE_STYLE = `
   .status-yes { color: #15803d; font-weight: bold; }
   .status-no { color: #b91c1c; font-weight: bold; }
   .signature { margin-top: 60px; font-size: 12px; }
+  .signature .sig-line { border-top: 1px solid #444; width: 220px; padding-top: 6px; }
+  .signature .sig-name { font-weight: bold; }
+  .signature .sig-role { color: #444; }
 `;
 
 export function getDocumentAcknowledgementHTML({
@@ -21,6 +27,7 @@ export function getDocumentAcknowledgementHTML({
   department,
   checkedDocs,
   verifiedByName,
+  verifiedByRole,
   verifiedAt,
 }: {
   collegeName: string;
@@ -29,6 +36,7 @@ export function getDocumentAcknowledgementHTML({
   department: string;
   checkedDocs: Record<string, boolean>;
   verifiedByName: string;
+  verifiedByRole?: string;
   verifiedAt: string;
 }): string {
   const rows = Object.entries(checkedDocs)
@@ -49,6 +57,7 @@ export function getDocumentAcknowledgementHTML({
 <body>
 <div class="page">
   <div class="header">
+    <img src="${VISHNU_LOGO_URL}" alt="Vishnu Logo" />
     <p class="college-name">${collegeName}</p>
   </div>
   <div class="title">DOCUMENT VERIFICATION ACKNOWLEDGEMENT</div>
@@ -68,7 +77,12 @@ export function getDocumentAcknowledgementHTML({
     <tbody>${rows || `<tr><td colspan="2">No documents listed</td></tr>`}</tbody>
   </table>
 
-  <div class="signature">Verified By: ${verifiedByName}</div>
+  <div class="signature">
+    <div class="sig-line">
+      <div class="sig-name">${verifiedByName}</div>
+      <div class="sig-role">${verifiedByRole ? `${verifiedByRole}, ` : ""}${collegeName}</div>
+    </div>
+  </div>
 </div>
 </body>
 </html>`;

@@ -1,4 +1,4 @@
-const VISHNU_LOGO_URL = "https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png";
+import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
 
 // Shared banner for public (no-auth) candidate-facing forms - bio-data form
 // and offer acceptance. Logo is fixed-width on the left; a same-width spacer
