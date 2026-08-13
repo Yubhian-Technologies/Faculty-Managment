@@ -25,18 +25,34 @@ export async function decideFinalStageLeave(params: {
   decidedByUid: string;
   decidedByEmail?: string;
   decider: FinalStageDecider;
+  // Other requests that reach this stage still untagged (isPaidLeave
+  // undefined) - i.e. the submitter skipped the HOD stage entirely (a
+  // Vice Principal's own Other leave landing at PENDING_PRINCIPAL, or a
+  // Principal's own landing at PENDING_MANAGEMENT) - need this decider to
+  // tag paid/unpaid themselves, since there's no HOD in the chain to have
+  // done it already. Callers validate it's present before calling (see
+  // applications/[id]/route.ts and management/leave-approvals/[id]/route.ts).
+  // Ignored when req.isPaidLeave is already set (an HOD already tagged it).
+  isPaidLeave?: boolean;
 }): Promise<{ lopDays: number }> {
-  const { db, collegeId, id, req, action, remarks, decidedByUid, decidedByEmail, decider } = params;
+  const { db, collegeId, id, req, action, remarks, decidedByUid, decidedByEmail, decider, isPaidLeave } = params;
   const ref = REQUESTS_COL(collegeId, db).doc(id);
   const now = new Date();
   const year = (req.fromDate as unknown as { toDate(): Date }).toDate().getFullYear();
   const roleLabel = decider === "PRINCIPAL" ? "Principal" : "Management";
   const actionField = decider === "PRINCIPAL" ? "principalAction" : "managementAction";
+  // Only newly tagged here, not an HOD-forwarded re-tag - req.isPaidLeave
+  // being set already means an HOD decided it upstream.
+  const newlyTaggedPaidLeave =
+    action === "APPROVE" && req.isOtherRequest && req.isPaidLeave === undefined && isPaidLeave !== undefined
+      ? isPaidLeave
+      : undefined;
 
   const actionRecord: LeaveActionRecord = {
     action: action === "APPROVE" ? "APPROVED" : "REJECTED",
     by: decidedByUid, byName: decidedByEmail || roleLabel, at: now as unknown as LeaveActionRecord["at"],
     ...(remarks ? { remarks } : {}),
+    ...(newlyTaggedPaidLeave !== undefined ? { isPaidLeave: newlyTaggedPaidLeave } : {}),
   };
 
   let lopDays = 0;
@@ -60,7 +76,13 @@ export async function decideFinalStageLeave(params: {
         }
       }
     }
-    await ref.update({ status: "APPROVED", [actionField]: actionRecord, lopDays, updatedAt: now });
+    await ref.update({
+      status: "APPROVED",
+      [actionField]: actionRecord,
+      lopDays,
+      updatedAt: now,
+      ...(newlyTaggedPaidLeave !== undefined ? { isPaidLeave: newlyTaggedPaidLeave } : {}),
+    });
   }
 
   await db.collection("colleges").doc(collegeId).collection("auditLogs").add({
