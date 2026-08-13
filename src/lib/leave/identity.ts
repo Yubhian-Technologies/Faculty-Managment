@@ -86,6 +86,7 @@ export async function resolveEmployeeIdentity(
     name?: string;
     department?: string;
     role?: string;
+    dateOfJoining?: { toDate(): Date };
     createdAt?: { toDate(): Date };
   };
   const isAcademicLeadership = u.role === "HOD" || u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "DEAN";
@@ -93,10 +94,13 @@ export async function resolveEmployeeIdentity(
     name: u.name ?? "Unknown",
     department: u.department,
     isTeachingStaff: isAcademicLeadership,
+    // The Add Staff form (api/college/users, api/administration/college-staff)
+    // asks for this directly now - always the real answer when present. Only
+    // falls back for older accounts created before that field existed:
     // HOD/Principal/Vice Principal/Dean login accounts have no FacultyMember
-    // record to source a real joining date from - falling back to this
-    // login's own createdAt (as every other role here does) would wrongly
-    // cycle a freshly-created account through the "new-joining" leave
+    // record to source a real joining date from either, so falling back to
+    // this login's own createdAt (as every other role here does) would
+    // wrongly cycle a freshly-created account through the "new-joining" leave
     // category (computeEffectiveCategory in categoryEngine.ts: reduced CL,
     // no SL/SCL/EL) for a full newJoiningYears after every re-provisioned
     // login, even though nobody is appointed to these roles as a brand-new
@@ -104,8 +108,9 @@ export async function resolveEmployeeIdentity(
     // so they get the same "vacation" (teaching-staff) entitlements as
     // teaching faculty from day one - still correctable via the Leave
     // Profile edit screen if a college ever needs a real date on record.
-    dateOfJoining: isAcademicLeadership
-      ? new Date(new Date().getFullYear() - 50, 0, 1)
-      : (u.createdAt?.toDate?.() ?? new Date()),
+    dateOfJoining: u.dateOfJoining?.toDate?.()
+      ?? (isAcademicLeadership
+        ? new Date(new Date().getFullYear() - 50, 0, 1)
+        : (u.createdAt?.toDate?.() ?? new Date())),
   };
 }

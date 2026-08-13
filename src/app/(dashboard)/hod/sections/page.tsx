@@ -10,7 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import { findBranchManager } from "@/lib/departments/managedBranches";
+import {
+  resolveScopeDepartments, buildCourseGroups, managedBranchYearsMap, yearsInScope,
+} from "@/lib/departments/hodScope";
 import type { SectionListItem, Course, Department } from "@/types";
 
 type SectionRow = SectionListItem;
@@ -42,26 +44,6 @@ function ordinalYear(year: number) {
 // call it directly instead of one depending on the other's memoized result -
 // the real departments in scope, never a grouping container (sub-department
 // or common parent) itself. See useCascadeFilter's comment for the two shapes.
-function resolveScopeDepartments(
-  ownDept: Department | null,
-  departments: Department[],
-  isGroupingContainer: boolean,
-  useCascadeFilter: boolean,
-  groupingChildren: Department[],
-  plainChildren: Department[]
-): Department[] {
-  if (!ownDept) return [];
-  if (useCascadeFilter) {
-    const managedBranches = groupingChildren.flatMap((c) =>
-      departments.filter((d) => (c.managedDepartments ?? []).includes(d.name))
-    );
-    return [...plainChildren, ...managedBranches];
-  }
-  const children = departments.filter((d) => d.parentDepartmentId === ownDept.id);
-  const managed = departments.filter((d) => (ownDept.managedDepartments ?? []).includes(d.name));
-  return isGroupingContainer ? [...children, ...managed] : [ownDept, ...children, ...managed];
-}
-
 const STUDENT_FACULTY_RATIO = 15;
 
 export default function HODSectionsPage() {
@@ -185,21 +167,7 @@ export default function HODSectionsPage() {
   // Group by catalog course (falling back to the normalized name for legacy
   // courses created before the catalog existed) and remember every underlying
   // course-doc id so a single tab filters sections across all of them.
-  type CourseGroup = { key: string; name: string; durationYears: number; courseIds: string[] };
-  const courseGroups = useMemo<CourseGroup[]>(() => {
-    const map = new Map<string, CourseGroup>();
-    for (const c of courses) {
-      const key = c.catalogId ?? `name:${c.name.trim().toLowerCase()}`;
-      const g = map.get(key);
-      if (g) {
-        g.courseIds.push(c.id);
-        if (!g.name && c.name) g.name = c.name;
-      } else {
-        map.set(key, { key, name: c.name, durationYears: c.durationYears, courseIds: [c.id] });
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [courses]);
+  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
 
   function openCreate() {
     const group = activeCourseKey !== "all" ? courseGroups.find((g) => g.key === activeCourseKey) ?? null : null;
@@ -240,16 +208,7 @@ export default function HODSectionsPage() {
   // first year on its own, so anything scoped by assignedYears must fall back
   // to this for a managed branch, or a correctly-created shared-year section
   // (and the year tab that reveals it) would vanish from its own HOD's list.
-  const managedBranchYears = useMemo(() => {
-    const m = new Map<string, number[]>();
-    for (const d of departments) {
-      for (const branchName of d.managedDepartments ?? []) {
-        if (m.has(branchName)) continue;
-        m.set(branchName, findBranchManager(departments, branchName)?.years ?? []);
-      }
-    }
-    return m;
-  }, [departments]);
+  const managedBranchYears = useMemo(() => managedBranchYearsMap(departments), [departments]);
 
   // Whether THIS (sub-)HOD actually views branches through a managed
   // relationship - as the main common HOD via the cascade, or as a sub-HOD who
@@ -266,21 +225,18 @@ export default function HODSectionsPage() {
   // sub-department's, for a managed branch); otherwise union every department
   // in this (sub-)HOD's scope. Falls back to the full course span when nothing
   // is assigned yet.
+  // Depends on the span as a number rather than on activeGroup itself: the
+  // React Compiler can't see inside buildCourseGroups to prove the group object
+  // is never mutated afterwards, and bails out of optimizing the whole
+  // component when a memo depends on something it can't rule that out for.
+  const activeDurationYears = activeGroup?.durationYears ?? 0;
   const yearTabOptions = useMemo(() => {
-    if (!activeGroup) return [] as number[];
-    const courseYears = Array.from({ length: activeGroup.durationYears }, (_, i) => i + 1);
+    if (!activeDurationYears) return [] as number[];
     const relevant = deptFilter !== "all"
       ? departments.filter((d) => d.name === deptFilter)
       : resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren);
-    const assigned = new Set<number>();
-    for (const d of relevant) {
-      for (const y of d.assignedYears ?? []) assigned.add(y);
-      if (viewsManagedBranchYears) {
-        for (const y of managedBranchYears.get(d.name) ?? []) assigned.add(y);
-      }
-    }
-    return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
-  }, [activeGroup, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren, plainChildren, isGroupingContainer, managedBranchYears, viewsManagedBranchYears]);
+    return yearsInScope(activeDurationYears, relevant, managedBranchYears, viewsManagedBranchYears);
+  }, [activeDurationYears, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren, plainChildren, isGroupingContainer, managedBranchYears, viewsManagedBranchYears]);
 
   // Each section is scoped to the years its OWN department is assigned to teach
   // ("Years Taught"). A section whose year the department no longer teaches

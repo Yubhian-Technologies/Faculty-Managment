@@ -30,6 +30,15 @@ export interface InternalExamMarksBatch {
   sectionId?: string;
   sectionName: string;
   year?: number;
+  // Denormalized from the source TeachingAssignment at creation time — absent
+  // on batches created before this field existed, or for a semester-scoped
+  // assignment (see TeachingAssignment) which has no courseId at all. The
+  // Exam Cell's ExamConfiguration is scoped to (courseId, year), so this is
+  // what every reader (Faculty/HOD/Principal) resolves it through; a reader
+  // that finds it missing falls back to looking up the linked
+  // teachingAssignments doc rather than failing.
+  courseId?: string;
+  courseName?: string;
   subjectId: string;
   subjectName: string;
   subjectCode: string;

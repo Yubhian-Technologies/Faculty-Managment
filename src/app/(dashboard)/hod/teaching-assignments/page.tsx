@@ -10,7 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
+import { deriveHodScope, buildCourseGroups } from "@/lib/departments/hodScope";
+import { managerTeachingYears } from "@/lib/departments/managedBranches";
 import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
@@ -25,13 +28,16 @@ function ordinalYear(year: number) {
 const ALL_DEPARTMENTS = "__all__";
 
 export default function TeachingAssignmentsPage() {
+  const user = useAuthStore((s) => s.user);
   const [courses, setCourses] = useState<Course[]>([]);
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Shared course/year context for both the staffing-gap finder and the assign-faculty form.
-  const [courseId, setCourseId] = useState("");
+  // Shared course/year context for both the staffing-gap finder and the
+  // assign-faculty form. This is a course GROUP key, not a course-doc id -
+  // see buildCourseGroups for why one programme spans several docs.
+  const [courseKey, setCourseKey] = useState("");
   const [year, setYear] = useState("");
   // "" = every department this HOD manages. Set once a sub-department is picked.
   const [departmentFilter, setDepartmentFilter] = useState("");
@@ -67,7 +73,94 @@ export default function TeachingAssignmentsPage() {
     })();
   }, []);
 
-  const key = `${courseId}_${year}`;
+  const scope = useMemo(() => deriveHodScope(departments, user?.department), [departments, user?.department]);
+  const { deptOptions } = scope;
+
+  // load()'s course fetch resolves to this HOD's own department only (or its
+  // parent, for a sub-HOD) - it never reaches a MANAGED branch's own Course
+  // doc. That's what made this page look broken: the shared first-year
+  // sections are filed against the branch's Course doc (CIVIL's "Bachelor of
+  // Technology"), so filtering by the common department's doc matched none of
+  // them and every year read "No sections created yet". Fetch each scope
+  // department's courses and merge, same as the Sections page.
+  const extraCourseDeptIds = useMemo(
+    () => deptOptions.filter((d) => d.id !== scope.ownDept?.id).map((d) => d.id).sort().join(","),
+    [deptOptions, scope.ownDept]
+  );
+  useEffect(() => {
+    if (!extraCourseDeptIds) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const lists = await Promise.all(
+          extraCourseDeptIds.split(",").map((id) =>
+            fetch(`/api/college/courses?departmentId=${encodeURIComponent(id)}`)
+              .then((r) => r.json() as Promise<{ courses: Course[] }>)
+              .then((j) => j.courses ?? [])
+          )
+        );
+        if (cancelled) return;
+        setCourses((prev) => {
+          const byId = new Map(prev.map((c) => [c.id, c]));
+          for (const list of lists) for (const c of list) byId.set(c.id, c);
+          return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+        });
+      } catch {
+        // Non-fatal - the own-scope fetch from load() still covers a plain HOD.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [extraCourseDeptIds]);
+
+  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
+  const course = useMemo(() => courseGroups.find((g) => g.key === courseKey) ?? null, [courseGroups, courseKey]);
+  // Every course-doc id behind the chosen programme - sections and subjects
+  // have to be gathered across all of them, not just one department's.
+  const activeCourseIds = useMemo(() => course?.courseIds ?? [], [course]);
+
+  // The HOD's own department plus its ACTUAL sub-departments (Department
+  // .parentDepartmentId children - BS-CHEMISTRY, BS-MATHS, …).
+  //
+  // Deliberately not derived from the loaded sections' own `department`, which
+  // is what this used to do: a shared first-year section belongs to the real
+  // branch it feeds (CIVIL, ECE), so that listed the Principal's branches -
+  // "secondary departments" - where sub-departments belong. Those branches are
+  // reachable through whichever sub-department manages them, below.
+  //
+  // Empty for a sub-HOD: a sub-department has no children of its own, so the
+  // filter doesn't render for them at all - they only ever work within their
+  // own sub-department, and a one-option dropdown is just noise.
+  const subDepartmentOptions = useMemo(() => {
+    const own = scope.ownDept;
+    if (!own) return [];
+    const children = departments
+      .filter((d) => d.parentDepartmentId === own.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return children.length > 0 ? [own, ...children] : [];
+  }, [departments, scope.ownDept]);
+
+  // The Principal's "Years Taught", not the raw course span - offering 1..4 for
+  // a department that teaches only the first year is what let this page ask for
+  // a year with nothing under it.
+  //
+  // Scoped to this HOD's own department and its actual sub-departments, each
+  // falling back to its parent's years (a sub-department is never given years
+  // of its own - see college/departments POST). Deliberately NOT the branches
+  // those sub-departments manage: CIVIL's own [2,3,4] belongs to CIVIL's own
+  // HOD, and only the shared year its manager teaches is Basic Science's to
+  // staff - which the parent fallback already contributes.
+  const yearOptions = useMemo(() => {
+    if (!course) return [];
+    const relevant = subDepartmentOptions.length > 0
+      ? subDepartmentOptions
+      : scope.ownDept ? [scope.ownDept] : [];
+    const assigned = new Set<number>();
+    for (const d of relevant) for (const y of managerTeachingYears(departments, d)) assigned.add(y);
+    const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
+    return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
+  }, [course, subDepartmentOptions, scope.ownDept, departments]);
+
+  const key = `${courseKey}_${year}`;
   // Everything this HOD may actually edit for the chosen course+year: their own
   // department's sections plus every sub-department's (a main HOD runs the whole
   // tree). Only genuinely cross-listed sections from an unrelated department
@@ -77,45 +170,54 @@ export default function TeachingAssignmentsPage() {
     [sectionsCache, key]
   );
 
-  // The departments those sections belong to - the HOD's own plus any
-  // sub-departments that actually run this course+year. Derived from the
-  // sections already loaded, so no extra request.
-  const departmentOptions = useMemo(
-    () =>
-      Array.from(new Set(editableSections.map((s) => s.department).filter(Boolean)))
-        .sort((a, b) => a.localeCompare(b)),
-    [editableSections]
-  );
+  // Picking a sub-department also brings in the branches it manages: BS-ENGLISH
+  // runs the shared first year for CIVIL and IT, so those sections are its
+  // even though each one's own `department` names the branch.
+  const filterDepartmentNames = useMemo(() => {
+    if (!departmentFilter) return null;
+    const d = departments.find((x) => x.name === departmentFilter);
+    return new Set<string>([departmentFilter, ...(d?.managedDepartments ?? [])]);
+  }, [departmentFilter, departments]);
 
-  // A main HOD narrows to one sub-department before picking a section; a sub-HOD
-  // only ever has their own, so this is a no-op for them.
   const sections = useMemo(
     () =>
-      departmentFilter
-        ? editableSections.filter((s) => s.department === departmentFilter)
+      filterDepartmentNames
+        ? editableSections.filter((s) => filterDepartmentNames.has(s.department))
         : editableSections,
-    [editableSections, departmentFilter]
+    [editableSections, filterDepartmentNames]
   );
   const subjects = useMemo(() => subjectsCache[key] ?? [], [subjectsCache, key]);
-  const course = courses.find((c) => c.id === courseId) ?? null;
-  const yearOptions = course ? Array.from({ length: course.durationYears }, (_, i) => i + 1) : [];
 
-  async function ensureCourseYearData(cId: string, y: string) {
-    const k = `${cId}_${y}`;
+  // Queried once per course-doc id and merged, since the sections/subjects
+  // APIs take a single courseId and one programme spans several docs.
+  async function ensureCourseYearData(courseIds: string[], k: string, y: string) {
+    if (courseIds.length === 0) return;
     if (!(k in sectionsCache)) {
-      const res = await fetch(`/api/college/sections?courseId=${encodeURIComponent(cId)}&year=${y}`);
-      const d = await res.json() as { sections: SectionListItem[] };
-      setSectionsCache((c) => ({ ...c, [k]: d.sections ?? [] }));
+      const lists = await Promise.all(
+        courseIds.map((cId) =>
+          fetch(`/api/college/sections?courseId=${encodeURIComponent(cId)}&year=${y}`)
+            .then((r) => r.json() as Promise<{ sections: SectionListItem[] }>)
+            .then((d) => d.sections ?? [])
+        )
+      );
+      const byId = new Map(lists.flat().map((s) => [s.id, s]));
+      setSectionsCache((c) => ({ ...c, [k]: Array.from(byId.values()) }));
     }
     if (!(k in subjectsCache)) {
-      const res = await fetch(`/api/college/subjects?courseId=${encodeURIComponent(cId)}&year=${y}`);
-      const d = await res.json() as { subjects: Subject[] };
-      setSubjectsCache((c) => ({ ...c, [k]: d.subjects ?? [] }));
+      const lists = await Promise.all(
+        courseIds.map((cId) =>
+          fetch(`/api/college/subjects?courseId=${encodeURIComponent(cId)}&year=${y}`)
+            .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
+            .then((d) => d.subjects ?? [])
+        )
+      );
+      const byId = new Map(lists.flat().map((s) => [s.id, s]));
+      setSubjectsCache((c) => ({ ...c, [k]: Array.from(byId.values()) }));
     }
   }
 
   function handleCourseChange(v: string) {
-    setCourseId(v);
+    setCourseKey(v);
     setYear("");
     setDepartmentFilter("");
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
@@ -125,7 +227,7 @@ export default function TeachingAssignmentsPage() {
     setYear(v);
     setDepartmentFilter("");
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
-    await ensureCourseYearData(courseId, v);
+    await ensureCourseYearData(activeCourseIds, `${courseKey}_${v}`, v);
   }
 
   function handleDepartmentChange(v: string) {
@@ -136,17 +238,20 @@ export default function TeachingAssignmentsPage() {
 
   // Which subject/section combos for the selected course+year have no faculty assigned yet.
   const gapRows = useMemo(() => {
-    if (!courseId || !year) return [];
+    if (!courseKey || !year) return [];
+    // Matched against every course-doc id in the group: an assignment stores
+    // whichever department's doc its section belongs to.
+    const courseIdSet = new Set(activeCourseIds);
     return subjects.map((subject) => {
       const staffedSectionIds = new Set(
         assignments
-          .filter((a) => a.subjectId === subject.id && a.courseId === courseId && a.year === Number(year))
+          .filter((a) => a.subjectId === subject.id && courseIdSet.has(a.courseId ?? "") && a.year === Number(year))
           .map((a) => a.sectionId)
       );
       const unstaffedSections = sections.filter((s) => !staffedSectionIds.has(s.id));
       return { subject, unstaffedSections };
     });
-  }, [subjects, sections, assignments, courseId, year]);
+  }, [subjects, sections, assignments, courseKey, activeCourseIds, year]);
 
   // Subjects already staffed for the section picked in the assign-faculty form shouldn't be
   // offered again there - pick a different subject or remove the existing assignment first.
@@ -180,18 +285,22 @@ export default function TeachingAssignmentsPage() {
 
   async function handleAssign(e: React.FormEvent) {
     e.preventDefault();
-    if (!courseId || !year || !assignForm.sectionId || !assignForm.subjectId || !assignForm.facultyId) return;
+    if (!courseKey || !year || !assignForm.sectionId || !assignForm.subjectId || !assignForm.facultyId) return;
     setSavingAssignment(true);
     try {
       const fac = faculty.find((f) => f.id === assignForm.facultyId);
       const subj = subjects.find((s) => s.id === assignForm.subjectId);
+      // The section's OWN course doc, not the group - a shared first-year
+      // section belongs to the branch's course, and storing the common
+      // department's id here would file the assignment against the wrong one.
+      const sectionCourseId = sections.find((s) => s.id === assignForm.sectionId)?.courseId ?? activeCourseIds[0];
       const res = await fetch("/api/college/teaching-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           facultyId: assignForm.facultyId,
           facultyName: fac?.name ?? "",
-          courseId,
+          courseId: sectionCourseId,
           sectionId: assignForm.sectionId,
           subjectId: assignForm.subjectId,
           hoursPerWeek: subj?.hoursPerWeek,
@@ -213,14 +322,15 @@ export default function TeachingAssignmentsPage() {
   }
 
   async function handleSendRequest() {
-    if (!courseId || !assignForm.sectionId || !assignForm.subjectId || !requestTargetId) return;
+    if (!courseKey || !assignForm.sectionId || !assignForm.subjectId || !requestTargetId) return;
     setSendingRequest(true);
     try {
       const res = await fetch("/api/college/faculty-assignment-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          courseId,
+          // Same reasoning as handleAssign: the section's own course doc.
+          courseId: sections.find((s) => s.id === assignForm.sectionId)?.courseId ?? activeCourseIds[0],
           sectionId: assignForm.sectionId,
           subjectId: assignForm.subjectId,
           targetDepartmentId: requestTargetId,
@@ -294,10 +404,13 @@ export default function TeachingAssignmentsPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:max-w-3xl">
             <div className="space-y-2">
               <Label>Course</Label>
-              <Select value={courseId} onValueChange={handleCourseChange}>
+              <Select value={courseKey} onValueChange={handleCourseChange}>
                 <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
                 <SelectContent>
-                  {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {/* Grouped, so one programme is a single choice rather than
+                      one identical-looking entry per department that owns a
+                      copy of it. */}
+                  {courseGroups.map((g) => <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -310,28 +423,32 @@ export default function TeachingAssignmentsPage() {
                 </SelectContent>
               </Select>
             </div>
-            {/* Narrows everything below to one sub-department. A sub-HOD only
-                ever has their own, so it collapses to a single option. */}
-            <div className="space-y-2">
-              <Label>Sub-department</Label>
-              <Select
-                value={departmentFilter || ALL_DEPARTMENTS}
-                onValueChange={handleDepartmentChange}
-                disabled={!year || departmentOptions.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={year ? "All departments" : "Select a year first"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_DEPARTMENTS}>All departments</SelectItem>
-                  {departmentOptions.map((d) => (
-                    <SelectItem key={d} value={d}>
-                      {departmentCode(d, departments)} · {d}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Only for an HOD who actually has sub-departments. A sub-HOD has
+                none beneath them and works solely within their own, so the
+                field is omitted rather than shown with a single option. */}
+            {subDepartmentOptions.length > 0 && (
+              <div className="space-y-2">
+                <Label>Sub-department</Label>
+                <Select
+                  value={departmentFilter || ALL_DEPARTMENTS}
+                  onValueChange={handleDepartmentChange}
+                  disabled={!year}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={year ? "All sub-departments" : "Select a year first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_DEPARTMENTS}>All sub-departments</SelectItem>
+                    {subDepartmentOptions.map((d) => (
+                      <SelectItem key={d.id} value={d.name}>
+                        {departmentCode(d.name, departments)} · {d.name}
+                        {d.id === scope.ownDept?.id ? " (your department)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -340,7 +457,7 @@ export default function TeachingAssignmentsPage() {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
           <CardContent>
-            {!courseId || !year ? (
+            {!courseKey || !year ? (
               <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above to see staffing gaps.</p>
             ) : subjects.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No subjects defined yet for {course?.name} · {ordinalYear(Number(year))}.</p>
@@ -370,7 +487,7 @@ export default function TeachingAssignmentsPage() {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
-            {!courseId || !year ? (
+            {!courseKey || !year ? (
               <p className="text-sm text-muted-foreground text-center py-6">Select a course and year above to assign faculty.</p>
             ) : (
               <form onSubmit={handleAssign} className="space-y-3">

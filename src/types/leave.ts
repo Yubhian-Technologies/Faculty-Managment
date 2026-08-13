@@ -144,6 +144,29 @@ export const LEAVE_REQUEST_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
   CANCELLED: "Cancelled",
 };
 
+// The Principal/Vice Principal must pick one of these when approving an
+// isOtherRequest at PENDING_PRINCIPAL - a further breakdown of "Other" for
+// the Principal's own record-keeping. Deliberately NOT a field on
+// LeaveRequest itself - it's kept in a separate collection
+// (colleges/{collegeId}/otherLeaveCategories/{requestId}, see
+// src/lib/leave/otherCategories.ts) that only the Principal-only
+// staff-leave-history surface ever reads, so it never appears in the
+// requester's own leave history, the HOD's queue/history, or the general
+// approval queue - see api/leave/other-categories/route.ts.
+export type OtherLeaveCategory = "MATERNITY" | "FAMILY_PLANNING" | "QUARANTINE" | "EXTRAORDINARY" | "COMPENSATORY";
+
+export const OTHER_LEAVE_CATEGORY_LABELS: Record<OtherLeaveCategory, string> = {
+  MATERNITY: "Maternity",
+  FAMILY_PLANNING: "Family Planning",
+  QUARANTINE: "Quarantine",
+  EXTRAORDINARY: "Extraordinary",
+  COMPENSATORY: "Compensatory",
+};
+
+export const OTHER_LEAVE_CATEGORY_ORDER: OtherLeaveCategory[] = [
+  "MATERNITY", "FAMILY_PLANNING", "QUARANTINE", "EXTRAORDINARY", "COMPENSATORY",
+];
+
 export interface LeaveActionRecord {
   action: "APPROVED" | "REJECTED";
   by: string;
@@ -182,6 +205,14 @@ export interface LeaveRequest {
   // accepted and tracked here as Loss of Pay days instead (no balance touch
   // for these days). Undefined/0 when the whole request fit within balance.
   lopDays?: number;
+  // Set when this request was submitted via the "Extend Leave" action on an
+  // already-approved, currently-ongoing leave (e.g. still sick past the
+  // originally approved return date) - id of that original request. It's a
+  // brand-new request in every other respect (own id, own approval chain -
+  // same HOD/Principal/Management routing as any other request by this
+  // person - own balance/LOP handling), this is purely informational so the
+  // approver has context and the requester's history shows the link.
+  extendsRequestId?: string;
   hodAction?: LeaveActionRecord;
   principalAction?: LeaveActionRecord;
   // Set when a PRINCIPAL's own leave (PENDING_MANAGEMENT) is decided - see

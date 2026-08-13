@@ -23,6 +23,7 @@ const OTHER_DOCUMENTS_CATEGORY = "Other Documents";
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 // AP/Telangana reservation categories (with BC sub-groups), as on the paper bio-data form.
+const RELIGIONS = ["Hindu", "Muslim", "Christian", "Sikh", "Buddhist", "Jain", "Parsi", "Other"];
 const CASTE_CATEGORIES = ["OC", "BC-A", "BC-B", "BC-C", "BC-D", "BC-E", "SC", "ST", "EWS", "Other"];
 
 function onlyDigits(value: string, maxLen: number): string {
@@ -189,6 +190,7 @@ export default function CandidateFormPage() {
     if (!form.dateOfBirth) errors.push("Missing Date of Birth");
     if (!form.gender) errors.push("Missing Gender");
     if (!form.bloodGroup) errors.push("Missing Blood Group");
+    if (!form.religion) errors.push("Missing Religion");
     if (!form.caste) errors.push("Missing Caste / Category");
     if (!form.emergencyContactName?.trim()) errors.push("Missing Emergency Contact Name");
 
@@ -442,6 +444,17 @@ export default function CandidateFormPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="religion">Religion <span className="text-destructive">*</span></Label>
+                  <Select value={form.religion ?? ""} onValueChange={(v) => updateForm({ religion: v })}>
+                    <SelectTrigger id="religion"><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {RELIGIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
                   <Label htmlFor="caste">Caste / Category <span className="text-destructive">*</span></Label>
                   <Select value={form.caste ?? ""} onValueChange={(v) => updateForm({ caste: v })}>
                     <SelectTrigger id="caste"><SelectValue placeholder="Select..." /></SelectTrigger>
@@ -449,6 +462,10 @@ export default function CandidateFormPage() {
                       {CASTE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="subCaste">Sub-caste / Community</Label>
+                  <Input id="subCaste" value={form.subCaste ?? ""} onChange={(e) => updateForm({ subCaste: e.target.value })} placeholder="e.g. Kapu, Reddy, Naidu..." />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

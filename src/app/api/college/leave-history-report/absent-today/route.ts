@@ -22,10 +22,10 @@ function coversToday(today: Date, from: Date, to: Date): boolean {
 
 // Count of people on APPROVED leave today, grouped by department name
 // (how LeaveRequest.department is stored) - powers the "N absent today"
-// badge on the Principal Leave History department picker.
+// badge on the Principal/College Office Leave History department picker.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
     const db = getAdminDb();
     const today = new Date();
 

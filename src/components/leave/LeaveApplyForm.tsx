@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CalendarPlus } from "lucide-react";
 import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
-import type { LeaveTypeCode } from "@/types/leave";
+import { toDate as toJsDate, formatDate } from "@/lib/utils";
+import { LEAVE_TYPE_LABELS } from "@/types/leave";
+import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -29,9 +31,16 @@ interface LeaveApplyFormProps {
 
 export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // "Extend Leave" (see LeaveProfileView.tsx) - the id of one of the
+  // requester's own already-approved requests, linked via the search param
+  // it's launched from. Same form, same POST endpoint - just prefilled and
+  // tagged so the new request carries the connection through.
+  const extendId = searchParams.get("extend");
   const todayISO = todayISODate();
   const [types, setTypes] = useState<BalanceEntry[]>([]);
   const [isLoadingTypes, setIsLoadingTypes] = useState(true);
+  const [extendSource, setExtendSource] = useState<LeaveRequest | null>(null);
   const [leaveTypeCode, setLeaveTypeCode] = useState<string>("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -65,6 +74,27 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       .finally(() => setIsLoadingTypes(false));
   }, []);
 
+  useEffect(() => {
+    if (!extendId) return;
+    fetch(`/api/leave/applications/${extendId}`)
+      .then((r) => r.json() as Promise<{ request?: LeaveRequest; error?: string }>)
+      .then((data) => {
+        if (!data.request) { toast({ variant: "destructive", title: "Couldn't load the leave you're extending" }); return; }
+        setExtendSource(data.request);
+        setLeaveTypeCode(data.request.isOtherRequest && !data.request.leaveTypeCode ? "OTHER" : data.request.leaveTypeCode ?? "OTHER");
+        // Continues the day right after the original's last day - never
+        // earlier than today, same "no backdating" rule as any other request.
+        const originalTo = toJsDate(data.request.toDate);
+        if (originalTo) {
+          const dayAfter = new Date(originalTo);
+          dayAfter.setDate(dayAfter.getDate() + 1);
+          const dayAfterISO = dayAfter.toISOString().split("T")[0];
+          setFromDate(dayAfterISO > todayISODate() ? dayAfterISO : todayISODate());
+        }
+      })
+      .catch(() => toast({ variant: "destructive", title: "Couldn't load the leave you're extending" }));
+  }, [extendId]);
+
   async function handleSubmit() {
     if (!fromDate || !toDate || !reason.trim() || !leaveTypeCode) {
       toast({ variant: "destructive", title: "All fields are required" });
@@ -86,6 +116,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           toDate,
           isHalfDay,
           reason: reason.trim(),
+          extendsRequestId: extendId ?? undefined,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -101,12 +132,31 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
   return (
     <div className="max-w-lg space-y-6">
-      <PageHeader title="Apply for Leave" description="Submit a new leave request" />
+      <PageHeader
+        title={extendId ? "Extend Leave" : "Apply for Leave"}
+        description={extendId ? "Request more days on an already-approved leave" : "Submit a new leave request"}
+      />
+      {extendId && (
+        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+          <CalendarPlus className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            {extendSource ? (
+              <>
+                Extending your {extendSource.isOtherRequest && !extendSource.leaveTypeCode ? "Other" : LEAVE_TYPE_LABELS[extendSource.leaveTypeCode!] ?? extendSource.leaveTypeCode}{" "}
+                leave approved for {formatDate(extendSource.fromDate)} - {formatDate(extendSource.toDate)}. This is a new
+                request and will go through approval again.
+              </>
+            ) : (
+              "Loading the leave you're extending…"
+            )}
+          </span>
+        </div>
+      )}
       <Card>
         <CardContent className="p-4 space-y-4">
           <div className="space-y-2">
             <Label>Leave Type</Label>
-            <Select value={leaveTypeCode} onValueChange={handleLeaveTypeChange} disabled={isLoadingTypes}>
+            <Select value={leaveTypeCode} onValueChange={handleLeaveTypeChange} disabled={isLoadingTypes || !!extendId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select leave type" />
               </SelectTrigger>
@@ -120,6 +170,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <SelectItem value="OTHER">Other</SelectItem>
               </SelectContent>
             </Select>
+            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you're extending.</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

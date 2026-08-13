@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import type { Course, Department, ExamConfiguration, Subject } from "@/types";
+import type { Course, Department, ExamConfiguration } from "@/types";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -32,17 +32,16 @@ function emptyComponent(): ComponentForm {
 
 function ExamCellConfigureForm() {
   const searchParams = useSearchParams();
-  const preselectedSubjectId = searchParams.get("subjectId");
+  const preselectedCourseId = searchParams.get("courseId");
+  const preselectedYear = searchParams.get("year");
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [courseName, setCourseName] = useState("");
   const [year, setYear] = useState("");
   const [departmentId, setDepartmentId] = useState("");
-  const [subjectId, setSubjectId] = useState("");
 
   const [internalMaxMarks, setInternalMaxMarks] = useState("");
   const [externalMaxMarks, setExternalMaxMarks] = useState("");
@@ -55,33 +54,24 @@ function ExamCellConfigureForm() {
     void (async () => {
       setIsLoadingData(true);
       try {
-        const [courseRes, deptRes, subjectRes] = await Promise.all([
+        const [courseRes, deptRes] = await Promise.all([
           fetch("/api/college/courses"),
           fetch("/api/college/departments"),
-          fetch("/api/college/subjects"),
         ]);
         const courseJson = (await courseRes.json()) as { courses?: Course[] };
         const deptJson = (await deptRes.json()) as { departments?: Department[] };
-        const subjectJson = (await subjectRes.json()) as { subjects?: Subject[] };
         const loadedCourses = courseJson.courses ?? [];
-        // Only course/year-scoped subjects are reachable from this cascading
-        // selector — the semester-scoped shape (no courseId) belongs to a
-        // different flow (HOD's Teaching Assignments page).
-        const loadedSubjects = (subjectJson.subjects ?? []).filter((s) => s.courseId && s.year != null);
         setCourses(loadedCourses);
         setDepartments(deptJson.departments ?? []);
-        setSubjects(loadedSubjects);
 
-        // Pre-select everything from ?subjectId= (the dashboard's "Edit" links),
-        // now that this same load has the data needed to resolve it.
-        if (preselectedSubjectId) {
-          const subj = loadedSubjects.find((s) => s.id === preselectedSubjectId);
-          const course = subj?.courseId ? loadedCourses.find((c) => c.id === subj.courseId) : null;
-          if (subj && subj.year != null && course) {
+        // Pre-select everything from ?courseId=&year= (the dashboard's "Edit"
+        // links), now that this same load has the data needed to resolve it.
+        if (preselectedCourseId && preselectedYear) {
+          const course = loadedCourses.find((c) => c.id === preselectedCourseId);
+          if (course) {
             setCourseName(course.name);
-            setYear(String(subj.year));
+            setYear(preselectedYear);
             setDepartmentId(course.departmentId);
-            setSubjectId(subj.id);
           }
         }
       } catch {
@@ -90,8 +80,8 @@ function ExamCellConfigureForm() {
         setIsLoadingData(false);
       }
     })();
-    // Intentionally mount-only — preselectedSubjectId is read from the URL once;
-    // re-running this whole fetch if it changed would be unnecessary.
+    // Intentionally mount-only — preselectedCourseId/Year are read from the
+    // URL once; re-running this whole fetch if they changed would be unnecessary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -117,12 +107,7 @@ function ExamCellConfigureForm() {
     [courses, courseName, departmentId]
   );
 
-  const subjectOptions = useMemo(() => {
-    if (!resolvedCourse || !year) return [];
-    return subjects.filter((s) => s.courseId === resolvedCourse.id && s.year === Number(year));
-  }, [subjects, resolvedCourse, year]);
-
-  const selectedSubject = subjectOptions.find((s) => s.id === subjectId) ?? null;
+  const branchName = departmentNameById.get(departmentId) ?? "";
 
   function resetConfigFields() {
     setExistingConfig(null);
@@ -131,24 +116,25 @@ function ExamCellConfigureForm() {
     setComponents([emptyComponent()]);
   }
 
-  function resetDownstream(from: "course" | "year" | "branch") {
-    if (from === "course") { setYear(""); setDepartmentId(""); setSubjectId(""); resetConfigFields(); }
-    if (from === "year") { setDepartmentId(""); setSubjectId(""); resetConfigFields(); }
-    if (from === "branch") { setSubjectId(""); resetConfigFields(); }
+  function resetDownstream(from: "course" | "year") {
+    if (from === "course") { setYear(""); setDepartmentId(""); resetConfigFields(); }
+    if (from === "year") { setDepartmentId(""); resetConfigFields(); }
   }
 
-  function handleSubjectChange(v: string) {
-    setSubjectId(v);
+  function handleBranchChange(v: string) {
+    setDepartmentId(v);
     resetConfigFields();
   }
 
-  // Load the configuration whenever the subject selection changes to a real subject.
+  // Load the configuration whenever the resolved course + year changes to a
+  // real selection — this is now the FULL identity (branch is implied by
+  // courseId), no subject involved.
   useEffect(() => {
-    if (!subjectId) return;
+    if (!resolvedCourse || !year) return;
     void (async () => {
       setIsLoadingConfig(true);
       try {
-        const res = await fetch(`/api/college/exam-configurations?subjectId=${subjectId}`);
+        const res = await fetch(`/api/college/exam-configurations?courseId=${resolvedCourse.id}&year=${year}`);
         const json = (await res.json()) as { configuration?: ExamConfiguration | null };
         if (json.configuration) {
           const cfg = json.configuration;
@@ -172,7 +158,7 @@ function ExamCellConfigureForm() {
         setIsLoadingConfig(false);
       }
     })();
-  }, [subjectId]);
+  }, [resolvedCourse, year]);
 
   function updateComponent(id: string, patch: Partial<ComponentForm>) {
     setComponents((list) => list.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -192,7 +178,7 @@ function ExamCellConfigureForm() {
   const breakdownMatches = hasNamedComponent && internalMax > 0 && breakdownTotal === internalMax;
 
   async function handleSave() {
-    if (!resolvedCourse || !selectedSubject || !year) return;
+    if (!resolvedCourse || !year) return;
     const cleanComponents = components.filter((c) => c.name.trim());
     if (cleanComponents.length === 0) {
       toast({ variant: "destructive", title: "Add at least one internal marks component" });
@@ -213,11 +199,8 @@ function ExamCellConfigureForm() {
         body: JSON.stringify({
           courseId: resolvedCourse.id,
           courseName: resolvedCourse.name,
-          department: departmentNameById.get(departmentId) ?? "",
+          department: branchName,
           year: Number(year),
-          subjectId: selectedSubject.id,
-          subjectName: selectedSubject.name,
-          subjectCode: selectedSubject.code,
           internalMaxMarks: internalMax,
           externalMaxMarks: Number(externalMaxMarks) || 0,
           components: cleanComponents.map((c, i) => ({
@@ -245,12 +228,12 @@ function ExamCellConfigureForm() {
     <div className="space-y-6">
       <PageHeader
         title="Configure Examination"
-        description="Select a course, year, branch and subject, then set its Internal/External marks and breakdown."
+        description="Select a course, year and branch, then set the Internal/External marks and breakdown that applies to every subject taught under it."
       />
 
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>Course</Label>
               <Select value={courseName} onValueChange={(v) => { setCourseName(v); resetDownstream("course"); }} disabled={isLoadingData}>
@@ -273,7 +256,7 @@ function ExamCellConfigureForm() {
 
             <div className="space-y-2">
               <Label>Branch</Label>
-              <Select value={departmentId} onValueChange={(v) => { setDepartmentId(v); resetDownstream("branch"); }} disabled={!year}>
+              <Select value={departmentId} onValueChange={handleBranchChange} disabled={!year}>
                 <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                 <SelectContent>
                   {branchOptions.length === 0 && (
@@ -283,24 +266,11 @@ function ExamCellConfigureForm() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-2">
-              <Label>Subject</Label>
-              <Select value={subjectId} onValueChange={handleSubjectChange} disabled={!departmentId}>
-                <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-                <SelectContent>
-                  {subjectOptions.length === 0 && (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects found for this course/year</div>
-                  )}
-                  {subjectOptions.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
 
-      {subjectId && (
+      {departmentId && (
         isLoadingConfig ? (
           <div className="h-72 rounded-lg border bg-muted/30 animate-pulse" />
         ) : (
@@ -308,11 +278,14 @@ function ExamCellConfigureForm() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
-                  Examination Configuration — {selectedSubject?.name}
+                  Examination Configuration — {courseName} · {ordinalYear(Number(year))} · {branchName}
                   {existingConfig && (
                     <span className="ml-2 text-xs font-normal text-muted-foreground">(editing existing configuration)</span>
                   )}
                 </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  This single configuration applies to every subject taught under {courseName} · {ordinalYear(Number(year))} · {branchName}.
+                </p>
               </CardHeader>
               <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">

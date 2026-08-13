@@ -49,7 +49,8 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D"
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const url = new URL(request.url);
     const db = getAdminDb();
@@ -107,7 +108,8 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
-      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D"
+      "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
+      "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await request.json()) as {
       leaveTypeCode?: LeaveTypeCode;
@@ -116,6 +118,7 @@ export async function POST(request: Request) {
       toDate?: string;
       isHalfDay?: boolean;
       reason?: string;
+      extendsRequestId?: string;
     };
 
     if (!body.fromDate || !body.toDate || !body.reason?.trim()) {
@@ -147,6 +150,20 @@ export async function POST(request: Request) {
         { error: "You already have a leave request pending approval. Please wait for it to be decided before applying again." },
         { status: 400 }
       );
+    }
+
+    // "Extend Leave" (see LeaveProfileView.tsx / LeaveApplyForm.tsx) - this is
+    // otherwise a completely normal new request (own approval chain, own
+    // balance/LOP handling), just tagged with which of the requester's own
+    // already-APPROVED requests it's extending, so the approver has context
+    // and the requester's history shows the link. Only ever points at one of
+    // their own APPROVED requests - never someone else's, and never a
+    // still-pending or rejected one (nothing to "extend" there).
+    if (body.extendsRequestId) {
+      const source = existingSnap.docs.find((d) => d.id === body.extendsRequestId);
+      if (!source || (source.data() as LeaveRequest).status !== "APPROVED") {
+        return NextResponse.json({ error: "The leave request you're trying to extend was not found" }, { status: 400 });
+      }
     }
 
     const settings = await loadCollegeSettings(db, session.collegeId);
@@ -219,6 +236,7 @@ export async function POST(request: Request) {
       ...(identity.department ? { department: identity.department } : {}),
       ...(body.leaveTypeCode ? { leaveTypeCode: body.leaveTypeCode } : {}),
       isOtherRequest: body.isOtherRequest || false,
+      ...(body.extendsRequestId ? { extendsRequestId: body.extendsRequestId } : {}),
       fromDate: fromDate as unknown as LeaveRequest["fromDate"],
       toDate: toDate as unknown as LeaveRequest["toDate"],
       totalDays,

@@ -309,6 +309,13 @@ export interface FMSUser {
   employeeId?: string; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   designation?: string; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
   dateOfBirth?: Timestamp; // for PRINCIPAL / VICE_PRINCIPAL / HOD profile forms
+  // Collected at account-creation time (see api/college/users, api/administration/
+  // college-staff) so a role with no FacultyMember/SupportingStaff record of its
+  // own (HOD/PRINCIPAL/VICE_PRINCIPAL/DEAN/COLLEGE_OFFICE/ACCOUNTS/FINANCE/IQAC/
+  // T&P/R&D/Library/Exam Cell/Webmaster/Placement Dept, ...) doesn't wrongly
+  // default into the leave module's "new joining" category from its login's own
+  // createdAt - see resolveEmployeeIdentity in lib/leave/identity.ts.
+  dateOfJoining?: Timestamp;
   profilePhotoUrl?: string; // Firebase Storage download URL, same field name as FacultyMember below
 
   // Personal / statutory details (same field names as FacultyMember below, for consistency)
@@ -811,6 +818,25 @@ export interface ResearchPublication {
   publicationYear: number;
   indexing?: string;
   driveLink?: string;
+  // Full citation as one block - authors, "Title", journal, volume/issue/
+  // pages, year, doi - exactly as printed on R&D's own report ("Publication
+  // Details" column, see src/lib/research/publicationsCsvColumns.ts). title
+  // and coAuthors above are parsed out of this at import time (see
+  // buildCitationParts in api/college/publications/import/route.ts) so
+  // search/sort/the compact list view keep working; this is the rich,
+  // display-ready version shown in full on the publication's own view.
+  citation?: string;
+  // Extra report columns carried by SVECW's own report (see
+  // publicationsCsvColumns.ts) - all optional, populated only when the
+  // import file (or a later edit) supplies them.
+  authorPosition?: string; // First Author / Co-Author / Corresponding Author
+  department?: string; // SVECW-First Author's department, as printed on the report
+  facultyOrStudent?: string; // "Faculty" or "Student"
+  venueType?: string; // Journal / Conference / Book Chapter
+  impactFactor?: string; // kept as string - the source report uses "NA" freely
+  sjr?: string;
+  quartile?: string;
+  isbnIssn?: string;
   addedBy: string; // R&D uid who created/last edited it
   addedByName: string;
   createdAt: Timestamp;
@@ -1149,6 +1175,39 @@ export interface StudentRecord {
   // department (see students/promote/route.ts), at which point it becomes
   // their primary `department` instead.
   secondaryDepartment?: string;
+  // ─── Admission-detail fields ────────────────────────────────────────────
+  // All optional, all set only via the College Office bulk import (see
+  // src/lib/students/importRow.ts) - there is no per-student edit form for
+  // any of these today, same as the older gender/dateOfBirth/etc. fields
+  // above. "Course"/"Branch" from the source admission sheet are NOT
+  // separate fields here - both are imported as aliases of `department`.
+  // Photo is intentionally not collected via CSV import at all.
+  semester?: number;
+  dateOfAdmission?: string; // yyyy-mm-dd
+  admissionNo?: string;
+  hallTicketNo?: string;
+  admissionType?: string; // e.g. Direct, Management, Convenor
+  entranceType?: string; // e.g. EAMCET, ECET
+  entranceRank?: string;
+  seatType?: string; // e.g. Convenor, Management
+  scholarship?: boolean;
+  category?: string; // caste-reservation category, e.g. OC/BC/SC/ST
+  religion?: string;
+  nationality?: string;
+  motherTongue?: string;
+  bloodGroup?: string;
+  mobileNo?: string;
+  landLineNo?: string;
+  aadharNo?: string;
+  rationCardNo?: string;
+  bankAccountNo?: string;
+  lastAttendedInstitution?: string;
+  distanceFromResidenceKm?: number;
+  hosteller?: boolean;
+  physicallyHandicapped?: boolean;
+  handicappedType?: "H" | "V" | "O"; // Hearing / Visual / Other - only meaningful when physicallyHandicapped
+  identificationMarks?: string;
+  remarks?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -1330,6 +1389,7 @@ export type AuditAction =
   | "LEAVE_PRINCIPAL_APPROVED"
   | "LEAVE_REJECTED"
   | "LEAVE_CANCELLED"
+  | "LEAVE_HISTORY_IMPORTED"
   // Permission & On-Duty
   | "PERMISSION_APPLIED"
   | "PERMISSION_APPROVED"

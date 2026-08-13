@@ -13,7 +13,7 @@ import { Users, Pencil } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory } from "@/types/leave";
 
-type StaffType = "faculty" | "supportingStaff";
+type StaffType = "faculty" | "supportingStaff" | "institutional";
 
 interface RosterEntry {
   uid: string;
@@ -29,13 +29,21 @@ interface LeaveProfilesRosterProps {
   editHrefBase: string; // e.g. "/hod/leave/profiles" -> links to "{base}/{uid}/edit"
 }
 
-const STAFF_TYPE_TABS: { key: StaffType; label: string }[] = [
+const BASE_STAFF_TYPE_TABS: { key: StaffType; label: string }[] = [
   { key: "faculty", label: "Faculty" },
   { key: "supportingStaff", label: "Supporting Staff" },
 ];
+// Vice Principal, College Office, Dean, IQAC Coordinator, T&P, R&D, Library,
+// Exam Cell, Webmaster - college-wide roles with no department, so they'd
+// never appear on the two tabs above. Principal/VP-only, mirroring the Leave
+// History page's own per-role registers (see nonDepartmentalStaffRoles.ts).
+// HOD is department-scoped and never gets any of these back from the API,
+// so the tab is only added once the roster actually has one - never shown
+// (and, by construction, never populated) on HOD's own Leave Profiles page.
+const INSTITUTIONAL_STAFF_TAB = { key: "institutional" as const, label: "Institutional Staff" };
 
-// Every entry here is auto-set-up already (from FacultyMember/SupportingStaff
-// designation) by the time it's fetched - there is no "not set up" state,
+// Every entry here is auto-set-up already (from FacultyMember/SupportingStaff/
+// role default) by the time it's fetched - there is no "not set up" state,
 // only ever an existing, editable profile.
 export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
@@ -50,6 +58,8 @@ export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) 
       .finally(() => setIsLoading(false));
   }, []);
 
+  const hasInstitutionalStaff = roster.some((f) => f.staffType === "institutional");
+  const staffTypeTabs = hasInstitutionalStaff ? [...BASE_STAFF_TYPE_TABS, INSTITUTIONAL_STAFF_TAB] : BASE_STAFF_TYPE_TABS;
   const visibleRoster = roster.filter((f) => f.staffType === staffType);
 
   return (
@@ -62,7 +72,7 @@ export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) 
       <SegmentedTabs
         value={staffType}
         onChange={(key) => setStaffType(key as StaffType)}
-        options={STAFF_TYPE_TABS}
+        options={staffTypeTabs}
       />
 
       {isLoading ? (
@@ -74,7 +84,7 @@ export function LeaveProfilesRoster({ editHrefBase }: LeaveProfilesRosterProps) 
       ) : visibleRoster.length === 0 ? (
         <EmptyState
           icon={<Users className="h-6 w-6" />}
-          title={staffType === "faculty" ? "No faculty found" : "No supporting staff found"}
+          title={staffType === "faculty" ? "No faculty found" : staffType === "supportingStaff" ? "No supporting staff found" : "No institutional staff found"}
         />
       ) : (
         <div className="space-y-2">

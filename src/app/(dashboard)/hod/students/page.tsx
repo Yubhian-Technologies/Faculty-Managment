@@ -17,6 +17,7 @@ import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
+import { disambiguateSectionLabels } from "@/lib/sections/sectionLabel";
 import type { StudentListItem, Section, Department } from "@/types";
 
 type StudentRow = Record<string, unknown> & StudentListItem;
@@ -94,13 +95,22 @@ export default function HodStudentsPage() {
     () => Array.from(new Set(students.map((s) => s.department).filter(Boolean))).sort(),
     [students]
   );
+  // Unassigned students this HOD can actually section - excludes view-only
+  // ("secondary") cross-listed students, e.g. someone else's branch merely
+  // pre-registered here. Drives the Department/Year pickers below so a branch
+  // with unassigned students but no sections *yet* still shows up (steering
+  // the HOD to create sections first) instead of the pickers looking empty.
+  const unassignedStudents = useMemo(
+    () => students.filter((s) => !s.section && s.accessLevel !== "secondary"),
+    [students]
+  );
   const distDepartments = useMemo(
-    () => Array.from(new Set(managedSections.map((s) => s.department).filter(Boolean))).sort(),
-    [managedSections]
+    () => Array.from(new Set(unassignedStudents.map((s) => s.department).filter(Boolean))).sort(),
+    [unassignedStudents]
   );
   const distYears = useMemo(
-    () => Array.from(new Set(managedSections.filter((s) => s.department === distDept).map((s) => s.year))).sort((a, b) => a - b),
-    [managedSections, distDept]
+    () => Array.from(new Set(unassignedStudents.filter((s) => s.department === distDept).map((s) => s.year))).sort((a, b) => a - b),
+    [unassignedStudents, distDept]
   );
   const distTargetSections = useMemo(
     () => managedSections
@@ -108,9 +118,17 @@ export default function HodStudentsPage() {
       .sort((a, b) => a.name.localeCompare(b.name)),
     [managedSections, distDept, distYear]
   );
+  // A department can run the same section name under more than one course
+  // (e.g. "IT-A" under both B.Tech and M.Tech) - this list isn't scoped to a
+  // single course, so identical-looking checkboxes need the course name added
+  // to tell them apart. Sections that are already unique are left as-is.
+  const distSectionLabels = useMemo(
+    () => disambiguateSectionLabels(distTargetSections, departments),
+    [distTargetSections, departments]
+  );
   const unassignedCount = useMemo(
-    () => students.filter((s) => s.department === distDept && String(s.year) === distYear && !s.section).length,
-    [students, distDept, distYear]
+    () => unassignedStudents.filter((s) => s.department === distDept && String(s.year) === distYear).length,
+    [unassignedStudents, distDept, distYear]
   );
 
   const filtered = useMemo(
@@ -367,7 +385,7 @@ export default function HodStudentsPage() {
                               checked={distSectionIds.includes(s.id)}
                               onCheckedChange={(checked) => toggleDistSection(s.id, !!checked)}
                             />
-                            {s.name}
+                            {distSectionLabels.get(s.id) ?? s.name}
                           </label>
                         ))}
                       </div>

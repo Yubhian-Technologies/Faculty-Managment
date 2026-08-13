@@ -20,6 +20,16 @@ This system has **three separate, non-interoperating hiring pipelines**. They sh
 | B. Location | [location-pipeline.md](location-pipeline.md) | `locations/{id}/...` | Yes — simpler, no batches | **No — dead-ends at offer approval** | **No** |
 | C. General Admin | [general-admin-pipeline.md](general-admin-pipeline.md) | global | No — headcount approval only | No — not applicable | No |
 
+## College pipeline — role-based views
+
+Same Pipeline A, sliced by who does what — pages, actions, API guards, and hand-offs for each college-scoped role, cross-linked back to the stage numbers in [college-pipeline.md](college-pipeline.md):
+
+- [roles/hod.md](roles/hod.md)
+- [roles/principal-vice-principal.md](roles/principal-vice-principal.md)
+- [roles/college-office.md](roles/college-office.md)
+- [roles/panel-member.md](roles/panel-member.md)
+- [roles/webmaster.md](roles/webmaster.md)
+
 ## Known gaps and footguns (verified in code, not speculation)
 
 - **`src/lib/firestore/hiring.ts` and `src/hooks/useHiring.ts` are vestigial.** Every College-pipeline API route talks to Firestore directly via `getAdminDb()`; `useHiring.ts` has zero importers anywhere in `src/`. Don't treat these as the "shared engine" — they aren't wired to anything live.
