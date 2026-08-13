@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
+import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
@@ -196,18 +197,17 @@ export async function POST(request: Request) {
       status?: StudentStatus;
       department?: string;
       departmentId?: string;
-      // Optional personal details - the same fields the Excel/CSV import
-      // collects, so a manually-added student carries the same information.
-      gender?: string;
-      dateOfBirth?: string;
-      guardianContact?: string;
-      email?: string;
+      // Optional roster details - every field the Excel/CSV import collects,
+      // read through normalizeRosterDetails so a manually-added student
+      // carries exactly the same information, shaped the same way.
+      [key: string]: unknown;
     };
 
-    // No roll number here by design: the College Office adds fresh students by
-    // basic details only. Roll numbers are the department's responsibility - the
-    // assigned HOD (years 2-4) or sub-HOD (year 1) assigns them later, once
-    // students are divided into sections (see students/[id] PATCH).
+    // A roll number here is optional and provisional only - the same standing
+    // it has as a column in the roster import. The real one is the
+    // department's responsibility: the assigned HOD (years 2-4) or sub-HOD
+    // (year 1) sets it once students are divided into sections (students/[id]
+    // PATCH), and only that path checks it for uniqueness.
     if (!body.name?.trim() || !body.year) {
       return NextResponse.json({ error: "name and year are required" }, { status: 400 });
     }
@@ -268,16 +268,14 @@ export async function POST(request: Request) {
       department: dept,
       section: sectionName,
       year: Number(body.year),
-      rollNumber: "",
       name: body.name.trim(),
-      status: body.status ?? "REGULAR",
-      // Optional personal details - stored only when provided, mirroring the
-      // bulk importer's buildStudentDoc so both entry paths shape the doc the
-      // same way (email lower-cased, blanks omitted rather than stored empty).
-      ...(body.gender?.trim() ? { gender: body.gender.trim() } : {}),
-      ...(body.dateOfBirth?.trim() ? { dateOfBirth: body.dateOfBirth.trim() } : {}),
-      ...(body.guardianContact?.trim() ? { guardianContact: body.guardianContact.trim() } : {}),
-      ...(body.email?.trim() ? { email: body.email.trim().toLowerCase() } : {}),
+      status: (body.status as StudentStatus | undefined) ?? "REGULAR",
+      // Every roster detail the import collects, cleaned the same way its
+      // buildStudentDoc cleans a parsed row - blanks omitted rather than
+      // stored empty. rollNumber is defaulted after the spread so a body
+      // without one still writes the "" the rest of the app expects.
+      rollNumber: "",
+      ...normalizeRosterDetails(body),
       createdAt: now,
       updatedAt: now,
     });

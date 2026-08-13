@@ -1179,9 +1179,17 @@ export interface StudentRecord {
   // All optional, all set only via the College Office bulk import (see
   // src/lib/students/importRow.ts) - there is no per-student edit form for
   // any of these today, same as the older gender/dateOfBirth/etc. fields
-  // above. "Course"/"Branch" from the source admission sheet are NOT
-  // separate fields here - both are imported as aliases of `department`.
-  // Photo is intentionally not collected via CSV import at all.
+  // above. Photo is intentionally not collected via CSV import at all.
+  //
+  // The programme the student is admitted into (B.Tech, M.Tech …), as written
+  // on the admission sheet. Free text and purely a record of what that sheet
+  // said - it is NOT resolved against the college's `courses` collection, and
+  // nothing keys off it; the student's academic scope comes from `department`
+  // + `year` as before. "Branch" remains an alias of `department`, but
+  // "Course" no longer is: the roster template carries both columns, so
+  // reading them as the same field would have made a sheet naming its
+  // programme in one and its branch in the other silently unimportable.
+  course?: string;
   semester?: number;
   dateOfAdmission?: string; // yyyy-mm-dd
   admissionNo?: string;
