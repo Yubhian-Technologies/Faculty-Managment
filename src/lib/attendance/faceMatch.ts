@@ -131,15 +131,16 @@ async function readFace(input: HTMLVideoElement | HTMLCanvasElement): Promise<Fa
   return { ear, yawOffset };
 }
 
-const CALIBRATION_MS = 1200;
+// Slowed from an initial 1200ms so the "hold still" calibration moment isn't
+// rushed before the first instruction even appears.
+const CALIBRATION_MS = 1800;
 // Loosened from an initial 0.75 after real-world testing showed genuine
 // blinks only reaching ~83-90% of baseline through this model - see git
 // history for the two measured data points this was tuned against.
 const BLINK_DIP_RATIO = 0.92;
 const BLINK_REOPEN_RATIO = 0.95;
 // First estimate, not yet real-world tuned - a deliberate head turn should
-// comfortably clear this, but if it doesn't, the diagnostic readout this
-// feeds (see MarkAttendanceDialog) will show exactly how far short.
+// comfortably clear this.
 const TURN_OFFSET_DELTA = 0.12;
 
 export interface LivenessSample {
@@ -230,6 +231,138 @@ export async function waitForHeadTurn(video: HTMLVideoElement, options: Liveness
       }
     }
     onSample?.({ step: "turn", ear: reading?.ear ?? null, yawOffset: reading?.yawOffset ?? null, baselineYaw, peakYawDelta });
+  }
+  return false;
+}
+
+// ─── Guided step-by-step registration ──────────────────────────────────────
+// Same EAR/yaw signals as the blink/turn check above, split into individually
+// -instructed steps (center → blink → turn one way → turn the other way →
+// re-center) so the registration UI can show one instruction at a time with
+// a progress indicator, and only advance once each action is actually
+// detected, instead of one implicit combined check.
+
+export interface FaceBaseline {
+  ear: number;
+  yawOffset: number;
+}
+
+interface GuidedStepOptions {
+  timeoutMs?: number;
+  hintDelayMs?: number;
+  shouldAbort?: () => boolean;
+  onHint?: (hint: string | null) => void;
+}
+
+// Captures the "look straight at the camera" reference pose the rest of the
+// guided steps are measured against.
+export async function calibrateFaceBaseline(
+  video: HTMLVideoElement,
+  options: { shouldAbort?: () => boolean } = {}
+): Promise<FaceBaseline | null> {
+  const { shouldAbort } = options;
+  const deadline = Date.now() + CALIBRATION_MS;
+  const earSamples: number[] = [];
+  const yawSamples: number[] = [];
+  while (Date.now() < deadline) {
+    if (shouldAbort?.()) return null;
+    const reading = await readFace(video);
+    if (reading) {
+      earSamples.push(reading.ear);
+      yawSamples.push(reading.yawOffset);
+    }
+  }
+  if (earSamples.length === 0) return null;
+  return {
+    ear: Math.max(...earSamples),
+    yawOffset: yawSamples.reduce((s, v) => s + v, 0) / yawSamples.length,
+  };
+}
+
+export async function waitForGuidedBlink(
+  video: HTMLVideoElement,
+  baselineEar: number,
+  options: GuidedStepOptions = {}
+): Promise<boolean> {
+  const { timeoutMs = 15000, hintDelayMs = 4000, shouldAbort, onHint } = options;
+  const closedThreshold = baselineEar * BLINK_DIP_RATIO;
+  const reopenThreshold = baselineEar * BLINK_REOPEN_RATIO;
+  let phase: "waiting-closed" | "waiting-reopen" = "waiting-closed";
+  const start = Date.now();
+  const deadline = start + timeoutMs;
+  let hintShown = false;
+  while (Date.now() < deadline) {
+    if (shouldAbort?.()) return false;
+    const reading = await readFace(video);
+    if (reading) {
+      if (phase === "waiting-closed" && reading.ear < closedThreshold) {
+        phase = "waiting-reopen";
+      } else if (phase === "waiting-reopen" && reading.ear > reopenThreshold) {
+        return true;
+      }
+    }
+    if (!hintShown && Date.now() - start > hintDelayMs) {
+      onHint?.("Please blink a little more clearly.");
+      hintShown = true;
+    }
+  }
+  return false;
+}
+
+export type TurnDirection = "left" | "right";
+
+// Detects one deliberate head turn away from baseline. When `excludeDirection`
+// is set, a turn in that same direction is ignored — used for the second
+// turn step so it requires the *other* side rather than accepting a repeat
+// of the first turn.
+export async function waitForGuidedTurn(
+  video: HTMLVideoElement,
+  baselineYaw: number,
+  options: GuidedStepOptions & { excludeDirection?: TurnDirection } = {}
+): Promise<TurnDirection | null> {
+  const { timeoutMs = 15000, hintDelayMs = 4000, shouldAbort, onHint, excludeDirection } = options;
+  const start = Date.now();
+  const deadline = start + timeoutMs;
+  let hintShown = false;
+  while (Date.now() < deadline) {
+    if (shouldAbort?.()) return null;
+    const reading = await readFace(video);
+    if (reading) {
+      const delta = reading.yawOffset - baselineYaw;
+      if (Math.abs(delta) > TURN_OFFSET_DELTA) {
+        const direction: TurnDirection = delta < 0 ? "left" : "right";
+        if (direction !== excludeDirection) return direction;
+      }
+    }
+    if (!hintShown && Date.now() - start > hintDelayMs) {
+      onHint?.(excludeDirection ? "Please turn your head to the other side." : "Please turn your head a little more.");
+      hintShown = true;
+    }
+  }
+  return null;
+}
+
+// Confirms the face has returned to (roughly) the baseline "looking straight"
+// pose before the final capture.
+export async function waitForGuidedRecenter(
+  video: HTMLVideoElement,
+  baselineYaw: number,
+  options: GuidedStepOptions = {}
+): Promise<boolean> {
+  const { timeoutMs = 15000, hintDelayMs = 4000, shouldAbort, onHint } = options;
+  const start = Date.now();
+  const deadline = start + timeoutMs;
+  let hintShown = false;
+  while (Date.now() < deadline) {
+    if (shouldAbort?.()) return false;
+    const reading = await readFace(video);
+    if (reading && Math.abs(reading.yawOffset - baselineYaw) < TURN_OFFSET_DELTA * 0.6) {
+      return true;
+    }
+    if (!hintShown && Date.now() - start > hintDelayMs) {
+      onHint?.("Please face the camera directly.");
+      hintShown = true;
+    }
   }
   return false;
 }

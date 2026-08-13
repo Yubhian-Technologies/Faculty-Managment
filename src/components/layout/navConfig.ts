@@ -41,6 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Faculty Details", href: "/management/faculty", iconName: "UsersRound", roles: ["MANAGEMENT"] },
   { label: "Budget", href: "/management/budget", iconName: "PiggyBank", roles: ["MANAGEMENT"], section: "Reports" },
   { label: "Budget History", href: "/management/indents", iconName: "ClipboardList", roles: ["MANAGEMENT"] },
+  { label: "Attendance", href: "/management/attendance", iconName: "ClipboardCheck", roles: ["MANAGEMENT"] },
   { label: "Leave Approvals", href: "/management/leave-approvals", iconName: "CalendarClock", roles: ["MANAGEMENT"], section: "HR" },
   { label: "My Profile", href: "/management/profile", iconName: "UserCircle", roles: ["MANAGEMENT"], section: "Personal" },
 
@@ -129,6 +130,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Budget History", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
+  { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL"] },
   { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
 
