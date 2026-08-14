@@ -76,6 +76,9 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
       backHref={backHref}
       // Principal/Vice Principal don't carry a teaching load - HOD does.
       excludeModules={role === "HOD" ? [] : ["teaching-load"]}
+      // Principal's own self-attendance is Management's only attendance
+      // visibility so far - not offered for VP/HOD here.
+      viewAttendanceHref={role === "PRINCIPAL" ? `/management/faculty/${collegeId}/principal/attendance` : undefined}
     />
   );
 }

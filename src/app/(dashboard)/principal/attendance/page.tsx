@@ -5,17 +5,11 @@ import { CalendarDays, Info, LogIn, LogOut, ScanFace } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
+import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -45,7 +39,7 @@ interface SummaryCard {
   colorClass: string;
 }
 
-export default function HODAttendancePage() {
+export default function PrincipalAttendancePage() {
   const now = new Date();
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
   const [year, setYear] = useState<number>(now.getFullYear());
@@ -81,8 +75,6 @@ export default function HODAttendancePage() {
   }, []);
 
   useEffect(() => {
-    // Awaited in a wrapper so load()'s setState calls aren't reachable
-    // synchronously from the effect body (react-hooks/set-state-in-effect).
     void (async () => { await load(year, month); })();
   }, [load, year, month]);
 
@@ -110,7 +102,7 @@ export default function HODAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="My Attendance"
-        description="Monthly attendance records"
+        description="Your monthly attendance record"
       />
 
       {isCurrentMonth && (
@@ -149,7 +141,6 @@ export default function HODAttendancePage() {
         </Card>
       )}
 
-      {/* Month / Year selector */}
       <div className="flex flex-wrap items-center gap-3">
         <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
           <SelectTrigger className="w-40">
@@ -187,7 +178,6 @@ export default function HODAttendancePage() {
         </Button>
       </div>
 
-      {/* Not-yet-recorded banner */}
       {noData && (
         <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           <Info className="h-4 w-4 mt-0.5 shrink-0" />
@@ -195,7 +185,6 @@ export default function HODAttendancePage() {
         </div>
       )}
 
-      {/* Summary cards */}
       {!isLoading && summary && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {summaryCards.map((c) => (
@@ -212,7 +201,6 @@ export default function HODAttendancePage() {
         </div>
       )}
 
-      {/* Loading skeleton */}
       {isLoading && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -224,13 +212,12 @@ export default function HODAttendancePage() {
         </div>
       )}
 
-      {/* Daily records */}
       {!isLoading && records.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              Daily Records - {MONTH_NAMES[month - 1]} {year}
+              Daily Records — {MONTH_NAMES[month - 1]} {year}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -248,30 +235,29 @@ export default function HODAttendancePage() {
                   : "";
 
                 return (
-                  <div
-                    key={rec.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3"
-                  >
-                    {/* Date */}
+                  <div key={rec.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="w-32 shrink-0">
                       <p className="text-sm font-medium">{formatDate(rec.date)}</p>
                       <p className="text-xs text-muted-foreground">{dayName}</p>
                     </div>
 
-                    {/* Status badge */}
-                    <div className="flex-1">
+                    <div className="flex-1 flex items-center gap-1.5">
                       <span
                         className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(rec.status)}`}
                       >
                         {ATTENDANCE_STATUS_LABELS[rec.status]}
                       </span>
+                      {isLateCheckIn(rec.checkIn) && (
+                        <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
+                          Late
+                        </span>
+                      )}
                     </div>
 
-                    {/* Check-in / check-out */}
                     <div className="text-right shrink-0">
                       {rec.checkIn || rec.checkOut ? (
                         <p className="text-xs text-muted-foreground">
-                          {rec.checkIn ?? "-"} – {rec.checkOut ?? "-"}
+                          {rec.checkIn ?? "—"} – {rec.checkOut ?? "—"}
                         </p>
                       ) : null}
                       {rec.remarks ? (
@@ -288,7 +274,6 @@ export default function HODAttendancePage() {
         </Card>
       )}
 
-      {/* Empty state - month loaded but no records */}
       {!isLoading && !noData && records.length === 0 && (
         <Card>
           <CardContent className="py-16 text-center">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CalendarDays, Info, LogIn, LogOut } from "lucide-react";
+import { CalendarDays, Info, LogIn, LogOut, ScanFace } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
+import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -45,8 +46,18 @@ export default function FacultyAttendancePage() {
   const [summary, setSummary] = useState<AttendanceSummary | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | undefined>(undefined);
-  const [dialogMode, setDialogMode] = useState<"check-in" | "check-out" | null>(null);
+  const [faceRegistered, setFaceRegistered] = useState<boolean | null>(null);
+  const [dialogMode, setDialogMode] = useState<"check-in" | "check-out" | "register" | null>(null);
+
+  const loadFaceRegistration = useCallback(async () => {
+    try {
+      const res = await fetch("/api/college/attendance/face-registration");
+      const json = await res.json() as { registered?: boolean };
+      setFaceRegistered(!!json.registered);
+    } catch {
+      /* non-critical - Mark Attendance will show a clear error if the check fails */
+    }
+  }, []);
 
   const load = useCallback(async (y: number, m: number) => {
     setIsLoading(true);
@@ -68,11 +79,8 @@ export default function FacultyAttendancePage() {
   }, [load, year, month]);
 
   useEffect(() => {
-    fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty?: { profilePhotoUrl?: string } | null }>)
-      .then((d) => setProfilePhotoUrl(d.faculty?.profilePhotoUrl))
-      .catch(() => { /* non-critical - Mark Attendance will show a clear error if missing */ });
-  }, []);
+    void (async () => { await loadFaceRegistration(); })();
+  }, [loadFaceRegistration]);
 
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
   const todayRecord = isCurrentMonth
@@ -100,7 +108,16 @@ export default function FacultyAttendancePage() {
       {isCurrentMonth && (
         <Card>
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-            {todayRecord?.checkOut ? (
+            {faceRegistered === false ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Register your face to start using facial attendance check-in.
+                </p>
+                <Button onClick={() => setDialogMode("register")}>
+                  <ScanFace className="h-4 w-4 mr-1.5" /> Register
+                </Button>
+              </>
+            ) : todayRecord?.checkOut ? (
               <p className="text-sm">
                 Today&apos;s attendance is complete — in at <span className="font-medium">{todayRecord.checkIn}</span>, out at{" "}
                 <span className="font-medium">{todayRecord.checkOut}</span>.
@@ -224,12 +241,17 @@ export default function FacultyAttendancePage() {
                       <p className="text-xs text-muted-foreground">{dayName}</p>
                     </div>
 
-                    <div className="flex-1">
+                    <div className="flex-1 flex items-center gap-1.5">
                       <span
                         className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(rec.status)}`}
                       >
                         {ATTENDANCE_STATUS_LABELS[rec.status]}
                       </span>
+                      {isLateCheckIn(rec.checkIn) && (
+                        <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
+                          Late
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-right shrink-0">
@@ -264,10 +286,15 @@ export default function FacultyAttendancePage() {
       {dialogMode && (
         <MarkAttendanceDialog
           mode={dialogMode}
-          profilePhotoUrl={profilePhotoUrl}
           open={!!dialogMode}
           onOpenChange={(o) => { if (!o) setDialogMode(null); }}
-          onSuccess={() => void load(year, month)}
+          onSuccess={() => {
+            if (dialogMode === "register") {
+              void loadFaceRegistration();
+            } else {
+              void load(year, month);
+            }
+          }}
         />
       )}
     </div>

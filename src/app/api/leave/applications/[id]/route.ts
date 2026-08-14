@@ -9,7 +9,7 @@ import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLea
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
-import { notify } from "@/lib/notify";
+import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import { OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { LeaveRequest, LeaveActionRecord, OtherLeaveCategory } from "@/types/leave";
@@ -57,9 +57,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       remarks?: string;
       isPaidLeave?: boolean;
       otherLeaveCategory?: OtherLeaveCategory;
+      reason?: string;
     };
     if (!body.action) {
       return NextResponse.json({ error: "action is required" }, { status: 400 });
+    }
+    if (body.action === "CANCEL" && !body.reason?.trim()) {
+      return NextResponse.json({ error: "A reason is required to cancel a leave request" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -111,11 +115,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           }
         }
       }
-      await ref.update({ status: "CANCELLED", updatedAt: now });
+      const cancelReason = body.reason!.trim();
+      await ref.update({ status: "CANCELLED", cancelReason, updatedAt: now });
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_CANCELLED", performedBy: session.uid,
-        performedByName: req.employeeName, targetId: id, details: { wasApproved }, timestamp: now,
+        performedByName: req.employeeName, targetId: id, details: { wasApproved, cancelReason }, timestamp: now,
       });
+
+      // Tell whoever sits above this requester in the approval chain - same
+      // routing rule applications/route.ts POST uses to decide where a fresh
+      // request lands (PANEL_MEMBER/departmental COLLEGE_STAFF -> their HOD,
+      // PRINCIPAL -> MANAGEMENT (no one else within the college), everyone
+      // else -> Principal/VP tier) - so the reason is visible to them even if
+      // they never re-open this person's history.
+      const message = `${req.employeeName} cancelled their ${wasApproved ? "approved" : "pending"} leave request (${req.totalDays} day(s)). Reason: ${cancelReason}`;
+      const reportsToHod = session.role === "PANEL_MEMBER" || (session.role === "COLLEGE_STAFF" && !!req.department);
+      if (reportsToHod && req.department) {
+        const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
+          .where("name", "==", req.department).limit(1).get();
+        const hodUid = (deptSnap.docs[0]?.data() as { hodUid?: string } | undefined)?.hodUid;
+        if (hodUid) {
+          await notify(db, session.collegeId, hodUid, "LEAVE_CANCELLED", "Leave Request Cancelled", message, `/hod/leave-history/${req.uid}`);
+        }
+      } else if (session.role === "PRINCIPAL") {
+        await notifyRole(db, session.collegeId, "MANAGEMENT", "LEAVE_CANCELLED", "Leave Request Cancelled", message);
+      } else {
+        await notifyRole(db, session.collegeId, "PRINCIPAL", "LEAVE_CANCELLED", "Leave Request Cancelled", message, "/principal/leave-approvals");
+        await notifyRole(db, session.collegeId, "VICE_PRINCIPAL", "LEAVE_CANCELLED", "Leave Request Cancelled", message, "/principal/leave-approvals");
+      }
+
       return NextResponse.json({ ok: true });
     }
 

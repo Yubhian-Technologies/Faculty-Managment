@@ -20,6 +20,12 @@ interface ConfirmDialogProps {
   variant?: "default" | "destructive";
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
+  // Extra content rendered between the description and the footer buttons -
+  // e.g. a required reason field (see LeaveTypeHistoryView's cancel dialog).
+  children?: React.ReactNode;
+  // Disables the confirm button independent of `loading` - e.g. while a
+  // required field in `children` is still empty.
+  confirmDisabled?: boolean;
 }
 
 export function ConfirmDialog({
@@ -32,6 +38,8 @@ export function ConfirmDialog({
   variant = "default",
   onConfirm,
   loading,
+  children,
+  confirmDisabled,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -40,6 +48,7 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
+        {children}
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             {cancelLabel}
@@ -48,6 +57,7 @@ export function ConfirmDialog({
             variant={variant === "destructive" ? "destructive" : "default"}
             onClick={onConfirm}
             loading={loading}
+            disabled={confirmDisabled}
           >
             {confirmLabel}
           </Button>
