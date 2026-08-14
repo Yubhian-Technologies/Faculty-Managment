@@ -9,10 +9,10 @@ import { getAdminDb } from "@/lib/firebase/admin";
 const EMBEDDING_LENGTH = 128;
 
 // Same "faculty member doc, else own user doc" resolution as
-// /api/college/attendance/reference-photo and /api/college/faculty/me - HODs
-// and Principal have no separate FacultyMember record, so their registration
-// lives on users/{uid} instead - naturally a separate document from any
-// Faculty member's, never shared.
+// /api/college/attendance/reference-photo and /api/college/faculty/me - HODs,
+// Principal, and Vice Principal have no separate FacultyMember record, so
+// their registration lives on users/{uid} instead - naturally a separate
+// document from any Faculty member's, never shared.
 async function resolveOwnDocRef(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
@@ -31,7 +31,7 @@ async function resolveOwnDocRef(
 // resulting match distance/boolean is ever sent back to the server).
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const db = getAdminDb();
     const ref = await resolveOwnDocRef(db, session.collegeId, session.uid);
     const snap = await ref.get();
@@ -54,7 +54,7 @@ export async function GET() {
 // off match confidence) by simply registering again.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const body = (await request.json()) as { embedding?: number[] };
     const embedding = body.embedding;
 

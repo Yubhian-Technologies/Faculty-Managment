@@ -17,6 +17,13 @@ import type { Course, Department, ExamConfiguration, InternalExamMarksBatch, Sec
 type Batch = InternalExamMarksBatch & { courseId?: string; courseName?: string };
 type Entry = InternalExamMarksBatch["entries"][number];
 
+// Sentinel for "All" at the Branch/Section/Subject filter levels — distinct
+// from "" (which still means "nothing picked yet" and drives the existing
+// disabled-until-parent-selected cascade). Course and Year keep their
+// existing required, single-value selection; only these three lower levels
+// gain an All option, per the request.
+const ALL = "__ALL__";
+
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
@@ -92,8 +99,6 @@ export default function PrincipalInternalMarksPage() {
     })();
   }, []);
 
-  const departmentNameById = useMemo(() => new Map(departments.map((d) => [d.id, d.name])), [departments]);
-
   const courseNameOptions = useMemo(() => [...new Set(courses.map((c) => c.name))].sort(), [courses]);
 
   const yearOptions = useMemo(() => {
@@ -101,44 +106,83 @@ export default function PrincipalInternalMarksPage() {
     return Array.from({ length: duration }, (_, i) => i + 1);
   }, [courses, courseName]);
 
+  // A department "offers" Course + Year only when both are true: it has a
+  // Course row for this course name (Course Catalog setup), AND it has
+  // actually opened that year for teaching (Department.assignedYears — the
+  // same "which years is this department currently teaching" toggle shown
+  // on the Departments page, set by Principal/VP). Skipping the assignedYears
+  // check was the bug: a department with a Course row but no years opened
+  // yet (or years opened that don't include the one selected) would still
+  // show up here even though it isn't really available for that Course +
+  // Year combination.
+  const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
+
   const branchOptions = useMemo(() => {
+    if (!courseName || !year) return [];
+    const yearNum = Number(year);
     const seen = new Map<string, string>();
     courses
       .filter((c) => c.name === courseName)
-      .forEach((c) => seen.set(c.departmentId, departmentNameById.get(c.departmentId) ?? c.departmentId));
+      .forEach((c) => {
+        const dept = departmentById.get(c.departmentId);
+        if (!dept || !(dept.assignedYears ?? []).includes(yearNum)) return;
+        seen.set(dept.id, dept.name);
+      });
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [courses, courseName, departmentNameById]);
+  }, [courses, courseName, year, departmentById]);
 
-  const resolvedCourse = useMemo(
-    () => courses.find((c) => c.name === courseName && c.departmentId === departmentId) ?? null,
-    [courses, courseName, departmentId]
-  );
+  // Every department-specific Course row sharing this course name — a
+  // "Course" (e.g. "Bachelors of Technology") exists as one row per
+  // department, so this is the set to match against whenever Department is
+  // "All", and a single-element view of it whenever a specific department is
+  // picked (department filtering happens separately below via each record's
+  // own `department` name field, not by narrowing this set).
+  const matchingCourses = useMemo(() => courses.filter((c) => c.name === courseName), [courses, courseName]);
+  const matchingCourseIds = useMemo(() => new Set(matchingCourses.map((c) => c.id)), [matchingCourses]);
 
-  const branchName = departmentNameById.get(departmentId) ?? "";
+  const branchName = departmentId && departmentId !== ALL ? (departmentById.get(departmentId)?.name ?? "") : "";
 
-  // Loads sections whenever the resolved course + year pair changes to a real
-  // one; clearing back to no-selection is handled by resetDownstream below
-  // (in the event handlers that cause it), not here.
+  // Sections for this course name + year, across every department that
+  // offers it (Principal's session is college-wide, so omitting courseId
+  // here returns the whole college's sections for that year) — filtered
+  // client-side to the course actually selected. This is department-
+  // agnostic on purpose: it's what lets "All" work at the Branch level
+  // without a second fetch path, and the Branch/Section selects below still
+  // narrow it to one department the same way they always did.
   useEffect(() => {
-    if (!resolvedCourse || !year) return;
     void (async () => {
+      if (!courseName || !year) { setSections([]); return; }
       setIsLoadingSections(true);
       try {
-        const res = await fetch(`/api/college/sections?courseId=${resolvedCourse.id}&year=${year}`);
+        const res = await fetch(`/api/college/sections?year=${year}`);
         const json = (await res.json()) as { sections?: Section[] };
-        setSections(json.sections ?? []);
+        setSections((json.sections ?? []).filter((s) => matchingCourseIds.has(s.courseId)));
       } catch {
         toast({ variant: "destructive", title: "Failed to load sections" });
       } finally {
         setIsLoadingSections(false);
       }
     })();
-  }, [resolvedCourse, year]);
+  }, [courseName, year, matchingCourseIds]);
+
+  // Distinct section names in scope: every department's when Branch is
+  // "All", otherwise just the selected department's — same section-name
+  // values `sectionName` state has always held.
+  const sectionOptions = useMemo(() => {
+    if (!departmentId) return [];
+    const inScope = departmentId === ALL ? sections : sections.filter((s) => s.department === branchName);
+    return [...new Set(inScope.map((s) => s.name))].sort();
+  }, [sections, departmentId, branchName]);
 
   const subjectOptions = useMemo(() => {
-    if (!resolvedCourse || !year) return [];
-    return subjects.filter((s) => s.courseId === resolvedCourse.id && s.year === Number(year));
-  }, [subjects, resolvedCourse, year]);
+    if (!courseName || !year || !departmentId) return [];
+    return subjects.filter(
+      (s) =>
+        matchingCourseIds.has(s.courseId ?? "") &&
+        s.year === Number(year) &&
+        (departmentId === ALL || s.department === branchName)
+    );
+  }, [subjects, courseName, year, departmentId, branchName, matchingCourseIds]);
 
   function resetDownstream(from: "course" | "year" | "branch" | "section") {
     if (from === "course") { setYear(""); setDepartmentId(""); setSectionName(""); setSubjectId(""); setSections([]); }
@@ -149,19 +193,41 @@ export default function PrincipalInternalMarksPage() {
 
   // Batches carry `department` (a name) and `courseId` (joined server-side from
   // the Exam Cell's ExamConfiguration) but not a separate section/subject id
-  // pairing beyond what's already on the batch — matching on all five academic
-  // dimensions is what pins it to exactly the selection made above.
+  // pairing beyond what's already on the batch. Whichever of Branch/Section/
+  // Subject is "All" simply skips that one constraint — this runs against
+  // `allBatches`, the Principal's real, already-loaded, unscoped batch list,
+  // so "All" actually queries every matching existing record, not just a
+  // label change.
   const matchingBatches = useMemo(() => {
-    if (!resolvedCourse || !year || !branchName || !sectionName || !subjectId) return [];
-    return allBatches.filter(
-      (b) =>
-        b.courseId === resolvedCourse.id &&
-        b.year === Number(year) &&
-        b.department === branchName &&
-        b.sectionName === sectionName &&
-        b.subjectId === subjectId
-    );
-  }, [allBatches, resolvedCourse, year, branchName, sectionName, subjectId]);
+    if (!courseName || !year || !departmentId || !sectionName || !subjectId) return [];
+    return allBatches.filter((b) => {
+      if (!matchingCourseIds.has(b.courseId ?? "")) return false;
+      if (b.year !== Number(year)) return false;
+      if (departmentId !== ALL && b.department !== branchName) return false;
+      if (sectionName !== ALL && b.sectionName !== sectionName) return false;
+      if (subjectId !== ALL && b.subjectId !== subjectId) return false;
+      return true;
+    });
+  }, [allBatches, courseName, year, departmentId, branchName, sectionName, subjectId, matchingCourseIds]);
+
+  // Any level set to "All" means matchingBatches can span multiple distinct
+  // (department, section, subject) contexts at once, so it's rendered as one
+  // flat, fully-labeled table instead of the single per-batch block used
+  // when every level pins to one exact record.
+  const isAllMode = departmentId === ALL || sectionName === ALL || subjectId === ALL;
+
+  const flatRows = useMemo(() => {
+    if (!isAllMode) return [];
+    return matchingBatches
+      .flatMap((batch) => batch.entries.filter(matchesSearch).map((entry) => ({ batch, entry })))
+      .sort((a, b) =>
+        a.batch.department.localeCompare(b.batch.department) ||
+        a.batch.sectionName.localeCompare(b.batch.sectionName) ||
+        a.batch.subjectName.localeCompare(b.batch.subjectName) ||
+        a.entry.name.localeCompare(b.entry.name)
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAllMode, matchingBatches, search]);
 
   // Exam Cell configuration is fetched lazily per batch (once) rather than for
   // every batch up front, and re-fetched fresh each time a batch is opened so
@@ -280,7 +346,7 @@ export default function PrincipalInternalMarksPage() {
       // the initial list load (joined from the Exam Cell's ExamConfiguration,
       // never persisted on the batch itself). Replacing the batch outright
       // with the PATCH response would silently drop that enrichment and make
-      // matchingBatches' `b.courseId === resolvedCourse.id` filter fail,
+      // matchingBatches' `matchingCourseIds.has(b.courseId)` filter fail,
       // vanishing the just-edited record from the current selection. Merge
       // over the previous object instead so every real field the server
       // returns (entries, enteredCount, lastModifiedBy, ...) updates, while
@@ -374,8 +440,10 @@ export default function PrincipalInternalMarksPage() {
               <Select value={departmentId} onValueChange={(v) => { setDepartmentId(v); resetDownstream("branch"); }} disabled={!year}>
                 <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                 <SelectContent>
-                  {branchOptions.length === 0 && (
+                  {branchOptions.length === 0 ? (
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">No branches offer this course</div>
+                  ) : (
+                    <SelectItem value={ALL}>All Departments</SelectItem>
                   )}
                   {branchOptions.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                 </SelectContent>
@@ -387,10 +455,12 @@ export default function PrincipalInternalMarksPage() {
               <Select value={sectionName} onValueChange={(v) => { setSectionName(v); resetDownstream("section"); }} disabled={!departmentId || isLoadingSections}>
                 <SelectTrigger><SelectValue placeholder={isLoadingSections ? "Loading…" : "Select section"} /></SelectTrigger>
                 <SelectContent>
-                  {sections.length === 0 && (
+                  {sectionOptions.length === 0 ? (
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">No sections found</div>
+                  ) : (
+                    <SelectItem value={ALL}>All Sections</SelectItem>
                   )}
-                  {sections.map((s) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                  {sectionOptions.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -400,8 +470,10 @@ export default function PrincipalInternalMarksPage() {
               <Select value={subjectId} onValueChange={setSubjectId} disabled={!sectionName}>
                 <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
                 <SelectContent>
-                  {subjectOptions.length === 0 && (
+                  {subjectOptions.length === 0 ? (
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects found</div>
+                  ) : (
+                    <SelectItem value={ALL}>All Subjects</SelectItem>
                   )}
                   {subjectOptions.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
                 </SelectContent>
@@ -420,7 +492,7 @@ export default function PrincipalInternalMarksPage() {
         </Card>
       )}
 
-      {matchingBatches.map((batch) => {
+      {!isAllMode && matchingBatches.map((batch) => {
         const config = configByBatchId[batch.id];
         const activeComponents = activeComponentsFor(batch);
         const visibleEntries = batch.entries.filter(matchesSearch);
@@ -520,6 +592,93 @@ export default function PrincipalInternalMarksPage() {
         );
       })}
 
+      {/* One or more of Branch/Section/Subject is "All" — matchingBatches can
+          span multiple departments/sections/subjects at once, so every row
+          carries its own identifying context instead of sharing one header. */}
+      {isAllMode && (
+        <div className="space-y-3">
+          <div className="relative sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by student name or roll number"
+              className="pl-9"
+            />
+          </div>
+
+          {flatRows.length > 0 ? (
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">Student</th>
+                      <th className="px-4 py-3">Department</th>
+                      <th className="px-4 py-3">Course</th>
+                      <th className="px-4 py-3">Year</th>
+                      <th className="px-4 py-3">Section</th>
+                      <th className="px-4 py-3">Subject</th>
+                      <th className="px-4 py-3">Faculty</th>
+                      <th className="px-4 py-3">Total</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {flatRows.map(({ batch, entry }) => {
+                      const config = configByBatchId[batch.id];
+                      return (
+                        <tr key={`${batch.id}-${entry.studentId}`}>
+                          <td className="px-4 py-2.5">
+                            <p className="font-medium text-foreground">{entry.name}</p>
+                            <p className="text-xs text-muted-foreground">{entry.rollNumber}</p>
+                          </td>
+                          <td className="px-4 py-2.5">{batch.department}</td>
+                          <td className="px-4 py-2.5">{batch.courseName ?? courseName}</td>
+                          <td className="px-4 py-2.5">{ordinalYear(batch.year)}</td>
+                          <td className="px-4 py-2.5">{batch.sectionName}</td>
+                          <td className="px-4 py-2.5">{batch.subjectName}</td>
+                          <td className="px-4 py-2.5">{batch.facultyName}</td>
+                          <td className="px-4 py-2.5 font-semibold text-foreground">
+                            {config ? `${entryTotal(batch, entry)}/${config.internalMaxMarks}` : "—"}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <Badge variant={batch.status === "SUBMITTED" ? "approved" : "pending"} className="text-xs">
+                              {batch.status === "SUBMITTED" ? "Submitted" : "Pending"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => openView(batch, entry)}>
+                                <Eye className="h-3.5 w-3.5" /> View
+                              </Button>
+                              {batch.status === "SUBMITTED" && (
+                                <Button variant="ghost" size="sm" onClick={() => void openEdit(batch, entry)}>
+                                  <Pencil className="h-3.5 w-3.5" /> Edit
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : (
+            matchingBatches.length > 0 && (
+              <Card>
+                <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                  No students match your search.
+                </CardContent>
+              </Card>
+            )
+          )}
+        </div>
+      )}
+
       {/* View — read-only detail */}
       <Dialog open={!!viewTarget} onOpenChange={(open) => !open && setViewTarget(null)}>
         <DialogContent className="max-w-lg">
@@ -531,9 +690,9 @@ export default function PrincipalInternalMarksPage() {
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                   <div><p className="text-xs text-muted-foreground">Roll Number</p><p className="font-medium">{viewTarget.entry.rollNumber}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Course</p><p className="font-medium">{courseName} · {ordinalYear(Number(year))}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Branch</p><p className="font-medium">{branchName}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Section</p><p className="font-medium">{sectionName}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Course</p><p className="font-medium">{viewTarget.batch.courseName ?? courseName} · {ordinalYear(viewTarget.batch.year)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Branch</p><p className="font-medium">{viewTarget.batch.department}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Section</p><p className="font-medium">{viewTarget.batch.sectionName}</p></div>
                   <div><p className="text-xs text-muted-foreground">Subject</p><p className="font-medium">{viewTarget.batch.subjectName}</p></div>
                   <div><p className="text-xs text-muted-foreground">Faculty</p><p className="font-medium">{viewTarget.batch.facultyName}</p></div>
                 </div>

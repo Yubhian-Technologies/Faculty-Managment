@@ -34,36 +34,35 @@ function statusBadgeClass(status: AttendanceStatus): string {
   }
 }
 
-// Read-only: Management's view of a college's Principal's own attendance
-// history - same attendanceRecords, same Present/Late derivation
-// (isLateCheckIn) the Principal's own "My Attendance" page uses, just fetched
-// via /api/management/colleges/[collegeId]/principal-attendance instead of
-// the session-scoped /api/college/attendance (Management isn't a member of
-// any one college). No edit affordance - Management never edits attendance.
-export default function ManagementPrincipalAttendancePage() {
+// Read-only: Management's view of a college's Vice Principal's own attendance
+// history - mirrors ManagementPrincipalAttendancePage exactly, just fetched
+// via /api/management/colleges/[collegeId]/vice-principal-attendance instead
+// (Management isn't a member of any one college). No edit affordance -
+// Management never edits attendance.
+export default function ManagementVicePrincipalAttendancePage() {
   const { collegeId } = useParams<{ collegeId: string }>();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
 
   const { data, isLoading } = useQuery({
-    queryKey: ["mgmt-principal-attendance", collegeId, year, month],
+    queryKey: ["mgmt-vice-principal-attendance", collegeId, year, month],
     queryFn: () =>
-      fetch(`/api/management/colleges/${collegeId}/principal-attendance?year=${year}&month=${month}`)
-        .then((r) => r.json() as Promise<{ principalName: string | null; records: (AttendanceRecord & { id: string })[] }>),
+      fetch(`/api/management/colleges/${collegeId}/vice-principal-attendance?year=${year}&month=${month}`)
+        .then((r) => r.json() as Promise<{ vicePrincipalName: string | null; records: (AttendanceRecord & { id: string })[] }>),
   });
 
-  const principalName = data?.principalName;
+  const vicePrincipalName = data?.vicePrincipalName;
   const records = data?.records ?? [];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Principal Attendance"
-        description={principalName ? `Monthly attendance record for ${principalName}` : "Monthly attendance record"}
+        title="Vice Principal Attendance"
+        description={vicePrincipalName ? `Monthly attendance record for ${vicePrincipalName}` : "Monthly attendance record"}
         actions={
           <Button variant="outline" asChild>
-            <Link href={`/management/faculty/${collegeId}/principal`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            <Link href={`/management/faculty/${collegeId}/vice-principal`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
           </Button>
         }
       />
@@ -94,10 +93,10 @@ export default function ManagementPrincipalAttendancePage() {
 
       {isLoading ? (
         <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />
-      ) : !principalName ? (
+      ) : !vicePrincipalName ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <p className="text-muted-foreground">No Principal is currently assigned to this college.</p>
+            <p className="text-muted-foreground">No Vice Principal is currently assigned to this college.</p>
           </CardContent>
         </Card>
       ) : records.length === 0 ? (
