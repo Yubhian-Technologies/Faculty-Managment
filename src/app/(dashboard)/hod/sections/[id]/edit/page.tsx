@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import type { Course, Department, Section, Subject, TeachingAssignment } from "@/types";
@@ -40,6 +42,10 @@ const EMPTY_FORM: SectionForm = {
   courseId: "", name: "", year: "", batch: "", facultyInchargeUid: "", facultyInchargeName: "",
 };
 
+type ClassLeaderUser = { uid: string; name: string; email: string };
+type NewClassLeaderForm = { email: string; password: string };
+const EMPTY_NEW_CLASS_LEADER: NewClassLeaderForm = { email: "", password: "" };
+
 export default function EditSectionPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -57,6 +63,18 @@ export default function EditSectionPage() {
   // a shared-first-year section (e.g. Basic Science → CSE) can be re-pointed.
   const [ownerDept, setOwnerDept] = useState("");
   const [branch, setBranch] = useState("");
+
+  // Class Leader (CR) login - bound to this section via Section.classLeaderUid.
+  const [classLeaderUid, setClassLeaderUid] = useState<string | undefined>(undefined);
+  const [classLeaderUser, setClassLeaderUser] = useState<ClassLeaderUser | null>(null);
+  const [classLeaderLoading, setClassLeaderLoading] = useState(false);
+  const [newClassLeader, setNewClassLeader] = useState<NewClassLeaderForm>(EMPTY_NEW_CLASS_LEADER);
+  const [creatingClassLeader, setCreatingClassLeader] = useState(false);
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [removeClassLeaderOpen, setRemoveClassLeaderOpen] = useState(false);
+  const [removingClassLeader, setRemovingClassLeader] = useState(false);
 
   // Subjects & faculty (per-subject teaching assignments for this section)
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
@@ -76,11 +94,6 @@ export default function EditSectionPage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/college/courses")
-      .then((r) => r.json() as Promise<{ courses: Course[] }>)
-      .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
-
     fetch("/api/college/faculty?status=ACTIVE")
       .then((r) => r.json())
       .then((d: { faculty?: FacultyOption[] }) => {
@@ -110,6 +123,7 @@ export default function EditSectionPage() {
         setEnrolledCount(s.studentCount ?? 0);
         setOwnerDept(s.department ?? "");
         setBranch(s.secondaryDepartments?.[0] ?? "");
+        setClassLeaderUid(s.classLeaderUid);
         setForm({
           courseId: s.courseId ?? "",
           name: s.name,
@@ -138,6 +152,136 @@ export default function EditSectionPage() {
       })
       .catch(() => { /* non-critical */ });
   }, [sectionId, router, loadSubjects]);
+
+  // Courses are scoped to this section's own (owning) department, same as the
+  // Add Section form's `?departmentId=` fetch - without this, the Course
+  // dropdown listed every course in the whole college (e.g. an unrelated
+  // department's Master of Technology showing up while editing a Civil
+  // Engineering section), not just what this department actually offers.
+  // Depends on `departments` too since the department name -> id lookup needs
+  // it, and both `ownerDept` and `departments` resolve asynchronously from
+  // separate fetches above.
+  useEffect(() => {
+    if (!ownerDept) return;
+    const deptId = departments.find((d) => d.name === ownerDept)?.id;
+    const qs = deptId ? `?departmentId=${encodeURIComponent(deptId)}` : "";
+    fetch(`/api/college/courses${qs}`)
+      .then((r) => r.json() as Promise<{ courses: Course[] }>)
+      .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+  }, [ownerDept, departments]);
+
+  const loadClassLeaderUser = useCallback(async (uid: string) => {
+    setClassLeaderLoading(true);
+    try {
+      const r = await fetch(`/api/college/users/${uid}`);
+      const d = await r.json() as { user?: { uid: string; name: string; email: string } };
+      setClassLeaderUser(d.user ? { uid: d.user.uid, name: d.user.name, email: d.user.email } : null);
+    } catch {
+      setClassLeaderUser(null);
+    } finally {
+      setClassLeaderLoading(false);
+    }
+  }, []);
+
+  // classLeaderUser is already null both times classLeaderUid can be falsy
+  // here - initial state, and right after handleRemoveClassLeader (which
+  // nulls it itself) - so there's nothing to sync in that case, only a fetch
+  // to kick off when it's set.
+  useEffect(() => {
+    if (!classLeaderUid) return;
+    void (async () => { await loadClassLeaderUser(classLeaderUid); })();
+  }, [classLeaderUid, loadClassLeaderUser]);
+
+  async function handleCreateClassLeader(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newClassLeader.email.trim() || !newClassLeader.password) {
+      toast({ variant: "destructive", title: "Email and password are both required" });
+      return;
+    }
+    if (newClassLeader.password.length < 6) {
+      toast({ variant: "destructive", title: "Password must be at least 6 characters" });
+      return;
+    }
+    setCreatingClassLeader(true);
+    try {
+      const res = await fetch("/api/college/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: newClassLeader.email.trim(),
+          password: newClassLeader.password,
+          role: "CLASS_LEADER",
+          sectionId,
+        }),
+      });
+      const json = await res.json() as { uid?: string; error?: string };
+      if (!res.ok || !json.uid) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to create Class Leader login" });
+        return;
+      }
+      toast({ variant: "success", title: "Class Leader account created" });
+      setNewClassLeader(EMPTY_NEW_CLASS_LEADER);
+      setClassLeaderUid(json.uid);
+    } catch {
+      toast({ variant: "destructive", title: "Network error, please try again" });
+    } finally {
+      setCreatingClassLeader(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!classLeaderUser) return;
+    if (resetPasswordValue.length < 6) {
+      toast({ variant: "destructive", title: "Password must be at least 6 characters" });
+      return;
+    }
+    setResettingPassword(true);
+    try {
+      const res = await fetch(`/api/college/users/${classLeaderUser.uid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: resetPasswordValue }),
+      });
+      if (!res.ok) {
+        const json = await res.json() as { error?: string };
+        toast({ variant: "destructive", title: json.error ?? "Failed to reset password" });
+        return;
+      }
+      toast({ variant: "success", title: "Password reset" });
+      setResetPasswordOpen(false);
+      setResetPasswordValue("");
+    } catch {
+      toast({ variant: "destructive", title: "Network error, please try again" });
+    } finally {
+      setResettingPassword(false);
+    }
+  }
+
+  async function handleRemoveClassLeader() {
+    if (!classLeaderUser) return;
+    setRemovingClassLeader(true);
+    try {
+      const res = await fetch(`/api/college/users/${classLeaderUser.uid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      if (!res.ok) {
+        const json = await res.json() as { error?: string };
+        toast({ variant: "destructive", title: json.error ?? "Failed to remove Class Leader login" });
+        return;
+      }
+      toast({ variant: "success", title: "Class Leader login removed" });
+      setClassLeaderUser(null);
+      setClassLeaderUid(undefined);
+      setRemoveClassLeaderOpen(false);
+    } catch {
+      toast({ variant: "destructive", title: "Network error, please try again" });
+    } finally {
+      setRemovingClassLeader(false);
+    }
+  }
 
   function setF(patch: Partial<SectionForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -203,10 +347,6 @@ export default function EditSectionPage() {
   }
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
-  const formYearOptions = useMemo(
-    () => (formCourse ? Array.from({ length: formCourse.durationYears }, (_, i) => i + 1) : []),
-    [formCourse]
-  );
 
   // Collapse the several Course docs that represent one catalog programme into
   // a single dropdown choice - `courses` legitimately holds one row per related
@@ -219,13 +359,18 @@ export default function EditSectionPage() {
   );
   function selectCourseGroup(groupKey: string) {
     const group = courseGroups.find((g) => g.key === groupKey);
-    if (!group) { setF({ courseId: "", year: "" }); setSubjects([]); return; }
+    // Year is fixed (see the read-only Year field below) - a course change
+    // never resets it, only revalidates subjects against the (unchanged) year;
+    // the server rejects a course whose own span or teaching-years no longer
+    // fit that fixed year.
+    if (!group) { setF({ courseId: "" }); setSubjects([]); return; }
     // Prefer the course doc owned by this section's own department, so the
     // stored courseId doesn't drift to a feeder department's row.
     const ownerDeptId = departments.find((d) => d.name === ownerDept)?.id;
     const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === ownerDeptId);
-    setF({ courseId: own ?? group.courseIds[0], year: "" });
-    setSubjects([]);
+    const newCourseId = own ?? group.courseIds[0];
+    setF({ courseId: newCourseId });
+    loadSubjects(newCourseId, form.year);
   }
 
   // Branch mode: this section's owning department cross-lists to one or more
@@ -258,7 +403,9 @@ export default function EditSectionPage() {
         body: JSON.stringify({
           courseId: form.courseId,
           name: form.name,
-          year: Number(form.year),
+          // Year is deliberately not sent - it's fixed once the section is
+          // created (see the read-only Year field below); the server also
+          // rejects an HOD attempting to change it directly regardless.
           batch: form.batch,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
@@ -352,19 +499,11 @@ export default function EditSectionPage() {
                 <p className="text-xs text-muted-foreground">{isBranchMode ? "e.g. CSE-A" : "e.g. A, B, C or CS-A"}</p>
               </div>
               <div className="space-y-2">
-                <Label>Year *</Label>
-                <Select
-                  value={form.year}
-                  onValueChange={(v) => { setF({ year: v }); loadSubjects(form.courseId, v); }}
-                  disabled={!formCourse}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-                  <SelectContent>
-                    {formYearOptions.map((y) => (
-                      <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Year</Label>
+                <Input value={form.year ? ordinalYear(Number(form.year)) : ""} disabled readOnly />
+                <p className="text-xs text-muted-foreground">
+                  Fixed once created - moving a cohort to the next year is a promotion, not an edit here.
+                </p>
               </div>
             </div>
 
@@ -455,6 +594,94 @@ export default function EditSectionPage() {
           </form>
         </CardContent>
       </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base">Class Leader Login</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {classLeaderLoading ? (
+            <div className="h-16 rounded-md border bg-muted/30 animate-pulse" />
+          ) : classLeaderUser ? (
+            <div className="space-y-4">
+              <div className="rounded-md border px-3 py-2">
+                <p className="text-sm font-medium">{classLeaderUser.name}</p>
+                <p className="text-xs text-muted-foreground">{classLeaderUser.email}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setResetPasswordOpen(true)}>
+                  Reset Password
+                </Button>
+                <Button type="button" variant="destructive" size="sm" onClick={() => setRemoveClassLeaderOpen(true)}>
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={(e) => void handleCreateClassLeader(e)} className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                No Class Leader (CR) login yet for this section - create one below. Just an email and password -
+                the login isn&apos;t tied to a specific student&apos;s name, since who holds the role can change
+                per your college&apos;s rules.
+              </p>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  autoComplete="off"
+                  value={newClassLeader.email}
+                  onChange={(e) => setNewClassLeader((c) => ({ ...c, email: e.target.value }))}
+                  placeholder="classleader@college.edu"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Temporary Password</Label>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={newClassLeader.password}
+                  onChange={(e) => setNewClassLeader((c) => ({ ...c, password: e.target.value }))}
+                  placeholder="Min 6 characters"
+                />
+              </div>
+              <Button type="submit" size="sm" loading={creatingClassLeader}>Create Class Leader</Button>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Class Leader Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>New Password</Label>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={resetPasswordValue}
+              onChange={(e) => setResetPasswordValue(e.target.value)}
+              placeholder="Min 6 characters"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setResetPasswordOpen(false)}>Cancel</Button>
+            <Button type="button" loading={resettingPassword} onClick={() => void handleResetPassword()}>Reset Password</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={removeClassLeaderOpen}
+        onOpenChange={setRemoveClassLeaderOpen}
+        title="Remove Class Leader login?"
+        description={`This deactivates ${classLeaderUser?.name ?? "this"}'s login and frees up this section for a new Class Leader.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => void handleRemoveClassLeader()}
+        loading={removingClassLeader}
+      />
     </div>
   );
 }

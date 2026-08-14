@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, CalendarDays, GraduationCap, Layers, UserCog, Users } from "lucide-react";
+import { Building2, BookOpen, CalendarDays, GraduationCap, Layers, UserCog, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
-import type { Course, Section } from "@/types";
+import type { Course, Section, TeachingAssignment } from "@/types";
+
+type AssignmentRow = TeachingAssignment & { id: string };
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -17,14 +19,16 @@ function ordinalYear(year: number) {
 export default function ClassLeaderDashboardPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [section, setSection] = useState<Section | null>(null);
+  const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/college/class-leader/timetable")
-      .then((r) => r.json() as Promise<{ course?: Course; section?: Section; error?: string }>)
+      .then((r) => r.json() as Promise<{ course?: Course; section?: Section; assignments?: AssignmentRow[]; error?: string }>)
       .then((d) => {
         setCourse(d.course ?? null);
         setSection(d.section ?? null);
+        setAssignments(d.assignments ?? []);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load your section" }))
       .finally(() => setIsLoading(false));
@@ -91,6 +95,27 @@ export default function ClassLeaderDashboardPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {section && assignments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BookOpen className="h-4 w-4" />Subjects &amp; Faculty
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {assignments.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-3 rounded-md border p-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{a.subjectName}</p>
+                  {a.subjectCode && <p className="text-xs text-muted-foreground">{a.subjectCode}</p>}
+                </div>
+                <p className="text-sm text-muted-foreground text-right shrink-0">{a.facultyName || "Not assigned"}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
       {section && (

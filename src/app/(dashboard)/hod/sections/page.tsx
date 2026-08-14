@@ -11,7 +11,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import {
-  resolveScopeDepartments, buildCourseGroups, managedBranchYearsMap, yearsInScope,
+  resolveScopeDepartments, buildCourseGroups, managedBranchYearsMap, yearsInScope, managerEffectiveYears,
 } from "@/lib/departments/hodScope";
 import type { SectionListItem, Course, Department } from "@/types";
 
@@ -225,18 +225,67 @@ export default function HODSectionsPage() {
   // sub-department's, for a managed branch); otherwise union every department
   // in this (sub-)HOD's scope. Falls back to the full course span when nothing
   // is assigned yet.
-  // Depends on the span as a number rather than on activeGroup itself: the
-  // React Compiler can't see inside buildCourseGroups to prove the group object
-  // is never mutated afterwards, and bails out of optimizing the whole
-  // component when a memo depends on something it can't rule that out for.
-  const activeDurationYears = activeGroup?.durationYears ?? 0;
+  // Read straight off courseGroups/activeCourseKey (both provably stable -
+  // courseGroups is itself memoized, activeCourseKey a plain string) rather
+  // than off activeGroup: the React Compiler can't see inside
+  // buildCourseGroups to prove the group object is never mutated afterwards,
+  // and bails out of optimizing the whole component when a memo depends on
+  // something it can't rule that out for.
+  const activeDurationYears = useMemo(
+    () => (activeCourseKey !== "all" ? courseGroups.find((g) => g.key === activeCourseKey)?.durationYears ?? 0 : 0),
+    [courseGroups, activeCourseKey]
+  );
+  // Only a real catalog course (not a legacy, pre-catalog one - see
+  // CourseGroup) can have a per-course academic-structure override; a legacy
+  // group falls back to each department's flat fields, same as always.
+  const activeCatalogId = useMemo(
+    () => (activeCourseKey !== "all" ? courseGroups.find((g) => g.key === activeCourseKey)?.catalogId : undefined),
+    [courseGroups, activeCourseKey]
+  );
   const yearTabOptions = useMemo(() => {
     if (!activeDurationYears) return [] as number[];
-    const relevant = deptFilter !== "all"
-      ? departments.filter((d) => d.name === deptFilter)
-      : resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren);
-    return yearsInScope(activeDurationYears, relevant, managedBranchYears, viewsManagedBranchYears);
-  }, [activeDurationYears, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren, plainChildren, isGroupingContainer, managedBranchYears, viewsManagedBranchYears]);
+    const courseYears = Array.from({ length: activeDurationYears }, (_, i) => i + 1);
+    // Recomputed per active course rather than reusing the plain
+    // `managedBranchYears` above (which stays flat/course-blind - it also
+    // drives which SECTIONS are visible at all, a decision that must stay
+    // right even before any course tab is picked). Cheap enough (a college's
+    // department count is small) to compute inline rather than its own memo.
+    const managedBranchYearsForActiveCourse = managedBranchYearsMap(departments, activeCatalogId);
+
+    if (deptFilter !== "all") {
+      // A specific branch is the active filter - its own years for this
+      // course, plus whatever shared year its manager contributes.
+      const relevant = departments.filter((d) => d.name === deptFilter);
+      return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId);
+    }
+
+    if (viewsManagedBranchYears) {
+      // Nothing (or only a sub-department) picked yet - covers BOTH shapes
+      // that reach branches through a managed relationship: the main common
+      // HOD browsing "All Departments" via the cascade (subDeptFilter may or
+      // may not be set), and a sub-department's OWN HOD logged in directly
+      // (isGroupingContainer - subDeptFilter is never set for them, so
+      // `manager` resolves straight to their own department). Either way,
+      // only the shared structure's own years for this course are "in view"
+      // here. A managed branch's own later years (e.g. EEE's own years 2-4 of
+      // a B.Tech Basic Science - English only shares year 1 of) belong to
+      // that branch's own dedicated HOD, not to the manager, and only become
+      // relevant once that specific branch is picked above (the deptFilter
+      // branch below) - unioning every managed branch's own years in here is
+      // exactly what let this page offer years the manager was never
+      // assigned for a course.
+      const manager = subDeptFilter ? groupingChildren.find((c) => c.name === subDeptFilter) : ownDept;
+      if (!manager) return [];
+      const managerYears = managerEffectiveYears(manager, departments, activeCatalogId);
+      return managerYears.length > 0 ? courseYears.filter((y) => managerYears.includes(y)) : courseYears;
+    }
+
+    const relevant = resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren);
+    return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId);
+  }, [
+    activeDurationYears, activeCatalogId, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren,
+    plainChildren, isGroupingContainer, viewsManagedBranchYears, subDeptFilter,
+  ]);
 
   // Each section is scoped to the years its OWN department is assigned to teach
   // ("Years Taught"). A section whose year the department no longer teaches
