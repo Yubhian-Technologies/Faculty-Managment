@@ -38,6 +38,12 @@ export class ChunkedBatch {
     this.opCount++;
   }
 
+  delete(ref: DocumentReference): void {
+    this.rotateIfFull();
+    this.batch.delete(ref);
+    this.opCount++;
+  }
+
   async commit(): Promise<void> {
     if (this.opCount > 0) this.pendingCommits.push(this.batch.commit());
     await Promise.all(this.pendingCommits);

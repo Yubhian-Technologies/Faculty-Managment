@@ -19,10 +19,21 @@ import type { Section, StudentRecord } from "@/types";
 // first-year HOD would otherwise have to run the per-department distribute
 // once for every branch; this does the whole year at once.
 //
-// Crucially, every student stays in their OWN branch: an IT student is placed
+// Crucially, every student ends up in their OWN branch: an IT student is placed
 // into an IT section, never into a sub-department. The sub-department
 // (BS-Maths, BS-English) is a management view that reaches those students
 // through Department.managedDepartments - it never becomes their department.
+//
+// A student's branch is `secondaryDepartment` when set - the College Office
+// enrolls a shared-first-year student under the grouping department (e.g.
+// "BS-Mathematics") with their real branch (e.g. "cse") only as that pointer,
+// since the branch's own sections don't exist until the sub-HOD creates them.
+// Falls back to `department` itself for a student already stored under their
+// real branch (a college using `managedDepartments` from the start, with no
+// grouping-department detour). On placement, `department` is corrected to
+// match (and the now-redundant `secondaryDepartment` cleared) - the student
+// becomes a real member of their branch the moment they land in one of its
+// sections.
 //
 // Branches with no sections yet are reported back rather than failing the run,
 // so one unprepared branch can't block the rest of the year.
@@ -63,7 +74,7 @@ export async function POST(request: Request) {
     const byBranch = new Map<string, (StudentRecord & { id: string })[]>();
     for (const d of unassignedSnap.docs) {
       const student = { id: d.id, ...(d.data() as Omit<StudentRecord, "id">) };
-      const branch = (student.department ?? "").trim();
+      const branch = (student.secondaryDepartment ?? student.department ?? "").trim();
       if (!branch) continue;
       const list = byBranch.get(branch);
       if (list) list.push(student);
@@ -131,7 +142,12 @@ export async function POST(request: Request) {
       for (let i = 0; i < sections.length; i++) {
         const section = sections[i];
         for (const student of slices[i]) {
+          // Cleared only when it's actually what resolved this branch - leaves
+          // an unrelated secondaryDepartment value untouched otherwise.
+          const resolvedViaSecondary = (student.secondaryDepartment ?? "").trim() === branch;
           batch.update(collegeRef.collection("students").doc(student.id), {
+            department: branch,
+            ...(resolvedViaSecondary ? { secondaryDepartment: null } : {}),
             section: section.name,
             year,
             updatedAt: now,

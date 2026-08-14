@@ -1,26 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GraduationCap, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import type { Course } from "@/types";
+import type { Course, Department } from "@/types";
 
 export default function HODTimetableCoursesPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/college/courses")
-      .then((r) => r.json() as Promise<{ courses: Course[] }>)
-      .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
+    Promise.all([
+      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
+      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+    ])
+      .then(([coursesRes, deptsRes]) => {
+        setCourses((coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+        setDepartments(deptsRes.departments ?? []);
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Each department owns its own course row for the same catalog programme
+  // and builds its own timetable under it, so - unlike Sections - these can't
+  // be merged into one card. Append the owning department's name whenever more
+  // than one course shares a display name, so the cards read as distinct
+  // destinations instead of confusing duplicates.
+  const courseNameCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of courses) counts.set(c.name, (counts.get(c.name) ?? 0) + 1);
+    return counts;
+  }, [courses]);
+  const deptNameById = useMemo(() => new Map(departments.map((d) => [d.id, d.name])), [departments]);
+  const courseLabel = (c: Course) => (courseNameCounts.get(c.name) ?? 0) > 1
+    ? `${c.name} — ${deptNameById.get(c.departmentId) ?? "?"}`
+    : c.name;
 
   return (
     <div className="space-y-6">
@@ -50,7 +71,7 @@ export default function HODTimetableCoursesPage() {
                   <Badge variant="secondary" className="text-xs font-mono mb-1">{c.code}</Badge>
                   <p className="font-semibold text-sm flex items-center gap-1.5">
                     <GraduationCap className="h-4 w-4 text-muted-foreground shrink-0" />
-                    {c.name}
+                    {courseLabel(c)}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">{c.durationYears} year{c.durationYears !== 1 ? "s" : ""}</p>
                 </div>

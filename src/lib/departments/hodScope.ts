@@ -1,4 +1,5 @@
 import { findBranchManager } from "@/lib/departments/managedBranches";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import type { Course, Department } from "@/types";
 
 // Client-side counterpart to getHodDepartmentScope (which is server-only, since
@@ -77,7 +78,16 @@ export function deriveHodScope(departments: Department[], ownDepartmentName: str
   };
 }
 
-export type CourseGroup = { key: string; name: string; durationYears: number; courseIds: string[] };
+export type CourseGroup = {
+  key: string;
+  name: string;
+  durationYears: number;
+  courseIds: string[];
+  /** The catalog entry this group resolves to - undefined for a legacy,
+   *  pre-catalog course (grouped by normalized name instead, see `key`),
+   *  which therefore can't have a per-course academic-structure override. */
+  catalogId?: string;
+};
 
 /**
  * Collapse the several Course docs that represent one programme into a single
@@ -97,24 +107,51 @@ export function buildCourseGroups(courses: Course[]): CourseGroup[] {
       g.courseIds.push(c.id);
       if (!g.name && c.name) g.name = c.name;
     } else {
-      map.set(key, { key, name: c.name, durationYears: c.durationYears, courseIds: [c.id] });
+      map.set(key, { key, name: c.name, durationYears: c.durationYears, courseIds: [c.id], catalogId: c.catalogId });
     }
   }
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
- * branch name -> the years its managing (sub-)department teaches. A real
- * branch's own "Years Taught" never includes a shared year like the common
- * first year, so anything scoped by assignedYears has to fall back to this for
- * a managed branch or the shared year disappears entirely.
+ * The years a shared-year manager (a sub-department, or the common
+ * department itself) actually offers for one specific course - its own
+ * per-course override/flat years (resolveDepartmentCourseScope), or, when it
+ * has neither of its own (the usual shape for an HOD-created sub-department -
+ * college/departments POST strips assignedYears from anything an HOD
+ * creates, and the courseScope override is Principal-only), its parent's.
+ * This is what a manager itself teaches - never a managed branch's own later
+ * years, which belong to that branch's own dedicated HOD instead.
  */
-export function managedBranchYearsMap(departments: Department[]): Map<string, number[]> {
+export function managerEffectiveYears(
+  manager: Department,
+  allDepartments: Department[],
+  catalogId: string | undefined
+): number[] {
+  const own = resolveDepartmentCourseScope(manager, catalogId).assignedYears;
+  if (own.length > 0) return own;
+  if (manager.parentDepartmentId) {
+    const parent = allDepartments.find((p) => p.id === manager.parentDepartmentId);
+    if (parent) return resolveDepartmentCourseScope(parent, catalogId).assignedYears;
+  }
+  return [];
+}
+
+/**
+ * branch name -> the years its managing (sub-)department teaches THIS course
+ * (managerEffectiveYears, resolved per catalogId when given). A real branch's
+ * own "Years Taught" never includes a shared year like the common first year,
+ * so anything scoped by assignedYears has to fall back to this for a managed
+ * branch or the shared year disappears entirely. `catalogId` omitted falls
+ * back to each manager's flat fields, unchanged from before this existed.
+ */
+export function managedBranchYearsMap(departments: Department[], catalogId?: string): Map<string, number[]> {
   const m = new Map<string, number[]>();
   for (const d of departments) {
     for (const branchName of d.managedDepartments ?? []) {
       if (m.has(branchName)) continue;
-      m.set(branchName, findBranchManager(departments, branchName)?.years ?? []);
+      const manager = findBranchManager(departments, branchName)?.department;
+      m.set(branchName, manager ? managerEffectiveYears(manager, departments, catalogId) : []);
     }
   }
   return m;
@@ -122,21 +159,26 @@ export function managedBranchYearsMap(departments: Department[]): Map<string, nu
 
 /**
  * The years to offer for a course: the "Years Taught" the Principal assigned
- * across the departments in play, intersected with the course's own span -
- * never the raw 1..durationYears, which is what let Teaching Assignments offer
- * years the department doesn't run. Falls back to the full span when nothing is
- * assigned anywhere, so an unconfigured college isn't locked out.
+ * across the departments in play - per-course override when one exists for
+ * `catalogId`, else the flat fields (resolveDepartmentCourseScope) -
+ * intersected with the course's own span, never the raw 1..durationYears,
+ * which is what let Teaching Assignments offer years the department doesn't
+ * run. Falls back to the full span when nothing is assigned anywhere, so an
+ * unconfigured college isn't locked out. `catalogId` omitted (a legacy,
+ * pre-catalog course - see CourseGroup) falls back to each department's flat
+ * fields only, unchanged from before per-course overrides existed.
  */
 export function yearsInScope(
   durationYears: number,
   relevantDepartments: Department[],
   managedBranchYears: Map<string, number[]>,
-  viewsManagedBranchYears: boolean
+  viewsManagedBranchYears: boolean,
+  catalogId?: string
 ): number[] {
   const courseYears = Array.from({ length: durationYears }, (_, i) => i + 1);
   const assigned = new Set<number>();
   for (const d of relevantDepartments) {
-    for (const y of d.assignedYears ?? []) assigned.add(y);
+    for (const y of resolveDepartmentCourseScope(d, catalogId).assignedYears) assigned.add(y);
     if (viewsManagedBranchYears) {
       for (const y of managedBranchYears.get(d.name) ?? []) assigned.add(y);
     }

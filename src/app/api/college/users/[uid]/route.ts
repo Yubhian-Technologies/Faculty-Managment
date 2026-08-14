@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { syncDepartmentHod } from "@/lib/departments/scope";
+import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 
 async function loadTargetInScope(
   db: FirebaseFirestore.Firestore,
@@ -30,18 +30,29 @@ async function loadTargetInScope(
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
   } else if (session.role === "HOD") {
-    if (target.role !== "PANEL_MEMBER") {
-      return { targetSnap: null, error: "HOD can only manage Panel Members", status: 403 };
+    if (target.role !== "PANEL_MEMBER" && target.role !== "CLASS_LEADER") {
+      return { targetSnap: null, error: "HOD can only manage Panel Members and Class Leaders", status: 403 };
     }
-    const hodSnap = await db
-      .collection("colleges")
-      .doc(session.collegeId)
-      .collection("users")
-      .doc(session.uid)
-      .get();
-    const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-    if (hodDept && target.department !== hodDept) {
-      return { targetSnap: null, error: "Can only manage faculty in your department", status: 403 };
+    if (target.role === "CLASS_LEADER") {
+      // Class Leader logins are bound to a Section (see users POST), not a
+      // flat department name match - a Section can belong to a sub-department,
+      // so this needs the same sub-department-aware check the creation path
+      // uses (canHodEditDepartment), not the simple equality below.
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, target.department ?? "")) {
+        return { targetSnap: null, error: "Can only manage Class Leaders in your department", status: 403 };
+      }
+    } else {
+      const hodSnap = await db
+        .collection("colleges")
+        .doc(session.collegeId)
+        .collection("users")
+        .doc(session.uid)
+        .get();
+      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+      if (hodDept && target.department !== hodDept) {
+        return { targetSnap: null, error: "Can only manage faculty in your department", status: 403 };
+      }
     }
   } else if (session.role === "COLLEGE_OFFICE") {
     if (target.role !== "CLASS_LEADER") {

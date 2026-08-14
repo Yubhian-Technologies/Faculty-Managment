@@ -40,9 +40,9 @@ export interface RosterField {
   placeholder?: string;
   /**
    * Kept out of the students list's columns while still belonging to the
-   * identity block of the form and detail view. Secondary Department sits
-   * beside Department where it's entered, but the list stays the seven
-   * columns it's meant to show.
+   * identity block of the form and detail view - for a field that's only
+   * ever set for a small subset of students, so most rows would show a
+   * near-empty column.
    */
   hideInList?: boolean;
 }
@@ -52,7 +52,7 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "name", label: "Name", kind: "text", sample: "P. Sai Kumar", required: true, primary: true, aliases: ["Student Name", "Full Name"], placeholder: "P. Sai Kumar" },
   { key: "course", label: "Course", kind: "text", sample: "", primary: true, aliases: ["Programme", "Program"], placeholder: "B.Tech" },
   { key: "department", label: "Department", kind: "select", sample: "IT", required: true, primary: true, aliases: ["Dept", "Department Code", "Branch"] },
-  { key: "secondaryDepartment", label: "Secondary Department", kind: "select", sample: "", primary: true, hideInList: true, aliases: ["Secondary Dept", "Core Branch"] },
+  { key: "secondaryDepartment", label: "Secondary Department", kind: "select", sample: "", primary: true, aliases: ["Secondary Dept", "Core Branch"] },
   { key: "year", label: "Academic Year", kind: "select", sample: "1", required: true, primary: true, aliases: ["Year"] },
   { key: "semester", label: "Semester", kind: "text", sample: "1st Semester", primary: true, aliases: ["Sem"], placeholder: "1st Semester" },
   { key: "rollNumber", label: "Roll No", kind: "text", sample: "", primary: true, aliases: ["Roll Number"] },

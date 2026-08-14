@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
-import type { Course, Subject } from "@/types";
+import type { Course, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 
 function ordinalYear(year: number) {
@@ -24,6 +24,7 @@ export default function HODSubjectsPage() {
   const router = useRouter();
   const { user } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
@@ -39,9 +40,14 @@ export default function HODSubjectsPage() {
   const loadCourses = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/courses");
-      const data = await res.json() as { courses: Course[] };
-      setCourses((data.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+      const [coursesRes, deptsRes] = await Promise.all([
+        fetch("/api/college/courses"),
+        fetch("/api/college/departments"),
+      ]);
+      const coursesData = await coursesRes.json() as { courses: Course[] };
+      const deptsData = await deptsRes.json() as { departments: Department[] };
+      setCourses((coursesData.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+      setDepartments(deptsData.departments ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load courses" });
     } finally {
@@ -52,6 +58,25 @@ export default function HODSubjectsPage() {
   useEffect(() => {
     void (async () => { await loadCourses(); })();
   }, [loadCourses]);
+
+  // Each department owns its own course row for the same catalog programme
+  // (e.g. Basic Science's and CIVIL's own "Bachelor of Technology"), and each
+  // carries its own distinct subject list - so, unlike Sections, these can't
+  // be merged into one choice. Append the owning department's name whenever
+  // more than one course shares a display name, so they read as distinct
+  // options instead of confusing duplicates.
+  const courseNameCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of courses) counts.set(c.name, (counts.get(c.name) ?? 0) + 1);
+    return counts;
+  }, [courses]);
+  const deptNameById = useMemo(() => new Map(departments.map((d) => [d.id, d.name])), [departments]);
+  const courseLabel = useCallback(
+    (c: Course) => (courseNameCounts.get(c.name) ?? 0) > 1
+      ? `${c.name} — ${deptNameById.get(c.departmentId) ?? "?"}`
+      : c.name,
+    [courseNameCounts, deptNameById]
+  );
 
   // Default straight to the first course/year - Course/Year stay switchable
   // via the pickers below for departments with more than one, but the HOD
@@ -125,7 +150,7 @@ export default function HODSubjectsPage() {
                 <Select value={selectedCourseId} onValueChange={selectCourse}>
                   <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
                   <SelectContent>
-                    {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    {courses.map((c) => <SelectItem key={c.id} value={c.id}>{courseLabel(c)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -146,7 +171,7 @@ export default function HODSubjectsPage() {
               <CardContent className="p-4 space-y-4">
                 <h2 className="font-semibold text-sm flex items-center gap-2">
                   <BookOpen className="h-4 w-4" />
-                  {selectedCourse?.name} · {ordinalYear(Number(selectedYear))}
+                  {selectedCourse ? courseLabel(selectedCourse) : ""} · {ordinalYear(Number(selectedYear))}
                 </h2>
 
                 {isLoadingSubjects ? (

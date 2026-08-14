@@ -17,12 +17,23 @@ import type { Section, StudentRecord } from "@/types";
 // and so on. Roll numbers are left exactly as imported. This is the "divide the
 // branch's students into sections A/B/C by initial" step a sub-HOD runs after
 // creating the sections. Each moved student also gets a departmentHistory entry.
+//
+// A shared-first-year student is enrolled under the grouping (sub-)department
+// (e.g. "BS-Mathematics") with `secondaryDepartment` naming their real branch
+// (e.g. "cse") - but that branch's sections are filed under the branch itself,
+// never under the grouping department (see hod/sections/new's managed-branch
+// mode). `secondaryDepartment` in the body names which branch to route through:
+// the cohort is narrowed to students pre-registered to it, and the target
+// sections/placement resolve against the branch, not the grouping department.
+// Omitted for a plain department (no shared-year structure), which behaves
+// exactly as before.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const body = (await request.json()) as {
       departmentId?: string;
       department?: string;
+      secondaryDepartment?: string;
       year: number;
       sectionIds: string[];
     };
@@ -49,24 +60,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "department or departmentId is required" }, { status: 400 });
     }
 
+    // The department sections/placement actually resolve against - the chosen
+    // real branch when routing a shared-first-year cohort through one,
+    // otherwise deptName itself (unchanged, plain-department behaviour).
+    const secondaryDeptName = body.secondaryDepartment?.trim() || "";
+    const targetDeptName = secondaryDeptName || deptName;
+
     // An HOD/Sub-HOD may only distribute within a department they own or
     // manage, and - for a managed branch reached only via `managedDepartments`
     // (e.g. Basic Science grouping CIVIL for its shared first year) - only for
     // the years that grouping actually covers. CIVIL's own years (2-4) stay
     // exclusively CIVIL's own dedicated HOD's to distribute, even though Basic
-    // Science manages CIVIL for year 1. Mirrors the read-side check in
-    // `college/students` GET and `college/sections` GET.
+    // Science manages CIVIL for year 1. Checked against targetDeptName (the
+    // branch actually being sectioned into), same as the section validation
+    // and student write below. Mirrors the read-side check in `college/students`
+    // GET and `college/sections` GET.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const deptsSnap = await collegeRef.collection("departments").get();
       const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
-      if (!canHodEditDepartmentYear(scope, allDepts, deptName, year)) {
+      if (!canHodEditDepartmentYear(scope, allDepts, targetDeptName, year)) {
         return NextResponse.json({ error: "That department/year is not yours or one you manage" }, { status: 403 });
       }
     }
 
     // Load the chosen sections, preserving the caller's order, and validate each
-    // belongs to this exact (department, year).
+    // belongs to this exact (target department, year).
     const sectionSnaps = await Promise.all(
       body.sectionIds.map((id) => collegeRef.collection("sections").doc(id).get())
     );
@@ -75,9 +94,9 @@ export async function POST(request: Request) {
       const snap = sectionSnaps[i];
       if (!snap.exists) return NextResponse.json({ error: `Section ${body.sectionIds[i]} not found` }, { status: 400 });
       const s = { id: snap.id, ...(snap.data() as object) } as Section;
-      if (s.department !== deptName || s.year !== year) {
+      if (s.department !== targetDeptName || s.year !== year) {
         return NextResponse.json(
-          { error: `Section ${s.name} is not a ${deptName} Year ${year} section` },
+          { error: `Section ${s.name} is not a ${targetDeptName} Year ${year} section` },
           { status: 400 }
         );
       }
@@ -85,14 +104,20 @@ export async function POST(request: Request) {
     }
 
     // Load the unassigned cohort for this (department, year), sorted by full name.
+    // Narrowed to students pre-registered to the chosen branch when routing
+    // through one - filtered in memory rather than a 4th `.where()` clause, to
+    // avoid requiring a new composite index for what's usually a small cohort.
     const unassignedSnap = await collegeRef.collection("students")
       .where("department", "==", deptName)
       .where("year", "==", year)
       .where("section", "==", "")
       .get();
-    const cohort = unassignedSnap.docs
+    let cohort = unassignedSnap.docs
       .map((d) => ({ id: d.id, ...(d.data() as Omit<StudentRecord, "id">) }))
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    if (secondaryDeptName) {
+      cohort = cohort.filter((s) => (s.secondaryDepartment ?? "").trim() === secondaryDeptName);
+    }
 
     if (cohort.length === 0) {
       return NextResponse.json({ error: "No unassigned students to distribute for this department and year" }, { status: 400 });
@@ -112,8 +137,20 @@ export async function POST(request: Request) {
       const section = sections[i];
       for (const student of slice) {
         const ref = collegeRef.collection("students").doc(student.id);
-        batch.update(ref, { section: section.name, year, updatedAt: now });
-        const history = departmentHistoryEntry(db, session.collegeId, student.id, deptName, section.name, year, now);
+        batch.update(ref, {
+          // Corrects department to the branch actually being sectioned into,
+          // same as the per-student PATCH does on a targeted section move -
+          // a student pre-registered under the grouping department becomes a
+          // real member of their branch the moment they land in one of its
+          // sections, not deferred to a separate promotion step. The
+          // secondary-department pointer is now redundant, so it's cleared;
+          // left untouched in the plain (no-branch) path.
+          ...(secondaryDeptName ? { department: targetDeptName, secondaryDepartment: null } : {}),
+          section: section.name,
+          year,
+          updatedAt: now,
+        });
+        const history = departmentHistoryEntry(db, session.collegeId, student.id, targetDeptName, section.name, year, now);
         batch.set(history.ref, history.data);
       }
       perSection.push({ section: section.name, count: slice.length });

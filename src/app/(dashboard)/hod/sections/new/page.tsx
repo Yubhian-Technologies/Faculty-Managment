@@ -11,7 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import { findBranchManager, managerTeachingYears } from "@/lib/departments/managedBranches";
+import { findBranchManager } from "@/lib/departments/managedBranches";
+import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import type { Course, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -123,6 +125,25 @@ export default function NewSectionPage() {
     [departments, activeDeptName]
   );
 
+  // Collapse the several Course docs that represent one catalog programme into
+  // a single dropdown choice - `courses` legitimately holds one row per related
+  // department (see buildCourseGroups' own comment), so without this the Course
+  // dropdown lists "Bachelor of Technology" once per department instead of once.
+  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
+  const selectedCourseGroupKey = useMemo(
+    () => courseGroups.find((g) => g.courseIds.includes(form.courseId))?.key ?? "",
+    [courseGroups, form.courseId]
+  );
+  function selectCourseGroup(groupKey: string) {
+    const group = courseGroups.find((g) => g.key === groupKey);
+    if (!group) { setF({ courseId: "", year: "" }); return; }
+    // Prefer the course doc owned by the department this section is actually
+    // being created under, so the stored courseId lines up with it rather than
+    // a feeder's - same preference the Sections list uses when jumping here.
+    const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === (departmentId || activeDept?.id));
+    setF({ courseId: own ?? group.courseIds[0], year: "" });
+  }
+
   // Managed-branch mode: activeDept is a real branch (e.g. IT) reached through
   // some sub-department's `managedDepartments` grouping (BS-Maths managing IT +
   // CSBS) rather than a plain pick of the HOD's own department. Takes priority
@@ -166,10 +187,13 @@ export default function NewSectionPage() {
   // lives - a real branch's own assignedYears (e.g. CIVIL's [2,3,4]) never
   // includes the shared first year on its own.
   // Computed from the manager actually in force rather than branchManager's own
-  // years, since viaDept may have overridden which department that is.
+  // years, since viaDept may have overridden which department that is. Resolved
+  // per the selected course's catalogId (managerEffectiveYears) rather than the
+  // manager's flat assignedYears alone, so a manager offering a per-course
+  // override (Department.courseScopes) is honoured the same as everywhere else.
   const managingYears = useMemo(
-    () => (managingDept ? managerTeachingYears(departments, managingDept) : []),
-    [managingDept, departments]
+    () => (managingDept ? managerEffectiveYears(managingDept, departments, formCourse?.catalogId) : []),
+    [managingDept, departments, formCourse]
   );
   // Derived section name: the managing sub-department's own code (e.g.
   // "BS-ENGLISH" - already self-describing, since sub-department codes are set
@@ -179,11 +203,16 @@ export default function NewSectionPage() {
   // that common department, so its own code is used the same way.
   const managedBranchName = `${managingDept?.code?.trim() ? `${managingDept.code.trim()}-` : ""}${activeDept?.code?.trim() || activeDeptName}-${letter.trim().toUpperCase()}`;
 
-  // Offer only the years this department is assigned to teach, intersected with
-  // the course's own span. A department set to [1,2,3] never shows Year 4 even
-  // for a 4-year course. In managed-branch mode, ONLY the common structure's
-  // years (managingYears - typically just the shared first year) are offered,
-  // never the branch's own later years: this Sub-Department cascade is how the
+  // Offer only the years this department is assigned to teach for the selected
+  // course, intersected with the course's own span. A department set to
+  // [1,2,3] never shows Year 4 even for a 4-year course, and a department
+  // running an independent course under its own per-course override (e.g.
+  // AIDS's Master of Technology spanning years 1-2 while its Bachelor of
+  // Technology spans 2-4 - Department.courseScopes, resolved by
+  // resolveDepartmentCourseScope) sees that override rather than its flat
+  // years. In managed-branch mode, ONLY the common structure's years
+  // (managingYears - typically just the shared first year) are offered, never
+  // the branch's own later years: this Sub-Department cascade is how the
   // shared first year is routed, but Year 2 onward belongs to that branch's own
   // dedicated HOD (set by the Principal), created through the plain flow
   // instead. When no years are assigned yet (or departments haven't loaded),
@@ -192,24 +221,31 @@ export default function NewSectionPage() {
   const formYearOptions = useMemo(() => {
     if (!formCourse) return [];
     const courseYears = Array.from({ length: formCourse.durationYears }, (_, i) => i + 1);
-    const assigned = isManagedBranchMode ? managingYears : (activeDept?.assignedYears ?? []);
+    const assigned = isManagedBranchMode
+      ? managingYears
+      : (activeDept ? resolveDepartmentCourseScope(activeDept, formCourse.catalogId).assignedYears : []);
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
   }, [formCourse, isManagedBranchMode, managingYears, activeDept]);
 
   // Legacy branch mode: the owning department cross-lists to one or more
-  // branches (Department.secondaryDepartments). When it does, the section
-  // feeds a branch instead of using a free-typed name. Only relevant when
-  // managed-branch mode above doesn't already apply.
+  // branches (Department.secondaryDepartments, resolved per the selected
+  // course's own courseScopes override when it has one - e.g. a department's
+  // independent M.Tech cross-lists no one even though its shared-first-year
+  // B.Tech does). When it does, the section feeds a branch instead of using a
+  // free-typed name. Only relevant when managed-branch mode above doesn't
+  // already apply.
   const branchOptions = useMemo(() => {
     if (isManagedBranchMode || !activeDept) return [];
-    if (activeDept.secondaryDepartments?.length) return activeDept.secondaryDepartments;
+    const ownBranches = resolveDepartmentCourseScope(activeDept, formCourse?.catalogId).secondaryDepartments;
+    if (ownBranches.length) return ownBranches;
     // A sub-department inherits its parent's configured branches, so a sub-HOD
     // can create the shared first-year branch sections too.
     if (activeDept.parentDepartmentId) {
-      return departments.find((d) => d.id === activeDept.parentDepartmentId)?.secondaryDepartments ?? [];
+      const parent = departments.find((d) => d.id === activeDept.parentDepartmentId);
+      return parent ? resolveDepartmentCourseScope(parent, formCourse?.catalogId).secondaryDepartments : [];
     }
     return [];
-  }, [isManagedBranchMode, activeDept, departments]);
+  }, [isManagedBranchMode, activeDept, departments, formCourse]);
   const isBranchMode = branchOptions.length > 0;
   const branchCodeOf = (name: string) =>
     departments.find((d) => d.name === name)?.code?.trim() || name;
@@ -307,10 +343,10 @@ export default function NewSectionPage() {
 
             <div className="space-y-2">
               <Label>Course *</Label>
-              <Select value={form.courseId} onValueChange={(v) => setF({ courseId: v, year: "" })}>
+              <Select value={selectedCourseGroupKey} onValueChange={selectCourseGroup}>
                 <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
                 <SelectContent>
-                  {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {courseGroups.map((g) => <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
