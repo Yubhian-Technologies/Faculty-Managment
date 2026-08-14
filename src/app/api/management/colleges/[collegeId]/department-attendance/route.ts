@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
 import type { AttendanceRecord } from "@/types";
 
 interface RosterEntry {
@@ -16,11 +17,17 @@ interface RosterEntry {
   // hiding a real department member, same rule as the Principal's own
   // Attendance Report page uses.
   courseIds?: string[];
-  status: string; // AttendanceStatus, or "NOT_MARKED" when no record exists yet for the day
+  // AttendanceStatus, or a synthetic value for "no record exists yet for the
+  // day": "NOT_REGISTERED" (hasn't registered their face at all - takes
+  // priority) or "NOT_MARKED" (registered, just hasn't checked in yet today).
+  // Deliberately NOT "ABSENT" for a past day with no record - see
+  // /api/college/attendance/report for why that derivation is deferred.
+  status: string;
   checkIn: string | null;
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
+  registered: boolean;
 }
 
 function parseDateParam(dateParam: string | null): { start: Date; end: Date; docSuffix: string } {
@@ -57,11 +64,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
       .get();
 
     const roster: RosterEntry[] = usersSnap.docs.map((d) => {
-      const u = d.data() as { name?: string; role?: string };
+      const u = d.data() as { name?: string; role?: string; faceEmbedding?: number[] };
       const role: "PANEL_MEMBER" | "HOD" = u.role === "HOD" ? "HOD" : "PANEL_MEMBER";
       return {
         uid: d.id, name: u.name ?? "", role,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+        // HOD registers directly on this same users/{uid} doc; PANEL_MEMBER
+        // registers on their facultyMembers doc instead (filled in below).
+        registered: role === "HOD" ? Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0 : false,
       };
     });
 
@@ -71,26 +81,66 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         .where("department", "==", department)
         .get();
 
+      // Two passes: first collect this date's matching records (with a ref,
+      // so closeMissedCheckouts can persist any correction), then apply the
+      // (possibly corrected) status onto the roster.
+      const pending: {
+        ref: FirebaseFirestore.DocumentReference;
+        resolvedDate: Date | null;
+        status: string;
+        checkIn: string | null;
+        checkOut: string | null;
+        remarks: string | null;
+        checkInVerified: boolean;
+        checkOutVerified: boolean;
+        entry: RosterEntry;
+      }[] = [];
+
       for (const doc of recordsSnap.docs) {
         const rec = doc.data() as AttendanceRecord;
         if (!rosterByUid.has(rec.facultyId)) continue;
-        const d = rec.date && typeof (rec.date as unknown as { toDate?: () => Date }).toDate === "function"
-          ? (rec.date as unknown as { toDate: () => Date }).toDate()
-          : new Date(rec.date as unknown as string);
-        if (d < start || d >= end) continue;
-        const entry = rosterByUid.get(rec.facultyId)!;
-        entry.status = rec.status;
-        entry.checkIn = rec.checkIn ?? null;
-        entry.checkOut = rec.checkOut ?? null;
-        entry.checkInVerified = !!rec.checkInVerified;
-        entry.checkOutVerified = !!rec.checkOutVerified;
+        const d = toAttendanceDate(rec.date);
+        if (!d || d < start || d >= end) continue;
+        pending.push({
+          ref: doc.ref,
+          resolvedDate: d,
+          status: rec.status,
+          checkIn: rec.checkIn ?? null,
+          checkOut: rec.checkOut ?? null,
+          remarks: rec.remarks ?? null,
+          checkInVerified: !!rec.checkInVerified,
+          checkOutVerified: !!rec.checkOutVerified,
+          entry: rosterByUid.get(rec.facultyId)!,
+        });
+      }
+
+      await closeMissedCheckouts(db, pending);
+
+      for (const p of pending) {
+        p.entry.status = p.status;
+        p.entry.checkIn = p.checkIn;
+        p.entry.checkOut = p.checkOut;
+        p.entry.checkInVerified = p.checkInVerified;
+        p.entry.checkOutVerified = p.checkOutVerified;
       }
 
       const facultyMembersSnap = await collegeRef.collection("facultyMembers").where("department", "==", department).get();
       const uidToFacultyMemberId = new Map<string, string>();
       for (const doc of facultyMembersSnap.docs) {
-        const fm = doc.data() as { userUid?: string };
-        if (fm.userUid) uidToFacultyMemberId.set(fm.userUid, doc.id);
+        const fm = doc.data() as { userUid?: string; faceEmbedding?: number[] };
+        if (!fm.userUid) continue;
+        uidToFacultyMemberId.set(fm.userUid, doc.id);
+        if (rosterByUid.get(fm.userUid)?.role === "PANEL_MEMBER") {
+          rosterByUid.get(fm.userUid)!.registered = Array.isArray(fm.faceEmbedding) && fm.faceEmbedding.length > 0;
+        }
+      }
+
+      // "No record yet" defaults to NOT_MARKED above - promote it to
+      // NOT_REGISTERED when the person hasn't registered their face at all.
+      for (const entry of roster) {
+        if (entry.status === "NOT_MARKED" && !entry.registered) {
+          entry.status = "NOT_REGISTERED";
+        }
       }
 
       const teachingSnap = await collegeRef.collection("teachingAssignments").where("department", "==", department).get();

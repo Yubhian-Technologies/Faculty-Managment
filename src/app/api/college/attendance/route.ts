@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
 import type { AttendanceRecord, AttendanceSummary } from "@/types";
 
 export async function GET(request: Request) {
@@ -44,28 +45,21 @@ export async function GET(request: Request) {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 1); // exclusive
 
-    const records: (AttendanceRecord & { id: string })[] = recordsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as AttendanceRecord & { id: string }))
-      .filter((rec) => {
-        const d: Date =
-          rec.date && typeof (rec.date as { toDate?: () => Date }).toDate === "function"
-            ? (rec.date as { toDate: () => Date }).toDate()
-            : new Date(rec.date as unknown as string);
-        return d >= monthStart && d < monthEnd;
+    const records: (AttendanceRecord & { id: string; ref: FirebaseFirestore.DocumentReference; resolvedDate: Date | null })[] = recordsSnap.docs
+      .map((d) => {
+        const data = d.data() as AttendanceRecord;
+        return { ...data, id: d.id, ref: d.ref, resolvedDate: toAttendanceDate(data.date) };
       })
-      .sort((a, b) => {
-        const da =
-          a.date && typeof (a.date as { toMillis?: () => number }).toMillis === "function"
-            ? (a.date as { toMillis: () => number }).toMillis()
-            : new Date(a.date as unknown as string).getTime();
-        const db_ =
-          b.date && typeof (b.date as { toMillis?: () => number }).toMillis === "function"
-            ? (b.date as { toMillis: () => number }).toMillis()
-            : new Date(b.date as unknown as string).getTime();
-        return da - db_;
-      });
+      .filter((rec) => rec.resolvedDate !== null && rec.resolvedDate >= monthStart && rec.resolvedDate < monthEnd)
+      .sort((a, b) => (a.resolvedDate?.getTime() ?? 0) - (b.resolvedDate?.getTime() ?? 0));
 
-    return NextResponse.json({ summary, records });
+    await closeMissedCheckouts(db, records);
+
+    return NextResponse.json({
+      summary,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the response
+      records: records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec),
+    });
   } catch (err) {
     if (
       err instanceof Error &&

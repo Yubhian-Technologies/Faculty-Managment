@@ -19,18 +19,20 @@ function todayISO(): string {
 
 function statusBadgeClass(status: string): string {
   switch (status) {
-    case "PRESENT":    return "bg-green-100 text-green-800 border-green-200";
-    case "ABSENT":     return "bg-red-100 text-red-800 border-red-200";
-    case "HALF_DAY":   return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    case "ON_LEAVE":   return "bg-blue-100 text-blue-800 border-blue-200";
-    case "ON_DUTY":    return "bg-purple-100 text-purple-800 border-purple-200";
-    case "NOT_MARKED": return "bg-gray-100 text-gray-600 border-gray-200";
-    default:           return "bg-gray-100 text-gray-700 border-gray-200";
+    case "PRESENT":        return "bg-green-100 text-green-800 border-green-200";
+    case "ABSENT":         return "bg-red-100 text-red-800 border-red-200";
+    case "HALF_DAY":       return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "ON_LEAVE":       return "bg-blue-100 text-blue-800 border-blue-200";
+    case "ON_DUTY":        return "bg-purple-100 text-purple-800 border-purple-200";
+    case "NOT_MARKED":     return "bg-gray-100 text-gray-600 border-gray-200";
+    case "NOT_REGISTERED": return "bg-orange-100 text-orange-800 border-orange-200";
+    default:                return "bg-gray-100 text-gray-700 border-gray-200";
   }
 }
 
 function statusLabel(status: string): string {
-  if (status === "NOT_MARKED") return "Not Marked";
+  if (status === "NOT_MARKED") return "Not Checked In Yet";
+  if (status === "NOT_REGISTERED") return "Not Registered";
   return ATTENDANCE_STATUS_LABELS[status as AttendanceStatus] ?? status;
 }
 
@@ -75,7 +77,7 @@ function RosterTable({ rows }: { rows: Row[] }) {
                     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(row.status)}`}>
                       {statusLabel(row.status)}
                     </span>
-                    {isLateCheckIn(row.checkIn) && (
+                    {row.status === "PRESENT" && isLateCheckIn(row.checkIn) && (
                       <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
                         Late
                       </span>
@@ -112,7 +114,7 @@ function RosterTable({ rows }: { rows: Row[] }) {
 // by the previous selection - so only records belonging to the selected
 // hierarchy are ever shown. Every attendance value (status, check-in/out,
 // verified badge, the red Late badge) comes from the exact same
-// attendanceRecords data and isLateCheckIn 9:15 rule the Faculty/HOD/
+// attendanceRecords data and isLateCheckIn 9:05 rule the Faculty/HOD/
 // Principal's own attendance pages use - this page only adds read-only,
 // cross-college navigation on top, never a second attendance mechanism.
 export default function ManagementAttendancePage() {
@@ -211,7 +213,7 @@ export default function ManagementAttendancePage() {
       if (!selectedCollegeId || !selectedPrincipalUid || !principal) { setPrincipalRow(null); return; }
       const [y, m] = date.split("-").map(Number);
       fetch(`/api/management/colleges/${selectedCollegeId}/principal-attendance?year=${y}&month=${m}`)
-        .then((r) => r.json() as Promise<{ records: (AttendanceRecord & { id: string })[] }>)
+        .then((r) => r.json() as Promise<{ records: (AttendanceRecord & { id: string })[]; registered?: boolean }>)
         .then((d) => {
           const rec = (d.records ?? []).find((r) => {
             const raw = r.date as unknown as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
@@ -223,7 +225,7 @@ export default function ManagementAttendancePage() {
           setPrincipalRow({
             uid: principal.uid,
             name: principal.name,
-            status: rec?.status ?? "NOT_MARKED",
+            status: rec?.status ?? (d.registered ? "NOT_MARKED" : "NOT_REGISTERED"),
             checkIn: rec?.checkIn ?? null,
             checkOut: rec?.checkOut ?? null,
             checkInVerified: rec?.checkInVerified,

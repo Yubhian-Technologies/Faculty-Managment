@@ -40,18 +40,20 @@ function todayISO(): string {
 
 function statusBadgeClass(status: string): string {
   switch (status) {
-    case "PRESENT":    return "bg-green-100 text-green-800 border-green-200";
-    case "ABSENT":     return "bg-red-100 text-red-800 border-red-200";
-    case "HALF_DAY":   return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    case "ON_LEAVE":   return "bg-blue-100 text-blue-800 border-blue-200";
-    case "ON_DUTY":    return "bg-purple-100 text-purple-800 border-purple-200";
-    case "NOT_MARKED": return "bg-gray-100 text-gray-600 border-gray-200";
-    default:           return "bg-gray-100 text-gray-700 border-gray-200";
+    case "PRESENT":        return "bg-green-100 text-green-800 border-green-200";
+    case "ABSENT":         return "bg-red-100 text-red-800 border-red-200";
+    case "HALF_DAY":       return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "ON_LEAVE":       return "bg-blue-100 text-blue-800 border-blue-200";
+    case "ON_DUTY":        return "bg-purple-100 text-purple-800 border-purple-200";
+    case "NOT_MARKED":     return "bg-gray-100 text-gray-600 border-gray-200";
+    case "NOT_REGISTERED": return "bg-orange-100 text-orange-800 border-orange-200";
+    default:                return "bg-gray-100 text-gray-700 border-gray-200";
   }
 }
 
 function statusLabel(status: string): string {
-  if (status === "NOT_MARKED") return "Not Marked";
+  if (status === "NOT_MARKED") return "Not Checked In Yet";
+  if (status === "NOT_REGISTERED") return "Not Registered";
   return ATTENDANCE_STATUS_LABELS[status as AttendanceStatus] ?? status;
 }
 
@@ -61,7 +63,7 @@ function StatusCell({ row }: { row: RosterEntry }) {
       <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(row.status)}`}>
         {statusLabel(row.status)}
       </span>
-      {isLateCheckIn(row.checkIn) && (
+      {row.status === "PRESENT" && isLateCheckIn(row.checkIn) && (
         <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
           Late
         </span>
@@ -140,12 +142,20 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
 
   useEffect(() => {
-    setIsLoading(true);
-    fetch(`/api/college/attendance/report?date=${date}`)
-      .then((r) => r.json() as Promise<{ roster: RosterEntry[]; error?: string }>)
-      .then((d) => setRoster(d.roster ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load attendance report" }))
-      .finally(() => setIsLoading(false));
+    // Wrapped so setState calls aren't reachable synchronously from the
+    // effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/college/attendance/report?date=${date}`);
+        const d = await res.json() as { roster: RosterEntry[]; error?: string };
+        setRoster(d.roster ?? []);
+      } catch {
+        toast({ variant: "destructive", title: "Failed to load attendance report" });
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, [date]);
 
   useEffect(() => {
