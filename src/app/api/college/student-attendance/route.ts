@@ -105,6 +105,7 @@ export async function POST(request: Request) {
         entries,
         totalStudents: entries.length,
         presentCount: 0,
+        classNotes: "",
         submittedAt: null,
         createdAt: now,
         updatedAt: now,
