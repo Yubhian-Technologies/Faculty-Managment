@@ -10,6 +10,7 @@ import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDial
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { CHECK_IN_CLOSED_MESSAGE, SUNDAY_HOLIDAY_MESSAGE, isBeforeCheckInWindow, isSunday } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -75,7 +76,9 @@ export default function FacultyAttendancePage() {
   }, []);
 
   useEffect(() => {
-    void load(year, month);
+    // Awaited in a wrapper so load()'s setState calls aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => { await load(year, month); })();
   }, [load, year, month]);
 
   useEffect(() => {
@@ -108,7 +111,11 @@ export default function FacultyAttendancePage() {
       {isCurrentMonth && (
         <Card>
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-            {faceRegistered === false ? (
+            {isSunday(now) ? (
+              <p className="text-sm text-muted-foreground">{SUNDAY_HOLIDAY_MESSAGE}</p>
+            ) : isBeforeCheckInWindow(now) ? (
+              <p className="text-sm text-muted-foreground">{CHECK_IN_CLOSED_MESSAGE}</p>
+            ) : faceRegistered === false ? (
               <>
                 <p className="text-sm text-muted-foreground">
                   Register your face to start using facial attendance check-in.
@@ -119,7 +126,7 @@ export default function FacultyAttendancePage() {
               </>
             ) : todayRecord?.checkOut ? (
               <p className="text-sm">
-                Today&apos;s attendance is complete — in at <span className="font-medium">{todayRecord.checkIn}</span>, out at{" "}
+                Today&apos;s attendance marked — in at <span className="font-medium">{todayRecord.checkIn}</span>, out at{" "}
                 <span className="font-medium">{todayRecord.checkOut}</span>.
               </p>
             ) : todayRecord?.checkIn ? (
@@ -247,7 +254,7 @@ export default function FacultyAttendancePage() {
                       >
                         {ATTENDANCE_STATUS_LABELS[rec.status]}
                       </span>
-                      {isLateCheckIn(rec.checkIn) && (
+                      {rec.status === "PRESENT" && isLateCheckIn(rec.checkIn) && (
                         <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
                           Late
                         </span>

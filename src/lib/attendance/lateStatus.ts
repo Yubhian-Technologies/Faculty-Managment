@@ -3,7 +3,7 @@
 // calculations. Shared by Faculty's own Daily Records view and the HOD/
 // Principal attendance report view so everyone derives it the same way from
 // the same recorded checkIn ("HH:MM", 24h) value.
-const LATE_CUTOFF_MINUTES = 9 * 60 + 15; // 09:15 — this exact minute still counts as on time
+const LATE_CUTOFF_MINUTES = 9 * 60 + 5; // 09:05 — this exact minute still counts as on time
 
 export function isLateCheckIn(checkIn: string | null | undefined): boolean {
   if (!checkIn) return false;

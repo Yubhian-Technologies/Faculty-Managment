@@ -16,6 +16,7 @@ import {
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
+import { CHECK_IN_CLOSED_MESSAGE, SUNDAY_HOLIDAY_MESSAGE, isBeforeCheckInWindow, isSunday } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -116,7 +117,11 @@ export default function HODAttendancePage() {
       {isCurrentMonth && (
         <Card>
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-            {faceRegistered === false ? (
+            {isSunday(now) ? (
+              <p className="text-sm text-muted-foreground">{SUNDAY_HOLIDAY_MESSAGE}</p>
+            ) : isBeforeCheckInWindow(now) ? (
+              <p className="text-sm text-muted-foreground">{CHECK_IN_CLOSED_MESSAGE}</p>
+            ) : faceRegistered === false ? (
               <>
                 <p className="text-sm text-muted-foreground">
                   Register your face to start using facial attendance check-in.
@@ -127,7 +132,7 @@ export default function HODAttendancePage() {
               </>
             ) : todayRecord?.checkOut ? (
               <p className="text-sm">
-                Today&apos;s attendance is complete — in at <span className="font-medium">{todayRecord.checkIn}</span>, out at{" "}
+                Today&apos;s attendance marked — in at <span className="font-medium">{todayRecord.checkIn}</span>, out at{" "}
                 <span className="font-medium">{todayRecord.checkOut}</span>.
               </p>
             ) : todayRecord?.checkIn ? (
