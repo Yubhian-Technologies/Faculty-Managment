@@ -1,11 +1,29 @@
-// Inclusive calendar-day count between two dates (half-day requests are
-// always a single day, counted as 0.5 by the caller).
-export function countLeaveDays(from: Date, to: Date, isHalfDay?: boolean): number {
+// Calendar-day key ("Y-M-D", month 0-based) for comparing two Dates by
+// local day regardless of their time-of-day component - used to match a
+// leave-range day against a holiday's date.
+export function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+// Inclusive day count between two dates, excluding every Sunday and every
+// date in `holidayDates` (a set of dateKey()s - see holidaysCount.ts's
+// getHolidayDateKeys) - neither was ever a working day to begin with, so a
+// leave request spanning one doesn't draw down balance for it. Half-day
+// requests are always a single day, counted as 0.5 regardless.
+// Shared by the server (applications/route.ts POST, the authoritative count
+// that gets stored and deducted) and the client-side preview
+// (LeaveApplyForm.tsx), so both agree on the same number before and after
+// submission.
+export function countWorkingDays(from: Date, to: Date, holidayDates: Set<string>, isHalfDay?: boolean): number {
   if (isHalfDay) return 0.5;
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const fromUTC = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
-  const toUTC = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
-  return Math.max(1, Math.round((toUTC - fromUTC) / msPerDay) + 1);
+  let count = 0;
+  const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  while (cursor <= end) {
+    if (cursor.getDay() !== 0 && !holidayDates.has(dateKey(cursor))) count++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
 }
 
 // Today as a local YYYY-MM-DD string - matches what a <input type="date">

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
@@ -26,6 +27,10 @@ export function ManagementLeaveApprovals() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
   const [remarksById, setRemarksById] = useState<Record<string, string>>({});
+  // A Principal's own "Other" leave has no HOD in its chain to have already
+  // tagged paid/unpaid - Management decides that themselves, as part of the
+  // same Approve action (see isOtherUntagged below).
+  const [paidById, setPaidById] = useState<Record<string, boolean>>({});
 
   function load() {
     setIsLoading(true);
@@ -43,12 +48,22 @@ export function ManagementLeaveApprovals() {
   }, []);
 
   async function act(item: Row, action: "APPROVE" | "REJECT") {
+    const isOtherUntagged = !!item.isOtherRequest && item.isPaidLeave === undefined;
+    if (action === "APPROVE" && isOtherUntagged && paidById[item.id] === undefined) {
+      toast({ variant: "destructive", title: "Select whether this is paid or unpaid leave" });
+      return;
+    }
     setActingId(item.id);
     try {
       const res = await fetch(`/api/management/leave-approvals/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collegeId: item.collegeId, action, remarks: remarksById[item.id] }),
+        body: JSON.stringify({
+          collegeId: item.collegeId,
+          action,
+          remarks: remarksById[item.id],
+          isPaidLeave: isOtherUntagged ? paidById[item.id] : undefined,
+        }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Action failed");
@@ -86,6 +101,7 @@ export function ManagementLeaveApprovals() {
           {requests.map((item) => {
             const isExpanded = expandedId === item.id;
             const isActingThis = actingId === item.id;
+            const isOtherUntagged = !!item.isOtherRequest && item.isPaidLeave === undefined;
             return (
               <Card key={item.id}>
                 <CardHeader
@@ -116,6 +132,23 @@ export function ManagementLeaveApprovals() {
                       <Label className="text-xs text-muted-foreground font-normal">Reason</Label>
                       <p className="text-sm">{item.reason || <span className="text-muted-foreground italic">No reason provided</span>}</p>
                     </div>
+                    {isOtherUntagged && (
+                      <div className="max-w-xs space-y-1.5">
+                        <Label className="text-xs text-muted-foreground font-normal">Paid or unpaid?</Label>
+                        <Select
+                          value={paidById[item.id] === undefined ? "" : String(paidById[item.id])}
+                          onValueChange={(v) => setPaidById((prev) => ({ ...prev, [item.id]: v === "true" }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select paid or unpaid" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true">Paid</SelectItem>
+                            <SelectItem value="false">Unpaid</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground font-normal">Remarks (optional)</Label>
                       <Textarea

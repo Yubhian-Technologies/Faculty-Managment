@@ -24,7 +24,7 @@ function currentTimeHHMM(): string {
 // distance) and records the client's reported face-match result.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL");
     const body = (await request.json()) as {
       latitude?: number;
       longitude?: number;

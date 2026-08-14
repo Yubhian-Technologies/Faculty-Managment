@@ -56,7 +56,12 @@ export function LeaveApprovalQueue() {
   async function act(r: LeaveRequest, action: "APPROVE" | "REJECT") {
     const isHodOtherDecision = r.status === "PENDING_HOD" && !!r.isOtherRequest;
     const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && !!r.isOtherRequest;
-    if (action === "APPROVE" && isHodOtherDecision && paidById[r.id] === undefined) {
+    // Normally an HOD already tagged paid/unpaid before forwarding here. A
+    // Vice Principal's own Other leave skips the HOD stage entirely though,
+    // reaching PENDING_PRINCIPAL still untagged - the Principal decides it
+    // themselves, in the same Approve action.
+    const needsPaidLeaveDecision = !!r.isOtherRequest && r.isPaidLeave === undefined && (isHodOtherDecision || isPrincipalOtherDecision);
+    if (action === "APPROVE" && needsPaidLeaveDecision && paidById[r.id] === undefined) {
       toast({ variant: "destructive", title: "Select whether this is paid or unpaid leave" });
       return;
     }
@@ -72,7 +77,7 @@ export function LeaveApprovalQueue() {
         body: JSON.stringify({
           action,
           remarks: remarksById[r.id],
-          isPaidLeave: isHodOtherDecision ? paidById[r.id] : undefined,
+          isPaidLeave: needsPaidLeaveDecision ? paidById[r.id] : undefined,
           otherLeaveCategory: isPrincipalOtherDecision ? categoryById[r.id] : undefined,
         }),
       });
@@ -114,6 +119,7 @@ export function LeaveApprovalQueue() {
             const isOtherRequest = !!r.isOtherRequest;
             const isHodOtherDecision = r.status === "PENDING_HOD" && isOtherRequest;
             const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && isOtherRequest;
+            const needsPaidLeaveDecision = isOtherRequest && r.isPaidLeave === undefined && (isHodOtherDecision || isPrincipalOtherDecision);
             const isExpanded = expandedId === r.id;
             return (
               <Card key={r.id} className={cn("transition-colors", isExpanded && "ring-1 ring-primary/20")}>
@@ -140,6 +146,9 @@ export function LeaveApprovalQueue() {
                       <Badge variant="secondary">
                         {isOtherRequest ? "Other" : LEAVE_TYPE_LABELS[r.leaveTypeCode!]}
                       </Badge>
+                      {r.isHalfDay && (
+                        <Badge variant="outline">Half Day &middot; {r.halfDaySession === "AN" ? "Afternoon" : "Forenoon"}</Badge>
+                      )}
                       {r.extendsRequestId && (
                         <Badge variant="outline" title="This extends a leave that was already approved">
                           Extension
@@ -162,7 +171,7 @@ export function LeaveApprovalQueue() {
                       <p className="text-sm">{r.reason || <span className="text-muted-foreground italic">No reason provided</span>}</p>
                     </div>
 
-                    {isHodOtherDecision && (
+                    {needsPaidLeaveDecision && (
                       <div className="max-w-xs space-y-1.5">
                         <label className="text-xs text-muted-foreground">Paid or unpaid?</label>
                         <Select

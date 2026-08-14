@@ -195,6 +195,11 @@ export interface LeaveRequest {
   toDate: Timestamp;
   totalDays: number;
   isHalfDay?: boolean;
+  // Which half of the day - only meaningful when isHalfDay is true. Purely
+  // informational (doesn't affect countWorkingDays' flat 0.5, see
+  // dayCounter.ts) but required by the client whenever isHalfDay is set, so
+  // the approver knows which half without asking.
+  halfDaySession?: "FN" | "AN";
   reason: string;
   status: LeaveRequestStatus;
   // Set by the HOD when forwarding an isOtherRequest to the Principal - Other
@@ -214,6 +219,11 @@ export interface LeaveRequest {
   // person - own balance/LOP handling), this is purely informational so the
   // approver has context and the requester's history shows the link.
   extendsRequestId?: string;
+  // Required from the requester whenever they cancel (see
+  // applications/[id]/route.ts PATCH's CANCEL branch) - shown alongside the
+  // cancelled request wherever the approver above them (HOD/Principal/VP/
+  // Management) views this person's leave history, e.g. LeaveHistoryRow.
+  cancelReason?: string;
   hodAction?: LeaveActionRecord;
   principalAction?: LeaveActionRecord;
   // Set when a PRINCIPAL's own leave (PENDING_MANAGEMENT) is decided - see

@@ -10,6 +10,19 @@ interface RosterEntry {
   uid: string;
   name: string;
   department: string;
+  role: "PANEL_MEMBER" | "HOD";
+  // Course id(s) (Course.id in the `courses` collection) this faculty has an
+  // explicit teaching assignment under, derived from teachingAssignments and
+  // matched by courseId — teachingAssignments also carries a free-text
+  // courseName, but that's a denormalized copy that isn't guaranteed to match
+  // the course's actual current name (seen in real data: an assignment's
+  // courseName of "BACHELOR OF TECHNOLOGY" for a course whose actual name is
+  // "Bachelors of Technology" — courseId is the reliable foreign key). Only
+  // populated for college-wide (non-HOD) callers, since only the Principal's
+  // report filters by it. Empty when the faculty has no course-linked
+  // teaching assignment on record — the Principal's report treats that as
+  // "not yet disambiguated" rather than "belongs to no course".
+  courseIds?: string[];
   status: string; // AttendanceStatus, or "NOT_MARKED" when no record exists yet for the day
   checkIn: string | null;
   checkOut: string | null;
@@ -53,10 +66,26 @@ export async function GET(request: Request) {
     const roster: RosterEntry[] = usersSnap.docs.map((d) => {
       const u = d.data() as { name?: string; department?: string };
       return {
-        uid: d.id, name: u.name ?? "", department: u.department ?? "",
+        uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "PANEL_MEMBER" as const,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
       };
     });
+
+    // College-wide (Principal/VP/Super Admin) callers also need each
+    // department's HOD in the roster — the Principal's report shows the HOD
+    // alongside their department's faculty. HOD's own department view stays
+    // Faculty-only, unchanged.
+    if (session.role !== "HOD") {
+      const hodsSnap = await collegeRef.collection("users").where("role", "==", "HOD").get();
+      for (const d of hodsSnap.docs) {
+        const u = d.data() as { name?: string; department?: string };
+        roster.push({
+          uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "HOD" as const,
+          status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+        });
+      }
+    }
+
     if (roster.length === 0) {
       return NextResponse.json({ date: docSuffix, roster: [] });
     }
@@ -79,6 +108,32 @@ export async function GET(request: Request) {
       entry.checkOut = rec.checkOut ?? null;
       entry.checkInVerified = !!rec.checkInVerified;
       entry.checkOutVerified = !!rec.checkOutVerified;
+    }
+
+    // Course grouping is only used by the college-wide (Principal/VP/Super
+    // Admin) report — skip the extra reads for HOD's department view.
+    if (session.role !== "HOD") {
+      const facultyMembersSnap = await collegeRef.collection("facultyMembers").get();
+      const uidToFacultyMemberId = new Map<string, string>();
+      for (const doc of facultyMembersSnap.docs) {
+        const fm = doc.data() as { userUid?: string };
+        if (fm.userUid) uidToFacultyMemberId.set(fm.userUid, doc.id);
+      }
+
+      const teachingSnap = await collegeRef.collection("teachingAssignments").get();
+      const facultyMemberIdToCourseIds = new Map<string, Set<string>>();
+      for (const doc of teachingSnap.docs) {
+        const ta = doc.data() as { facultyId?: string; courseId?: string };
+        if (!ta.facultyId || !ta.courseId) continue;
+        if (!facultyMemberIdToCourseIds.has(ta.facultyId)) facultyMemberIdToCourseIds.set(ta.facultyId, new Set());
+        facultyMemberIdToCourseIds.get(ta.facultyId)!.add(ta.courseId);
+      }
+
+      for (const entry of roster) {
+        const facultyMemberId = uidToFacultyMemberId.get(entry.uid);
+        const courseIds = facultyMemberId ? facultyMemberIdToCourseIds.get(facultyMemberId) : undefined;
+        entry.courseIds = courseIds ? Array.from(courseIds).sort() : [];
+      }
     }
 
     roster.sort((a, b) => a.name.localeCompare(b.name));
