@@ -47,6 +47,21 @@ export function secondaryDepartmentOptions(departments: Department[], department
   return Array.from(names).sort((a, b) => a.localeCompare(b));
 }
 
+/**
+ * The years a department can register a student into - its own "Years Taught"
+ * (Department.assignedYears, set by the Principal), e.g. a shared-first-year
+ * grouping sub-department like BS-CHEMISTRY is set to [1] only, since its
+ * later years belong to the branches it feeds (picked via Secondary
+ * Department, not by registering the student under BS-CHEMISTRY again).
+ * Falls back to every college-configured year when the department hasn't been
+ * assigned any yet, so an unconfigured department isn't locked out entirely.
+ */
+export function yearOptionsForDepartment(departments: Department[], departmentName: string, fallbackYears: number[]): number[] {
+  const dept = departments.find((d) => d.name === departmentName);
+  const assigned = dept?.assignedYears;
+  return assigned && assigned.length > 0 ? [...assigned].sort((a, b) => a - b) : fallbackYears;
+}
+
 interface FormProps {
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
@@ -106,6 +121,11 @@ function FieldInput({ field, values, onChange, departments, courses, years, read
             // The branch list is the new department's, so a choice made under
             // the old one can't carry over.
             onChange("secondaryDepartment", "");
+            // Nor can a previously chosen year, if the new department doesn't
+            // teach it (e.g. switching to a shared-first-year grouping
+            // sub-department like BS-CHEMISTRY, which only teaches Year 1).
+            const allowedYears = yearOptionsForDepartment(departments, v, years);
+            if (values.year && !allowedYears.includes(Number(values.year))) onChange("year", "");
           }}
         >
           <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
@@ -141,13 +161,17 @@ function FieldInput({ field, values, onChange, departments, courses, years, read
   }
 
   if (field.key === "year") {
+    // Scoped to the chosen department's own "Years Taught" once one is picked
+    // - otherwise every college-configured year, so the field isn't blocked
+    // before a department is even chosen.
+    const options = values.department ? yearOptionsForDepartment(departments, values.department, years) : years;
     return (
       <div className="space-y-2">
         <Label>{label}</Label>
         <Select value={value} onValueChange={(v) => onChange(field.key, v)}>
           <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
           <SelectContent>
-            {years.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
+            {options.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>

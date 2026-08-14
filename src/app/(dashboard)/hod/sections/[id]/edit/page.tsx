@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { buildCourseGroups } from "@/lib/departments/hodScope";
 import type { Course, Department, Section, Subject, TeachingAssignment } from "@/types";
 
 type SectionRow = Section & { id: string };
@@ -207,6 +208,26 @@ export default function EditSectionPage() {
     [formCourse]
   );
 
+  // Collapse the several Course docs that represent one catalog programme into
+  // a single dropdown choice - `courses` legitimately holds one row per related
+  // department, so without this the Course dropdown lists "Bachelor of
+  // Technology" once per department instead of once.
+  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
+  const selectedCourseGroupKey = useMemo(
+    () => courseGroups.find((g) => g.courseIds.includes(form.courseId))?.key ?? "",
+    [courseGroups, form.courseId]
+  );
+  function selectCourseGroup(groupKey: string) {
+    const group = courseGroups.find((g) => g.key === groupKey);
+    if (!group) { setF({ courseId: "", year: "" }); setSubjects([]); return; }
+    // Prefer the course doc owned by this section's own department, so the
+    // stored courseId doesn't drift to a feeder department's row.
+    const ownerDeptId = departments.find((d) => d.name === ownerDept)?.id;
+    const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === ownerDeptId);
+    setF({ courseId: own ?? group.courseIds[0], year: "" });
+    setSubjects([]);
+  }
+
   // Branch mode: this section's owning department cross-lists to one or more
   // branches (a shared-first-year department). Offer them so the section's
   // target branch can be changed. Unchanged for standalone departments.
@@ -293,13 +314,10 @@ export default function EditSectionPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label>Course *</Label>
-              <Select
-                value={form.courseId}
-                onValueChange={(v) => { setF({ courseId: v, year: "" }); setSubjects([]); }}
-              >
+              <Select value={selectedCourseGroupKey} onValueChange={selectCourseGroup}>
                 <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
                 <SelectContent>
-                  {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {courseGroups.map((g) => <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

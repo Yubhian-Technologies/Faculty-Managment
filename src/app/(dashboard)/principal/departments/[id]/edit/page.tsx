@@ -31,8 +31,6 @@ export default function EditDepartmentPage() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addingYear, setAddingYear] = useState(false);
-  const [commonYearStart, setCommonYearStart] = useState("");
-  const [commonYearEnd, setCommonYearEnd] = useState("");
 
   const {
     register,
@@ -46,11 +44,6 @@ export default function EditDepartmentPage() {
   });
 
   const hodUid = watch("hodUid");
-
-  // Mirrors the shared first-year rule in src/lib/college/academicStructure.ts:
-  // claims year 1 AND acts as a shared parent (sub-departments or cross-listing).
-  const isCommonYearCandidate =
-    assignedYears.includes(1) && (hasSubDepartments || secondaryDepartments.length > 0);
 
   useEffect(() => {
     async function load() {
@@ -74,8 +67,6 @@ export default function EditDepartmentPage() {
         setAssignedYears(dept.assignedYears ?? []);
         setHasSubDepartments(dept.hasSubDepartments ?? false);
         setSecondaryDepartments(dept.secondaryDepartments ?? []);
-        setCommonYearStart(dept.commonYearStart ?? "");
-        setCommonYearEnd(dept.commonYearEnd ?? "");
         reset({ name: dept.name, code: dept.code, hodUid: dept.hodUid ?? "" });
       } catch {
         toast({ variant: "destructive", title: "Failed to load department" });
@@ -161,10 +152,6 @@ export default function EditDepartmentPage() {
         assignedYears,
         hasSubDepartments,
         secondaryDepartments,
-        // Sent as "" to clear when this is no longer a shared first-year
-        // department, so a stale period can't linger on the doc.
-        commonYearStart: isCommonYearCandidate ? commonYearStart : "",
-        commonYearEnd: isCommonYearCandidate ? commonYearEnd : "",
       };
       const res = await fetch("/api/college/departments", {
         method: "PATCH",
@@ -327,39 +314,6 @@ export default function EditDepartmentPage() {
                     The HOD will get a &quot;Sub-Departments&quot; page to add sub-departments and assign sub-HODs.
                   </p>
                 </div>
-              </div>
-            )}
-
-            {isCommonYearCandidate && (
-              <div className="space-y-2 rounded-md border p-3">
-                <Label>First-Year Period</Label>
-                <p className="text-xs text-muted-foreground">
-                  Approximately when this shared first year runs. Optional and advisory - it gives the
-                  &quot;Advance First-Year Cohort&quot; screen its context and never blocks anything.
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="common-year-start" className="text-xs font-normal">Starts</Label>
-                    <Input
-                      id="common-year-start"
-                      type="date"
-                      value={commonYearStart}
-                      onChange={(e) => setCommonYearStart(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="common-year-end" className="text-xs font-normal">Ends</Label>
-                    <Input
-                      id="common-year-end"
-                      type="date"
-                      value={commonYearEnd}
-                      onChange={(e) => setCommonYearEnd(e.target.value)}
-                    />
-                  </div>
-                </div>
-                {commonYearStart && commonYearEnd && commonYearEnd < commonYearStart && (
-                  <p className="text-sm text-destructive">End must be on or after the start.</p>
-                )}
               </div>
             )}
 

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { findBranchManager, managerTeachingYears } from "@/lib/departments/managedBranches";
+import { buildCourseGroups } from "@/lib/departments/hodScope";
 import type { Course, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -122,6 +123,25 @@ export default function NewSectionPage() {
     () => departments.find((d) => d.name === activeDeptName) ?? null,
     [departments, activeDeptName]
   );
+
+  // Collapse the several Course docs that represent one catalog programme into
+  // a single dropdown choice - `courses` legitimately holds one row per related
+  // department (see buildCourseGroups' own comment), so without this the Course
+  // dropdown lists "Bachelor of Technology" once per department instead of once.
+  const courseGroups = useMemo(() => buildCourseGroups(courses), [courses]);
+  const selectedCourseGroupKey = useMemo(
+    () => courseGroups.find((g) => g.courseIds.includes(form.courseId))?.key ?? "",
+    [courseGroups, form.courseId]
+  );
+  function selectCourseGroup(groupKey: string) {
+    const group = courseGroups.find((g) => g.key === groupKey);
+    if (!group) { setF({ courseId: "", year: "" }); return; }
+    // Prefer the course doc owned by the department this section is actually
+    // being created under, so the stored courseId lines up with it rather than
+    // a feeder's - same preference the Sections list uses when jumping here.
+    const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === (departmentId || activeDept?.id));
+    setF({ courseId: own ?? group.courseIds[0], year: "" });
+  }
 
   // Managed-branch mode: activeDept is a real branch (e.g. IT) reached through
   // some sub-department's `managedDepartments` grouping (BS-Maths managing IT +
@@ -307,10 +327,10 @@ export default function NewSectionPage() {
 
             <div className="space-y-2">
               <Label>Course *</Label>
-              <Select value={form.courseId} onValueChange={(v) => setF({ courseId: v, year: "" })}>
+              <Select value={selectedCourseGroupKey} onValueChange={selectCourseGroup}>
                 <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
                 <SelectContent>
-                  {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {courseGroups.map((g) => <SelectItem key={g.key} value={g.key}>{g.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

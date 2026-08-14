@@ -27,8 +27,6 @@ export default function NewDepartmentPage() {
   const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
   const [assignedYears, setAssignedYears] = useState<number[]>([]);
   const [addingYear, setAddingYear] = useState(false);
-  const [commonYearStart, setCommonYearStart] = useState("");
-  const [commonYearEnd, setCommonYearEnd] = useState("");
 
   useEffect(() => {
     fetch("/api/college/users?role=HOD")
@@ -83,13 +81,6 @@ export default function NewDepartmentPage() {
   const hodUid = watch("hodUid");
   const nameValue = watch("name");
 
-  // The first-year period only applies to a department that would act as the
-  // shared first-year one - it claims year 1 AND is a shared parent (split into
-  // sub-departments, or cross-listing the branches it feeds). Mirrors the rule
-  // in src/lib/college/academicStructure.ts.
-  const isCommonYearCandidate =
-    assignedYears.includes(1) && (hasSubDepartments || secondaryDepartments.length > 0);
-
   async function handleHodCreated(uid: string) {
     try {
       const res = await fetch("/api/college/users?role=HOD");
@@ -117,10 +108,6 @@ export default function NewDepartmentPage() {
         hasSubDepartments,
         secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
         assignedYears: assignedYears.length > 0 ? assignedYears : undefined,
-        // Only meaningful on a shared first-year department, and only sent when
-        // year 1 is actually among the years this department teaches.
-        ...(isCommonYearCandidate && commonYearStart ? { commonYearStart } : {}),
-        ...(isCommonYearCandidate && commonYearEnd ? { commonYearEnd } : {}),
       };
       const res = await fetch("/api/college/departments", {
         method: "POST",
@@ -278,39 +265,6 @@ export default function NewDepartmentPage() {
                 </p>
               </div>
             </div>
-
-            {isCommonYearCandidate && (
-              <div className="space-y-2 rounded-md border p-3">
-                <Label>First-Year Period</Label>
-                <p className="text-xs text-muted-foreground">
-                  Approximately when this shared first year runs. Optional and advisory - it gives the
-                  &quot;Advance First-Year Cohort&quot; screen its context and never blocks anything.
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="common-year-start" className="text-xs font-normal">Starts</Label>
-                    <Input
-                      id="common-year-start"
-                      type="date"
-                      value={commonYearStart}
-                      onChange={(e) => setCommonYearStart(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="common-year-end" className="text-xs font-normal">Ends</Label>
-                    <Input
-                      id="common-year-end"
-                      type="date"
-                      value={commonYearEnd}
-                      onChange={(e) => setCommonYearEnd(e.target.value)}
-                    />
-                  </div>
-                </div>
-                {commonYearStart && commonYearEnd && commonYearEnd < commonYearStart && (
-                  <p className="text-sm text-destructive">End must be on or after the start.</p>
-                )}
-              </div>
-            )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
