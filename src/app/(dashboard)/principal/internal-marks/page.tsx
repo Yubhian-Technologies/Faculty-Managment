@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { formatDateTime } from "@/lib/utils";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import type { Course, Department, ExamConfiguration, InternalExamMarksBatch, Section, Subject } from "@/types";
 
 type Batch = InternalExamMarksBatch & { courseId?: string; courseName?: string };
@@ -101,21 +102,32 @@ export default function PrincipalInternalMarksPage() {
 
   const courseNameOptions = useMemo(() => [...new Set(courses.map((c) => c.name))].sort(), [courses]);
 
-  const yearOptions = useMemo(() => {
-    const duration = Math.max(0, ...courses.filter((c) => c.name === courseName).map((c) => c.durationYears));
-    return Array.from({ length: duration }, (_, i) => i + 1);
-  }, [courses, courseName]);
-
   // A department "offers" Course + Year only when both are true: it has a
   // Course row for this course name (Course Catalog setup), AND it has
-  // actually opened that year for teaching (Department.assignedYears — the
-  // same "which years is this department currently teaching" toggle shown
-  // on the Departments page, set by Principal/VP). Skipping the assignedYears
-  // check was the bug: a department with a Course row but no years opened
-  // yet (or years opened that don't include the one selected) would still
-  // show up here even though it isn't really available for that Course +
-  // Year combination.
+  // actually opened that year for teaching - resolveDepartmentCourseScope,
+  // per-course override included, never a direct `assignedYears` read.
   const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
+
+  // The union of every department's actually-assigned years for this course
+  // name, not the raw 1..max(durationYears) span - Department isn't picked
+  // yet at this point in the flow (Course -> Year -> Branch), so a single
+  // department's own scope can't be intersected here the way other pages do;
+  // instead a year only appears at all if SOME department offering this
+  // course actually teaches it. Falls back to the full span only when no
+  // department has any explicit assignment, so an unconfigured college isn't
+  // locked out.
+  const yearOptions = useMemo(() => {
+    const relevant = courses.filter((c) => c.name === courseName);
+    const assigned = new Set<number>();
+    for (const c of relevant) {
+      const dept = departmentById.get(c.departmentId);
+      if (!dept) continue;
+      for (const y of resolveDepartmentCourseScope(dept, c.catalogId).assignedYears) assigned.add(y);
+    }
+    if (assigned.size > 0) return Array.from(assigned).sort((a, b) => a - b);
+    const duration = Math.max(0, ...relevant.map((c) => c.durationYears));
+    return Array.from({ length: duration }, (_, i) => i + 1);
+  }, [courses, courseName, departmentById]);
 
   const branchOptions = useMemo(() => {
     if (!courseName || !year) return [];
@@ -125,7 +137,9 @@ export default function PrincipalInternalMarksPage() {
       .filter((c) => c.name === courseName)
       .forEach((c) => {
         const dept = departmentById.get(c.departmentId);
-        if (!dept || !(dept.assignedYears ?? []).includes(yearNum)) return;
+        if (!dept) return;
+        const assignedYears = resolveDepartmentCourseScope(dept, c.catalogId).assignedYears;
+        if (!assignedYears.includes(yearNum)) return;
         seen.set(dept.id, dept.name);
       });
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));

@@ -31,6 +31,10 @@ export async function POST(request: Request) {
       studentIds: string[];
       action: "PROMOTE" | "GRADUATE";
       targetSectionId?: string;
+      // GRADUATE only - the final-year section these students are graduating
+      // out of, so the batch/course it carries can be snapshotted onto each
+      // student record (see StudentRecord.graduation* fields).
+      sourceSectionId?: string;
     };
 
     const studentIds = Array.isArray(body.studentIds) ? body.studentIds : [];
@@ -62,6 +66,14 @@ export async function POST(request: Request) {
       targetSection = { id: targetSnap.id, ...(targetSnap.data() as object) } as Section;
     }
 
+    let graduationSource: Section | null = null;
+    if (body.action === "GRADUATE" && body.sourceSectionId) {
+      const sourceSnap = await collegeRef.collection("sections").doc(body.sourceSectionId).get();
+      if (sourceSnap.exists) {
+        graduationSource = { id: sourceSnap.id, ...(sourceSnap.data() as object) } as Section;
+      }
+    }
+
     const studentSnaps = await Promise.all(
       studentIds.map((id) => collegeRef.collection("students").doc(id).get())
     );
@@ -83,7 +95,18 @@ export async function POST(request: Request) {
       }
 
       if (body.action === "GRADUATE") {
-        batch.update(snap.ref, { status: "GRADUATED", updatedAt: now });
+        batch.update(snap.ref, {
+          status: "GRADUATED",
+          updatedAt: now,
+          graduatedAt: now,
+          ...(graduationSource
+            ? {
+                graduationBatch: graduationSource.batch,
+                graduationCourseId: graduationSource.courseId,
+                graduationCourseName: graduationSource.courseName ?? "",
+              }
+            : {}),
+        });
       } else {
         batch.update(snap.ref, {
           department: targetSection!.department,

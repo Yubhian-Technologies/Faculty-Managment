@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "@/hooks/useToast";
 import { buildRows } from "@/lib/timetable/buildGrid";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -20,6 +21,15 @@ const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
+}
+
+/** "09:00" -> "9:00 AM" - display only, absent until an HOD has broken this
+ *  course-year's day down period-by-period (see CourseYearTiming.periods). */
+function formatTime12h(hhmm: string) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 export default function PrincipalTimetablePage() {
@@ -101,6 +111,17 @@ export default function PrincipalTimetablePage() {
   // The one concrete Course doc the two selections resolve to.
   const course = courses.find((c) => c.name === courseName && c.departmentId === departmentId) ?? null;
   const courseId = course?.id ?? "";
+  // Scoped to the picked department's own "Years Taught" for this course
+  // (resolveDepartmentCourseScope), not the raw 1..durationYears span - e.g.
+  // Basic Science only ever published a 1st-year timetable for a shared
+  // 4-year B.Tech course, so 2nd-4th shouldn't even be offered here.
+  const yearOptions = (() => {
+    if (!course) return [];
+    const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
+    const dept = departments.find((d) => d.id === departmentId);
+    const assigned = dept ? resolveDepartmentCourseScope(dept, course.catalogId).assignedYears : [];
+    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+  })();
 
   // Sections + timing for the resolved course-year. Downstream state is cleared
   // by the choose* handlers, so this effect never has to reset anything itself.
@@ -194,11 +215,9 @@ export default function PrincipalTimetablePage() {
             disabled={!course}
           >
             <option value="">Select a year</option>
-            {course
-              ? Array.from({ length: course.durationYears }, (_, i) => i + 1).map((y) => (
-                  <option key={y} value={y}>{ordinalYear(y)}</option>
-                ))
-              : null}
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>{ordinalYear(y)}</option>
+            ))}
           </select>
         </div>
 
@@ -265,7 +284,14 @@ export default function PrincipalTimetablePage() {
                 }
                 return (
                   <tr key={`period_${row.period}`} className="border-b last:border-b-0">
-                    <td className="p-2.5 font-medium text-muted-foreground">{row.period}</td>
+                    <td className="p-2.5 font-medium text-muted-foreground">
+                      {row.period}
+                      {row.startTime && row.endTime && (
+                        <p className="text-[10px] font-normal whitespace-nowrap">
+                          {formatTime12h(row.startTime)}&ndash;{formatTime12h(row.endTime)}
+                        </p>
+                      )}
+                    </td>
                     {DAYS.map((d) => {
                       const slot = slots.find((s) => s.day === d && s.periodNumber === row.period);
                       return (

@@ -14,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 import type { AcademicRegulationSettings, Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 
 const ALL_REGULATIONS = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
@@ -89,10 +90,16 @@ export default function DeanSubjectsPage() {
     [departments, selectedDepartmentId]
   );
   const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
-  const yearOptions = useMemo(
-    () => (selectedCourse ? Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1) : []),
-    [selectedCourse]
-  );
+  // Scoped to the picked department's own "Years Taught" for this course
+  // (resolveDepartmentCourseScope), not the raw 1..durationYears span - e.g.
+  // Basic Science only offers 1st Year even though its shared B.Tech course
+  // spans 4.
+  const yearOptions = useMemo(() => {
+    if (!selectedCourse || !selectedDepartment) return [];
+    const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
+    const assigned = resolveDepartmentCourseScope(selectedDepartment, selectedCourse.catalogId).assignedYears;
+    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+  }, [selectedCourse, selectedDepartment]);
   const currentRegulation = selectedYear ? regulationSettings?.yearRegulations?.[selectedYear] : undefined;
   // This course's own assigned regulations (Course Catalog > Regulations) -
   // the actual set a subject for it may use, narrower than the college's

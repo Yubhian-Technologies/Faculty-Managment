@@ -536,18 +536,40 @@ export interface BreakConfig {
   durationMinutes: number;
 }
 
+// One period's explicit clock range, set by the HOD (see
+// api/college/course-year-timings/route.ts PATCH) - free-form, not required
+// to be equal-length or back-to-back, but validated to fall within
+// [collegeStartTime, collegeEndTime]. `period` is 1-based and must be
+// contiguous from 1 - there's no such thing as a gap in the period numbering
+// itself, only possibly a gap in clock time between two periods' start/end
+// (e.g. an unlisted break).
+export interface PeriodTiming {
+  period: number;
+  startTime: string; // "HH:MM" 24h
+  endTime: string; // "HH:MM" 24h
+}
+
 export interface CourseYearTiming {
   id: string; // `${courseId}_year${year}`
   collegeId: string;
   departmentId: string;
   courseId: string;
   year: number;
-  collegeStartTime: string; // "HH:MM" 24h
-  collegeEndTime: string; // "HH:MM" 24h
+  collegeStartTime: string; // "HH:MM" 24h - the day's outer bound, Principal-set
+  collegeEndTime: string; // "HH:MM" 24h - the day's outer bound, Principal-set
   numberOfPeriods: number;
   periodDurationMinutes: number;
   lunchBreak: BreakConfig;
   shortBreaks: BreakConfig[];
+  // The HOD's own period-by-period breakdown within [collegeStartTime,
+  // collegeEndTime] - absent until an HOD sets it (see PATCH, HOD-only),
+  // at which point it's the source of truth for numberOfPeriods and for each
+  // period's displayed clock range (see buildGrid.ts's buildRows) instead of
+  // the numberOfPeriods/periodDurationMinutes formula above. That formula
+  // stays in place as the fallback for a course-year an HOD hasn't broken
+  // down yet, so nothing already relying on it (isContiguousBlockAvailable,
+  // the timetable solver, ...) has to change.
+  periods?: PeriodTiming[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -1243,6 +1265,17 @@ export interface StudentRecord {
   handicappedType?: "H" | "V" | "O"; // Hearing / Visual / Other - only meaningful when physicallyHandicapped
   identificationMarks?: string;
   remarks?: string;
+  // ─── Graduation snapshot ────────────────────────────────────────────────
+  // Set once, when `status` flips to GRADUATED (students/promote route). The
+  // student's department/section/year are left untouched by graduation (they
+  // stay whatever their final-year section was), so these three exist purely
+  // to make that final cohort's programme + batch queryable/displayable
+  // without joining back to a Section doc that could later be edited or
+  // removed - a graduate's record shouldn't be able to drift after the fact.
+  graduatedAt?: Timestamp;
+  graduationBatch?: string; // Section.batch at graduation, e.g. "2021-2025"
+  graduationCourseId?: string;
+  graduationCourseName?: string; // e.g. "B.Tech"
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

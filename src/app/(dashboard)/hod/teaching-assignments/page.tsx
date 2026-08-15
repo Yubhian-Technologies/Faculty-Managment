@@ -12,9 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
-import { deriveHodScope, buildCourseGroups } from "@/lib/departments/hodScope";
-import { managerTeachingYears } from "@/lib/departments/managedBranches";
-import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember } from "@/types";
+import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
+import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember, FacultyAssignmentRequest } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
 type FacultyRow = FacultyMember;
@@ -47,6 +46,7 @@ export default function TeachingAssignmentsPage() {
   }, [ownCourses, scopeCourses]);
   const [faculty, setFaculty] = useState<FacultyRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
+  const [assignmentRequests, setAssignmentRequests] = useState<FacultyAssignmentRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Shared course/year context for both the staffing-gap finder and the
@@ -75,6 +75,7 @@ export default function TeachingAssignmentsPage() {
       fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty(d.faculty ?? [])),
       fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>).then((d) => setAssignments(d.assignments ?? [])),
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
+      fetch("/api/college/faculty-assignment-requests").then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>).then((d) => setAssignmentRequests(d.requests ?? [])),
     ])
       .catch(() => toast({ variant: "destructive", title: "Failed to load teaching data" }))
       .finally(() => setIsLoading(false));
@@ -160,13 +161,19 @@ export default function TeachingAssignmentsPage() {
   // those sub-departments manage: CIVIL's own [2,3,4] belongs to CIVIL's own
   // HOD, and only the shared year its manager teaches is Basic Science's to
   // staff - which the parent fallback already contributes.
+  //
+  // Uses managerEffectiveYears (catalogId-aware), not the flat-only
+  // managerTeachingYears - a department with a per-course override (e.g. an
+  // independent M.Tech run on different years than its shared-first-year
+  // B.Tech) needs THIS course's own override, not always its flat
+  // assignedYears.
   const yearOptions = useMemo(() => {
     if (!course) return [];
     const relevant = subDepartmentOptions.length > 0
       ? subDepartmentOptions
       : scope.ownDept ? [scope.ownDept] : [];
     const assigned = new Set<number>();
-    for (const d of relevant) for (const y of managerTeachingYears(departments, d)) assigned.add(y);
+    for (const d of relevant) for (const y of managerEffectiveYears(d, departments, course.catalogId)) assigned.add(y);
     const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
     return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
   }, [course, subDepartmentOptions, scope.ownDept, departments]);
@@ -264,6 +271,21 @@ export default function TeachingAssignmentsPage() {
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
+  // sectionId_subjectId pairs with a PENDING lend-request already out (see
+  // "Or ask another department to lend a faculty member" below) - the target
+  // department hasn't allocated anyone yet, but this HOD already committed to
+  // waiting on them, so staffing it directly in the meantime would risk ending
+  // up double-staffed the moment that department allocates their own faculty
+  // (the request API only guards against a second *request* for the same
+  // subject+section, not a direct assignment racing an outstanding one - see
+  // college/faculty-assignment-requests/route.ts POST).
+  const pendingRequestKeys = useMemo(
+    () => new Set(
+      assignmentRequests.filter((r) => r.status === "PENDING").map((r) => `${r.sectionId}_${r.subjectId}`)
+    ),
+    [assignmentRequests]
+  );
+
   // Which subject/section combos for the selected course+year have no faculty assigned yet.
   const gapRows = useMemo(() => {
     if (!courseKey || !year) return [];
@@ -276,15 +298,21 @@ export default function TeachingAssignmentsPage() {
           .filter((a) => a.subjectId === subject.id && courseIdSet.has(a.courseId ?? "") && a.year === Number(year))
           .map((a) => a.sectionId)
       );
-      const unstaffedSections = sections.filter((s) => !staffedSectionIds.has(s.id));
+      const unstaffedSections = sections
+        .filter((s) => !staffedSectionIds.has(s.id))
+        .map((s) => ({ section: s, isRequested: pendingRequestKeys.has(`${s.id}_${subject.id}`) }));
       return { subject, unstaffedSections };
     });
-  }, [subjects, sections, assignments, courseKey, activeCourseIds, year]);
+  }, [subjects, sections, assignments, courseKey, activeCourseIds, year, pendingRequestKeys]);
 
   // Subjects already staffed for the section picked in the assign-faculty form shouldn't be
   // offered again there - pick a different subject or remove the existing assignment first.
+  // Same for one with a pending lend-request out - see pendingRequestKeys above.
   const availableSubjectsForAssign = assignForm.sectionId
-    ? subjects.filter((s) => !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id))
+    ? subjects.filter((s) =>
+        !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id) &&
+        !pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)
+      )
     : subjects;
 
   // Faculty offered here are always this HOD's own/managed department's -
@@ -365,6 +393,11 @@ export default function TeachingAssignmentsPage() {
       }
       toast({ variant: "success", title: "Request sent - track it under Assignment Requests" });
       setRequestTargetId("");
+      // The subject just requested drops out of availableSubjectsForAssign
+      // (see pendingRequestKeys) the moment assignmentRequests refreshes -
+      // clear it here too so the form doesn't sit on a now-invalid selection.
+      setAssignForm((f) => ({ ...f, subjectId: "" }));
+      load();
     } catch {
       toast({ variant: "destructive", title: "Network error" });
     } finally {
@@ -494,8 +527,10 @@ export default function TeachingAssignmentsPage() {
                       <Badge variant="approved" className="mt-1.5">Fully staffed</Badge>
                     ) : (
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {unstaffedSections.map((s) => (
-                          <Badge key={s.id} variant="rejected">{sectionDisplayLabel(s, departments)} unstaffed</Badge>
+                        {unstaffedSections.map(({ section: s, isRequested }) => (
+                          <Badge key={s.id} variant={isRequested ? "modified" : "rejected"}>
+                            {sectionDisplayLabel(s, departments)} {isRequested ? "requested" : "unstaffed"}
+                          </Badge>
                         ))}
                       </div>
                     )}

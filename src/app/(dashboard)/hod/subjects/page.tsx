@@ -14,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import type { Course, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 
 const ALL_REGULATIONS = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
@@ -90,10 +91,19 @@ export default function HODSubjectsPage() {
   // almost always already there.
   const selectedCourseId = pickedCourseId || courses[0]?.id || "";
   const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
-  const yearOptions = useMemo(
-    () => (selectedCourse ? Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1) : []),
-    [selectedCourse]
-  );
+  const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
+  // Never the raw 1..durationYears span - a department (or, for a sub-HOD,
+  // its parent) only teaches the years the Principal actually assigned it
+  // (resolveDepartmentCourseScope, per-course override included). Falls back
+  // to the full span only when the department has no assignment at all, so an
+  // unconfigured college isn't locked out.
+  const yearOptions = useMemo(() => {
+    if (!selectedCourse) return [];
+    const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
+    const dept = departmentById.get(selectedCourse.departmentId);
+    const assigned = dept ? resolveDepartmentCourseScope(dept, selectedCourse.catalogId).assignedYears : [];
+    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+  }, [selectedCourse, departmentById]);
   const selectedYear = pickedYear || (yearOptions.length > 0 ? String(yearOptions[0]) : "");
 
   // Regulation codes actually present among this course/year's subjects -

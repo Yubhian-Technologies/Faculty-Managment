@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import type { Course, Department, ExamConfiguration } from "@/types";
 
 function ordinalYear(year: number) {
@@ -86,21 +87,49 @@ function ExamCellConfigureForm() {
   }, []);
 
   const departmentNameById = useMemo(() => new Map(departments.map((d) => [d.id, d.name])), [departments]);
+  const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
 
   const courseNameOptions = useMemo(() => [...new Set(courses.map((c) => c.name))].sort(), [courses]);
 
+  // The union of every department's actually-assigned years for this course
+  // name, not the raw 1..max(durationYears) span - Department isn't picked
+  // yet at this point (Course -> Year -> Branch), so a year only appears at
+  // all if SOME department offering this course actually teaches it. Falls
+  // back to the full span only when no department has any explicit
+  // assignment, so an unconfigured college isn't locked out.
   const yearOptions = useMemo(() => {
-    const duration = Math.max(0, ...courses.filter((c) => c.name === courseName).map((c) => c.durationYears));
+    const relevant = courses.filter((c) => c.name === courseName);
+    const assigned = new Set<number>();
+    for (const c of relevant) {
+      const dept = departmentById.get(c.departmentId);
+      if (!dept) continue;
+      for (const y of resolveDepartmentCourseScope(dept, c.catalogId).assignedYears) assigned.add(y);
+    }
+    if (assigned.size > 0) return Array.from(assigned).sort((a, b) => a - b);
+    const duration = Math.max(0, ...relevant.map((c) => c.durationYears));
     return Array.from({ length: duration }, (_, i) => i + 1);
-  }, [courses, courseName]);
+  }, [courses, courseName, departmentById]);
 
+  // Previously offered every department that merely owns a Course row for
+  // this course name, regardless of the picked Year - a department that only
+  // teaches Year 1 of a shared 4-year B.Tech showed up as a Branch choice
+  // even with Year 3 selected. Scoped the same way Principal's Internal
+  // Marks page is (resolveDepartmentCourseScope, per-course override
+  // included).
   const branchOptions = useMemo(() => {
+    if (!courseName || !year) return [];
+    const yearNum = Number(year);
     const seen = new Map<string, string>();
     courses
       .filter((c) => c.name === courseName)
-      .forEach((c) => seen.set(c.departmentId, departmentNameById.get(c.departmentId) ?? c.departmentId));
+      .forEach((c) => {
+        const dept = departmentById.get(c.departmentId);
+        if (!dept) return;
+        if (!resolveDepartmentCourseScope(dept, c.catalogId).assignedYears.includes(yearNum)) return;
+        seen.set(c.departmentId, departmentNameById.get(c.departmentId) ?? c.departmentId);
+      });
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [courses, courseName, departmentNameById]);
+  }, [courses, courseName, year, departmentById, departmentNameById]);
 
   const resolvedCourse = useMemo(
     () => courses.find((c) => c.name === courseName && c.departmentId === departmentId) ?? null,

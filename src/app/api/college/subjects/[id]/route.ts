@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import type { SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS } from "@/types";
 
@@ -36,6 +37,23 @@ export async function PATCH(
     const ref = db.collection("colleges").doc(session.collegeId).collection("subjects").doc(id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // Dean/Principal/Super Admin manage subjects across every department by
+    // design (see dean/subjects/page.tsx - no per-row ownership guard there);
+    // only an HOD is restricted to their own department/sub-departments. This
+    // was previously unchecked entirely - any authenticated HOD could edit
+    // any other department's subject via a direct request, the UI's own
+    // "isOwnDepartment" hide-the-buttons check being client-side only.
+    if (session.role === "HOD") {
+      const subjectDept = (snap.data() as { department?: string }).department;
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!subjectDept || !canHodEditDepartment(scope, subjectDept)) {
+        return NextResponse.json(
+          { error: "That subject is not in your department or one of your sub-departments" },
+          { status: 403 },
+        );
+      }
+    }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name != null) updates.name = body.name.trim();
@@ -95,6 +113,17 @@ export async function DELETE(
     const ref = db.collection("colleges").doc(session.collegeId).collection("subjects").doc(id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (session.role === "HOD") {
+      const subjectDept = (snap.data() as { department?: string }).department;
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!subjectDept || !canHodEditDepartment(scope, subjectDept)) {
+        return NextResponse.json(
+          { error: "That subject is not in your department or one of your sub-departments" },
+          { status: 403 },
+        );
+      }
+    }
 
     await ref.delete();
     return NextResponse.json({ success: true });
