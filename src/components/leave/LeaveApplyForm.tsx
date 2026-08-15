@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
 import { AlertTriangle, CalendarPlus } from "lucide-react";
 import { countWorkingDays, dateKey, todayISODate } from "@/lib/leave/dayCounter";
@@ -52,6 +52,30 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
 
   const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
+  // Forenoon's window has already passed for a half-day request filed for
+  // today, once it's 11am or later - only a future date still has a whole
+  // forenoon ahead of it, so this never restricts those.
+  const isForenoonBlocked = isHalfDay && fromDate === todayISO && new Date().getHours() >= 11;
+  // Derived, not stored - if the requester picked Forenoon earlier and it
+  // only just became blocked (they left the tab open past 11am), this
+  // silently falls back to Afternoon everywhere it's read (the Select's
+  // value below and the submitted payload) without needing an effect to
+  // "correct" halfDaySession after the fact.
+  const effectiveHalfDaySession = isForenoonBlocked ? "AN" : halfDaySession;
+
+  function handleDurationModeChange(mode: "FULL" | "HALF") {
+    const half = mode === "HALF";
+    setIsHalfDay(half);
+    // Half day is a single day - From and To lock to the same date the
+    // moment the mode switches (see handleFromDateChange for the reverse:
+    // keeping them locked as From changes afterwards).
+    if (half && fromDate) setToDate(fromDate);
+  }
+
+  function handleFromDateChange(value: string) {
+    setFromDate(value);
+    if (isHalfDay) setToDate(value);
+  }
 
   useEffect(() => {
     fetch("/api/college/holidays")
@@ -133,7 +157,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           fromDate,
           toDate,
           isHalfDay,
-          halfDaySession: isHalfDay ? halfDaySession : undefined,
+          halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
           reason: reason.trim(),
           extendsRequestId: extendId ?? undefined,
         }),
@@ -189,44 +213,66 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <SelectItem value="OTHER">Other</SelectItem>
               </SelectContent>
             </Select>
-            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you're extending.</p>}
+            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you&rsquo;re extending.</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label>Duration</Label>
+            <div className="flex items-center gap-2">
+              <SegmentedTabs
+                value={isHalfDay ? "HALF" : "FULL"}
+                onChange={(v) => isHalfDayEligible && handleDurationModeChange(v as "FULL" | "HALF")}
+                options={[
+                  { key: "FULL", label: "Full day" },
+                  { key: "HALF", label: "Half day" },
+                ]}
+                className={!isHalfDayEligible ? "cursor-not-allowed opacity-50" : undefined}
+              />
+              {!isHalfDayEligible && leaveTypeCode && (
+                <span className="text-xs text-muted-foreground">Half day not available for this leave type</span>
+              )}
+            </div>
+          </div>
+
+          <div className={isHalfDay ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
             <div className="space-y-2">
               <Label>From</Label>
-              <Input type="date" value={fromDate} min={todayISO} onChange={(e) => setFromDate(e.target.value)} />
+              <Input type="date" value={fromDate} min={todayISO} onChange={(e) => handleFromDateChange(e.target.value)} />
             </div>
-            <div className="space-y-2">
-              <Label>To</Label>
-              <Input type="date" value={toDate} min={fromDate || todayISO} onChange={(e) => setToDate(e.target.value)} />
-            </div>
-          </div>
-
-          <label className={`flex items-center gap-2 text-sm ${isHalfDayEligible ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>
-            <Checkbox
-              checked={isHalfDay}
-              onCheckedChange={(c) => setIsHalfDay(c === true)}
-              disabled={!isHalfDayEligible}
-            />
-            Half day
-            {!isHalfDayEligible && leaveTypeCode && (
-              <span className="text-xs text-muted-foreground">(not available for this leave type)</span>
+            {/* Half day is always that same single day - To stays locked equal
+                to From under the hood (see handleFromDateChange/
+                handleDurationModeChange) and is still sent as such on submit,
+                just not shown here since there's nothing to actually pick. */}
+            {!isHalfDay && (
+              <div className="space-y-2">
+                <Label>To</Label>
+                <Input
+                  type="date"
+                  value={toDate}
+                  min={fromDate || todayISO}
+                  onChange={(e) => setToDate(e.target.value)}
+                />
+              </div>
             )}
-          </label>
+          </div>
 
           {isHalfDay && isHalfDayEligible && (
             <div className="space-y-2">
               <Label>Which half?</Label>
-              <Select value={halfDaySession} onValueChange={(v) => setHalfDaySession(v as "FN" | "AN")}>
+              <Select value={effectiveHalfDaySession} onValueChange={(v) => setHalfDaySession(v as "FN" | "AN")}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="FN">Forenoon</SelectItem>
+                  {!isForenoonBlocked && <SelectItem value="FN">Forenoon</SelectItem>}
                   <SelectItem value="AN">Afternoon</SelectItem>
                 </SelectContent>
               </Select>
+              {isForenoonBlocked && (
+                <p className="text-xs text-muted-foreground">
+                  Forenoon is no longer available for today after 11am - only Afternoon can be selected.
+                </p>
+              )}
             </div>
           )}
 

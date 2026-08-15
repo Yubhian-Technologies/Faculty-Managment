@@ -356,7 +356,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
             `<tr>${r.map((c) => `<td style="border:1px solid #ccc;padding:4px 6px;font-size:9px;text-align:center;white-space:nowrap;">${c}</td>`).join("")}</tr>`
         )
         .join("");
-      const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;margin:16px;}table{border-collapse:collapse;}</style></head><body><h3 style="margin:0 0 12px;">${title}</h3><table>${tableHead}${tableBody}</table></body></html>`;
+      const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;margin:16px;}table{border-collapse:collapse;}</style></head><body><h3 style="margin:0 0 12px;text-align:center;">${title}</h3><table>${tableHead}${tableBody}</table></body></html>`;
       await renderHtmlToPdf(html, `${exportFilenameBase}.pdf`);
     } catch {
       toast({ variant: "destructive", title: "Failed to export PDF" });
