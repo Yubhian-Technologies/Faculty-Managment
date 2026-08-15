@@ -499,6 +499,14 @@ export interface CourseCatalogItem {
   name: string; // canonical name, e.g. "Bachelor of Technology"
   code: string; // "BTECH"
   durationYears: number; // e.g. 4, 2
+  // Subset of the college's declared AcademicRegulationSettings.regulations
+  // (colleges/{collegeId}/settings/academicRegulations) that this course
+  // actually uses (e.g. B.Tech -> R20/R23, B.Pharm -> R19/R22) - a different
+  // course can have an entirely different set. Empty/absent until the
+  // Principal assigns at least one here, which blocks the Dean from adding
+  // subjects to any Course created from this catalog entry (see
+  // api/college/subjects POST) until it's set.
+  regulations?: string[];
   isActive: boolean;
   createdBy?: string;
   createdByName?: string;

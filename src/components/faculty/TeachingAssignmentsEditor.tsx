@@ -302,7 +302,9 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                       {subjects.length > 0 && availableSubjects.length === 0 && (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground">All subjects for this year are already assigned</div>
                       )}
-                      {availableSubjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
+                      {availableSubjects.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name} ({s.code}{s.regulation ? ` · ${s.regulation}` : ""})</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
