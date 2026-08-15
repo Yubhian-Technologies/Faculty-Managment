@@ -18,9 +18,93 @@
 // re-checking `assignedYears`/`hasSubDepartments` inline, so the definition
 // can't drift between routes. If the heuristic ever needs to change (or become
 // a stored flag), this file is the only thing to edit.
-import type { Department } from "@/types";
+import type { Department, DepartmentCourseScope } from "@/types";
 
 export type DepartmentWithId = Department & { id: string };
+
+/**
+ * A department's academic-structure fields (assignedYears/secondaryDepartments),
+ * resolved for one specific course. A department can offer several courses
+ * (see Department.courseScopes) that need different structures - e.g. a
+ * B.Tech with a common first year through this department, and an M.Tech it
+ * runs independently end to end. A course with no entry in `courseScopes`
+ * falls back to the department's flat fields, which stay the permanent
+ * default. Always call this rather than reading either directly, so the
+ * override-or-fallback logic lives in exactly one place.
+ *
+ * Deliberately does NOT resolve hasSubDepartments or managedDepartments -
+ * those describe real, non-course-scoped entities (child Department docs,
+ * and who's authorized to edit a branch's roster) and stay flat-only.
+ */
+export function resolveDepartmentCourseScope(
+  department: Pick<Department, "assignedYears" | "secondaryDepartments" | "courseScopes">,
+  catalogId: string | undefined | null
+): DepartmentCourseScope {
+  const override = catalogId ? department.courseScopes?.[catalogId] : undefined;
+  return {
+    assignedYears: override?.assignedYears ?? department.assignedYears ?? [],
+    secondaryDepartments: override?.secondaryDepartments ?? department.secondaryDepartments ?? [],
+  };
+}
+
+/**
+ * Whether a department already acts as a shared-year structural node - split
+ * into sub-departments, or already cross-listing branches for some course
+ * (its flat fields, or any per-course override). Such a department adding
+ * ANOTHER catalog course needs to deliberately decide how that course
+ * relates to its branches (see findUnconnectedCourseOwners) rather than
+ * silently inheriting whatever cross-listing happens to already be set - that
+ * silent inheritance is exactly what let an M.Tech course added to a
+ * B.Tech-shared-first-year department come out cross-listed to the same
+ * branches by accident. An ordinary branch department (no sub-departments,
+ * never cross-lists anyone) has no such expectation, so adding its own
+ * independent copy of any course - the completely normal "every branch runs
+ * its own program" shape - is never restricted by this.
+ */
+export function isSharedYearStructuralDepartment(
+  department: Pick<Department, "hasSubDepartments" | "secondaryDepartments" | "courseScopes">
+): boolean {
+  if (department.hasSubDepartments) return true;
+  if ((department.secondaryDepartments ?? []).length > 0) return true;
+  return Object.values(department.courseScopes ?? {}).some((s) => (s.secondaryDepartments ?? []).length > 0);
+}
+
+/**
+ * Other departments that already offer `catalogId` with no declared
+ * relationship to `department` for it - neither cross-lists the other. Used
+ * to flag (client) or block (server, for a shared-year structural
+ * department - see isSharedYearStructuralDepartment) an accidental second,
+ * unrelated program under the same catalog entry, e.g. Basic Science's own
+ * M.Tech ending up cross-listed to the same branches as its B.Tech by
+ * accident, or nothing at all when it should be independent.
+ *
+ * `intendedSecondaryDepartments` is what `department` is ABOUT to have for
+ * this course - pass the value being submitted in the same request (course
+ * creation happens before any override is written, so the resolved value
+ * would otherwise still be the old one); omitted, falls back to whatever's
+ * already resolved (editing an existing course's structure).
+ */
+export function findUnconnectedCourseOwners(
+  department: Pick<Department, "id" | "name" | "secondaryDepartments" | "courseScopes">,
+  catalogId: string,
+  otherDepartmentIdsOfferingCourse: string[],
+  allDepartments: DepartmentWithId[],
+  intendedSecondaryDepartments?: string[]
+): DepartmentWithId[] {
+  const ourSecondary = intendedSecondaryDepartments ?? resolveDepartmentCourseScope(department, catalogId).secondaryDepartments;
+  const seen = new Set<string>();
+  const conflicts: DepartmentWithId[] = [];
+  for (const otherId of otherDepartmentIdsOfferingCourse) {
+    if (otherId === department.id || seen.has(otherId)) continue;
+    seen.add(otherId);
+    const other = allDepartments.find((d) => d.id === otherId);
+    if (!other) continue;
+    const otherFeedsUs = resolveDepartmentCourseScope(other, catalogId).secondaryDepartments.includes(department.name);
+    const weFeedThem = ourSecondary.includes(other.name);
+    if (!otherFeedsUs && !weFeedThem) conflicts.push(other);
+  }
+  return conflicts;
+}
 
 export interface AcademicStructure {
   /** True when a common-year department exists - i.e. structure (1) above. */

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -48,6 +49,7 @@ export default function OfficeStudentsPage() {
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [years, setYears] = useState<number[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -66,6 +68,16 @@ export default function OfficeStudentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<StudentListItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Bulk removal: selection is keyed by student id and persists across filter
+  // changes, so "filter by department, select all, delete" (department-wide
+  // removal) and "clear filters, select all, delete" (remove everyone) both
+  // fall out of the same mechanism as picking individual rows - no separate
+  // "delete all" / "delete by department" actions needed.
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -78,12 +90,17 @@ export default function OfficeStudentsPage() {
       const loaded = studentsRes.students ?? [];
       setStudents(loaded);
       setDepartments(deptsRes.departments ?? []);
+      const loadedCourses = coursesRes.courses ?? [];
+      setCourses(loadedCourses);
       // Every department owns its own Course doc for the same programme, so
       // the raw list repeats "Bachelor of Technology" once per department -
       // the picker wants the distinct programme names, which is also what
-      // `course` stores (free text, see StudentRecord.course).
+      // `course` stores (free text, see StudentRecord.course). The raw list
+      // above is kept too, so the Year/Secondary Department fields can still
+      // resolve which specific department+course combination (and therefore
+      // which per-course courseScopes override) was picked.
       setCourseNames(
-        Array.from(new Set((coursesRes.courses ?? []).map((c) => c.name?.trim()).filter(Boolean) as string[]))
+        Array.from(new Set(loadedCourses.map((c) => c.name?.trim()).filter(Boolean) as string[]))
           .sort((a, b) => a.localeCompare(b))
       );
       // Prefer the college's configured academic years; fall back to whatever
@@ -124,6 +141,38 @@ export default function OfficeStudentsPage() {
       return true;
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [students, search, deptFilter, yearFilter]);
+
+  // Filtered against the live roster (not just truthy in `selected`) so a
+  // selection made before another edit/delete elsewhere reloads the list
+  // never counts or submits an id that no longer exists.
+  const selectedIds = useMemo(() => {
+    const liveIds = new Set(students.map((s) => s.id));
+    return Object.keys(selected).filter((id) => selected[id] && liveIds.has(id));
+  }, [selected, students]);
+  const selectedCount = selectedIds.length;
+  const allFilteredSelected = filtered.length > 0 && filtered.every((s) => selected[s.id]);
+  const someFilteredSelected = filtered.some((s) => selected[s.id]);
+
+  function toggleSelectAllFiltered(checked: boolean | "indeterminate") {
+    const shouldSelect = checked === true;
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const s of filtered) {
+        if (shouldSelect) next[s.id] = true;
+        else delete next[s.id];
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectOne(id: string, checked: boolean | "indeterminate") {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (checked === true) next[id] = true;
+      else delete next[id];
+      return next;
+    });
+  }
 
   function setF(key: string, value: string) { setForm((f) => ({ ...f, [key]: value })); }
 
@@ -200,6 +249,51 @@ export default function OfficeStudentsPage() {
     }
   }
 
+  // The server caps a single call at 400 students (matches students/promote),
+  // so a large "delete all" selection is sent as sequential chunks from here
+  // rather than requiring the Office to split it up themselves.
+  const BULK_DELETE_CHUNK_SIZE = 400;
+
+  async function handleBulkDelete() {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleting(true);
+    setBulkProgress({ done: 0, total: selectedIds.length });
+    let deletedTotal = 0;
+    let skippedTotal = 0;
+    try {
+      for (let i = 0; i < selectedIds.length; i += BULK_DELETE_CHUNK_SIZE) {
+        const chunk = selectedIds.slice(i, i + BULK_DELETE_CHUNK_SIZE);
+        const res = await fetch("/api/college/students/bulk-delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentIds: chunk }),
+        });
+        const json = await res.json() as { deletedCount?: number; skipped?: string[]; error?: string };
+        if (!res.ok) {
+          toast({ variant: "destructive", title: json.error ?? "Failed to remove some students" });
+          break;
+        }
+        deletedTotal += json.deletedCount ?? 0;
+        skippedTotal += json.skipped?.length ?? 0;
+        setBulkProgress({ done: Math.min(i + chunk.length, selectedIds.length), total: selectedIds.length });
+      }
+      if (deletedTotal > 0) {
+        toast({
+          variant: "success",
+          title: `${deletedTotal} student${deletedTotal === 1 ? "" : "s"} removed${skippedTotal ? ` (${skippedTotal} already gone)` : ""}`,
+        });
+      }
+      setBulkDeleteOpen(false);
+      setSelected({});
+      void load();
+    } catch {
+      toast({ variant: "destructive", title: "Network error - please try again" });
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkProgress(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -248,6 +342,24 @@ export default function OfficeStudentsPage() {
         </Select>
       </div>
 
+      {/* Bulk actions - appears once at least one row is selected. Selecting
+          every row of a department- or year-filtered list is how "delete this
+          department" / "delete all students" are done, rather than separate
+          dedicated actions. */}
+      {selectedCount > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-2.5">
+          <span className="text-sm">
+            <strong className="text-foreground">{selectedCount}</strong> student{selectedCount === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelected({})}>Clear selection</Button>
+            <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 className="h-4 w-4 mr-2" />Delete Selected
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* List */}
       {isLoading ? (
         <div className="space-y-2">
@@ -274,6 +386,13 @@ export default function OfficeStudentsPage() {
                     list, matching the sheet column it's named after. */}
                 <thead>
                   <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                    <th className="p-3 font-medium w-10">
+                      <Checkbox
+                        checked={allFilteredSelected ? true : someFilteredSelected ? "indeterminate" : false}
+                        onCheckedChange={toggleSelectAllFiltered}
+                        aria-label="Select all"
+                      />
+                    </th>
                     <th className="p-3 font-medium">S.No</th>
                     {LIST_ROSTER_FIELDS.map((f) => (
                       <th key={f.key} className="p-3 font-medium whitespace-nowrap">{f.label}</th>
@@ -288,6 +407,13 @@ export default function OfficeStudentsPage() {
                       onClick={() => setViewTarget(s)}
                       className={`border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors ${i % 2 === 0 ? "" : "bg-muted/20"}`}
                     >
+                      <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={!!selected[s.id]}
+                          onCheckedChange={(checked) => toggleSelectOne(s.id, checked)}
+                          aria-label={`Select ${s.name}`}
+                        />
+                      </td>
                       <td className="p-3 text-muted-foreground whitespace-nowrap">{i + 1}</td>
                       {LIST_ROSTER_FIELDS.map((f) => {
                         const value = rosterFieldDisplay(f, s);
@@ -379,9 +505,19 @@ export default function OfficeStudentsPage() {
             values={form}
             onChange={setF}
             departments={activeDepartments}
-            courses={courseNames}
+            courseNames={courseNames}
+            courses={courses}
             years={years}
-            readOnlyKeys={editTarget ? ["rollNumber"] : []}
+            // Department and Year are read-only on Edit to match what this
+            // dialog's own description already promises ("shown for context") -
+            // students/[id] PATCH's roster-detail-edit path silently drops both
+            // (see ROSTER_DETAIL_KEYS), so leaving them as live Selects let an
+            // office user click a different department and, on Save, have that
+            // click silently discarded while its side effect of clearing
+            // Secondary Department (and, now, Course when it no longer matches)
+            // was NOT discarded - a confusing partial save. Locking them stops
+            // that click from happening at all.
+            readOnlyKeys={editTarget ? ["rollNumber", "department", "year"] : []}
           />
 
           <DialogFooter>
@@ -403,6 +539,21 @@ export default function OfficeStudentsPage() {
         variant="destructive"
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
+      />
+
+      {/* ── Bulk remove confirm ── */}
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => { if (!open && !isBulkDeleting) setBulkDeleteOpen(false); }}
+        title={`Remove ${selectedCount} student${selectedCount === 1 ? "" : "s"}?`}
+        description={
+          `This will permanently remove ${selectedCount} student${selectedCount === 1 ? "" : "s"}. This cannot be undone.`
+          + (bulkProgress ? ` Removing ${bulkProgress.done} of ${bulkProgress.total}…` : "")
+        }
+        confirmLabel="Remove All"
+        variant="destructive"
+        onConfirm={() => void handleBulkDelete()}
+        loading={isBulkDeleting}
       />
     </div>
   );

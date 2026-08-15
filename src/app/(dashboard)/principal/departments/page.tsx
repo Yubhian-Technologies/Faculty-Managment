@@ -10,11 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import type { Department } from "@/types";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import type { Course, Department } from "@/types";
 
 export default function DepartmentsPage() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingDept, setDeletingDept] = useState<Department | null>(null);
 
@@ -24,12 +26,23 @@ export default function DepartmentsPage() {
   const topLevelDepartments = departments.filter((d) => !d.parentDepartmentId);
   const childrenOf = (parentId: string) =>
     departments.filter((d) => d.parentDepartmentId === parentId);
+  const coursesOf = (departmentId: string) =>
+    courses.filter((c) => c.departmentId === departmentId).sort((a, b) => a.name.localeCompare(b.name));
 
   async function loadDepts() {
     setIsLoading(true);
     try {
-      const deptRes = await fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>);
+      // No `departmentId` - a non-HOD caller gets every Course doc in the
+      // college in one call, so each department's cards can show its own
+      // courses' years/cross-listing instead of one blended department-wide
+      // badge (a department can offer several courses with different
+      // structures - see resolveDepartmentCourseScope).
+      const [deptRes, coursesRes] = await Promise.all([
+        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+        fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
+      ]);
       setDepartments(deptRes.departments ?? []);
+      setCourses(coursesRes.courses ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load departments" });
     } finally {
@@ -122,20 +135,53 @@ export default function DepartmentsPage() {
                     ) : (
                       <p className="text-xs text-orange-500 mt-1.5">No HOD assigned</p>
                     )}
-                    {dept.assignedYears && dept.assignedYears.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {dept.assignedYears.map((y) => (
-                          <Badge key={y} variant="outline" className="text-xs">{yearOrdinalLabel(y)}</Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground mt-1.5">No years assigned yet</p>
-                    )}
-                    {dept.secondaryDepartments && dept.secondaryDepartments.length > 0 && (
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        Cross-listed with <span className="text-foreground">{dept.secondaryDepartments.join(", ")}</span>
-                      </p>
-                    )}
+                    {(() => {
+                      const deptCourses = coursesOf(dept.id);
+                      // A department with courses shows each one's OWN resolved
+                      // years/cross-listing (a per-course override when set,
+                      // else the flat fields below) - a department offering
+                      // both B.Tech and M.Tech can have entirely different
+                      // structures for each. One that hasn't added any course
+                      // yet falls back to the flat fields as a general preview.
+                      if (deptCourses.length > 0) {
+                        return (
+                          <div className="mt-1.5 space-y-1">
+                            {deptCourses.map((c) => {
+                              const scope = resolveDepartmentCourseScope(dept, c.catalogId);
+                              return (
+                                <p key={c.id} className="text-xs text-muted-foreground">
+                                  <span className="text-foreground font-medium">{c.name}:</span>{" "}
+                                  {scope.assignedYears.length > 0
+                                    ? scope.assignedYears.map(yearOrdinalLabel).join(", ")
+                                    : "No years assigned yet"}
+                                  {scope.secondaryDepartments.length > 0 && (
+                                    <> · Cross-listed with <span className="text-foreground">{scope.secondaryDepartments.join(", ")}</span></>
+                                  )}
+                                </p>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+                      return (
+                        <>
+                          {dept.assignedYears && dept.assignedYears.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {dept.assignedYears.map((y) => (
+                                <Badge key={y} variant="outline" className="text-xs">{yearOrdinalLabel(y)}</Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground mt-1.5">No years assigned yet</p>
+                          )}
+                          {dept.secondaryDepartments && dept.secondaryDepartments.length > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1.5">
+                              Cross-listed with <span className="text-foreground">{dept.secondaryDepartments.join(", ")}</span>
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
                     {childrenOf(dept.id).length > 0 && (
                       <div className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
                         <Layers className="h-3 w-3 mt-0.5 shrink-0" />

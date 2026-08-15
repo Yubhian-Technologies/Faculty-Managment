@@ -12,9 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CreateHodDialog } from "@/components/college/CreateHodDialog";
+import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import type { AcademicYear, Department, FMSUser } from "@/types";
 
 export default function EditDepartmentPage() {
@@ -31,8 +31,6 @@ export default function EditDepartmentPage() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addingYear, setAddingYear] = useState(false);
-  const [commonYearStart, setCommonYearStart] = useState("");
-  const [commonYearEnd, setCommonYearEnd] = useState("");
 
   const {
     register,
@@ -46,11 +44,6 @@ export default function EditDepartmentPage() {
   });
 
   const hodUid = watch("hodUid");
-
-  // Mirrors the shared first-year rule in src/lib/college/academicStructure.ts:
-  // claims year 1 AND acts as a shared parent (sub-departments or cross-listing).
-  const isCommonYearCandidate =
-    assignedYears.includes(1) && (hasSubDepartments || secondaryDepartments.length > 0);
 
   useEffect(() => {
     async function load() {
@@ -74,8 +67,6 @@ export default function EditDepartmentPage() {
         setAssignedYears(dept.assignedYears ?? []);
         setHasSubDepartments(dept.hasSubDepartments ?? false);
         setSecondaryDepartments(dept.secondaryDepartments ?? []);
-        setCommonYearStart(dept.commonYearStart ?? "");
-        setCommonYearEnd(dept.commonYearEnd ?? "");
         reset({ name: dept.name, code: dept.code, hodUid: dept.hodUid ?? "" });
       } catch {
         toast({ variant: "destructive", title: "Failed to load department" });
@@ -161,10 +152,6 @@ export default function EditDepartmentPage() {
         assignedYears,
         hasSubDepartments,
         secondaryDepartments,
-        // Sent as "" to clear when this is no longer a shared first-year
-        // department, so a stale period can't linger on the doc.
-        commonYearStart: isCommonYearCandidate ? commonYearStart : "",
-        commonYearEnd: isCommonYearCandidate ? commonYearEnd : "",
       };
       const res = await fetch("/api/college/departments", {
         method: "PATCH",
@@ -257,61 +244,17 @@ export default function EditDepartmentPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Years Taught</Label>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddYear} loading={addingYear}>
-                  + Add Year
-                </Button>
-              </div>
-              {openYears.length === 0 ? (
-                <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                  No academic years added yet for this college - use &quot;+ Add Year&quot; above.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-                  {openYears.map((y) => (
-                    <label key={y.yearNumber} className="flex items-center gap-1.5 text-sm">
-                      <Checkbox
-                        checked={assignedYears.includes(y.yearNumber)}
-                        onCheckedChange={(checked) => toggleAssignedYear(y.yearNumber, !!checked)}
-                      />
-                      {yearOrdinalLabel(y.yearNumber)}
-                    </label>
-                  ))}
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">Which years of study this department currently teaches. HODs can only create sections for these years.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Secondary Departments</Label>
-              {(() => {
-                const options = allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId);
-                return options.length > 0 ? (
-                  <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-                    {options.map((d) => (
-                      <label key={d.id} className="flex items-center gap-1.5 text-sm">
-                        <Checkbox
-                          checked={secondaryDepartments.includes(d.name)}
-                          onCheckedChange={(checked) => toggleSecondaryDepartment(d.name, !!checked)}
-                        />
-                        {d.name}
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                    No other top-level departments yet
-                  </p>
-                );
-              })()}
-              <p className="text-xs text-muted-foreground">
-                Optional - every section College Office creates under this department will be cross-listed to all
-                selected departments, so each one&apos;s HOD gets automatic view-only access to its students,
-                roster, and assigned faculty (e.g. a shared first-year department feeding both CSE and ECE).
-              </p>
-            </div>
+            <YearsTaughtAndSecondaryFields
+              openYears={openYears}
+              onAddYear={handleAddYear}
+              isAddingYear={addingYear}
+              assignedYears={assignedYears}
+              onToggleYear={toggleAssignedYear}
+              yearsHelperText="Which years of study this department currently teaches. HODs can only create sections for these years."
+              secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId)}
+              secondaryDepartments={secondaryDepartments}
+              onToggleSecondaryDepartment={toggleSecondaryDepartment}
+            />
 
             {!department?.parentDepartmentId && (
               <div className="flex items-start gap-2 rounded-md border p-3">
@@ -327,39 +270,6 @@ export default function EditDepartmentPage() {
                     The HOD will get a &quot;Sub-Departments&quot; page to add sub-departments and assign sub-HODs.
                   </p>
                 </div>
-              </div>
-            )}
-
-            {isCommonYearCandidate && (
-              <div className="space-y-2 rounded-md border p-3">
-                <Label>First-Year Period</Label>
-                <p className="text-xs text-muted-foreground">
-                  Approximately when this shared first year runs. Optional and advisory - it gives the
-                  &quot;Advance First-Year Cohort&quot; screen its context and never blocks anything.
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="common-year-start" className="text-xs font-normal">Starts</Label>
-                    <Input
-                      id="common-year-start"
-                      type="date"
-                      value={commonYearStart}
-                      onChange={(e) => setCommonYearStart(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="common-year-end" className="text-xs font-normal">Ends</Label>
-                    <Input
-                      id="common-year-end"
-                      type="date"
-                      value={commonYearEnd}
-                      onChange={(e) => setCommonYearEnd(e.target.value)}
-                    />
-                  </div>
-                </div>
-                {commonYearStart && commonYearEnd && commonYearEnd < commonYearStart && (
-                  <p className="text-sm text-destructive">End must be on or after the start.</p>
-                )}
               </div>
             )}
 
