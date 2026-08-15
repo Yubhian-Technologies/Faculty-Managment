@@ -12,8 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
-import { deriveHodScope, buildCourseGroups } from "@/lib/departments/hodScope";
-import { managerTeachingYears } from "@/lib/departments/managedBranches";
+import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
 import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
@@ -160,13 +159,19 @@ export default function TeachingAssignmentsPage() {
   // those sub-departments manage: CIVIL's own [2,3,4] belongs to CIVIL's own
   // HOD, and only the shared year its manager teaches is Basic Science's to
   // staff - which the parent fallback already contributes.
+  //
+  // Uses managerEffectiveYears (catalogId-aware), not the flat-only
+  // managerTeachingYears - a department with a per-course override (e.g. an
+  // independent M.Tech run on different years than its shared-first-year
+  // B.Tech) needs THIS course's own override, not always its flat
+  // assignedYears.
   const yearOptions = useMemo(() => {
     if (!course) return [];
     const relevant = subDepartmentOptions.length > 0
       ? subDepartmentOptions
       : scope.ownDept ? [scope.ownDept] : [];
     const assigned = new Set<number>();
-    for (const d of relevant) for (const y of managerTeachingYears(departments, d)) assigned.add(y);
+    for (const d of relevant) for (const y of managerEffectiveYears(d, departments, course.catalogId)) assigned.add(y);
     const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
     return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
   }, [course, subDepartmentOptions, scope.ownDept, departments]);

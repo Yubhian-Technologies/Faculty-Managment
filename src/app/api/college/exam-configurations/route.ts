@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { examConfigId } from "@/lib/exams/internalExamMarks";
-import type { ExamConfigComponent, ExamConfiguration, Subject } from "@/types";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import type { DepartmentCourseScope, ExamConfigComponent, ExamConfiguration, Subject } from "@/types";
 
 // Broad read access — same role set already used for /api/college/subjects —
 // so the Exam Cell dashboard, Principal/HOD oversight, and the Faculty
@@ -97,6 +98,32 @@ export async function POST(request: Request) {
     if (!courseId || !department || !year) {
       return NextResponse.json({ error: "courseId, department and year are required" }, { status: 400 });
     }
+
+    const db = getAdminDb();
+
+    // The course+year combo must actually exist for a department that runs
+    // it - resolveDepartmentCourseScope (per-course override included), never
+    // a raw 1..durationYears span. Previously unchecked: Exam Cell could
+    // create a configuration for a Course+Year+Department a department never
+    // actually teaches (e.g. Basic Science, Year 3, on a shared 4-year
+    // B.Tech course it only opens Year 1 of).
+    const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId).get();
+    if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    const course = courseSnap.data() as { departmentId?: string; catalogId?: string; durationYears?: number };
+    if (course.durationYears != null && (year < 1 || year > course.durationYears)) {
+      return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears}` }, { status: 400 });
+    }
+    if (course.departmentId) {
+      const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").doc(course.departmentId).get();
+      if (deptSnap.exists) {
+        const deptDoc = deptSnap.data() as { assignedYears?: number[]; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope> };
+        const assignedYears = resolveDepartmentCourseScope(deptDoc, course.catalogId).assignedYears;
+        if (assignedYears.length > 0 && !assignedYears.includes(Number(year))) {
+          return NextResponse.json({ error: `"${department}" is not assigned to teach Year ${year}` }, { status: 400 });
+        }
+      }
+    }
+
     if (typeof internalMaxMarks !== "number" || internalMaxMarks <= 0) {
       return NextResponse.json({ error: "Internal Maximum Marks must be a positive number" }, { status: 400 });
     }
@@ -121,8 +148,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    const db = getAdminDb();
 
     // requireCollegeMember only decodes the session cookie (uid/role/collegeId) —
     // the actor's display name lives in their Firestore user record.

@@ -14,7 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { parseExcelFile, parseCSV, matchHeaders, getUnmatchedHeaders, readFileAsText } from "@/lib/utils/csv";
 import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
-import type { AcademicYear, Department, Section, StudentRecord } from "@/types";
+import type { AcademicYear, Course, Department, Section, StudentRecord } from "@/types";
 
 const GRADUATE = "GRADUATE" as const;
 
@@ -40,6 +40,7 @@ export default function StudentPromotionsPage() {
   const [sections, setSections] = useState<Section[]>([]);
   const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [isLoadingContext, setIsLoadingContext] = useState(true);
 
   const [advancePreview, setAdvancePreview] = useState<AdvancePreview | null>(null);
@@ -66,11 +67,13 @@ export default function StudentPromotionsPage() {
       fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>).then((d) => d.sections ?? []),
       fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>).then((d) => (d.academicYears ?? []).filter((y) => y.isActive)),
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => d.departments ?? []),
+      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => d.courses ?? []),
     ])
-      .then(([sections, years, depts]) => {
+      .then(([sections, years, depts, courses]) => {
         setSections(sections);
         setOpenYears(years);
         setDepartments(depts);
+        setCourses(courses);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load sections" }))
       .finally(() => setIsLoadingContext(false));
@@ -138,9 +141,19 @@ export default function StudentPromotionsPage() {
   }
 
   const sourceSection = sections.find((s) => s.id === sourceSectionId) ?? null;
+  const sourceCourse = sourceSection ? courses.find((c) => c.id === sourceSection.courseId) ?? null : null;
+  // Whether a section's cohort graduates (rather than moves up a year) is
+  // this course's own duration, not the college-wide highest open academic
+  // year - a 4-year B.Tech section must graduate at year 4 even if some other
+  // course on campus (e.g. a 5-year Pharm.D) keeps year 5 "open" college-wide.
+  // Falls back to the old college-wide heuristic only if the section's course
+  // can't be resolved (e.g. deleted course), so this never regresses to "no
+  // graduation option at all".
   const maxActiveYear = openYears.length > 0 ? Math.max(...openYears.map((y) => y.yearNumber)) : 4;
   const nextYear = sourceSection ? sourceSection.year + 1 : null;
-  const isFinalYear = sourceSection ? sourceSection.year >= maxActiveYear : false;
+  const isFinalYear = sourceSection
+    ? sourceSection.year >= (sourceCourse?.durationYears ?? maxActiveYear)
+    : false;
 
   useEffect(() => {
     if (!sourceSection) {
@@ -327,7 +340,11 @@ export default function StudentPromotionsPage() {
       toast({ variant: "destructive", title: "Select at least one student" });
       return;
     }
-    if (toPromote.some((s) => !rowTargets[s.id])) {
+    // Final year has no per-student target to fill in - every row shows the
+    // same static "Graduate" label instead of a Select (see the table below),
+    // so rowTargets is never populated for these rows. Only non-final-year
+    // rows need the per-student check.
+    if (!isFinalYear && toPromote.some((s) => !rowTargets[s.id])) {
       toast({ variant: "destructive", title: "Every selected student needs a target (or Graduate)" });
       return;
     }
@@ -336,7 +353,7 @@ export default function StudentPromotionsPage() {
     try {
       const groups: Record<string, string[]> = {};
       for (const s of toPromote) {
-        const target = rowTargets[s.id];
+        const target = isFinalYear ? GRADUATE : rowTargets[s.id];
         (groups[target] ??= []).push(s.id);
       }
 
@@ -347,7 +364,7 @@ export default function StudentPromotionsPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(
               target === GRADUATE
-                ? { studentIds, action: "GRADUATE" }
+                ? { studentIds, action: "GRADUATE", sourceSectionId: sourceSection!.id }
                 : { studentIds, action: "PROMOTE", targetSectionId: target }
             ),
           })

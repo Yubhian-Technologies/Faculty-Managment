@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, BookOpen, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { Course, Department, Section, Subject, CourseYearTiming, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 
 export interface StagedSlot {
   localId: string;
@@ -70,6 +71,7 @@ interface Props {
 export function TeachingAssignmentsEditor({ value, onChange }: Props) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
   const [sectionsCache, setSectionsCache] = useState<Record<string, Section[]>>({});
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
   const [timingCache, setTimingCache] = useState<Record<string, CourseYearTiming | null>>({});
@@ -229,7 +231,16 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
 
   function renderRow(row: StagedTeachingRow) {
         const course = courses.find((c) => c.id === row.courseId) ?? null;
-        const yearOptions = course ? Array.from({ length: course.durationYears }, (_, i) => i + 1) : [];
+        // Scoped to the course's own department (resolveDepartmentCourseScope),
+        // not the raw 1..durationYears span - a department only teaches the
+        // years the Principal actually assigned it.
+        const yearOptions = (() => {
+          if (!course) return [];
+          const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
+          const dept = departmentById.get(course.departmentId);
+          const assigned = dept ? resolveDepartmentCourseScope(dept, course.catalogId).assignedYears : [];
+          return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+        })();
         const key = `${row.courseId}_${row.year}`;
         const sections = sectionsCache[key] ?? [];
         const subjects = subjectsCache[key] ?? [];

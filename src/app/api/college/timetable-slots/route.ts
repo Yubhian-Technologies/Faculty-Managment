@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import type { DayOfWeek } from "@/types";
 
 export async function GET(request: Request) {
@@ -53,6 +54,18 @@ export async function POST(request: Request) {
       facultyId: string; facultyName: string; courseId: string; year: number;
       sectionId: string; subjectId: string; subjectName: string; department: string;
     };
+
+    // This pins a slot straight into a section's published timetable - an
+    // HOD may only do that for their own department (or one they own/manage),
+    // same restriction as publish/route.ts and timetable/draft above. Was
+    // previously unchecked - any HOD who knew/guessed another department's
+    // assignmentId could pin a slot into that department's section.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, assignment.department)) {
+        return NextResponse.json({ error: "That teaching assignment is not in your department" }, { status: 403 });
+      }
+    }
 
     const conflict = await collegeRef.collection("timetableSlots")
       .where("sectionId", "==", assignment.sectionId)
