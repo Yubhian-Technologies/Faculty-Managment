@@ -144,7 +144,10 @@ export async function PATCH(
     if (body.departmentId != null) {
       const targetDeptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").doc(body.departmentId).get();
       if (!targetDeptSnap.exists) return NextResponse.json({ error: "Department not found" }, { status: 404 });
-      const targetDept = targetDeptSnap.data() as { name?: string; parentDepartmentId?: string; assignedYears?: number[]; secondaryDepartments?: string[] };
+      const targetDept = targetDeptSnap.data() as {
+        name?: string; parentDepartmentId?: string; assignedYears?: number[];
+        secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>;
+      };
       const targetDeptName = targetDept.name ?? "";
 
       if (hodScope && !canHodEditDepartmentId(hodScope, body.departmentId)) {
@@ -155,7 +158,11 @@ export async function PATCH(
         return NextResponse.json({ error: "This section's course does not belong to the selected department" }, { status: 400 });
       }
 
-      const assignedYears = targetDept.assignedYears ?? [];
+      // Per-course override aware (resolveDepartmentCourseScope), not a direct
+      // `assignedYears` read - a target department with a per-course override
+      // (e.g. an independent M.Tech run on different years than its shared
+      // B.Tech) needs THIS course's own override, not always its flat years.
+      const assignedYears = resolveDepartmentCourseScope(targetDept, course?.catalogId).assignedYears;
       if (targetYear != null && assignedYears.length > 0 && !assignedYears.includes(Number(targetYear))) {
         return NextResponse.json({ error: `"${targetDeptName}" is not assigned to teach Year ${targetYear}` }, { status: 400 });
       }

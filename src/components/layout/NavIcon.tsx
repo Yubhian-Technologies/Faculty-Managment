@@ -50,6 +50,7 @@ import {
   AtSign,
   FlaskConical,
   Send,
+  Award,
   type LucideProps,
 } from "lucide-react";
 
@@ -105,6 +106,7 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   AtSign,
   FlaskConical,
   Send,
+  Award,
 };
 
 export function NavIcon({ name, ...props }: { name: string } & LucideProps) {

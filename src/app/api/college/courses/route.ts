@@ -6,29 +6,47 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getRelatedDepartmentIds } from "@/lib/departments/scope";
 import { isSharedYearStructuralDepartment, findUnconnectedCourseOwners, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { validateAssignedYears, validateSecondaryDepartmentNames } from "@/lib/departments/courseScopeValidation";
+import { deriveHodScope } from "@/lib/departments/hodScope";
+import type { Department } from "@/types";
 
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "EXAM_CELL", "DEAN");
     const { searchParams } = new URL(request.url);
-    let departmentId = searchParams.get("departmentId");
+    const explicitDepartmentId = searchParams.get("departmentId");
+    let departmentId = explicitDepartmentId;
 
     const db = getAdminDb();
 
-    if (!departmentId && session.role === "HOD") {
+    if (session.role === "HOD") {
       const userSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
       const deptName = (userSnap.data() as { department?: string } | undefined)?.department;
-      if (deptName) {
-        const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
-          .where("name", "==", deptName).limit(1).get();
-        if (deptSnap.empty) {
-          departmentId = "__none__";
-        } else {
-          // A sub-department never owns courses of its own - it shares its
-          // parent's program - so a sub-HOD resolves courses against the
-          // parent instead, same fallback already used for section creation.
-          const deptData = deptSnap.docs[0].data() as { parentDepartmentId?: string };
-          departmentId = deptData.parentDepartmentId ?? deptSnap.docs[0].id;
+
+      if (!explicitDepartmentId) {
+        if (deptName) {
+          const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
+            .where("name", "==", deptName).limit(1).get();
+          if (deptSnap.empty) {
+            departmentId = "__none__";
+          } else {
+            // A sub-department never owns courses of its own - it shares its
+            // parent's program - so a sub-HOD resolves courses against the
+            // parent instead, same fallback already used for section creation.
+            const deptData = deptSnap.docs[0].data() as { parentDepartmentId?: string };
+            departmentId = deptData.parentDepartmentId ?? deptSnap.docs[0].id;
+          }
+        }
+      } else {
+        // An explicitly-requested departmentId (Teaching Assignments/Sections
+        // asking for a specific scope department's courses) must actually be
+        // within this HOD's own scope - own department, parent (sub-HOD),
+        // real sub-departments, or managed branches - never an arbitrary
+        // department elsewhere in the college. Was previously unchecked.
+        const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+        const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
+        const scope = deriveHodScope(departments, deptName);
+        if (!scope.deptOptions.some((d) => d.id === explicitDepartmentId)) {
+          return NextResponse.json({ error: "That department is outside your scope" }, { status: 403 });
         }
       }
     }

@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTimetableContext, pinnedCells, type TimetableContext } from "@/lib/timetable/loadContext";
 import { isContiguousBlockAvailable } from "@/lib/timetable/buildGrid";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import type { DayOfWeek, DraftSlot, TimetableDraft } from "@/types";
 
 // Read, hand-build, hand-edit, or discard the draft for one section.
@@ -134,6 +135,22 @@ export async function GET(request: Request) {
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
 
     const db = getAdminDb();
+
+    // A draft is an in-progress, unpublished timetable - unlike the published
+    // slots (visible college-wide by design), only the section's own
+    // department (or an HOD who owns/manages it) may see or touch it. Checked
+    // against the SECTION's department, not just an existing draft's, so this
+    // also protects a section that has no draft yet.
+    if (session.role === "HOD") {
+      const sectionSnap = await db.collection("colleges").doc(session.collegeId).collection("sections").doc(sectionId).get();
+      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      const section = sectionSnap.data() as { department: string };
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, section.department)) {
+        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      }
+    }
+
     const draft = await loadDraft(db, session.collegeId, sectionId);
     return NextResponse.json({ draft });
   } catch (err) {
@@ -161,6 +178,13 @@ export async function POST(request: Request) {
         { error: "No period timing is configured for this course year." },
         { status: 409 },
       );
+    }
+
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, ctx.section.department)) {
+        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      }
     }
 
     const draft = {
@@ -214,6 +238,13 @@ export async function PATCH(request: Request) {
     ]);
     if (!ctx || !ctx.timing) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     if (!draft) return NextResponse.json({ error: "No draft to edit" }, { status: 404 });
+
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, ctx.section.department)) {
+        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      }
+    }
 
     let slots: DraftSlot[];
 
@@ -321,9 +352,27 @@ export async function DELETE(request: Request) {
     const sectionId = searchParams.get("sectionId");
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
 
+    const db = getAdminDb();
+    const ref = draftRef(db, session.collegeId, sectionId);
+
+    // An HOD could otherwise wipe another department's in-progress,
+    // unpublished timetable outright - checked against the draft's own
+    // stored `department` (set at creation, see POST above), no extra
+    // Section read needed. Nothing to protect if no draft exists yet.
+    if (session.role === "HOD") {
+      const snap = await ref.get();
+      if (snap.exists) {
+        const department = (snap.data() as { department?: string }).department;
+        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+        if (!department || !canHodEditDepartment(scope, department)) {
+          return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+        }
+      }
+    }
+
     // Discards the draft only. Published slots in `timetableSlots` are untouched,
     // so this can never remove a live timetable.
-    await draftRef(getAdminDb(), session.collegeId, sectionId).delete();
+    await ref.delete();
 
     return NextResponse.json({ ok: true });
   } catch (err) {
