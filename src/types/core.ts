@@ -1257,6 +1257,17 @@ export interface StudentRecord {
   handicappedType?: "H" | "V" | "O"; // Hearing / Visual / Other - only meaningful when physicallyHandicapped
   identificationMarks?: string;
   remarks?: string;
+  // ─── Graduation snapshot ────────────────────────────────────────────────
+  // Set once, when `status` flips to GRADUATED (students/promote route). The
+  // student's department/section/year are left untouched by graduation (they
+  // stay whatever their final-year section was), so these three exist purely
+  // to make that final cohort's programme + batch queryable/displayable
+  // without joining back to a Section doc that could later be edited or
+  // removed - a graduate's record shouldn't be able to drift after the fact.
+  graduatedAt?: Timestamp;
+  graduationBatch?: string; // Section.batch at graduation, e.g. "2021-2025"
+  graduationCourseId?: string;
+  graduationCourseName?: string; // e.g. "B.Tech"
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

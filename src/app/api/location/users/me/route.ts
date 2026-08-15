@@ -14,14 +14,16 @@ export async function GET() {
   try {
     const session = await requireLocationMember(...LOCATION_ROLES);
     const db = getAdminDb();
-    const snap = await db
-      .collection("locations").doc(session.locationId)
-      .collection("locationUsers").doc(session.uid)
-      .get();
+    const locationRef = db.collection("locations").doc(session.locationId);
+    const [snap, locationSnap] = await Promise.all([
+      locationRef.collection("locationUsers").doc(session.uid).get(),
+      locationRef.get(),
+    ]);
     if (!snap.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
-    return NextResponse.json({ user: { uid: snap.id, ...snap.data() } });
+    const locationName = (locationSnap.data() as { name?: string } | undefined)?.name ?? "";
+    return NextResponse.json({ user: { uid: snap.id, ...snap.data() }, locationName });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_LOCATION_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

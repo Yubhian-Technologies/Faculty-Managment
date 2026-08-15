@@ -7,6 +7,7 @@ import type { SubjectType } from "@/types";
 import {
   getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames, resolveSubjectDepartment,
 } from "@/lib/departments/scope";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 
 export async function GET(request: Request) {
   try {
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
 
       const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId).get();
       if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
-      const course = courseSnap.data() as { name: string; departmentId: string; durationYears: number };
+      const course = courseSnap.data() as { name: string; departmentId: string; durationYears: number; catalogId?: string };
       if (year < 1 || year > course.durationYears) {
         return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
       }
@@ -165,6 +166,26 @@ export async function POST(request: Request) {
         // one shared 1st-year list; other years (2nd year onward) stay filed
         // under the department actually selected (IT for IT, CS for CS, ...).
         dept = await resolveSubjectDepartment(db, session.collegeId, requestedDept, Number(year));
+      }
+
+      // The department the subject is finally filed under (own, a
+      // sub-department, or a feeder rerouted to by resolveSubjectDepartment)
+      // must actually be assigned to teach this year for this course - the
+      // course-span check above only rules out an impossible year, not one
+      // this specific department has no business in (e.g. Basic Science
+      // offering only Year 1 of a 4-year B.Tech it shares with its branches).
+      const scopeDeptSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("departments").where("name", "==", dept).limit(1).get();
+      if (!scopeDeptSnap.empty) {
+        const scopeDept = scopeDeptSnap.docs[0].data() as {
+          assignedYears?: number[];
+          secondaryDepartments?: string[];
+          courseScopes?: Record<string, { assignedYears: number[]; secondaryDepartments: string[] }>;
+        };
+        const assignedYears = resolveDepartmentCourseScope(scopeDept, course.catalogId).assignedYears;
+        if (assignedYears.length > 0 && !assignedYears.includes(Number(year))) {
+          return NextResponse.json({ error: `"${dept}" is not assigned to teach Year ${year}` }, { status: 400 });
+        }
       }
 
       const ref = await db

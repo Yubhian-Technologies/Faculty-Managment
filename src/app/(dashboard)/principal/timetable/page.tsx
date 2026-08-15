@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "@/hooks/useToast";
 import { buildRows } from "@/lib/timetable/buildGrid";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -110,6 +111,17 @@ export default function PrincipalTimetablePage() {
   // The one concrete Course doc the two selections resolve to.
   const course = courses.find((c) => c.name === courseName && c.departmentId === departmentId) ?? null;
   const courseId = course?.id ?? "";
+  // Scoped to the picked department's own "Years Taught" for this course
+  // (resolveDepartmentCourseScope), not the raw 1..durationYears span - e.g.
+  // Basic Science only ever published a 1st-year timetable for a shared
+  // 4-year B.Tech course, so 2nd-4th shouldn't even be offered here.
+  const yearOptions = (() => {
+    if (!course) return [];
+    const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
+    const dept = departments.find((d) => d.id === departmentId);
+    const assigned = dept ? resolveDepartmentCourseScope(dept, course.catalogId).assignedYears : [];
+    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+  })();
 
   // Sections + timing for the resolved course-year. Downstream state is cleared
   // by the choose* handlers, so this effect never has to reset anything itself.
@@ -203,11 +215,9 @@ export default function PrincipalTimetablePage() {
             disabled={!course}
           >
             <option value="">Select a year</option>
-            {course
-              ? Array.from({ length: course.durationYears }, (_, i) => i + 1).map((y) => (
-                  <option key={y} value={y}>{ordinalYear(y)}</option>
-                ))
-              : null}
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>{ordinalYear(y)}</option>
+            ))}
           </select>
         </div>
 

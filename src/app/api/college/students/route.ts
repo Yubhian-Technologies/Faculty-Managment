@@ -8,7 +8,8 @@ import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
-import type { Section, StudentRecord, StudentStatus } from "@/types";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import type { Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
 
 // Sections a PANEL_MEMBER (faculty) is in charge of - students are only visible/
 // editable within these. Returns [] if the faculty isn't assigned to any section.
@@ -254,6 +255,25 @@ export async function POST(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (dept && !canHodEditDepartment(scope, dept)) {
         return NextResponse.json({ error: "That department is not yours or one you manage" }, { status: 403 });
+      }
+    }
+
+    // An unassigned add's year must be one this department is actually
+    // assigned to teach (resolveDepartmentCourseScope - no course is chosen
+    // for an unassigned add, so this reads the department's flat years only).
+    // A student added straight into an existing section instead already
+    // inherits a year that section itself was validated against at creation
+    // (sections POST), so this only needs to apply to the unassigned path.
+    if (!sectionName && dept) {
+      const deptScopeSnap = await collegeRef.collection("departments").where("name", "==", dept).limit(1).get();
+      if (!deptScopeSnap.empty) {
+        const deptScopeDoc = deptScopeSnap.docs[0].data() as {
+          assignedYears?: number[]; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>;
+        };
+        const assignedYears = resolveDepartmentCourseScope(deptScopeDoc, undefined).assignedYears;
+        if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
+          return NextResponse.json({ error: `"${dept}" is not assigned to teach Year ${body.year}` }, { status: 400 });
+        }
       }
     }
 

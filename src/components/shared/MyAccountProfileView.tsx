@@ -26,12 +26,22 @@ interface Props {
 export function MyAccountProfileView({ basePath, fetchEndpoint, photoEndpoint }: Props) {
   const { user } = useAuth();
   const [phone, setPhone] = useState<string | undefined>(undefined);
+  // Only present for LOCATION-scoped roles - /api/location/users/me resolves
+  // and returns both; /api/admin/users/me (GLOBAL roles) has neither, since a
+  // Super Admin/Management/Finance/Purchase Dept user isn't tied to one
+  // location, so both stay unset and their fields below stay hidden.
+  const [department, setDepartment] = useState<string | undefined>(undefined);
+  const [locationName, setLocationName] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(fetchEndpoint)
-      .then((r) => r.json() as Promise<{ user?: { phone?: string } }>)
-      .then((d) => setPhone(d.user?.phone))
+      .then((r) => r.json() as Promise<{ user?: { phone?: string; department?: string }; locationName?: string }>)
+      .then((d) => {
+        setPhone(d.user?.phone);
+        setDepartment(d.user?.department);
+        setLocationName(d.locationName);
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
       .finally(() => setLoading(false));
   }, [fetchEndpoint]);
@@ -61,10 +71,22 @@ export function MyAccountProfileView({ basePath, fetchEndpoint, photoEndpoint }:
               <p className="text-xs text-muted-foreground">Role</p>
               <p className="text-sm font-medium">{ROLE_LABELS[user.role]}</p>
             </div>
+            {locationName && (
+              <div>
+                <p className="text-xs text-muted-foreground">Location</p>
+                <p className="text-sm font-medium">{locationName}</p>
+              </div>
+            )}
             <div>
               <p className="text-xs text-muted-foreground">Phone</p>
               <p className="text-sm font-medium">{loading ? "…" : phone || "-"}</p>
             </div>
+            {department && (
+              <div>
+                <p className="text-xs text-muted-foreground">Department</p>
+                <p className="text-sm font-medium">{department}</p>
+              </div>
+            )}
           </div>
           <div className="flex justify-end pt-4 border-t">
             <Button asChild>
