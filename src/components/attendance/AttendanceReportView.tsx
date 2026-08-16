@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CheckCircle2, ShieldCheck, Search, Download } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { CheckCircle2, ShieldCheck, Search, Download, Pencil, CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -9,10 +10,13 @@ import { TableSkeleton } from "@/components/shared/SkeletonLoader";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { exportToCSV } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, type Department, type Course } from "@/types";
 
 interface RosterEntry {
@@ -90,7 +94,8 @@ function CheckOutCell({ row }: { row: RosterEntry }) {
   ) : <>—</>;
 }
 
-function RosterTable({ rows }: { rows: RosterEntry[] }) {
+function RosterTable({ rows, onMark, monthlyViewBasePath }: { rows: RosterEntry[]; onMark?: (row: RosterEntry) => void; monthlyViewBasePath?: string }) {
+  const showActions = !!onMark || !!monthlyViewBasePath;
   return (
     <div className="rounded-lg border overflow-hidden">
       <div className="overflow-x-auto">
@@ -101,6 +106,7 @@ function RosterTable({ rows }: { rows: RosterEntry[] }) {
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Status</th>
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Check In</th>
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Check Out</th>
+              {showActions && <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap" />}
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -110,6 +116,24 @@ function RosterTable({ rows }: { rows: RosterEntry[] }) {
                 <td className="px-4 py-3 whitespace-nowrap"><StatusCell row={row} /></td>
                 <td className="px-4 py-3 whitespace-nowrap"><CheckInCell row={row} /></td>
                 <td className="px-4 py-3 whitespace-nowrap"><CheckOutCell row={row} /></td>
+                {showActions && (
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {monthlyViewBasePath && (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`${monthlyViewBasePath}/${row.uid}`}>
+                            <CalendarDays className="h-3.5 w-3.5 mr-1" /> This Month
+                          </Link>
+                        </Button>
+                      )}
+                      {onMark && (
+                        <Button variant="outline" size="sm" onClick={() => onMark(row)}>
+                          <Pencil className="h-3.5 w-3.5 mr-1" /> Mark
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -127,9 +151,27 @@ interface AttendanceReportViewProps {
   // course instead of the flat table. Opt-in so the HOD's department-scoped
   // report keeps its existing flat layout untouched.
   groupByDepartmentAndCourse?: boolean;
+  // Shows a "Mark" action that opens a dialog to set check-in/out on
+  // someone's behalf (POST /api/college/attendance/manual) - for when they
+  // can't complete the self-attendance flow themselves (most commonly:
+  // checked in, then left campus for official work, so the on-campus
+  // geofence blocks their own check-out). Wired to whichever row(s) the
+  // caller is actually authorized to mark - the API enforces that
+  // server-side regardless of this prop either way:
+  //   - Flat (non-grouped) table: every Faculty row - HOD's own report.
+  //   - Grouped table: only the HOD row, never Faculty - Principal/VP's
+  //     report, mirroring the face-registration reset cascade (one tier at
+  //     a time; Principal doesn't skip past the HOD to mark Faculty here).
+  allowManualMark?: boolean;
+  // Adds a "This Month" link (to `${monthlyViewBasePath}/${uid}`) next to
+  // Mark, opening PersonMonthlyAttendanceView for that person - the whole
+  // month at a glance instead of one date at a time. Same row scoping as
+  // allowManualMark; pass the caller's own base route (e.g.
+  // "/hod/faculty-attendance" or "/principal/attendance-report").
+  monthlyViewBasePath?: string;
 }
 
-export function AttendanceReportView({ title, description, groupByDepartmentAndCourse }: AttendanceReportViewProps) {
+export function AttendanceReportView({ title, description, groupByDepartmentAndCourse, allowManualMark, monthlyViewBasePath }: AttendanceReportViewProps) {
   const [date, setDate] = useState(todayISO());
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -141,22 +183,67 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
 
+  const [markTarget, setMarkTarget] = useState<RosterEntry | null>(null);
+  const [manualCheckIn, setManualCheckIn] = useState("");
+  const [manualCheckOut, setManualCheckOut] = useState("");
+  const [manualReason, setManualReason] = useState("");
+  const [isMarking, setIsMarking] = useState(false);
+
+  const loadRoster = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/college/attendance/report?date=${date}`);
+      const d = await res.json() as { roster: RosterEntry[]; error?: string };
+      setRoster(d.roster ?? []);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to load attendance report" });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [date]);
+
   useEffect(() => {
     // Wrapped so setState calls aren't reachable synchronously from the
     // effect body (react-hooks/set-state-in-effect).
-    void (async () => {
-      setIsLoading(true);
-      try {
-        const res = await fetch(`/api/college/attendance/report?date=${date}`);
-        const d = await res.json() as { roster: RosterEntry[]; error?: string };
-        setRoster(d.roster ?? []);
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load attendance report" });
-      } finally {
-        setIsLoading(false);
+    void (async () => { await loadRoster(); })();
+  }, [loadRoster]);
+
+  function openMarkDialog(row: RosterEntry) {
+    setMarkTarget(row);
+    setManualCheckIn(row.checkIn ?? "");
+    setManualCheckOut(row.checkOut ?? "");
+    setManualReason("");
+  }
+
+  async function handleManualMark() {
+    if (!markTarget) return;
+    setIsMarking(true);
+    try {
+      const res = await fetch("/api/college/attendance/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          facultyId: markTarget.uid,
+          date,
+          checkIn: manualCheckIn || undefined,
+          checkOut: manualCheckOut || undefined,
+          reason: manualReason,
+        }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to mark attendance" });
+        return;
       }
-    })();
-  }, [date]);
+      toast({ title: `Attendance updated for ${markTarget.name}` });
+      setMarkTarget(null);
+      await loadRoster();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to mark attendance" });
+    } finally {
+      setIsMarking(false);
+    }
+  }
 
   useEffect(() => {
     if (!groupByDepartmentAndCourse) return;
@@ -186,6 +273,10 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   }, [groupByDepartmentAndCourse, selectedDepartmentId]);
 
   const presentCount = roster.filter((r) => r.status === "PRESENT").length;
+  // Editing (not viewing) is only allowed for the current month, up to the
+  // 25th - see isManualEditWindowOpen. "This Month"/viewing stays available
+  // regardless; only the "Mark" action is gated by this.
+  const canEditSelectedDate = isManualEditWindowOpen(new Date(`${date}T00:00:00`));
 
   const columns: Column<RosterEntry>[] = [
     { key: "name", header: "Faculty" },
@@ -193,6 +284,29 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     { key: "status", header: "Status", render: (row) => <StatusCell row={row} /> },
     { key: "checkIn", header: "Check In", render: (row) => <CheckInCell row={row} /> },
     { key: "checkOut", header: "Check Out", render: (row) => <CheckOutCell row={row} /> },
+    ...(allowManualMark || monthlyViewBasePath
+      ? [{
+          key: "actions",
+          header: "",
+          render: (row: RosterEntry) =>
+            row.role === "PANEL_MEMBER" ? (
+              <div className="flex items-center gap-2">
+                {monthlyViewBasePath && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`${monthlyViewBasePath}/${row.uid}`}>
+                      <CalendarDays className="h-3.5 w-3.5 mr-1" /> This Month
+                    </Link>
+                  </Button>
+                )}
+                {allowManualMark && canEditSelectedDate && (
+                  <Button variant="outline" size="sm" onClick={() => openMarkDialog(row)}>
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Mark
+                  </Button>
+                )}
+              </div>
+            ) : null,
+        } satisfies Column<RosterEntry>]
+      : []),
   ];
 
   const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId) ?? null;
@@ -240,6 +354,10 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
           </div>
         )}
       </div>
+
+      {allowManualMark && !canEditSelectedDate && (
+        <p className="text-xs text-muted-foreground">{MANUAL_EDIT_WINDOW_CLOSED_MESSAGE}</p>
+      )}
 
       {groupByDepartmentAndCourse ? (
         <div className="space-y-4">
@@ -308,7 +426,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
                   <div className="space-y-2">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">HOD</h3>
                     {searchedHod ? (
-                      <RosterTable rows={[searchedHod]} />
+                      <RosterTable rows={[searchedHod]} onMark={allowManualMark && canEditSelectedDate ? openMarkDialog : undefined} monthlyViewBasePath={monthlyViewBasePath} />
                     ) : (
                       <p className="text-sm text-muted-foreground">No HOD assigned for this department.</p>
                     )}
@@ -341,6 +459,48 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
           csvFilename={`attendance-${date}`}
         />
       )}
+
+      {allowManualMark && (() => {
+        const checkOutNotAfterCheckIn = !!manualCheckIn && !!manualCheckOut && manualCheckOut <= manualCheckIn;
+        return (
+          <ConfirmDialog
+            open={!!markTarget}
+            onOpenChange={(open) => { if (!open) setMarkTarget(null); }}
+            title={`Mark attendance for ${markTarget?.name ?? "faculty"}?`}
+            description={`For ${date}. Use this when they can't complete self check-in/out themselves (e.g. they left campus for official work). This is recorded as a manual entry, distinct from a real face+location check-in.`}
+            confirmLabel="Save"
+            loading={isMarking}
+            confirmDisabled={!manualReason.trim() || (!manualCheckIn && !manualCheckOut) || checkOutNotAfterCheckIn}
+            onConfirm={() => void handleManualMark()}
+          >
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="manual-checkin">Check In</Label>
+                  <Input id="manual-checkin" type="time" value={manualCheckIn} onChange={(e) => setManualCheckIn(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="manual-checkout">Check Out</Label>
+                  <Input id="manual-checkout" type="time" value={manualCheckOut} onChange={(e) => setManualCheckOut(e.target.value)} />
+                </div>
+              </div>
+              {checkOutNotAfterCheckIn && (
+                <p className="text-xs text-destructive">Check-out must be after check-in.</p>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="manual-reason">Reason (required)</Label>
+                <Textarea
+                  id="manual-reason"
+                  value={manualReason}
+                  onChange={(e) => setManualReason(e.target.value)}
+                  rows={3}
+                  placeholder="Why are you marking this manually? e.g. Left campus at 2pm for an official site visit."
+                />
+              </div>
+            </div>
+          </ConfirmDialog>
+        );
+      })()}
     </div>
   );
 }

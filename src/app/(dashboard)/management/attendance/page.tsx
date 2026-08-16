@@ -109,14 +109,15 @@ function RosterTable({ rows }: { rows: Row[] }) {
   );
 }
 
-// Location -> College -> Principal -> Department -> Course -> HOD -> Faculty,
-// each level appearing only once its parent is picked, and each fetch scoped
-// by the previous selection - so only records belonging to the selected
-// hierarchy are ever shown. Every attendance value (status, check-in/out,
-// verified badge, the red Late badge) comes from the exact same
-// attendanceRecords data and isLateCheckIn 9:05 rule the Faculty/HOD/
-// Principal's own attendance pages use - this page only adds read-only,
-// cross-college navigation on top, never a second attendance mechanism.
+// Location -> College -> Principal + Vice Principal -> Department -> Course
+// -> HOD -> Faculty, each level appearing only once its parent is picked,
+// and each fetch scoped by the previous selection - so only records
+// belonging to the selected hierarchy are ever shown. Every attendance
+// value (status, check-in/out, verified badge, the red Late badge) comes
+// from the exact same attendanceRecords data and isLateCheckIn 9:05 rule
+// the Faculty/HOD/Principal/VP's own attendance pages use - this page only
+// adds read-only, cross-college navigation on top, never a second
+// attendance mechanism.
 export default function ManagementAttendancePage() {
   const [date, setDate] = useState(todayISO());
 
@@ -130,6 +131,13 @@ export default function ManagementAttendancePage() {
   const [isLoadingPrincipal, setIsLoadingPrincipal] = useState(false);
   const [selectedPrincipalUid, setSelectedPrincipalUid] = useState("");
   const [principalRow, setPrincipalRow] = useState<Row | null>(null);
+
+  // Vice Principal is shown alongside Principal, driven by the same College
+  // selection - it never gates Department/Course below (only Principal does)
+  // so no separate select control is needed, just a fetch-and-display row.
+  const [vicePrincipal, setVicePrincipal] = useState<{ uid: string; name: string } | null>(null);
+  const [isLoadingVicePrincipal, setIsLoadingVicePrincipal] = useState(false);
+  const [vicePrincipalRow, setVicePrincipalRow] = useState<Row | null>(null);
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
@@ -159,6 +167,8 @@ export default function ManagementAttendancePage() {
     setPrincipal(null);
     setSelectedPrincipalUid("");
     setPrincipalRow(null);
+    setVicePrincipal(null);
+    setVicePrincipalRow(null);
     setDepartments([]);
     setSelectedDepartmentId("");
     setCourses([]);
@@ -170,6 +180,8 @@ export default function ManagementAttendancePage() {
     setPrincipal(null);
     setSelectedPrincipalUid("");
     setPrincipalRow(null);
+    setVicePrincipal(null);
+    setVicePrincipalRow(null);
     setDepartments([]);
     setSelectedDepartmentId("");
     setCourses([]);
@@ -185,7 +197,7 @@ export default function ManagementAttendancePage() {
 
   const collegesForLocation = colleges.filter((c) => c.locationId === selectedLocationId);
 
-  // Principal + department list, once a College is selected.
+  // Principal + Vice Principal + department list, once a College is selected.
   useEffect(() => {
     void (async () => {
       if (!selectedCollegeId) return;
@@ -199,6 +211,13 @@ export default function ManagementAttendancePage() {
         })
         .catch(() => setPrincipal(null))
         .finally(() => setIsLoadingPrincipal(false));
+
+      setIsLoadingVicePrincipal(true);
+      fetch(`/api/management/colleges/${selectedCollegeId}/staff?role=VICE_PRINCIPAL`)
+        .then((r) => r.json() as Promise<{ profile: { uid?: string; name?: string } | null }>)
+        .then((d) => setVicePrincipal(d.profile?.uid ? { uid: d.profile.uid, name: d.profile.name ?? "" } : null))
+        .catch(() => setVicePrincipal(null))
+        .finally(() => setIsLoadingVicePrincipal(false));
 
       fetch(`/api/management/colleges/${selectedCollegeId}/departments`)
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
@@ -236,6 +255,35 @@ export default function ManagementAttendancePage() {
     })();
   }, [selectedCollegeId, selectedPrincipalUid, principal, date]);
 
+  // Vice Principal's own attendance for the selected date.
+  useEffect(() => {
+    void (async () => {
+      if (!selectedCollegeId || !vicePrincipal) { setVicePrincipalRow(null); return; }
+      const [y, m] = date.split("-").map(Number);
+      fetch(`/api/management/colleges/${selectedCollegeId}/vice-principal-attendance?year=${y}&month=${m}`)
+        .then((r) => r.json() as Promise<{ records: (AttendanceRecord & { id: string })[]; registered?: boolean }>)
+        .then((d) => {
+          const rec = (d.records ?? []).find((r) => {
+            const raw = r.date as unknown as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
+            const rd = raw
+              ? typeof raw.toDate === "function" ? raw.toDate() : new Date(((raw._seconds ?? raw.seconds) ?? 0) * 1000)
+              : null;
+            return rd ? dateKey(rd) === date : false;
+          });
+          setVicePrincipalRow({
+            uid: vicePrincipal.uid,
+            name: vicePrincipal.name,
+            status: rec?.status ?? (d.registered ? "NOT_MARKED" : "NOT_REGISTERED"),
+            checkIn: rec?.checkIn ?? null,
+            checkOut: rec?.checkOut ?? null,
+            checkInVerified: rec?.checkInVerified,
+            checkOutVerified: rec?.checkOutVerified,
+          });
+        })
+        .catch(() => setVicePrincipalRow(null));
+    })();
+  }, [selectedCollegeId, vicePrincipal, date]);
+
   const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId) ?? null;
   const selectedDepartmentName = selectedDepartment?.name ?? "";
 
@@ -271,7 +319,7 @@ export default function ManagementAttendancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Attendance" description="Location → College → Principal → Department → Course → HOD → Faculty" />
+      <PageHeader title="Attendance" description="Location → College → Principal/Vice Principal → Department → Course → HOD → Faculty" />
 
       <Card>
         <CardContent className="p-5 space-y-4">
@@ -377,6 +425,17 @@ export default function ManagementAttendancePage() {
             ) : (
               <p className="text-sm text-muted-foreground">
                 {isLoadingPrincipal ? "Loading…" : "No Principal assigned to this college."}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vice Principal</h3>
+            {vicePrincipalRow ? (
+              <RosterTable rows={[vicePrincipalRow]} />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {isLoadingVicePrincipal ? "Loading…" : "No Vice Principal assigned to this college."}
               </p>
             )}
           </div>

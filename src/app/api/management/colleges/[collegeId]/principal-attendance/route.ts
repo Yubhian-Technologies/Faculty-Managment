@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
+import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
 import type { AttendanceRecord, AttendanceSummary } from "@/types";
 
 // MANAGEMENT is read-only - this route only implements GET.
@@ -31,9 +32,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
     }
     const principalDoc = principalSnap.docs[0];
     const principalUid = principalDoc.id;
-    const principalData = principalDoc.data() as { name?: string; faceEmbedding?: number[] };
+    const principalData = principalDoc.data() as { name?: string; department?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
     const principalName = principalData.name ?? "";
     const registered = Array.isArray(principalData.faceEmbedding) && principalData.faceEmbedding.length > 0;
+    const registeredAt = principalData.faceRegisteredAt ? principalData.faceRegisteredAt.toDate() : null;
 
     const summaryId = `${principalUid}_${year}_${month}`;
     const summarySnap = await collegeRef.collection("attendanceSummaries").doc(summaryId).get();
@@ -56,12 +58,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
 
     await closeMissedCheckouts(db, records);
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the real records
+    const realRecords = records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec);
+    const filledRecords = fillMissingDays(realRecords, monthStart, monthEnd, registeredAt, {
+      collegeId, facultyId: principalUid, facultyName: principalName, department: principalData.department ?? "",
+    });
+
     return NextResponse.json({
       principalName,
       registered,
       summary,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the response
-      records: records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec),
+      records: filledRecords,
     });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {

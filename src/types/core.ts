@@ -1298,6 +1298,7 @@ export type NotificationType =
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
+  | "ATTENDANCE_MANUALLY_MARKED"
   // Permission & On-Duty
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"
