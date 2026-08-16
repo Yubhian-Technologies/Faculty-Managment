@@ -21,6 +21,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       collegeId?: string;
       action?: "APPROVE" | "REJECT";
       remarks?: string;
+      isPaidLeave?: boolean;
     };
 
     if (!body.collegeId) {
@@ -40,11 +41,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "This request is no longer pending" }, { status: 400 });
     }
 
+    // A Principal's own Other leave has no HOD in its chain to have already
+    // tagged paid/unpaid (see the same requirement on the Principal's own
+    // PENDING_PRINCIPAL decision, applications/[id]/route.ts) - Management
+    // decides it themselves, in the same Approve action, since there's no
+    // further stage to forward to.
+    if (body.action === "APPROVE" && req.isOtherRequest && req.isPaidLeave === undefined) {
+      if (typeof body.isPaidLeave !== "boolean") {
+        return NextResponse.json({ error: "Select paid or unpaid before approving" }, { status: 400 });
+      }
+    }
+
     await decideFinalStageLeave({
       db, collegeId: body.collegeId, id, req,
       action: body.action, remarks: body.remarks,
       decidedByUid: session.uid, decidedByEmail: session.email,
       decider: "MANAGEMENT",
+      isPaidLeave: body.isPaidLeave,
     });
 
     return NextResponse.json({ ok: true });

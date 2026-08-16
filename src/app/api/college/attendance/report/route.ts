@@ -4,17 +4,41 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
+import { isSunday } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceRecord } from "@/types";
 
 interface RosterEntry {
   uid: string;
   name: string;
   department: string;
-  status: string; // AttendanceStatus, or "NOT_MARKED" when no record exists yet for the day
+  role: "PANEL_MEMBER" | "HOD";
+  // Course id(s) (Course.id in the `courses` collection) this faculty has an
+  // explicit teaching assignment under, derived from teachingAssignments and
+  // matched by courseId — teachingAssignments also carries a free-text
+  // courseName, but that's a denormalized copy that isn't guaranteed to match
+  // the course's actual current name (seen in real data: an assignment's
+  // courseName of "BACHELOR OF TECHNOLOGY" for a course whose actual name is
+  // "Bachelors of Technology" — courseId is the reliable foreign key). Only
+  // populated for college-wide (non-HOD) callers, since only the Principal's
+  // report filters by it. Empty when the faculty has no course-linked
+  // teaching assignment on record — the Principal's report treats that as
+  // "not yet disambiguated" rather than "belongs to no course".
+  courseIds?: string[];
+  // AttendanceStatus, or a synthetic value for "no record exists yet for the
+  // day": "NOT_REGISTERED" (never registered their face at all - takes
+  // priority) or "NOT_MARKED" (registered, hasn't checked in *today* yet -
+  // still in progress, not judged). A past day with no record derives to
+  // ABSENT (or HOLIDAY on a Sunday) once it's on/after that person's
+  // face-registration date - before that date, or before today's window
+  // closes, it stays NOT_MARKED/NOT_REGISTERED. Approved leave and the
+  // office Holidays calendar still aren't cross-referenced here.
+  status: string;
   checkIn: string | null;
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
+  registered: boolean;
 }
 
 function parseDateParam(dateParam: string | null): { start: Date; end: Date; docSuffix: string } {
@@ -49,14 +73,52 @@ export async function GET(request: Request) {
       usersQuery = usersQuery.where("department", "in", scopeDepartments);
     }
 
+    // Faculty's face-registration status lives on their facultyMembers doc
+    // (see resolveOwnDocRef in the face-registration API) - fetched
+    // unconditionally (scoped like everything else) since both HOD's and the
+    // college-wide report need it now, not just the course-grouping below.
+    let facultyMembersQuery: FirebaseFirestore.Query = collegeRef.collection("facultyMembers");
+    if (scopeDepartments) facultyMembersQuery = facultyMembersQuery.where("department", "in", scopeDepartments);
+    const facultyMembersSnap = await facultyMembersQuery.get();
+    const uidToFacultyMemberId = new Map<string, string>();
+    const uidToRegistered = new Map<string, boolean>();
+    const uidToRegisteredAt = new Map<string, Date | null>();
+    for (const doc of facultyMembersSnap.docs) {
+      const fm = doc.data() as { userUid?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
+      if (!fm.userUid) continue;
+      uidToFacultyMemberId.set(fm.userUid, doc.id);
+      uidToRegistered.set(fm.userUid, Array.isArray(fm.faceEmbedding) && fm.faceEmbedding.length > 0);
+      uidToRegisteredAt.set(fm.userUid, fm.faceRegisteredAt ? fm.faceRegisteredAt.toDate() : null);
+    }
+
     const usersSnap = await usersQuery.get();
     const roster: RosterEntry[] = usersSnap.docs.map((d) => {
       const u = d.data() as { name?: string; department?: string };
       return {
-        uid: d.id, name: u.name ?? "", department: u.department ?? "",
+        uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "PANEL_MEMBER" as const,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+        registered: uidToRegistered.get(d.id) ?? false,
       };
     });
+
+    // College-wide (Principal/VP/Super Admin) callers also need each
+    // department's HOD in the roster — the Principal's report shows the HOD
+    // alongside their department's faculty. HOD's own department view stays
+    // Faculty-only, unchanged. HOD registers directly on their own
+    // users/{uid} doc (no facultyMembers record), so no lookup needed here.
+    if (session.role !== "HOD") {
+      const hodsSnap = await collegeRef.collection("users").where("role", "==", "HOD").get();
+      for (const d of hodsSnap.docs) {
+        const u = d.data() as { name?: string; department?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
+        roster.push({
+          uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "HOD" as const,
+          status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0,
+        });
+        uidToRegisteredAt.set(d.id, u.faceRegisteredAt ? u.faceRegisteredAt.toDate() : null);
+      }
+    }
+
     if (roster.length === 0) {
       return NextResponse.json({ date: docSuffix, roster: [] });
     }
@@ -66,19 +128,87 @@ export async function GET(request: Request) {
     if (scopeDepartments) recordsQuery = recordsQuery.where("department", "in", scopeDepartments);
     const recordsSnap = await recordsQuery.get();
 
+    // Two passes: first collect this date's matching records (with a ref, so
+    // closeMissedCheckouts can persist any correction), then apply the
+    // (possibly corrected) status onto the roster - so a past date with a
+    // missed checkout shows Absent here too, not a stale Present.
+    const pending: {
+      ref: FirebaseFirestore.DocumentReference;
+      resolvedDate: Date | null;
+      status: string;
+      checkIn: string | null;
+      checkOut: string | null;
+      remarks: string | null;
+      checkInVerified: boolean;
+      checkOutVerified: boolean;
+      entry: RosterEntry;
+    }[] = [];
+
     for (const doc of recordsSnap.docs) {
       const rec = doc.data() as AttendanceRecord;
       if (!rosterByUid.has(rec.facultyId)) continue;
-      const d = rec.date && typeof (rec.date as unknown as { toDate?: () => Date }).toDate === "function"
-        ? (rec.date as unknown as { toDate: () => Date }).toDate()
-        : new Date(rec.date as unknown as string);
-      if (d < start || d >= end) continue;
-      const entry = rosterByUid.get(rec.facultyId)!;
-      entry.status = rec.status;
-      entry.checkIn = rec.checkIn ?? null;
-      entry.checkOut = rec.checkOut ?? null;
-      entry.checkInVerified = !!rec.checkInVerified;
-      entry.checkOutVerified = !!rec.checkOutVerified;
+      const d = toAttendanceDate(rec.date);
+      if (!d || d < start || d >= end) continue;
+      pending.push({
+        ref: doc.ref,
+        resolvedDate: d,
+        status: rec.status,
+        checkIn: rec.checkIn ?? null,
+        checkOut: rec.checkOut ?? null,
+        remarks: rec.remarks ?? null,
+        checkInVerified: !!rec.checkInVerified,
+        checkOutVerified: !!rec.checkOutVerified,
+        entry: rosterByUid.get(rec.facultyId)!,
+      });
+    }
+
+    await closeMissedCheckouts(db, pending);
+
+    for (const p of pending) {
+      p.entry.status = p.status;
+      p.entry.checkIn = p.checkIn;
+      p.entry.checkOut = p.checkOut;
+      p.entry.checkInVerified = p.checkInVerified;
+      p.entry.checkOutVerified = p.checkOutVerified;
+    }
+
+    // "No record yet" defaults to NOT_MARKED above - refine it:
+    //   - Never registered at all -> NOT_REGISTERED (most actionable).
+    //   - A past date, on/after their registration date -> ABSENT (or
+    //     HOLIDAY if that date is a Sunday) - they could have checked in
+    //     and didn't. Before registration, or today, stays NOT_MARKED.
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    for (const entry of roster) {
+      if (entry.status !== "NOT_MARKED") continue;
+      if (!entry.registered) {
+        entry.status = "NOT_REGISTERED";
+        continue;
+      }
+      const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
+      const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
+      if (start < todayStart && regStart && start >= regStart) {
+        entry.status = isSunday(start) ? "HOLIDAY" : "ABSENT";
+      }
+    }
+
+    // Course grouping is only used by the college-wide (Principal/VP/Super
+    // Admin) report — skip the extra reads for HOD's department view.
+    if (session.role !== "HOD") {
+      const teachingSnap = await collegeRef.collection("teachingAssignments").get();
+      const facultyMemberIdToCourseIds = new Map<string, Set<string>>();
+      for (const doc of teachingSnap.docs) {
+        const ta = doc.data() as { facultyId?: string; courseId?: string };
+        if (!ta.facultyId || !ta.courseId) continue;
+        if (!facultyMemberIdToCourseIds.has(ta.facultyId)) facultyMemberIdToCourseIds.set(ta.facultyId, new Set());
+        facultyMemberIdToCourseIds.get(ta.facultyId)!.add(ta.courseId);
+      }
+
+      for (const entry of roster) {
+        const facultyMemberId = uidToFacultyMemberId.get(entry.uid);
+        const courseIds = facultyMemberId ? facultyMemberIdToCourseIds.get(facultyMemberId) : undefined;
+        entry.courseIds = courseIds ? Array.from(courseIds).sort() : [];
+      }
     }
 
     roster.sort((a, b) => a.name.localeCompare(b.name));

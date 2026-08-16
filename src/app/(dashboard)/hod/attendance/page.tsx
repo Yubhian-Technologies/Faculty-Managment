@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CalendarDays, Info, LogIn, LogOut } from "lucide-react";
+import { CalendarDays, Info, LogIn, LogOut, ScanFace } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
+import { CHECK_IN_CLOSED_MESSAGE, SUNDAY_HOLIDAY_MESSAGE, isBeforeCheckInWindow, isSunday } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -52,8 +53,18 @@ export default function HODAttendancePage() {
   const [summary, setSummary] = useState<AttendanceSummary | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | undefined>(undefined);
-  const [dialogMode, setDialogMode] = useState<"check-in" | "check-out" | null>(null);
+  const [faceRegistered, setFaceRegistered] = useState<boolean | null>(null);
+  const [dialogMode, setDialogMode] = useState<"check-in" | "check-out" | "register" | null>(null);
+
+  const loadFaceRegistration = useCallback(async () => {
+    try {
+      const res = await fetch("/api/college/attendance/face-registration");
+      const json = await res.json() as { registered?: boolean };
+      setFaceRegistered(!!json.registered);
+    } catch {
+      /* non-critical - Mark Attendance will show a clear error if the check fails */
+    }
+  }, []);
 
   const load = useCallback(async (y: number, m: number) => {
     setIsLoading(true);
@@ -77,11 +88,8 @@ export default function HODAttendancePage() {
   }, [load, year, month]);
 
   useEffect(() => {
-    fetch("/api/college/faculty/me")
-      .then((r) => r.json() as Promise<{ faculty?: { profilePhotoUrl?: string } | null }>)
-      .then((d) => setProfilePhotoUrl(d.faculty?.profilePhotoUrl))
-      .catch(() => { /* non-critical - Mark Attendance will show a clear error if missing */ });
-  }, []);
+    void (async () => { await loadFaceRegistration(); })();
+  }, [loadFaceRegistration]);
 
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
   const todayRecord = isCurrentMonth
@@ -109,9 +117,22 @@ export default function HODAttendancePage() {
       {isCurrentMonth && (
         <Card>
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-            {todayRecord?.checkOut ? (
+            {isSunday(now) ? (
+              <p className="text-sm text-muted-foreground">{SUNDAY_HOLIDAY_MESSAGE}</p>
+            ) : isBeforeCheckInWindow(now) ? (
+              <p className="text-sm text-muted-foreground">{CHECK_IN_CLOSED_MESSAGE}</p>
+            ) : faceRegistered === false ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Register your face to start using facial attendance check-in.
+                </p>
+                <Button onClick={() => setDialogMode("register")}>
+                  <ScanFace className="h-4 w-4 mr-1.5" /> Register
+                </Button>
+              </>
+            ) : todayRecord?.checkOut ? (
               <p className="text-sm">
-                Today&apos;s attendance is complete — in at <span className="font-medium">{todayRecord.checkIn}</span>, out at{" "}
+                Today&apos;s attendance marked — in at <span className="font-medium">{todayRecord.checkIn}</span>, out at{" "}
                 <span className="font-medium">{todayRecord.checkOut}</span>.
               </p>
             ) : todayRecord?.checkIn ? (
@@ -285,10 +306,15 @@ export default function HODAttendancePage() {
       {dialogMode && (
         <MarkAttendanceDialog
           mode={dialogMode}
-          profilePhotoUrl={profilePhotoUrl}
           open={!!dialogMode}
           onOpenChange={(o) => { if (!o) setDialogMode(null); }}
-          onSuccess={() => void load(year, month)}
+          onSuccess={() => {
+            if (dialogMode === "register") {
+              void loadFaceRegistration();
+            } else {
+              void load(year, month);
+            }
+          }}
         />
       )}
     </div>

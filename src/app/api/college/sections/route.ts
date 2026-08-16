@@ -6,6 +6,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import type { DepartmentCourseScope } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -198,7 +200,7 @@ export async function POST(request: Request) {
     if (!courseSnap.exists) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
-    const course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string };
+    const course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
     if (Number(body.year) < 1 || Number(body.year) > course.durationYears) {
       return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
     }
@@ -275,21 +277,25 @@ export async function POST(request: Request) {
     }
 
     // A department can only hold sections for years the Principal/VP has
-    // actually assigned it (see Department.assignedYears) - otherwise the
-    // year-allocation feature is purely decorative. This same lookup also
-    // validates the section's own cross-listed (secondary) department - a
-    // department/sub-department can be configured with several possible
-    // destinations (e.g. a shared first-year sub-department feeding both CSE
-    // and ECE), but each individual section commits to exactly one, since
-    // its whole cohort promotes into that one branch together.
+    // actually assigned it for this course (Department.courseScopes when the
+    // department has a per-course override for it - e.g. an independent
+    // M.Tech running years 1-2 under a department whose B.Tech runs 2-4 -
+    // else its flat Department.assignedYears; see resolveDepartmentCourseScope)
+    // - otherwise the year-allocation feature is purely decorative. This same
+    // lookup also validates the section's own cross-listed (secondary)
+    // department - a department/sub-department can be configured with several
+    // possible destinations (e.g. a shared first-year sub-department feeding
+    // both CSE and ECE), but each individual section commits to exactly one,
+    // since its whole cohort promotes into that one branch together.
     let secondaryDepartments: string[] = [];
     if (dept) {
       const allDeptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
       const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as
-        (DepartmentYearRow & { name?: string; secondaryDepartments?: string[] })[];
+        (DepartmentYearRow & { name?: string; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope> })[];
       const deptDoc = allDepts.find((d) => d.name === dept);
       if (deptDoc) {
-        const assignedYears = deptDoc.assignedYears ?? [];
+        const deptScope = resolveDepartmentCourseScope(deptDoc, course.catalogId);
+        const assignedYears = deptScope.assignedYears;
         if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
           // A real branch (e.g. IT) reached through a sub-department's managed
           // grouping (BS-Maths managing IT + CSBS) never carries the shared
@@ -311,13 +317,14 @@ export async function POST(request: Request) {
             );
           }
         }
-        // Available branches: this department's own configured secondaries, or -
-        // for a sub-department with none of its own - those inherited from its
-        // parent, so a sub-HOD can create the shared first-year branch sections.
-        let availableSecondaryDepts = deptDoc.secondaryDepartments ?? [];
+        // Available branches: this department's own configured secondaries
+        // (for this course), or - for a sub-department with none of its own -
+        // those inherited from its parent, so a sub-HOD can create the shared
+        // first-year branch sections.
+        let availableSecondaryDepts = deptScope.secondaryDepartments;
         if (availableSecondaryDepts.length === 0 && deptDoc.parentDepartmentId) {
           const parent = allDepts.find((d) => d.id === deptDoc.parentDepartmentId);
-          availableSecondaryDepts = parent?.secondaryDepartments ?? [];
+          availableSecondaryDepts = parent ? resolveDepartmentCourseScope(parent, course.catalogId).secondaryDepartments : [];
         }
         const chosen = body.secondaryDepartment?.trim()
           || (availableSecondaryDepts.length === 1 ? availableSecondaryDepts[0] : "");

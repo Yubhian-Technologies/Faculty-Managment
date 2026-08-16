@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { computeYearlyLeaveSummary } from "@/lib/leave/monthlySummary";
 import { resolveReportRoster } from "@/lib/leave/reportRoster";
 import { resolveCollegeLocationName } from "@/lib/college/locationName";
+import { countHolidaysPerMonth } from "@/lib/leave/holidaysCount";
 
 interface YearlyReportRow {
   uid: string;
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
     if ("error" in roster) return NextResponse.json({ error: roster.error }, { status: roster.status });
     const { department, people } = roster;
 
-    const [rows, location] = await Promise.all([
+    const [rows, location, holidaysByMonth] = await Promise.all([
       Promise.all(
         people.map(async (p): Promise<YearlyReportRow> => {
           const summary = await computeYearlyLeaveSummary(db, session.collegeId, p.uid, year);
@@ -47,9 +48,10 @@ export async function GET(request: Request) {
         })
       ),
       resolveCollegeLocationName(db, session.collegeId),
+      countHolidaysPerMonth(db, session.collegeId, year),
     ]);
 
-    return NextResponse.json({ department, year, rows, location });
+    return NextResponse.json({ department, year, rows, location, holidaysByMonth });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

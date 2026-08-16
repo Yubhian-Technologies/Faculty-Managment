@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { syncDepartmentHod } from "@/lib/departments/scope";
+import { syncDepartmentHod, getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { getCreatableOfficeRoles } from "@/lib/roles/officeRoles";
 import type { CollegeType, UserRole } from "@/types";
 
@@ -23,7 +23,11 @@ const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIP
 // `department` - the sub-department itself, and this account's actual scope,
 // only becomes real once POST /api/college/departments links them via
 // hodUid, which is where the "only within your own department" check lives).
-const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD"];
+// CLASS_LEADER is included so an HOD can create their own sections' Class
+// Leader logins from hod/sections/[id]/edit - the College Office pages that
+// used to be the only place this happened were removed; this is where
+// section management actually lives now.
+const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "CLASS_LEADER"];
 // College Office may only create Class Leader logins - one per Section, bound
 // via `sectionId` below. (The College Office section pages that used to call
 // this were removed; sections are managed from the HOD and Principal views.)
@@ -185,6 +189,19 @@ export async function POST(request: Request) {
           { error: "This section already has a Class Leader login. Remove it first to create a new one." },
           { status: 409 }
         );
+      }
+      // An HOD may only create a Class Leader for a section in their own
+      // department or one of their sub-departments - HOD_ROLES above only
+      // gates the ROLE, not which section, so without this an HOD could
+      // otherwise create a login for any section college-wide.
+      if (session.role === "HOD") {
+        const scope = await getHodDepartmentScope(db, collegeId, session.uid);
+        if (!canHodEditDepartment(scope, sectionData.department ?? "")) {
+          return NextResponse.json(
+            { error: "That section is not in your department or one of your sub-departments" },
+            { status: 403 }
+          );
+        }
       }
     }
 

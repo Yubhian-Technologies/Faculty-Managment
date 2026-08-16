@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
 import type { StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
@@ -86,6 +87,7 @@ export default function MarkAttendancePage() {
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [draft, setDraft] = useState<Record<string, StudentAttendanceMark | null>>({});
   const [mode, setMode] = useState<AttendanceMode | null>(null);
+  const [classNotes, setClassNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -178,6 +180,7 @@ export default function MarkAttendancePage() {
     setLoadError(null);
     setDraft({});
     setMode(null);
+    setClassNotes("");
   }
 
   function handleCourseChange(v: string) {
@@ -228,6 +231,7 @@ export default function MarkAttendancePage() {
       }
       setAttendanceSession(json.session);
       setDraft(Object.fromEntries(json.session.entries.map((e) => [e.studentId, e.status])));
+      setClassNotes(json.session.classNotes ?? "");
     } catch {
       setLoadError("Failed to load students");
     } finally {
@@ -279,7 +283,7 @@ export default function MarkAttendancePage() {
       const res = await fetch(`/api/college/student-attendance/${attendanceSession.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries, submit: true }),
+        body: JSON.stringify({ entries, classNotes, submit: true }),
       });
       const json = (await res.json()) as { session?: StudentAttendanceSession; error?: string };
       if (!res.ok || !json.session) throw new Error(json.error ?? "Failed to submit attendance");
@@ -391,7 +395,7 @@ export default function MarkAttendancePage() {
                   loading={isLoadingStudents}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  Load Students
+                  Submit
                 </Button>
               </div>
             </CardContent>
@@ -517,29 +521,43 @@ export default function MarkAttendancePage() {
 
               {attendanceSession.totalStudents > 0 && (
                 <Card>
-                  <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm text-muted-foreground">
-                      <p>
-                        {isReadOnly
-                          ? "This attendance has been submitted and is locked."
-                          : "Please review the attendance before submitting."}
-                      </p>
-                      <p>Once submitted, attendance cannot be edited or modified.</p>
+                  <CardContent className="space-y-4 py-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="classNotes">Class Description</Label>
+                      <Textarea
+                        id="classNotes"
+                        placeholder="What did you cover in this class? (topics taught, activities, etc.)"
+                        value={classNotes}
+                        onChange={(e) => setClassNotes(e.target.value)}
+                        disabled={isReadOnly}
+                        rows={3}
+                      />
                     </div>
-                    <p className="text-sm font-medium shrink-0">
-                      You have marked {markedCount} out of {attendanceSession.totalStudents} students
-                    </p>
-                    {!isReadOnly && (
-                      <Button
-                        onClick={() => void handleSubmit()}
-                        disabled={!allMarked || isSubmitting}
-                        loading={isSubmitting}
-                        className="shrink-0"
-                      >
-                        <Lock className="h-4 w-4" />
-                        Submit Attendance
-                      </Button>
-                    )}
+
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        <p>
+                          {isReadOnly
+                            ? "This attendance has been submitted and is locked."
+                            : "Please review the attendance before submitting."}
+                        </p>
+                        <p>Once submitted, attendance cannot be edited or modified.</p>
+                      </div>
+                      <p className="text-sm font-medium shrink-0">
+                        You have marked {markedCount} out of {attendanceSession.totalStudents} students
+                      </p>
+                      {!isReadOnly && (
+                        <Button
+                          onClick={() => void handleSubmit()}
+                          disabled={!allMarked || isSubmitting}
+                          loading={isSubmitting}
+                          className="shrink-0"
+                        >
+                          <Lock className="h-4 w-4" />
+                          Submit Attendance
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               )}

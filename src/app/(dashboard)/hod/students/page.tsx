@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Shuffle, Pencil, Layers } from "lucide-react";
+import { Shuffle, Pencil, Layers, ArrowRightLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,10 @@ export default function HodStudentsPage() {
 
   const [distributeOpen, setDistributeOpen] = useState(false);
   const [distDept, setDistDept] = useState("");
+  // The real branch to route through, when distDept is a shared-first-year
+  // grouping department (e.g. "BS-Mathematics") whose sections are filed under
+  // the branches it manages (e.g. "cse"), never under itself.
+  const [distBranch, setDistBranch] = useState("");
   const [distYear, setDistYear] = useState("");
   const [distSectionIds, setDistSectionIds] = useState<string[]>([]);
   const [isDistributing, setIsDistributing] = useState(false);
@@ -59,6 +63,16 @@ export default function HodStudentsPage() {
   const [editRoll, setEditRoll] = useState("");
   const [editStatus, setEditStatus] = useState("REGULAR");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Per-student section assignment - the same move the bulk Distribute dialog
+  // does for a whole cohort, but for one student at a time (e.g. placing the
+  // handful left over after an uneven bulk split, or moving someone who was
+  // sectioned wrong). Reuses students/[id] PATCH's targetSectionId move, which
+  // already corrects `department` to the section's own and resolves/clears
+  // secondaryDepartment - the single-student counterpart of the bulk fix above.
+  const [assignTarget, setAssignTarget] = useState<StudentRow | null>(null);
+  const [assignSectionId, setAssignSectionId] = useState("");
+  const [isAssigning, setIsAssigning] = useState(false);
 
   async function load() {
     setIsLoading(true);
@@ -108,15 +122,34 @@ export default function HodStudentsPage() {
     () => Array.from(new Set(unassignedStudents.map((s) => s.department).filter(Boolean))).sort(),
     [unassignedStudents]
   );
-  const distYears = useMemo(
-    () => Array.from(new Set(unassignedStudents.filter((s) => s.department === distDept).map((s) => s.year))).sort((a, b) => a - b),
+  // The real branches distDept's unassigned students are pre-registered to
+  // (e.g. "cse", "IT" under "BS-Mathematics") - present only for a
+  // shared-first-year grouping department, since a plain department's
+  // students carry no secondaryDepartment at all. Forces the branch pick
+  // below before sections (filed under the branch, never the grouping
+  // department) can be found.
+  const distBranches = useMemo(
+    () => Array.from(new Set(
+      unassignedStudents.filter((s) => s.department === distDept).map((s) => s.secondaryDepartment).filter(Boolean)
+    )).sort() as string[],
     [unassignedStudents, distDept]
+  );
+  // Which department sections/placement actually resolve against - the chosen
+  // branch once one is required and picked, otherwise distDept itself.
+  const distTargetDept = distBranches.length > 0 ? distBranch : distDept;
+  const distYears = useMemo(
+    () => Array.from(new Set(
+      unassignedStudents
+        .filter((s) => s.department === distDept && (distBranches.length === 0 || s.secondaryDepartment === distBranch))
+        .map((s) => s.year)
+    )).sort((a, b) => a - b),
+    [unassignedStudents, distDept, distBranch, distBranches.length]
   );
   const distTargetSections = useMemo(
     () => managedSections
-      .filter((s) => s.department === distDept && String(s.year) === distYear)
+      .filter((s) => s.department === distTargetDept && String(s.year) === distYear)
       .sort((a, b) => a.name.localeCompare(b.name)),
-    [managedSections, distDept, distYear]
+    [managedSections, distTargetDept, distYear]
   );
   // A department can run the same section name under more than one course
   // (e.g. "IT-A" under both B.Tech and M.Tech) - this list isn't scoped to a
@@ -127,13 +160,32 @@ export default function HodStudentsPage() {
     [distTargetSections, departments]
   );
   const unassignedCount = useMemo(
-    () => unassignedStudents.filter((s) => s.department === distDept && String(s.year) === distYear).length,
-    [unassignedStudents, distDept, distYear]
+    () => unassignedStudents.filter((s) =>
+      s.department === distDept
+      && (distBranches.length === 0 || s.secondaryDepartment === distBranch)
+      && String(s.year) === distYear
+    ).length,
+    [unassignedStudents, distDept, distBranch, distBranches.length, distYear]
   );
 
   const filtered = useMemo(
     () => (deptFilter === "all" ? students : students.filter((s) => s.department === deptFilter)),
     [students, deptFilter]
+  );
+
+  // Sections a single student can be assigned into - their real branch's (if
+  // pre-registered to one via secondaryDepartment) or their own department's,
+  // for their own year. Same resolution the bulk Distribute dialog uses.
+  const assignTargetSections = useMemo(() => {
+    if (!assignTarget) return [];
+    const dept = assignTarget.secondaryDepartment || assignTarget.department;
+    return managedSections
+      .filter((s) => s.department === dept && s.year === assignTarget.year)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [assignTarget, managedSections]);
+  const assignSectionLabels = useMemo(
+    () => disambiguateSectionLabels(assignTargetSections, departments),
+    [assignTargetSections, departments]
   );
 
   // The cohort action belongs to the main HOD of a shared first-year department
@@ -191,6 +243,32 @@ export default function HodStudentsPage() {
     setEditStatus(student.status ?? "REGULAR");
   }
 
+  function openAssign(student: StudentRow) {
+    setAssignTarget(student);
+    setAssignSectionId("");
+  }
+
+  async function handleAssign() {
+    if (!assignTarget || !assignSectionId) return;
+    setIsAssigning(true);
+    try {
+      const res = await fetch(`/api/college/students/${assignTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetSectionId: assignSectionId }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to assign section");
+      toast({ variant: "success", title: `${assignTarget.name} assigned` });
+      setAssignTarget(null);
+      void load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to assign section" });
+    } finally {
+      setIsAssigning(false);
+    }
+  }
+
   async function handleSaveEdit() {
     if (!editTarget) return;
     setIsSavingEdit(true);
@@ -213,7 +291,7 @@ export default function HodStudentsPage() {
   }
 
   async function handleDistribute() {
-    if (!distDept || !distYear || distSectionIds.length === 0) {
+    if (!distDept || (distBranches.length > 0 && !distBranch) || !distYear || distSectionIds.length === 0) {
       toast({ variant: "destructive", title: "Pick a department, year, and at least one section" });
       return;
     }
@@ -222,7 +300,12 @@ export default function HodStudentsPage() {
       const res = await fetch("/api/college/students/distribute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ department: distDept, year: Number(distYear), sectionIds: distSectionIds }),
+        body: JSON.stringify({
+          department: distDept,
+          ...(distBranch ? { secondaryDepartment: distBranch } : {}),
+          year: Number(distYear),
+          sectionIds: distSectionIds,
+        }),
       });
       const json = await res.json() as { error?: string; distributed?: number; perSection?: { section: string; count: number }[] };
       if (!res.ok) throw new Error(json.error ?? "Failed to distribute");
@@ -243,6 +326,18 @@ export default function HodStudentsPage() {
     { key: "name", header: "Name" },
     { key: "department", header: "Department", hideOnMobile: true, render: (r) => <span className="text-sm text-muted-foreground">{r.department}</span> },
     {
+      key: "secondaryDepartment",
+      header: "Secondary Dept",
+      hideOnMobile: true,
+      // Only ever set for a shared-first-year student pre-registered to their
+      // real branch (e.g. "cse" under "BS-Mathematics") - a plain department's
+      // students, and a first-year already sectioned into their branch, carry
+      // none, so this reads as a blank dash for them.
+      render: (r) => r.secondaryDepartment
+        ? <span className="text-sm text-muted-foreground">{r.secondaryDepartment}</span>
+        : <span className="text-sm text-muted-foreground/40">—</span>,
+    },
+    {
       key: "section",
       header: "Section",
       render: (r) =>
@@ -260,9 +355,14 @@ export default function HodStudentsPage() {
       key: "actions",
       header: "",
       render: (r) => (
-        <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set roll number / status">
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex items-center justify-end">
+          <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
+            <ArrowRightLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set roll number / status">
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       ),
     },
   ];
@@ -337,7 +437,13 @@ export default function HodStudentsPage() {
               </DialogContent>
             </Dialog>
           )}
-          <Dialog open={distributeOpen} onOpenChange={(open) => { setDistributeOpen(open); if (!open) setDistSectionIds([]); }}>
+          <Dialog
+            open={distributeOpen}
+            onOpenChange={(open) => {
+              setDistributeOpen(open);
+              if (!open) { setDistBranch(""); setDistSectionIds([]); }
+            }}
+          >
             <DialogTrigger asChild>
               <Button><Shuffle className="h-4 w-4 mr-2" />Distribute Unassigned</Button>
             </DialogTrigger>
@@ -353,25 +459,65 @@ export default function HodStudentsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label>Department</Label>
-                    <Select value={distDept} onValueChange={(v) => { setDistDept(v); setDistYear(""); setDistSectionIds([]); }}>
+                    <Select
+                      value={distDept}
+                      onValueChange={(v) => { setDistDept(v); setDistBranch(""); setDistYear(""); setDistSectionIds([]); }}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                       <SelectContent>
                         {distDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
+                  {/* Only a shared-first-year grouping department (e.g.
+                      "BS-Mathematics") has branches here - its sections are
+                      filed under the real branch (cse, IT, ...), never under
+                      itself, so the branch has to be picked before sections
+                      can be found at all. A plain department skips straight
+                      to Year, unchanged from before. */}
+                  {distBranches.length > 0 ? (
+                    <div className="space-y-2">
+                      <Label>Secondary Department</Label>
+                      <Select
+                        value={distBranch}
+                        onValueChange={(v) => { setDistBranch(v); setDistYear(""); setDistSectionIds([]); }}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                        <SelectContent>
+                          {distBranches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>Year</Label>
+                      <Select value={distYear} onValueChange={(v) => { setDistYear(v); setDistSectionIds([]); }} disabled={!distDept}>
+                        <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+                        <SelectContent>
+                          {distYears.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
+                {distBranches.length > 0 && (
                   <div className="space-y-2">
                     <Label>Year</Label>
-                    <Select value={distYear} onValueChange={(v) => { setDistYear(v); setDistSectionIds([]); }} disabled={!distDept}>
+                    <Select
+                      value={distYear}
+                      onValueChange={(v) => { setDistYear(v); setDistSectionIds([]); }}
+                      disabled={!distBranch}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                       <SelectContent>
                         {distYears.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
+                )}
 
-                {distDept && distYear && (
+                {distDept && (distBranches.length === 0 || distBranch) && distYear && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Target Sections</Label>
@@ -391,7 +537,7 @@ export default function HodStudentsPage() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                        No sections for {distDept} Year {distYear} yet - create them under Sections first.
+                        No sections for {distTargetDept} Year {distYear} yet - create them under Sections first.
                       </p>
                     )}
                   </div>
@@ -467,6 +613,44 @@ export default function HodStudentsPage() {
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
             <Button onClick={() => void handleSaveEdit()} loading={isSavingEdit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!assignTarget} onOpenChange={(open) => { if (!open) setAssignTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{assignTarget?.section ? "Move" : "Assign"} {assignTarget?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              {assignTarget?.secondaryDepartment
+                ? <>Pre-registered to <strong>{assignTarget.secondaryDepartment}</strong> · Year {assignTarget?.year}</>
+                : <>{assignTarget?.department} · Year {assignTarget?.year}</>}
+              {assignTarget?.section ? ` · currently Section ${assignTarget.section}` : " · currently Unassigned"}
+            </p>
+            <div className="space-y-2">
+              <Label>Section</Label>
+              <Select value={assignSectionId} onValueChange={setAssignSectionId}>
+                <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
+                <SelectContent>
+                  {assignTargetSections.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{assignSectionLabels.get(s.id) ?? s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {assignTargetSections.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No sections yet for {assignTarget?.secondaryDepartment || assignTarget?.department} Year {assignTarget?.year} - create one under Sections first.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAssignTarget(null)}>Cancel</Button>
+            <Button onClick={() => void handleAssign()} loading={isAssigning} disabled={!assignSectionId}>
+              {assignTarget?.section ? "Move" : "Assign"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

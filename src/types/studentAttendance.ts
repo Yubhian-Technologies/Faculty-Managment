@@ -44,6 +44,8 @@ export interface StudentAttendanceSession {
   entries: StudentAttendanceEntry[];
   totalStudents: number;
   presentCount: number;
+  classNotes: string; // what the faculty covered in this class session
+
   submittedAt?: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;

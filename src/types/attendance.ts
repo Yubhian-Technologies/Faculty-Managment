@@ -76,6 +76,13 @@ export interface AttendanceSummary {
 
 export type HolidayType = "NATIONAL" | "REGIONAL" | "COLLEGE" | "RESTRICTED";
 
+export const HOLIDAY_TYPE_LABELS: Record<HolidayType, string> = {
+  NATIONAL: "National",
+  REGIONAL: "Regional",
+  COLLEGE: "College",
+  RESTRICTED: "Restricted",
+};
+
 export interface Holiday {
   id: string;
   collegeId: string;

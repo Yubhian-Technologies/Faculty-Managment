@@ -1,0 +1,94 @@
+export const dynamic = "force-dynamic";
+
+import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
+import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+
+// Sends someone back to "not registered" for facial attendance so their next
+// visit to My Attendance shows the exact same Register prompt/capture flow as
+// first-time registration — clears only the stored embedding, never the
+// underlying record. This route never captures a face itself; the actual
+// re-registration still happens entirely on that person's own device via the
+// unchanged existing flow (see /api/college/attendance/face-registration
+// POST, which their next registration overwrites this same field with —
+// never a duplicate record).
+//
+// Two escalation tiers reset each other, mirroring the org hierarchy:
+//   - HOD resets a same-department Faculty member (facultyMembers doc).
+//   - PRINCIPAL resets an HOD or Vice Principal in their own college
+//     (users/{uid} doc — HOD/Principal/VP have no FacultyMember record).
+// Management resetting Principal is a separate route (Management's session
+// isn't scoped to one college) — see
+// /api/management/colleges/[collegeId]/principal-attendance/reset.
+export async function POST(request: Request) {
+  try {
+    const session = await requireCollegeMember("HOD", "PRINCIPAL");
+    const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    if (session.role === "PRINCIPAL") {
+      const body = (await request.json()) as { uid?: string };
+      const uid = body.uid;
+      if (!uid) {
+        return NextResponse.json({ error: "Staff member is required" }, { status: 400 });
+      }
+
+      const targetSnap = await collegeRef.collection("users").doc(uid).get();
+      if (!targetSnap.exists) {
+        return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
+      }
+      const target = targetSnap.data() as { role?: string };
+      if (target.role !== "HOD" && target.role !== "VICE_PRINCIPAL") {
+        return NextResponse.json(
+          { error: "You can only reset face registration for an HOD or Vice Principal" },
+          { status: 403 }
+        );
+      }
+
+      await targetSnap.ref.update({
+        faceEmbedding: FieldValue.delete(),
+        faceRegisteredAt: FieldValue.delete(),
+      });
+
+      return NextResponse.json({ ok: true });
+    }
+
+    const body = (await request.json()) as { facultyId?: string };
+    const facultyId = body.facultyId;
+    if (!facultyId) {
+      return NextResponse.json({ error: "Faculty is required" }, { status: 400 });
+    }
+
+    const targetSnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
+    if (!targetSnap.exists) {
+      return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+    }
+    const target = targetSnap.data() as { department?: string; userUid?: string };
+
+    const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+    if (!canHodEditDepartment(scope, target.department ?? "")) {
+      return NextResponse.json(
+        { error: "You can only reset face registration for faculty in your department" },
+        { status: 403 }
+      );
+    }
+    if (!target.userUid) {
+      return NextResponse.json({ error: "This faculty member has no login account yet" }, { status: 400 });
+    }
+
+    await targetSnap.ref.update({
+      faceEmbedding: FieldValue.delete(),
+      faceRegisteredAt: FieldValue.delete(),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/attendance/face-registration/reset POST]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}

@@ -9,7 +9,8 @@ import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
-import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
+import { countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
+import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
@@ -117,6 +118,7 @@ export async function POST(request: Request) {
       fromDate?: string;
       toDate?: string;
       isHalfDay?: boolean;
+      halfDaySession?: "FN" | "AN";
       reason?: string;
       extendsRequestId?: string;
     };
@@ -186,6 +188,9 @@ export async function POST(request: Request) {
     if (body.isHalfDay && !(body.leaveTypeCode && HALF_DAY_ELIGIBLE_TYPES.includes(body.leaveTypeCode))) {
       return NextResponse.json({ error: "Half day is only available for Sick Leave, Special Casual Leave, and On Duty" }, { status: 400 });
     }
+    if (body.isHalfDay && body.halfDaySession !== "FN" && body.halfDaySession !== "AN") {
+      return NextResponse.json({ error: "Select forenoon or afternoon for a half day request" }, { status: 400 });
+    }
 
     const fromDate = new Date(body.fromDate);
     const toDate = new Date(body.toDate);
@@ -213,7 +218,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const totalDays = countLeaveDays(fromDate, toDate, body.isHalfDay);
+    // Sundays and declared holidays within the range were never working days
+    // to begin with, so they don't draw down balance - see countWorkingDays.
+    const holidayDates = await getHolidayDateKeys(db, session.collegeId, fromDate, toDate);
+    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay);
 
     // Insufficient balance never blocks submission - days beyond what's
     // remaining are accepted and split into Loss of Pay at approval time
@@ -248,6 +256,7 @@ export async function POST(request: Request) {
       toDate: toDate as unknown as LeaveRequest["toDate"],
       totalDays,
       isHalfDay: body.isHalfDay || false,
+      ...(body.isHalfDay ? { halfDaySession: body.halfDaySession } : {}),
       reason: body.reason.trim(),
       status: initialStatus,
       createdAt: now as unknown as LeaveRequest["createdAt"],

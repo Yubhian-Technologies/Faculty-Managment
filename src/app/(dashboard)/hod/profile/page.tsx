@@ -5,10 +5,9 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
 import { ChangePasswordDialog } from "@/components/shared/ChangePasswordDialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { MyProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
+import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySummary";
 import { useAuth } from "@/hooks/useAuth";
-import { ROLE_LABELS } from "@/types";
 import type { Department } from "@/types";
 
 export default function HodProfilePage() {
@@ -40,29 +39,10 @@ export default function HodProfilePage() {
       <Card>
         <CardContent className="p-6 space-y-6">
           <ProfilePhotoUpload name={user.name} photoUrl={user.profilePhotoUrl} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
-            <div>
-              <p className="text-xs text-muted-foreground">Name</p>
-              <p className="text-sm font-medium">{user.name}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Email</p>
-              <p className="text-sm font-medium">{user.email}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Role</p>
-              <p className="text-sm font-medium">{ROLE_LABELS[user.role]}</p>
-            </div>
-            {user.department && (
-              <div>
-                <p className="text-xs text-muted-foreground">Department</p>
-                <p className="text-sm font-medium flex items-center gap-1.5">
-                  {user.department}
-                  {parentDeptName && <Badge variant="secondary" className="text-xs">Sub-department of {parentDeptName}</Badge>}
-                </p>
-              </div>
-            )}
-          </div>
+          <ProfileIdentitySummary
+            user={user}
+            departmentBadge={parentDeptName ? `Sub-department of ${parentDeptName}` : undefined}
+          />
         </CardContent>
       </Card>
 

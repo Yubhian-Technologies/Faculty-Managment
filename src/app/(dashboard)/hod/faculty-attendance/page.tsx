@@ -7,6 +7,8 @@ export default function HodFacultyAttendancePage() {
     <AttendanceReportView
       title="Faculty Attendance"
       description="Daily self-attendance (face + location verified) for your department"
+      allowManualMark
+      monthlyViewBasePath="/hod/faculty-attendance"
     />
   );
 }

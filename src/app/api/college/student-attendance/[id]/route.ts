@@ -16,6 +16,7 @@ export async function PATCH(
     const session = await requireCollegeMember("PANEL_MEMBER");
     const body = (await request.json()) as {
       entries?: { studentId: string; status: StudentAttendanceMark | null }[];
+      classNotes?: string;
       submit?: boolean;
     };
 
@@ -53,6 +54,9 @@ export async function PATCH(
 
     const now = new Date();
     const update: Record<string, unknown> = { entries, presentCount, updatedAt: now };
+    if (body.classNotes !== undefined) {
+      update.classNotes = body.classNotes.trim();
+    }
 
     if (body.submit) {
       if (markedCount < existing.totalStudents || existing.totalStudents === 0) {

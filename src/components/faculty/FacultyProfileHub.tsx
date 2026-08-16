@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronRight, Pencil } from "lucide-react";
+import { ArrowLeft, ChevronRight, Pencil, ScanFace, ClipboardCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,17 @@ interface FacultyProfileHubProps {
   backHref?: string;
   editHref?: string;
   parentDeptName?: string | null; // shown as a badge next to Department when it's a sub-department
+  // Shows a "Re-register Face" action button when provided — the HOD's own
+  // faculty detail page passes this to let them send a same-department
+  // Faculty member back to first-time facial-attendance registration; other
+  // callers of this shared component (Principal's staff view, etc.) simply
+  // don't pass it, so they render exactly as before.
+  onReRegisterFace?: () => void;
+  // Shows a "View Attendance" link to the given href when provided —
+  // Management's Principal profile view passes this to reach the Principal's
+  // attendance history; other callers don't pass it, so they render exactly
+  // as before.
+  viewAttendanceHref?: string;
 }
 
 interface ProfileModuleTilesProps {
@@ -83,7 +94,7 @@ export function ProfileModuleTiles({ basePath, hideFinancialModule, excludeModul
 // module (Personal, Academic Qualification, Research, ...) instead of one long
 // scrolling form - each tile routes to its own page (FacultyProfileModuleContent).
 export function FacultyProfileHub({
-  faculty, basePath, hideFinancialModule, excludeModules, backHref, editHref, parentDeptName,
+  faculty, basePath, hideFinancialModule, excludeModules, backHref, editHref, parentDeptName, onReRegisterFace, viewAttendanceHref,
 }: FacultyProfileHubProps) {
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
   const [photoUrl, setPhotoUrl] = useState(faculty.profilePhotoUrl);
@@ -116,6 +127,16 @@ export function FacultyProfileHub({
             {backHref && (
               <Button variant="outline" asChild>
                 <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+              </Button>
+            )}
+            {onReRegisterFace && (
+              <Button variant="outline" onClick={onReRegisterFace}>
+                <ScanFace className="h-4 w-4 mr-2" />Re-register Face
+              </Button>
+            )}
+            {viewAttendanceHref && (
+              <Button variant="outline" asChild>
+                <Link href={viewAttendanceHref}><ClipboardCheck className="h-4 w-4 mr-2" />View Attendance</Link>
               </Button>
             )}
             {editHref && (

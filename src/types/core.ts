@@ -456,6 +456,20 @@ export interface Department {
   // Science" department feeds students on to both CSE and ECE, so both
   // HODs need visibility into its sections ahead of promotion.
   secondaryDepartments?: string[];
+  // Per-course override of assignedYears/secondaryDepartments above, keyed by
+  // CourseCatalogItem.id - a department can offer several courses (e.g. a
+  // B.Tech with a common first year through this department, and an M.Tech
+  // it runs independently end to end), and the flat fields above can't tell
+  // them apart. Stable across a delete/recreate of this department's own
+  // Course doc for that catalog entry (deliberate, so a careful cross-listing
+  // setup survives a course being re-added). A course with no entry here
+  // follows the flat fields above, which remain the permanent default - not a
+  // migration crutch - for a brand-new department or any course that never
+  // needs to diverge. Resolve through resolveDepartmentCourseScope()
+  // (src/lib/college/academicStructure.ts), never read directly. Deliberately
+  // does NOT cover hasSubDepartments or managedDepartments - see that
+  // function's doc-comment for why.
+  courseScopes?: Record<string, DepartmentCourseScope>;
   // Grouped/managed branches: on a sub-department, the top-level departments
   // (e.g. IT, CSBS) whose students, sections and academics its Sub-HOD fully
   // manages. Distinct from `secondaryDepartments` (view-only cross-listing) -
@@ -472,6 +486,11 @@ export interface Department {
   commonYearEnd?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+}
+
+export interface DepartmentCourseScope {
+  assignedYears: number[];
+  secondaryDepartments: string[];
 }
 
 // ─── Course Catalog (college-wide master list of course definitions the Principal
@@ -1221,6 +1240,17 @@ export interface StudentRecord {
   handicappedType?: "H" | "V" | "O"; // Hearing / Visual / Other - only meaningful when physicallyHandicapped
   identificationMarks?: string;
   remarks?: string;
+  // ─── Graduation snapshot ────────────────────────────────────────────────
+  // Set once, when `status` flips to GRADUATED (students/promote route). The
+  // student's department/section/year are left untouched by graduation (they
+  // stay whatever their final-year section was), so these three exist purely
+  // to make that final cohort's programme + batch queryable/displayable
+  // without joining back to a Section doc that could later be edited or
+  // removed - a graduate's record shouldn't be able to drift after the fact.
+  graduatedAt?: Timestamp;
+  graduationBatch?: string; // Section.batch at graduation, e.g. "2021-2025"
+  graduationCourseId?: string;
+  graduationCourseName?: string; // e.g. "B.Tech"
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -1273,6 +1303,7 @@ export type NotificationType =
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
+  | "ATTENDANCE_MANUALLY_MARKED"
   // Permission & On-Duty
   | "PERMISSION_APPROVED"
   | "PERMISSION_REJECTED"

@@ -4,6 +4,26 @@ import { LEAVE_TYPE_SEED } from "./seedData";
 import { computeEffectiveCategory } from "./categoryEngine";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 
+// Earned Leave's total balance (this year's base entitlement + whatever
+// carries forward - see initBalancesForYear) never exceeds this. Once
+// someone is sitting at the cap, nothing more carries forward the next year
+// until they use some of it down - using even one day makes room for that
+// much to carry forward again, back up to the cap, not on top of it.
+export const EL_CARRY_FORWARD_CAP = 300;
+
+// Earliest year the EL carry-forward chain ever backfills to, regardless of
+// how much earlier a profile's actual dateOfJoining is - this app has no real
+// leave-usage records before this year, so treating an earlier joining date
+// as the chain's start would assume zero EL ever taken across years we have
+// no actual data for, inflating the carried total. Once real historical
+// leave records are imported (per-year `used`/`entitled` written directly
+// onto the relevant year's leaveBalances doc), this stops mattering for
+// those years - initBalancesForYear only ever backfills a year that doesn't
+// already have a doc, so an imported year is never touched or overwritten by
+// this fallback, and the chain carries forward from the real imported
+// numbers instead.
+export const EL_HISTORY_START_YEAR = 2024;
+
 // EL is the one leave type whose annual entitlement depends on the profile's
 // effective category (vacation/teaching staff: 6 days; non-vacation/
 // supporting staff: 30 days) rather than a flat rules.daysPerYear.
@@ -42,6 +62,11 @@ export async function initBalancesForYear(
   const effectiveCategory = computeEffectiveCategory(profile, newJoiningYears);
   const col = BALANCES_COL(collegeId, db);
   const now = new Date();
+  const doj = profile.dateOfJoining as unknown as { toDate?: () => Date };
+  const joiningYear = (doj?.toDate?.() ?? new Date(profile.dateOfJoining as unknown as string)).getFullYear();
+  // The chain never backfills earlier than this, even for someone who joined
+  // well before it - see EL_HISTORY_START_YEAR.
+  const earliestChainYear = Math.max(joiningYear, EL_HISTORY_START_YEAR);
 
   const writes: Promise<unknown>[] = [];
 
@@ -64,11 +89,27 @@ export async function initBalancesForYear(
     // don't retroactively change an already-settled year.
     let carriedForward: number | undefined;
     if (lt.code === "EL") {
-      const prevBalances = await loadBalances(db, collegeId, uid, year - 1);
-      const prevEL = prevBalances.find((b) => b.leaveTypeCode === "EL");
+      let prevBalances = await loadBalances(db, collegeId, uid, year - 1);
+      let prevEL = prevBalances.find((b) => b.leaveTypeCode === "EL");
+      // Last year's own EL doc may never have been touched (nobody viewed
+      // their balance or applied for leave that year) - without this, the
+      // carry-forward chain silently breaks and resets to 0 the first time a
+      // gap year is skipped, understating the true running total. Backfill it
+      // first (recursively, in case several years in a row were skipped),
+      // bounded by earliestChainYear - there's nothing to carry from before
+      // that (either they hadn't joined yet, or it's before real leave data
+      // exists in this system at all).
+      if (!prevEL && year - 1 >= earliestChainYear) {
+        await initBalancesForYear(db, collegeId, uid, profile, newJoiningYears, year - 1, types);
+        prevBalances = await loadBalances(db, collegeId, uid, year - 1);
+        prevEL = prevBalances.find((b) => b.leaveTypeCode === "EL");
+      }
       if (prevEL) {
         const prevEntitled = prevEL.entitled ?? entitled;
-        carriedForward = Math.max(0, prevEntitled - (prevEL.used ?? 0));
+        const unusedLastYear = Math.max(0, prevEntitled - (prevEL.used ?? 0));
+        // Capped so this year's total (base + carried) never exceeds
+        // EL_CARRY_FORWARD_CAP - see its own comment for why.
+        carriedForward = Math.max(0, Math.min(unusedLastYear, EL_CARRY_FORWARD_CAP - entitled));
         entitled += carriedForward;
       }
     }
@@ -161,6 +202,27 @@ export async function releasePending(
   const data = (await ref.get()).data() ?? {};
   await ref.set(
     { collegeId, uid, leaveTypeCode, year, pending: Math.max(0, (data.pending ?? 0) - days), updatedAt: new Date() },
+    { merge: true }
+  );
+}
+
+// Inverse of commitApproval - the requester cancelling an already-APPROVED
+// request (see applications/[id]/route.ts CANCEL branch) restores whatever
+// days that approval had committed to `used`, same as if it had never been
+// approved. Never touches `pending` - approval already zeroed out whatever
+// was reserved for it.
+export async function releaseApproval(
+  db: Firestore,
+  collegeId: string,
+  uid: string,
+  leaveTypeCode: LeaveTypeCode,
+  year: number,
+  days: number
+): Promise<void> {
+  const ref = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, leaveTypeCode, year));
+  const data = (await ref.get()).data() ?? {};
+  await ref.set(
+    { collegeId, uid, leaveTypeCode, year, used: Math.max(0, (data.used ?? 0) - days), updatedAt: new Date() },
     { merge: true }
   );
 }

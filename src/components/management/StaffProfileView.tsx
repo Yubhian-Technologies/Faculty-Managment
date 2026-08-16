@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -8,6 +9,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileHub } from "@/components/faculty/FacultyProfileHub";
 import { FacultyProfileModuleContent } from "@/components/faculty/FacultyProfileModuleContent";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { toast } from "@/hooks/useToast";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import type { FacultyMember, UserRole, College, ResearchPublication } from "@/types";
 
@@ -45,11 +48,36 @@ function staffBasePath(collegeId: string, role: Props["role"]) {
 // identity summary + one tile per module (Personal, Academic Qualification,
 // Research, ...), same FacultyProfileHub every other role's faculty/staff
 // detail page uses, instead of one long scroll of every module dumped flat.
-// Read-only (no editHref) - Management never edits these records.
+// Read-only (no editHref) - Management never edits these records, with one
+// deliberate exception: resetting the Principal's own facial-attendance
+// registration - the top of the reset chain (Faculty <- HOD, HOD/VP <-
+// Principal, Principal <- Management; see
+// /api/management/colleges/[collegeId]/principal-attendance/reset).
 export function StaffProfileView({ collegeId, role, title, department, backHref }: Props) {
   const router = useRouter();
   const { data, isLoading } = useManagementStaff(collegeId, role, department);
   const profile = data?.profile;
+
+  const [confirmingReRegister, setConfirmingReRegister] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  async function handleReRegisterFace() {
+    setIsResetting(true);
+    try {
+      const res = await fetch(`/api/management/colleges/${collegeId}/principal-attendance/reset`, { method: "POST" });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to reset face registration" });
+        return;
+      }
+      toast({ title: `${profile?.name ?? "Principal"} can now register their face again from My Attendance` });
+      setConfirmingReRegister(false);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to reset face registration" });
+    } finally {
+      setIsResetting(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -70,13 +98,35 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
   }
 
   return (
-    <FacultyProfileHub
-      faculty={profile}
-      basePath={staffBasePath(collegeId, role)}
-      backHref={backHref}
-      // Principal/Vice Principal don't carry a teaching load - HOD does.
-      excludeModules={role === "HOD" ? [] : ["teaching-load"]}
-    />
+    <>
+      <FacultyProfileHub
+        faculty={profile}
+        basePath={staffBasePath(collegeId, role)}
+        backHref={backHref}
+        // Principal/Vice Principal don't carry a teaching load - HOD does.
+        excludeModules={role === "HOD" ? [] : ["teaching-load"]}
+        viewAttendanceHref={
+          role === "PRINCIPAL"
+            ? `/management/faculty/${collegeId}/principal/attendance`
+            : role === "VICE_PRINCIPAL"
+              ? `/management/faculty/${collegeId}/vice-principal/attendance`
+              : undefined
+        }
+        onReRegisterFace={role === "PRINCIPAL" ? () => setConfirmingReRegister(true) : undefined}
+      />
+
+      {role === "PRINCIPAL" && (
+        <ConfirmDialog
+          open={confirmingReRegister}
+          onOpenChange={(open) => { if (!open) setConfirmingReRegister(false); }}
+          title="Re-register face?"
+          description={`${profile?.name ?? "This Principal"}'s current registered face will stop working for check-in. They'll be prompted to register their face again the next time they open My Attendance.`}
+          confirmLabel="Re-register Face"
+          onConfirm={() => void handleReRegisterFace()}
+          loading={isResetting}
+        />
+      )}
+    </>
   );
 }
 

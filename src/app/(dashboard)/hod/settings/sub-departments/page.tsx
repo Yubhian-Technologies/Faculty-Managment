@@ -359,7 +359,7 @@ export default function SubDepartmentsSettingsPage() {
                   grouped under it below.
                 </p>
                 <div className="space-y-2">
-                  <Label>Managed Departments</Label>
+                  <Label>Secondary Departments</Label>
                   {(() => {
                     const options = allDepartments.filter(
                       (d) => !d.parentDepartmentId && d.name !== ownDept.name && d.name !== name
@@ -372,7 +372,7 @@ export default function SubDepartmentsSettingsPage() {
                             <label
                               key={d.id}
                               className={`flex items-center gap-1.5 text-sm ${takenBy ? "opacity-50" : ""}`}
-                              title={takenBy ? `Already managed by ${takenBy}` : undefined}
+                              title={takenBy ? `Already a secondary department of ${takenBy}` : undefined}
                             >
                               <Checkbox
                                 disabled={!!takenBy}
@@ -460,7 +460,7 @@ export default function SubDepartmentsSettingsPage() {
                 </div>
                 {dept.managedDepartments && dept.managedDepartments.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Manages <span className="text-foreground">{dept.managedDepartments.join(", ")}</span>
+                    Secondary Departments: <span className="text-foreground">{dept.managedDepartments.join(", ")}</span>
                   </p>
                 )}
               </CardContent>
@@ -521,7 +521,7 @@ export default function SubDepartmentsSettingsPage() {
                         <label
                           key={d.id}
                           className={`flex items-center gap-1.5 text-sm ${takenBy ? "opacity-50" : ""}`}
-                          title={takenBy ? `Already managed by ${takenBy}` : undefined}
+                          title={takenBy ? `Already a secondary department of ${takenBy}` : undefined}
                         >
                           <Checkbox
                             disabled={!!takenBy}

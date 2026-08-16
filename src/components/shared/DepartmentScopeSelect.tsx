@@ -275,7 +275,7 @@ export function DepartmentScopeSelect({
         {options.map((d) => (
           <option key={d.id} value={d.name}>
             {d.name}
-            {d.id === own.id ? " (your department)" : managedNames.has(d.name) ? " (managed branch)" : ""}
+            {d.id === own.id ? " (your department)" : managedNames.has(d.name) ? " (secondary department)" : ""}
           </option>
         ))}
       </select>

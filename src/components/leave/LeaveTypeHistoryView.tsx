@@ -7,6 +7,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { ArrowLeft, History } from "lucide-react";
 import { LeaveHistoryRow, type BalanceEntry } from "./LeaveProfileView";
@@ -61,6 +63,7 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
   // applications/route.ts POST), so releasing a pending amount that was never
   // added releases nothing - cancelling never reduces the shown balance.
   const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
   // Earned Leave's carry-forward breakdown (e.g. "6 base + 3 carried from
   // last year = 9") - fetched only for the EL history view specifically per
@@ -109,19 +112,22 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
   }, [uid, showOtherLeaveCategory]);
 
   async function handleCancel() {
-    if (!cancelTarget) return;
+    if (!cancelTarget || !cancelReason.trim()) return;
     setCancelling(true);
     try {
       const res = await fetch(`/api/leave/applications/${cancelTarget.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "CANCEL" }),
+        body: JSON.stringify({ action: "CANCEL", reason: cancelReason.trim() }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to cancel");
       toast({ variant: "success", title: "Leave request cancelled" });
-      setRequests((prev) => prev.map((r) => (r.id === cancelTarget.id ? { ...r, status: "CANCELLED" } : r)));
+      setRequests((prev) =>
+        prev.map((r) => (r.id === cancelTarget.id ? { ...r, status: "CANCELLED", cancelReason: cancelReason.trim() } : r))
+      );
       setCancelTarget(null);
+      setCancelReason("");
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to cancel" });
     } finally {
@@ -148,11 +154,11 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="p-4 text-sm">
             <p className="font-medium">
-              {elBalance.entitled} day(s) available this year
+              {elBalance.entitled} day(s) available &mdash; total Earned Leave, carried forward every year
             </p>
             <p className="text-muted-foreground mt-0.5">
-              {(elBalance.entitled ?? 0) - elBalance.carriedForward} base + {elBalance.carriedForward} carried forward
-              from last year&rsquo;s unused Earned Leave
+              {(elBalance.entitled ?? 0) - elBalance.carriedForward} new this year + {elBalance.carriedForward} carried
+              forward from previous years (capped at 300 total)
               {elBalance.used ? ` · ${elBalance.used} used so far` : ""}
             </p>
           </CardContent>
@@ -192,14 +198,30 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
 
       <ConfirmDialog
         open={!!cancelTarget}
-        onOpenChange={(open) => { if (!open) setCancelTarget(null); }}
+        onOpenChange={(open) => { if (!open) { setCancelTarget(null); setCancelReason(""); } }}
         title="Cancel this leave request?"
-        description="It moves to Cancelled in your history. Your leave balance is unaffected either way."
+        description={
+          cancelTarget?.status === "APPROVED"
+            ? "It moves to Cancelled in your history and the days already deducted for it are added back to your balance."
+            : "It moves to Cancelled in your history. Your leave balance is unaffected either way."
+        }
         confirmLabel="Cancel Request"
         variant="destructive"
         loading={cancelling}
+        confirmDisabled={!cancelReason.trim()}
         onConfirm={() => void handleCancel()}
-      />
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="cancel-reason">Reason for cancelling (visible to your approver)</Label>
+          <Textarea
+            id="cancel-reason"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            rows={3}
+            placeholder="Why are you cancelling this leave request?"
+          />
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

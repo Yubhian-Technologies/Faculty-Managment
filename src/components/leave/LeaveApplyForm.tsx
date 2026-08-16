@@ -12,11 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
 import { AlertTriangle, CalendarPlus } from "lucide-react";
-import { countLeaveDays, todayISODate } from "@/lib/leave/dayCounter";
+import { countWorkingDays, dateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { toDate as toJsDate, formatDate } from "@/lib/utils";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
+import type { Holiday } from "@/types";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -45,17 +46,34 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDaySession, setHalfDaySession] = useState<"FN" | "AN">("FN");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
 
   const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
+
+  useEffect(() => {
+    fetch("/api/college/holidays")
+      .then((r) => r.json() as Promise<{ holidays: Holiday[] }>)
+      .then((d) => {
+        const keys = (d.holidays ?? []).map((h) => toJsDate(h.date)).filter((d): d is Date => !!d).map(dateKey);
+        setHolidayDates(new Set(keys));
+      })
+      .catch(() => {
+        // Non-fatal - the preview just won't exclude holidays; the server
+        // (applications/route.ts) is still the authoritative count.
+      });
+  }, []);
 
   // Live preview only - the server never blocks on this (see applications/route.ts),
   // it just warns the requester before they submit that some days will exceed
   // their balance and be treated as Loss of Pay (final split happens at approval).
+  // Matches the server's countWorkingDays exactly - Sundays and declared
+  // holidays within the range don't count, same rule the server enforces.
   const selectedType = types.find((t) => t.code === leaveTypeCode);
   const previewTotalDays =
-    fromDate && toDate && toDate >= fromDate ? countLeaveDays(new Date(fromDate), new Date(toDate), isHalfDay) : 0;
+    fromDate && toDate && toDate >= fromDate ? countWorkingDays(new Date(fromDate), new Date(toDate), holidayDates, isHalfDay) : 0;
   const lopPreviewDays =
     selectedType && !selectedType.unlimited && selectedType.remaining !== undefined && previewTotalDays > selectedType.remaining
       ? previewTotalDays - selectedType.remaining
@@ -115,6 +133,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           fromDate,
           toDate,
           isHalfDay,
+          halfDaySession: isHalfDay ? halfDaySession : undefined,
           reason: reason.trim(),
           extendsRequestId: extendId ?? undefined,
         }),
@@ -195,6 +214,21 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               <span className="text-xs text-muted-foreground">(not available for this leave type)</span>
             )}
           </label>
+
+          {isHalfDay && isHalfDayEligible && (
+            <div className="space-y-2">
+              <Label>Which half?</Label>
+              <Select value={halfDaySession} onValueChange={(v) => setHalfDaySession(v as "FN" | "AN")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FN">Forenoon</SelectItem>
+                  <SelectItem value="AN">Afternoon</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {lopPreviewDays > 0 && selectedType && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">

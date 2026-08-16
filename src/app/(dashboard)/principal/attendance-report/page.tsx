@@ -7,6 +7,9 @@ export default function PrincipalAttendanceReportPage() {
     <AttendanceReportView
       title="Attendance Report"
       description="Daily self-attendance (face + location verified) across the college"
+      groupByDepartmentAndCourse
+      allowManualMark
+      monthlyViewBasePath="/principal/attendance-report"
     />
   );
 }

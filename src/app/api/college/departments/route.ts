@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
@@ -9,31 +10,7 @@ import {
   branchClaimConflictMessage,
   type DepartmentClaimRow,
 } from "@/lib/departments/managedBranches";
-
-// Years a department teaches must be a subset of the years this college has
-// actually opened (Location Admin's Academic Years toggle) - mirrors the same
-// check done for Section creation in college/sections/route.ts. Shared by the
-// create and update paths so both reject the same way.
-// Returns an error message, or null when the years are valid.
-async function validateAssignedYears(
-  db: FirebaseFirestore.Firestore,
-  collegeId: string,
-  assignedYears: number[]
-): Promise<string | null> {
-  const academicYearsSnap = await db
-    .collection("colleges")
-    .doc(collegeId)
-    .collection("academicYears")
-    .get();
-  const openYears = new Set(
-    academicYearsSnap.docs
-      .map((d) => d.data() as { yearNumber: number; isActive: boolean })
-      .filter((y) => y.isActive)
-      .map((y) => y.yearNumber)
-  );
-  const invalid = assignedYears.filter((y) => !openYears.has(Number(y)));
-  return invalid.length > 0 ? `Year(s) ${invalid.join(", ")} are not open for this college` : null;
-}
+import { validateAssignedYears, validateSecondaryDepartmentNames } from "@/lib/departments/courseScopeValidation";
 
 // yyyy-mm-dd, the same shape StudentRecord.dateOfBirth already uses.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -432,6 +409,13 @@ export async function PATCH(request: Request) {
       managedDepartments?: string[];
       commonYearStart?: string;
       commonYearEnd?: string;
+      // Per-course override of assignedYears/secondaryDepartments - see
+      // Department.courseScopes. Principal/VP/Super Admin only: deliberately
+      // NOT added to the HOD-restricted allowlist below, same tier as
+      // assignedYears/hasSubDepartments.
+      courseScope?:
+        | { catalogId: string; assignedYears: number[]; secondaryDepartments: string[] }
+        | { catalogId: string; clear: true };
     };
 
     const { deptId, ...rawUpdates } = body;
@@ -494,22 +478,60 @@ export async function PATCH(request: Request) {
         const currentSnap = await deptRef.get();
         const currentData = currentSnap.data() as { name?: string; parentDepartmentId?: string } | undefined;
         const currentName = updates.name?.trim() ?? currentData?.name ?? "";
-        if (names.includes(currentName)) {
-          return NextResponse.json({ error: "Secondary department must be different from this department" }, { status: 400 });
-        }
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         const byName = new Map(deptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }]));
-        for (const secName of names) {
-          const secDept = byName.get(secName);
-          if (!secDept) {
-            return NextResponse.json({ error: `Secondary department "${secName}" not found` }, { status: 400 });
-          }
-          if (secDept.parentDepartmentId) {
-            return NextResponse.json({ error: `"${secName}" is a sub-department and can't be used as a secondary department` }, { status: 400 });
-          }
-        }
+        const secError = validateSecondaryDepartmentNames(names, currentName, byName);
+        if (secError) return NextResponse.json({ error: secError }, { status: 400 });
       }
       updates.secondaryDepartments = names;
+    }
+
+    // Per-course override of assignedYears/secondaryDepartments - see
+    // Department.courseScopes. Popped off `updates` (rather than left as a
+    // literal `courseScope` field) and resolved into a `courseScopes.<id>`
+    // dot-path key on `courseScopePatch`, merged in at write time below -
+    // touches only that one catalogId, sibling overrides and the flat fields
+    // are untouched.
+    const { courseScope, ...updatesWithoutCourseScope } = updates;
+    updates = updatesWithoutCourseScope;
+    const courseScopePatch: Record<string, unknown> = {};
+    if (courseScope) {
+      const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses")
+        .where("departmentId", "==", deptId)
+        .where("catalogId", "==", courseScope.catalogId)
+        .limit(1)
+        .get();
+      if (courseSnap.empty) {
+        return NextResponse.json({ error: "This department does not offer that course yet" }, { status: 400 });
+      }
+
+      if ("clear" in courseScope && courseScope.clear) {
+        courseScopePatch[`courseScopes.${courseScope.catalogId}`] = FieldValue.delete();
+      } else if ("assignedYears" in courseScope) {
+        const durationYears = (courseSnap.docs[0].data() as { durationYears?: number }).durationYears ?? 0;
+        const years = Array.from(new Set(courseScope.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
+        const tooLong = years.filter((y) => y > durationYears);
+        if (tooLong.length > 0) {
+          return NextResponse.json(
+            { error: `Year(s) ${tooLong.join(", ")} are beyond this course's ${durationYears}-year duration` },
+            { status: 400 }
+          );
+        }
+        const yearsError = await validateAssignedYears(db, session.collegeId, years);
+        if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
+
+        const names = Array.from(new Set(courseScope.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
+        if (names.length > 0) {
+          const currentSnap = await deptRef.get();
+          const currentName = updates.name?.trim() ?? (currentSnap.data() as { name?: string } | undefined)?.name ?? "";
+          const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+          const byName = new Map(deptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }]));
+          const secError = validateSecondaryDepartmentNames(names, currentName, byName);
+          if (secError) return NextResponse.json({ error: secError }, { status: 400 });
+        }
+
+        courseScopePatch[`courseScopes.${courseScope.catalogId}`] = { assignedYears: years, secondaryDepartments: names };
+      }
     }
 
     if (updates.managedDepartments !== undefined) {
@@ -594,10 +616,10 @@ export async function PATCH(request: Request) {
           deptId
         );
         if (conflicts.length > 0) throw new Error(`BRANCH_CLAIMED:${branchClaimConflictMessage(conflicts)}`);
-        tx.update(deptRef, { ...updates, updatedAt: now });
+        tx.update(deptRef, { ...updates, ...courseScopePatch, updatedAt: now });
       });
     } else {
-      await deptRef.update({ ...updates, updatedAt: now });
+      await deptRef.update({ ...updates, ...courseScopePatch, updatedAt: now });
     }
 
     return NextResponse.json({ ok: true });

@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
-import type { Course } from "@/types";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import type { Course, Department } from "@/types";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -18,21 +19,35 @@ export default function HODTimetableYearsPage() {
   const router = useRouter();
   const { courseId } = useParams<{ courseId: string }>();
   const [course, setCourse] = useState<Course | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/college/courses")
-      .then((r) => r.json() as Promise<{ courses: Course[] }>)
-      .then((d) => {
-        const found = (d.courses ?? []).find((c) => c.id === courseId) ?? null;
+    Promise.all([
+      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
+      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+    ])
+      .then(([c, d]) => {
+        const found = (c.courses ?? []).find((x) => x.id === courseId) ?? null;
         if (!found) toast({ variant: "destructive", title: "Course not found" });
         setCourse(found);
+        setDepartments(d.departments ?? []);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load course" }))
       .finally(() => setIsLoading(false));
   }, [courseId]);
 
-  const years = course ? Array.from({ length: course.durationYears }, (_, i) => i + 1) : [];
+  // Scoped to the course's own department's "Years Taught"
+  // (resolveDepartmentCourseScope), not the raw 1..durationYears span - e.g.
+  // Basic Science only builds a 1st-year timetable even for a shared 4-year
+  // B.Tech course.
+  const years = (() => {
+    if (!course) return [];
+    const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
+    const dept = departments.find((d) => d.id === course.departmentId);
+    const assigned = dept ? resolveDepartmentCourseScope(dept, course.catalogId).assignedYears : [];
+    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+  })();
 
   return (
     <div className="space-y-6">
