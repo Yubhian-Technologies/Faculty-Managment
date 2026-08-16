@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
+import { isSunday } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceRecord } from "@/types";
 
 interface RosterEntry {
@@ -25,11 +26,13 @@ interface RosterEntry {
   // "not yet disambiguated" rather than "belongs to no course".
   courseIds?: string[];
   // AttendanceStatus, or a synthetic value for "no record exists yet for the
-  // day": "NOT_REGISTERED" (hasn't registered their face at all - takes
-  // priority) or "NOT_MARKED" (registered, just hasn't checked in yet today).
-  // Deliberately NOT "ABSENT" for a past day with no record - this route has
-  // no way yet to tell "forgot to check in" apart from Sunday/holiday/
-  // approved-leave, so that derivation is intentionally deferred.
+  // day": "NOT_REGISTERED" (never registered their face at all - takes
+  // priority) or "NOT_MARKED" (registered, hasn't checked in *today* yet -
+  // still in progress, not judged). A past day with no record derives to
+  // ABSENT (or HOLIDAY on a Sunday) once it's on/after that person's
+  // face-registration date - before that date, or before today's window
+  // closes, it stays NOT_MARKED/NOT_REGISTERED. Approved leave and the
+  // office Holidays calendar still aren't cross-referenced here.
   status: string;
   checkIn: string | null;
   checkOut: string | null;
@@ -79,11 +82,13 @@ export async function GET(request: Request) {
     const facultyMembersSnap = await facultyMembersQuery.get();
     const uidToFacultyMemberId = new Map<string, string>();
     const uidToRegistered = new Map<string, boolean>();
+    const uidToRegisteredAt = new Map<string, Date | null>();
     for (const doc of facultyMembersSnap.docs) {
-      const fm = doc.data() as { userUid?: string; faceEmbedding?: number[] };
+      const fm = doc.data() as { userUid?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
       if (!fm.userUid) continue;
       uidToFacultyMemberId.set(fm.userUid, doc.id);
       uidToRegistered.set(fm.userUid, Array.isArray(fm.faceEmbedding) && fm.faceEmbedding.length > 0);
+      uidToRegisteredAt.set(fm.userUid, fm.faceRegisteredAt ? fm.faceRegisteredAt.toDate() : null);
     }
 
     const usersSnap = await usersQuery.get();
@@ -104,12 +109,13 @@ export async function GET(request: Request) {
     if (session.role !== "HOD") {
       const hodsSnap = await collegeRef.collection("users").where("role", "==", "HOD").get();
       for (const d of hodsSnap.docs) {
-        const u = d.data() as { name?: string; department?: string; faceEmbedding?: number[] };
+        const u = d.data() as { name?: string; department?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
         roster.push({
           uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "HOD" as const,
           status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
           registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0,
         });
+        uidToRegisteredAt.set(d.id, u.faceRegisteredAt ? u.faceRegisteredAt.toDate() : null);
       }
     }
 
@@ -166,12 +172,23 @@ export async function GET(request: Request) {
       p.entry.checkOutVerified = p.checkOutVerified;
     }
 
-    // "No record yet" defaults to NOT_MARKED above - promote it to
-    // NOT_REGISTERED when the person hasn't registered their face at all,
-    // since that's a more actionable distinction than a blanket "not marked".
+    // "No record yet" defaults to NOT_MARKED above - refine it:
+    //   - Never registered at all -> NOT_REGISTERED (most actionable).
+    //   - A past date, on/after their registration date -> ABSENT (or
+    //     HOLIDAY if that date is a Sunday) - they could have checked in
+    //     and didn't. Before registration, or today, stays NOT_MARKED.
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     for (const entry of roster) {
-      if (entry.status === "NOT_MARKED" && !entry.registered) {
+      if (entry.status !== "NOT_MARKED") continue;
+      if (!entry.registered) {
         entry.status = "NOT_REGISTERED";
+        continue;
+      }
+      const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
+      const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
+      if (start < todayStart && regStart && start >= regStart) {
+        entry.status = isSunday(start) ? "HOLIDAY" : "ABSENT";
       }
     }
 
