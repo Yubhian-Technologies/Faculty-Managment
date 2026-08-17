@@ -51,7 +51,7 @@ export default function HODSupportingStaffPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/supporting-staff");
+      const res = await fetch("/api/college/supporting-staff?scope=own");
       const data = await res.json() as { staff: StaffRow[] };
       setStaff(data.staff ?? []);
     } catch {

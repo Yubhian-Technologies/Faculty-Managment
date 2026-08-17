@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
 import type { FacultyAssignmentRequest } from "@/types";
 
 // Fulfills (allocate) or declines an incoming faculty-assignment request -
@@ -33,7 +33,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const reqData = reqSnap.data() as FacultyAssignmentRequest;
 
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    if (!canHodEditDepartment(scope, reqData.targetDepartmentName)) {
+    // Own department/sub-departments only, not managed branches (see
+    // ownDepartmentNames doc) - matches the GET route's incoming-list
+    // filter, so a request that isn't listed here can't be acted on either.
+    if (!ownDepartmentNames(scope).includes(reqData.targetDepartmentName)) {
       return NextResponse.json({ error: "This request wasn't sent to your department" }, { status: 403 });
     }
 
