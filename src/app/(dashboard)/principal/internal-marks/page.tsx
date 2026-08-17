@@ -27,6 +27,7 @@ const ALL = "__ALL__";
 
 function ordinalYear(year: number | undefined) {
   if (year === undefined) return "—";
+  if (year == null) return "—";
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
 }

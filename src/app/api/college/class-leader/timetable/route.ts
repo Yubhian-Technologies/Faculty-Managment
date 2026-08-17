@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
+import { isoDateKey } from "@/lib/leave/dayCounter";
 
 // Self-contained read for the Class Leader dashboard AND timetable page (both
 // call this one endpoint): resolves the caller's own bound Section (never a
@@ -43,8 +45,20 @@ export async function GET() {
     const timing = timingsSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }) as unknown as { id: string; year: number })
       .find((t) => t.year === section.year) ?? null;
-    const slots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const rawSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     const assignments = assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Overlay today's approved-leave substitutions - see
+    // lib/leave/periodCoverage.ts and the same overlay in
+    // GET college/timetable-slots.
+    const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, isoDateKey(new Date()));
+    const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
+    const slots = rawSlots.map((s) => {
+      const sub = substitutionBySlotId.get((s as { id: string }).id);
+      return sub
+        ? { ...s, substituteFacultyId: sub.substituteFacultyId, substituteFacultyName: sub.substituteFacultyName, substituteForName: sub.requesterName }
+        : s;
+    });
 
     return NextResponse.json({ course, section, timing, slots, assignments });
   } catch (err) {
