@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, KeyRound, ChevronRight } from "lucide-react";
+import { ArrowLeft, KeyRound, ChevronRight, CheckCircle2 } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { getDetailedHiringStatus, DETAILED_HIRING_STATUS_LABELS } from "@/lib/hiringPipeline";
 import type { Candidate, CandidateApplication, OfferLetter, FacultyAccountRequest, FacultyAccountRequestStatus, VacancyRequest } from "@/types";
@@ -25,6 +25,11 @@ type DocCandidateView = {
   batchId?: string;
   statusLabel: string;
   eligibleForCredentialRequest: boolean;
+  // Fully done - credentials created (or the whole request completed) - shown
+  // as "Hiring Closed" instead of the raw status label, and routed to the
+  // consolidated Candidate Profile (all-stages view) instead of the active
+  // document-verification workflow page, which has nothing left to do here.
+  isClosed: boolean;
 };
 
 export default function CollegeOfficeVacancyCandidatesPage() {
@@ -92,6 +97,7 @@ export default function CollegeOfficeVacancyCandidatesPage() {
               detailedStatus === "APPOINTMENT_LETTER_SENT" &&
               !!offer?.candidateConfirmedJoiningDate &&
               !(offer && accountRequestExistsByOfferId.has(offer.id)),
+            isClosed: detailedStatus === "CREDENTIALS_CREATED" || detailedStatus === "HIRING_COMPLETED",
           };
         });
         setCandidates(views);
@@ -154,14 +160,27 @@ export default function CollegeOfficeVacancyCandidatesPage() {
               {candidate.eligibleForCredentialRequest && (
                 <Checkbox checked={selected.has(candidate.id)} onCheckedChange={() => toggleSelected(candidate.id)} />
               )}
-              <Link href={`/college-office/documents/candidate/${candidate.id}`} className="flex-1 min-w-0 flex items-center justify-between gap-3 group">
+              <Link
+                href={candidate.isClosed ? `/candidate-profile/${candidate.candidateId}` : `/college-office/documents/candidate/${candidate.id}`}
+                className="flex-1 min-w-0 flex items-center justify-between gap-3 group"
+              >
                 <p className="font-medium text-sm truncate">{candidate.name}</p>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50">
-                    {candidate.statusLabel}
-                  </Badge>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-                </div>
+                {candidate.isClosed ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50">
+                      <CheckCircle2 className="h-3 w-3 mr-1" /> Hiring Closed
+                    </Badge>
+                    <span className="text-xs text-primary group-hover:underline">View Details</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50">
+                      {candidate.statusLabel}
+                    </Badge>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                  </div>
+                )}
               </Link>
             </div>
           ))}

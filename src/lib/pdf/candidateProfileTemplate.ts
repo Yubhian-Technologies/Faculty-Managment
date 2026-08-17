@@ -4,6 +4,7 @@ import type { CandidateStage } from "@/types";
 import {
   esc, entry, bullets, detail, detailTable, docLinkRow, renderSection, DOCUMENT_STYLES,
 } from "@/lib/pdf/resumeTemplate";
+import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
 
 interface QualificationLike {
   degree?: string;
@@ -96,6 +97,11 @@ export interface CandidateProfileData {
   };
 
   applications?: ApplicationLike[];
+
+  /** Whoever downloaded/generated this document (HOD, College Office, etc.) -
+   *  shown as the signature at the bottom, same as the document acknowledgement. */
+  generatedByName?: string;
+  generatedByRole?: string;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -105,29 +111,32 @@ const SOURCE_LABELS: Record<string, string> = {
   REFERRAL: "Referral",
 };
 
-// Deliberately not the resume's photo/avatar CV-style header - this is meant
-// to read as a plain data page, not a formatted resume, so this template
-// only overrides the header block and reuses everything else (section/entry/
-// fact-grid layout) as-is from DOCUMENT_STYLES.
-const PLAIN_HEADER_STYLES = `
-  .plain-header { border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 10px; }
-  .plain-title { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
-  .plain-contact { text-align: left; white-space: normal; margin-top: 6px; }
+// Deliberately not the resume's photo/avatar CV-style header - this reads as
+// a plain data page, not a formatted resume - but shares the same letterhead
+// (logo + college name) and signature-block look as the document
+// acknowledgement (documentAcknowledgementTemplate.ts) so every internal
+// hiring document this office generates looks like it belongs to one set.
+// Prefixed "cp-" so nothing here collides with DOCUMENT_STYLES' own classes.
+const HEADER_AND_SIGNATURE_STYLES = `
+  .cp-header { text-align: center; border-bottom: 3px double #1d4ed8; padding-bottom: 14px; margin-bottom: 16px; }
+  .cp-header img { height: 56px; width: auto; object-fit: contain; margin-bottom: 8px; }
+  .cp-college-name { font-size: 20px; font-weight: bold; color: #1d4ed8; margin: 0 0 6px; }
+  .cp-title { font-size: 15px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.6px; margin: 0 0 4px; }
+  .cp-subtitle { font-size: 12.5px; color: #4b5563; }
+  .cp-signature { margin-top: 40px; font-size: 12px; break-inside: avoid-page; }
+  .cp-sig-line { border-top: 1px solid #444; width: 220px; padding-top: 6px; }
+  .cp-sig-name { font-weight: bold; }
+  .cp-sig-role { color: #444; }
 `;
 
 export function getCandidateProfileHTML(data: CandidateProfileData): string {
-  const contactLines = [
-    data.email ? `Email: ${esc(data.email)}` : "",
-    data.collegeName ? `College: ${esc(data.collegeName)}` : "",
-    data.phone ? `Mobile: ${esc(data.phone)}` : "",
-    data.resumeUrl ? `<a href="${esc(data.resumeUrl)}" target="_blank" style="color:#1d4ed8;text-decoration:none;">View Uploaded Resume ↗</a>` : "",
-  ].filter(Boolean);
-
   const primaryApplication = data.applications?.[0];
   const subtitle = [primaryApplication?.position, primaryApplication?.department].filter(Boolean).join(" · ");
 
   // ── Personal & contact details ──────────────────────────────────────────
   const personalBody = detailTable(
+    detail("Email", data.email) +
+    detail("Phone", data.phone) +
     detail("Father's Name", data.fatherName) +
     detail("Mother's Name", data.motherName) +
     detail("Date of Birth", data.dateOfBirth ? formatDate(new Date(data.dateOfBirth)) : "") +
@@ -228,18 +237,15 @@ export function getCandidateProfileHTML(data: CandidateProfileData): string {
 <html>
 <head>
 <meta charset="utf-8">
-<style>${DOCUMENT_STYLES}${PLAIN_HEADER_STYLES}</style>
+<style>${DOCUMENT_STYLES}${HEADER_AND_SIGNATURE_STYLES}</style>
 </head>
 <body>
 <div class="page">
-  <div class="plain-header">
-    <div class="plain-title">Candidate Profile</div>
-    <div class="name">${esc(data.name)}</div>
-    ${subtitle ? `<div class="subtitle">${esc(subtitle)}</div>` : ""}
-    ${data.collegeName ? `<div class="college">${esc(data.collegeName)}</div>` : ""}
-    <div class="contact-block plain-contact">
-      ${contactLines.map((l) => `<div>${l}</div>`).join("")}
-    </div>
+  <div class="cp-header">
+    <img src="${VISHNU_LOGO_URL}" alt="Vishnu Logo">
+    <p class="cp-college-name">${esc(data.collegeName || "")}</p>
+    <div class="cp-title">Candidate Profile — ${esc(data.name)}</div>
+    ${subtitle ? `<div class="cp-subtitle">${esc(subtitle)}</div>` : ""}
   </div>
 
   ${renderSection("Personal & Contact Details", personalBody)}
@@ -250,6 +256,13 @@ export function getCandidateProfileHTML(data: CandidateProfileData): string {
   ${renderSection("Relatives Working in the Society", relativesBody)}
   ${renderSection("Documents & Certificates", documentsBody)}
   ${renderSection("Hiring Applications", applicationsBody)}
+
+  ${data.generatedByName ? `<div class="cp-signature">
+    <div class="cp-sig-line">
+      <div class="cp-sig-name">${esc(data.generatedByName)}</div>
+      <div class="cp-sig-role">${data.generatedByRole ? `${esc(data.generatedByRole)}, ` : ""}${esc(data.collegeName || "")}</div>
+    </div>
+  </div>` : ""}
 
   <div class="footer">Generated on ${esc(formatDate(new Date()))} - Confidential, for internal institutional use only.</div>
 </div>

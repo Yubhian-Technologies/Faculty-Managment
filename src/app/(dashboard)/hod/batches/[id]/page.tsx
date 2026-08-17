@@ -26,8 +26,8 @@ import {
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
-import { DESIGNATION_LABELS, ROLE_LABELS } from "@/types";
-import type { HiringBatch, Candidate, CandidateApplication, CandidateBioData, InterviewMode, FacultyMember, FMSUser } from "@/types";
+import { DESIGNATION_LABELS, ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, CandidateBioData, InterviewMode, MeetingPlatform, FacultyMember, FMSUser } from "@/types";
 import { useAuthStore } from "@/store/authStore";
 
 // Joined view for this batch's roster: person fields come from Candidate,
@@ -128,9 +128,11 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   const [editInterviewDate, setEditInterviewDate] = useState("");
   const [isSavingCommittee, setIsSavingCommittee] = useState(false);
   const [arrivingId, setArrivingId] = useState<string | null>(null);
+  const [isMarkingComplete, setIsMarkingComplete] = useState(false);
 
   const [demoClassroom, setDemoClassroom] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
+  const [meetingPlatform, setMeetingPlatform] = useState<MeetingPlatform | "">("");
   const [coordinatorFacultyId, setCoordinatorFacultyId] = useState("");
   const [interviewVenue, setInterviewVenue] = useState("");
   const [requiredDocuments, setRequiredDocuments] = useState<string[]>([]);
@@ -179,6 +181,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setAllUsers(users);
       setDemoClassroom(b.demoClassroom ?? "");
       setMeetingLink(b.meetingLink ?? "");
+      setMeetingPlatform(b.meetingPlatform ?? "");
       setCoordinatorFacultyId(b.coordinatorFacultyId ?? "");
       setInterviewVenue(b.interviewVenue ?? "");
       setRequiredDocuments(b.requiredDocuments ?? []);
@@ -245,12 +248,17 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
   }, [id]);
 
   async function saveDetails() {
-    if (!coordinatorFacultyId) {
+    const isOnline = batch?.hiringMode === "ONLINE";
+    if (!isOnline && !coordinatorFacultyId) {
       toast({ variant: "destructive", title: "Please assign a coordinator" });
       return;
     }
-    if (!interviewVenue.trim()) {
+    if (!isOnline && !interviewVenue.trim()) {
       toast({ variant: "destructive", title: "Please enter the interview venue" });
+      return;
+    }
+    if (isOnline && (!meetingPlatform || !meetingLink.trim())) {
+      toast({ variant: "destructive", title: "Please select a platform and enter a meeting link" });
       return;
     }
     setIsSaving(true);
@@ -259,17 +267,21 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          interviewVenue: interviewVenue.trim(),
           requiredDocuments,
-          demoClassroom: demoClassroom.trim(),
           meetingLink: meetingLink.trim(),
-          coordinatorFacultyId,
           setupComplete: true,
           currentPhase: "INTERVIEW_READY",
+          ...(isOnline
+            ? { meetingPlatform }
+            : { interviewVenue: interviewVenue.trim(), demoClassroom: demoClassroom.trim(), coordinatorFacultyId }),
         }),
       });
       if (!res.ok) throw new Error();
-      toast({ variant: "success", title: "Setup saved", description: "Coordinator has been notified. Session is ready." });
+      toast({
+        variant: "success",
+        title: "Setup saved",
+        description: isOnline ? "Session is ready." : "Coordinator has been notified. Session is ready.",
+      });
       void load();
     } catch {
       toast({ variant: "destructive", title: "Failed to save" });
@@ -355,6 +367,30 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
+  // Online batches skip the physical demo/QR session entirely — "opening the
+  // interview session" advances the batch directly (same PATCH the
+  // coordinator's "Mark Demo Complete" makes), which is what reveals the
+  // meeting link to panel members (see panel/interviews/[id]/page.tsx and
+  // evaluation/[batchId]/[candidateId]/page.tsx, both gated on currentPhase
+  // being IN_PROGRESS or later) without ever visiting /coordinator/[id].
+  async function markInterviewComplete() {
+    setIsMarkingComplete(true);
+    try {
+      const res = await fetch(`/api/college/hiring-batches/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ demoComplete: true }),
+      });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Interview session opened", description: "Panel members can now join the meeting and evaluate." });
+      void load();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update" });
+    } finally {
+      setIsMarkingComplete(false);
+    }
+  }
+
   async function markArrived(applicationId: string) {
     if (arrivingId) return;
     setArrivingId(applicationId);
@@ -391,6 +427,19 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     const venue = batch.interviewVenue || "To be notified";
     const mode = candidate.interviewMode === "ONLINE" ? "Online" : "Offline";
     const meetLink = batch.meetingLink || "";
+    const platform = batch.meetingPlatform ? MEETING_PLATFORM_LABELS[batch.meetingPlatform] : "";
+    // Coordinator contact - best-effort; omit whichever of phone/email is
+    // missing, and skip the whole block if there's no coordinator at all
+    // (online batches have none, so this naturally disappears for them).
+    const coordinator = batch.coordinatorUid ? userMap[batch.coordinatorUid] : undefined;
+    const coordinatorLines = [
+      batch.coordinatorName,
+      coordinator?.phone ? `Phone: ${coordinator.phone}` : "",
+      coordinator?.email ? `Email: ${coordinator.email}` : "",
+    ].filter(Boolean);
+    const coordinatorBlock = coordinatorLines.length > 0
+      ? `\n\nFor any queries, please contact your Interview Coordinator:\n${coordinatorLines.join("\n")}`
+      : "";
     const docs = (batch.requiredDocuments ?? []).length > 0
       ? (batch.requiredDocuments ?? []).map((d) => `• ${d}`).join("\n")
       : "• Updated Resume/Curriculum Vitae\n• Passport-size Photograph\n• Original and Photocopies of Educational Certificates\n• Experience Certificates (if applicable)\n• Government-issued Photo ID Proof";
@@ -405,9 +454,9 @@ INTERVIEW DETAILS:
 
 • Date: ${date}
 • Time: ${time}
-• Venue: ${venue}
-• Mode: ${mode}
-• Reporting Time: Please arrive 15 minutes before the scheduled time${mode === "Online" && meetLink ? `\n• Meeting Link: ${meetLink}` : ""}
+• Mode: ${mode}${mode === "Online"
+      ? `${platform ? `\n• Platform: ${platform}` : ""}${meetLink ? `\n• Meeting Link: ${meetLink}` : ""}\n• Please join a few minutes before the scheduled time`
+      : `\n• Venue: ${venue}\n• Reporting Time: Please arrive 15 minutes before the scheduled time`}${coordinatorBlock}
 
 Kindly bring the following documents for verification:
 
@@ -515,19 +564,21 @@ ${institution}`;
           </CardHeader>
           <CardContent className="space-y-5">
 
-            {/* Venue */}
-            <div className="space-y-2">
-              <Label htmlFor="interviewVenue">
-                <MapPin className="h-3 w-3 inline mr-1" />
-                Interview Venue *
-              </Label>
-              <Input
-                id="interviewVenue"
-                value={interviewVenue}
-                onChange={(e) => setInterviewVenue(e.target.value)}
-                placeholder="e.g. Conference Hall, Block B, 2nd Floor"
-              />
-            </div>
+            {/* Venue (offline only) */}
+            {batch.hiringMode !== "ONLINE" && (
+              <div className="space-y-2">
+                <Label htmlFor="interviewVenue">
+                  <MapPin className="h-3 w-3 inline mr-1" />
+                  Interview Venue *
+                </Label>
+                <Input
+                  id="interviewVenue"
+                  value={interviewVenue}
+                  onChange={(e) => setInterviewVenue(e.target.value)}
+                  placeholder="e.g. Conference Hall, Block B, 2nd Floor"
+                />
+              </div>
+            )}
 
             {/* Required Documents */}
             <div className="space-y-2">
@@ -604,61 +655,79 @@ ${institution}`;
               )}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="demoClassroom">
-                  <MapPin className="h-3 w-3 inline mr-1" />
-                  Demo Classroom
-                </Label>
-                <Input
-                  id="demoClassroom"
-                  value={demoClassroom}
-                  onChange={(e) => setDemoClassroom(e.target.value)}
-                  placeholder="e.g. Room 301, Block A"
-                />
-                <p className="text-xs text-muted-foreground">Room where offline candidates give demo class.</p>
+            {batch.hiringMode === "ONLINE" ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="meetingPlatform">Platform *</Label>
+                  <Select value={meetingPlatform} onValueChange={(v) => setMeetingPlatform(v as MeetingPlatform)}>
+                    <SelectTrigger id="meetingPlatform">
+                      <SelectValue placeholder="Select a platform" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(MEETING_PLATFORM_LABELS) as MeetingPlatform[]).map((p) => (
+                        <SelectItem key={p} value={p}>{MEETING_PLATFORM_LABELS[p]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="meetingLink">Meeting Link *</Label>
+                  <Input
+                    id="meetingLink"
+                    type="url"
+                    value={meetingLink}
+                    onChange={(e) => setMeetingLink(e.target.value)}
+                    placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  />
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="demoClassroom">
+                      <MapPin className="h-3 w-3 inline mr-1" />
+                      Demo Classroom
+                    </Label>
+                    <Input
+                      id="demoClassroom"
+                      value={demoClassroom}
+                      onChange={(e) => setDemoClassroom(e.target.value)}
+                      placeholder="e.g. Room 301, Block A"
+                    />
+                    <p className="text-xs text-muted-foreground">Room where offline candidates give demo class.</p>
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="meetingLink">Online Meeting Link</Label>
-                <Input
-                  id="meetingLink"
-                  type="url"
-                  value={meetingLink}
-                  onChange={(e) => setMeetingLink(e.target.value)}
-                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
-                />
-                <p className="text-xs text-muted-foreground">For online candidates.</p>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>
-                  <Users className="h-3 w-3 inline mr-1" />
-                  Demo Coordinator *
-                </Label>
-                <Select value={coordinatorFacultyId} onValueChange={setCoordinatorFacultyId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select faculty coordinator..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {facultyList.length === 0 ? (
-                      <SelectItem value="__none" disabled>No active faculty</SelectItem>
-                    ) : (
-                      facultyList.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>
-                          {f.name} · {DESIGNATION_LABELS[f.designation] ?? f.designation}
-                        </SelectItem>
-                      ))
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>
+                      <Users className="h-3 w-3 inline mr-1" />
+                      Demo Coordinator *
+                    </Label>
+                    <Select value={coordinatorFacultyId} onValueChange={setCoordinatorFacultyId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select faculty coordinator..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {facultyList.length === 0 ? (
+                          <SelectItem value="__none" disabled>No active faculty</SelectItem>
+                        ) : (
+                          facultyList.map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.name} · {DESIGNATION_LABELS[f.designation] ?? f.designation}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {selectedCoordinator && !selectedCoordinator.userUid && (
+                      <p className="text-xs text-muted-foreground">No login account — notification skipped.</p>
                     )}
-                  </SelectContent>
-                </Select>
-                {selectedCoordinator && !selectedCoordinator.userUid && (
-                  <p className="text-xs text-muted-foreground">No login account — notification skipped.</p>
-                )}
-              </div>
-            </div>
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="flex justify-end">
               <Button onClick={saveDetails} loading={isSaving}>
@@ -951,8 +1020,8 @@ ${institution}`;
       </Card>
 
 
-      {/* ── STEP A: Demo complete — HOD reviews student scores ─────────────────── */}
-      {(batch.currentPhase === "IN_PROGRESS" || batch.currentPhase === "PANEL_INTERVIEW" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED") && (
+      {/* ── STEP A: Demo complete — HOD reviews student scores (offline only, no demo/QR for online interviews) ── */}
+      {batch.hiringMode !== "ONLINE" && (batch.currentPhase === "IN_PROGRESS" || batch.currentPhase === "PANEL_INTERVIEW" || batch.currentPhase === "PRINCIPAL_FINAL_REVIEW" || batch.currentPhase === "COMPLETED") && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -1093,14 +1162,16 @@ ${institution}`;
         <Card className="border-primary/30">
           <CardContent className="p-5 flex items-center justify-between gap-4">
             <div>
-              <p className="font-medium text-sm">Release for Panel Interview Scoring</p>
+              <p className="font-medium text-sm">{batch.hiringMode === "ONLINE" ? "Open for Evaluations" : "Release for Panel Interview Scoring"}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Once you review the demo scores above, open panel scoring so all panel members can submit their interview assessments.
+                {batch.hiringMode === "ONLINE"
+                  ? "Once the panel has finished interviewing candidates over the meeting link, open evaluations so they can submit their assessments."
+                  : "Once you review the demo scores above, open panel scoring so all panel members can submit their interview assessments."}
               </p>
             </div>
             <Button onClick={() => void releaseToPanelInterview()} loading={isReleasingToPanel} className="shrink-0">
               <ArrowRight className="h-4 w-4 mr-2" />
-              Open Panel Scoring
+              {batch.hiringMode === "ONLINE" ? "Open for Evaluations" : "Open Panel Scoring"}
             </Button>
           </CardContent>
         </Card>
@@ -1243,29 +1314,44 @@ ${institution}`;
       )}
 
       {/* Once a candidate has arrived, open the interview session directly —
-          no need to wait for a separate demo day. */}
+          no need to wait for a separate demo day. Online batches have no
+          physical demo/QR session at all, so they get a direct fast-forward
+          instead of a link to /coordinator. */}
       {batch.currentPhase === "INTERVIEW_READY" && (
         <Card className={candidates.some((c) => c.hasArrived) ? "border-primary/30" : "border-dashed"}>
           <CardContent className="p-6 text-center">
             {candidates.some((c) => c.hasArrived) ? (
-              <>
-                <p className="font-medium text-sm">Candidates are arriving</p>
-                <p className="text-xs text-muted-foreground mt-1 mb-3">
-                  Open the interview session to display demo QR codes and run scoring.
-                </p>
-                <Button asChild>
-                  <Link href={`/coordinator/${id}`}>
-                    Open Demo Session
+              batch.hiringMode === "ONLINE" ? (
+                <>
+                  <p className="font-medium text-sm">Candidates are ready</p>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    Open the interview session to reveal the meeting link to panel members so they can join and interview candidates.
+                  </p>
+                  <Button onClick={() => void markInterviewComplete()} loading={isMarkingComplete}>
+                    Open Interview Session
                     <ArrowRight className="h-4 w-4 ml-2" />
-                  </Link>
-                </Button>
-              </>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-sm">Candidates are arriving</p>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    Open the interview session to display demo QR codes and run scoring.
+                  </p>
+                  <Button asChild>
+                    <Link href={`/coordinator/${id}`}>
+                      Open Demo Session
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Link>
+                  </Button>
+                </>
+              )
             ) : (
               <>
                 <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="font-medium text-sm">Waiting for candidates to arrive</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Mark candidates arrived above, then open the interview session to run the demo and scoring.
+                  Mark candidates arrived above, then {batch.hiringMode === "ONLINE" ? "open the interview session" : "open the interview session to run the demo and scoring"}.
                 </p>
               </>
             )}

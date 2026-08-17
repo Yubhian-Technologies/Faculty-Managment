@@ -160,6 +160,41 @@ export function isHiringClosed(
 
 const DETAILED_STATUS_ORDER = Object.keys(DETAILED_HIRING_STATUS_LABELS) as DetailedHiringStatus[];
 
+// Office's own 4-stage pipeline (Offer Letter -> Documents & Joining Letter ->
+// Appointment Letter -> Credentials & Email), each bucketing several of the
+// finer-grained DetailedHiringStatus values above - mirrors the visual stepper
+// HOD/Principal get (src/components/shared/PipelineStep.tsx) but scoped to
+// what Office actually does, instead of the Request/Candidates/Interview/
+// Decision/Onboarding stepper which starts before Office is involved. Shared
+// by the department-scoped vacancy view (college-office/documents/[department])
+// and the consolidated all-departments pipeline board (college-office/pipeline)
+// so both render the same 4 stages instead of drifting apart.
+export type OfficeStage = 1 | 2 | 3 | 4;
+
+export const OFFICE_STAGE_BY_STATUS: Record<DetailedHiringStatus, OfficeStage> = {
+  INTERVIEW_COMPLETED: 1,
+  SELECTED: 1,
+  OFFER_PENDING: 1,
+  OFFER_SENT: 1,
+  CANDIDATE_ACCEPTANCE_PENDING: 1,
+  OFFER_ACCEPTED: 2,
+  DOCUMENTS_VERIFICATION: 2,
+  JOINING_LETTER_UPLOADED: 2,
+  APPOINTMENT_LETTER_PENDING: 3,
+  APPOINTMENT_LETTER_SENT: 3,
+  ACCOUNT_CREATION_PENDING: 4,
+  CREDENTIALS_CREATED: 4,
+  FACULTY_ONBOARDED: 4,
+  HIRING_COMPLETED: 4,
+};
+
+export const OFFICE_STAGE_LABELS: Record<OfficeStage, string> = {
+  1: "Offer Letter",
+  2: "Documents & Joining Letter",
+  3: "Appointment Letter",
+  4: "Credentials & Email",
+};
+
 // Summarizes a batch's approved candidates' post-decision progress as the
 // stage 5 "Onboarding" step's sub-label - the least-advanced status among
 // them, since that's the one still needing attention. Shared by HOD's and
