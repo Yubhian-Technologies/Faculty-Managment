@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
-import { getHodDepartmentScope, canHodEditDepartment, editableDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
 
 // Lets an HOD ask an unrelated department (one they have no direct
 // own/managed/feeder access to - see college/faculty/route.ts) to lend a
@@ -25,7 +25,12 @@ export async function GET() {
     }
 
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    const myNames = editableDepartmentNames(scope);
+    // Own department + literal sub-departments only - NOT managed/grouped
+    // branches. A request names a specific target department; only that
+    // department (or its real parent, if it's a sub-department with no HOD
+    // of its own) should see it, not whoever else happens to administer it
+    // via a managedDepartments grouping (see ownDepartmentNames doc).
+    const myNames = ownDepartmentNames(scope);
 
     const [outgoingSnap, incomingSnap] = await Promise.all([
       coll.where("requestedBy", "==", session.uid).get(),

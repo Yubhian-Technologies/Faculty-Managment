@@ -6,6 +6,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
+import { isoDateKey } from "@/lib/leave/dayCounter";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -65,7 +67,45 @@ export async function GET(request: Request) {
         .collection("timetableSlots")
         .where("facultyId", "==", facultyId)
         .get();
-      timetableSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }));
+      const ownSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }));
+
+      // Today's approved-leave substitutions - both directions: mark this
+      // faculty's own slots that are being covered by someone else today,
+      // and add synthetic entries for periods THEY are covering for someone
+      // else today (their own facultyId won't otherwise appear on that
+      // slot). See lib/leave/periodCoverage.ts and the same overlay in
+      // GET college/timetable-slots / college/class-leader/timetable.
+      const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, isoDateKey(new Date()));
+      const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
+      timetableSlots = ownSlots.map((s) => {
+        const sub = substitutionBySlotId.get(s.id);
+        return sub
+          ? { ...s, substituteFacultyId: sub.substituteFacultyId, substituteFacultyName: sub.substituteFacultyName, substituteForName: sub.requesterName }
+          : s;
+      });
+
+      const ownSlotIds = new Set(ownSlots.map((s) => s.id));
+      for (const sub of substitutions) {
+        if (sub.substituteFacultyId !== facultyId || ownSlotIds.has(sub.timetableSlotId)) continue;
+        timetableSlots.push({
+          id: `substitute_${sub.timetableSlotId}`,
+          collegeId: session.collegeId,
+          department: "",
+          assignmentId: "",
+          facultyId,
+          facultyName: sub.substituteFacultyName,
+          courseId: "",
+          year: 0,
+          sectionId: "",
+          subjectId: "",
+          subjectName: sub.subjectName,
+          day: sub.day,
+          periodNumber: sub.periodNumber,
+          createdAt: null as unknown as TimetableSlot["createdAt"],
+          updatedAt: null as unknown as TimetableSlot["updatedAt"],
+          substituteForName: sub.requesterName,
+        } as TimetableSlot & { id: string });
+      }
     }
 
     const [assignmentsSnap, childAssignmentsSnap] = await Promise.all([

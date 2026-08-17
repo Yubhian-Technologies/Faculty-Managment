@@ -1,4 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
+import type { DayOfWeek } from "./teaching";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Leave Module - from-scratch rebuild.
@@ -181,6 +182,34 @@ export interface LeaveActionRecord {
   isPaidLeave?: boolean;
 }
 
+// ─── Period Substitution ───────────────────────────────────────────────────
+// Links a leave request to who covers a specific teaching period while the
+// requester is out - one entry per (date, TimetableSlot) the requester would
+// otherwise have taught. For standard types (CL/SL/SCL/EL/OD), the requester
+// must name a substitute for every affected period at submission time
+// (assignedBy: "APPLICANT") - see /api/leave/period-coverage and
+// applications/route.ts POST. For an "Other" request, the requester never
+// picks these; instead the HOD may optionally assign some/all of them
+// (assignedBy: "HOD") when tagging paid/unpaid and forwarding to the
+// Principal - see applications/[id]/route.ts PATCH. Either way, substitutes
+// are only notified once the request reaches a final APPROVED status (see
+// notifySubstitutes in lib/leave/periodCoverage.ts) - never on a tentative
+// pick or a forward that might still be rejected.
+export interface PeriodSubstitution {
+  date: string; // "YYYY-MM-DD" - the specific calendar date within the leave range
+  day: DayOfWeek;
+  periodNumber: number;
+  timetableSlotId: string;
+  sectionId: string;
+  sectionName?: string;
+  courseId?: string;
+  subjectId: string;
+  subjectName: string;
+  substituteFacultyId: string;   // FacultyMember doc id, not the login uid
+  substituteFacultyName: string;
+  assignedBy: "APPLICANT" | "HOD";
+}
+
 export interface LeaveRequest {
   id: string;
   collegeId: string;
@@ -219,6 +248,11 @@ export interface LeaveRequest {
   // person - own balance/LOP handling), this is purely informational so the
   // approver has context and the requester's history shows the link.
   extendsRequestId?: string;
+  // Which of the requester's own teaching periods are covered while they're
+  // out, and by whom - see PeriodSubstitution above. Undefined/empty for a
+  // non-teaching requester, a leave range with no affected periods, or an
+  // "Other" request the HOD chose not to adjust.
+  periodSubstitutions?: PeriodSubstitution[];
   // Required from the requester whenever they cancel (see
   // applications/[id]/route.ts PATCH's CANCEL branch) - shown alongside the
   // cancelled request wherever the approver above them (HOD/Principal/VP/
