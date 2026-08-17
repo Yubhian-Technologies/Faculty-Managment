@@ -203,6 +203,16 @@ export interface TimetableSlot {
   isPinned?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // Attached at read time only (never persisted on the doc itself) when
+  // today has an APPROVED leave's PeriodSubstitution covering this exact
+  // slot - see lib/leave/periodCoverage.ts's getActiveSubstitutionsForDate,
+  // applied by GET college/timetable-slots, college/class-leader/timetable,
+  // and college/teaching-assignments. Absent on every other day, and absent
+  // for a slot nobody's covering today even if `day` matches today.
+  substituteFacultyId?: string;
+  substituteFacultyName?: string;
+  substituteForName?: string; // the regularly-scheduled faculty's name, on leave today
 }
 
 // ─── Timetable Rules ──────────────────────────────────────────────────────────

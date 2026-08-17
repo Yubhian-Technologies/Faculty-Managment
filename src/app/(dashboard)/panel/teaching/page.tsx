@@ -132,9 +132,15 @@ export default function TeachingLoadPage() {
                     return (
                       <td key={d} className="p-2 align-top">
                         {slot ? (
-                          <div className="rounded-md border bg-primary/5 border-primary/20 p-2">
+                          <div className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
                             <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
-                            {subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>}
+                            {slot.substituteFacultyName ? (
+                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Covered by {slot.substituteFacultyName} today</p>
+                            ) : slot.substituteForName ? (
+                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Substituting for {slot.substituteForName} today</p>
+                            ) : (
+                              subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>
+                            )}
                             {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
                           </div>
                         ) : (

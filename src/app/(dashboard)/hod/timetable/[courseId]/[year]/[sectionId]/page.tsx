@@ -641,7 +641,14 @@ export default function HODTimetableGridPage() {
                                 {isPinnedCell && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
                                 {slot.subjectName}
                               </p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
+                              {pSlot?.substituteFacultyName ? (
+                                <>
+                                  <p className="text-[11px] font-medium text-amber-700 mt-0.5">{pSlot.substituteFacultyName}</p>
+                                  <p className="text-[10px] text-muted-foreground">Substituting for {pSlot.substituteForName} today</p>
+                                </>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
+                              )}
                               {"classroom" in slot && slot.classroom && (
                                 <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>
                               )}

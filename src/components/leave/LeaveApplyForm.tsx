@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { AlertTriangle, CalendarPlus } from "lucide-react";
+import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
 import { countWorkingDays, dateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { toDate as toJsDate, formatDate } from "@/lib/utils";
@@ -24,6 +24,16 @@ interface BalanceEntry {
   label: string;
   unlimited: boolean;
   remaining?: number;
+}
+
+interface PeriodCoverageEntry {
+  date: string;
+  day: string;
+  periodNumber: number;
+  timetableSlotId: string;
+  sectionName?: string;
+  subjectName: string;
+  candidates: { facultyId: string; facultyName: string }[];
 }
 
 interface LeaveApplyFormProps {
@@ -50,6 +60,9 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
+  const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
+  const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
+  const [substituteByPeriod, setSubstituteByPeriod] = useState<Record<string, string>>({});
 
   const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
   // Forenoon's window has already passed for a half-day request filed for
@@ -108,6 +121,35 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     if (!HALF_DAY_ELIGIBLE_TYPES.includes(value as LeaveTypeCode)) setIsHalfDay(false);
   }
 
+  // Standard leave types only (never "Other" - see PeriodSubstitution in
+  // types/leave.ts) - fetches which of the requester's own teaching periods
+  // fall within this date range and who in their department is free to cover
+  // each one. Empty for a non-teaching requester or a range with no affected
+  // periods; the picker below simply doesn't render in that case.
+  useEffect(() => {
+    if (!leaveTypeCode || leaveTypeCode === "OTHER" || !fromDate || !toDate || toDate < fromDate) {
+      setPeriods([]);
+      setSubstituteByPeriod({});
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingPeriods(true);
+    fetch(`/api/leave/period-coverage?fromDate=${fromDate}&toDate=${toDate}`)
+      .then((r) => r.json() as Promise<{ periods?: PeriodCoverageEntry[]; error?: string }>)
+      .then((data) => {
+        if (cancelled) return;
+        setPeriods(data.periods ?? []);
+        setSubstituteByPeriod({});
+      })
+      .catch(() => {
+        if (!cancelled) setPeriods([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingPeriods(false);
+      });
+    return () => { cancelled = true; };
+  }, [leaveTypeCode, fromDate, toDate]);
+
   useEffect(() => {
     fetch("/api/leave/balances")
       .then((r) => r.json() as Promise<{ leaveTypes: BalanceEntry[] }>)
@@ -146,6 +188,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       toast({ variant: "destructive", title: "Leave cannot be applied for a date before today" });
       return;
     }
+    if (periods.length > 0 && periods.some((p) => !substituteByPeriod[`${p.date}|${p.timetableSlotId}`])) {
+      toast({ variant: "destructive", title: "Select a substitute for every affected period before submitting" });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/leave/applications", {
@@ -160,6 +206,13 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
           reason: reason.trim(),
           extendsRequestId: extendId ?? undefined,
+          periodSubstitutions: periods.length > 0
+            ? periods.map((p) => ({
+                date: p.date,
+                timetableSlotId: p.timetableSlotId,
+                substituteFacultyId: substituteByPeriod[`${p.date}|${p.timetableSlotId}`],
+              }))
+            : undefined,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -273,6 +326,49 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   Forenoon is no longer available for today after 11am - only Afternoon can be selected.
                 </p>
               )}
+            </div>
+          )}
+
+          {isLoadingPeriods && (
+            <div className="h-20 bg-muted animate-pulse rounded-lg" />
+          )}
+
+          {!isLoadingPeriods && periods.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <Label>Who&rsquo;s covering your classes?</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pick a substitute from your department for each period you&rsquo;d otherwise teach on this leave.
+              </p>
+              <div className="space-y-2 rounded-lg border p-3">
+                {periods.map((p) => {
+                  const key = `${p.date}|${p.timetableSlotId}`;
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="text-sm min-w-0">
+                        <span className="font-medium">{p.subjectName}</span>
+                        {p.sectionName && <span className="text-muted-foreground"> · {p.sectionName}</span>}
+                        <span className="text-muted-foreground"> · {formatDate(new Date(p.date))} P{p.periodNumber}</span>
+                      </div>
+                      <Select
+                        value={substituteByPeriod[key] ?? ""}
+                        onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
+                      >
+                        <SelectTrigger className="w-48">
+                          <SelectValue placeholder={p.candidates.length === 0 ? "None available" : "Select faculty"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {p.candidates.map((c) => (
+                            <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

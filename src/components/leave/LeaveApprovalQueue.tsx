@@ -11,11 +11,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { cn, formatDate } from "@/lib/utils";
-import { CalendarClock, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { CalendarClock, Check, X, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
 
 const CATEGORY_TABS = EFFECTIVE_CATEGORY_ORDER.map((key) => ({ key, label: EFFECTIVE_CATEGORY_LABELS[key] }));
+
+interface PeriodCoverageEntry {
+  date: string;
+  day: string;
+  periodNumber: number;
+  timetableSlotId: string;
+  sectionName?: string;
+  subjectName: string;
+  candidates: { facultyId: string; facultyName: string }[];
+}
 
 // Shared by /hod/leave-approvals (department queue) and /principal/leave-approvals
 // (college-wide final sign-off) - the API scopes the results server-side.
@@ -34,6 +44,11 @@ export function LeaveApprovalQueue() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [category, setCategory] = useState<EffectiveLeaveCategory>("vacation");
+  // HOD-only: optional period adjustment shown while forwarding an "Other"
+  // request (see PeriodSubstitution in types/leave.ts) - keyed by request id.
+  const [periodsById, setPeriodsById] = useState<Record<string, PeriodCoverageEntry[]>>({});
+  const [loadingPeriodsId, setLoadingPeriodsId] = useState<string | null>(null);
+  const [substitutionsById, setSubstitutionsById] = useState<Record<string, Record<string, string>>>({});
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -53,6 +68,19 @@ export function LeaveApprovalQueue() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!expandedId) return;
+    const r = requests.find((req) => req.id === expandedId);
+    const isHodOtherDecision = !!r && r.status === "PENDING_HOD" && !!r.isOtherRequest;
+    if (!isHodOtherDecision || periodsById[expandedId]) return;
+    setLoadingPeriodsId(expandedId);
+    fetch(`/api/leave/period-coverage?requestId=${expandedId}`)
+      .then((res) => res.json() as Promise<{ periods?: PeriodCoverageEntry[] }>)
+      .then((data) => setPeriodsById((prev) => ({ ...prev, [expandedId]: data.periods ?? [] })))
+      .catch(() => setPeriodsById((prev) => ({ ...prev, [expandedId]: [] })))
+      .finally(() => setLoadingPeriodsId((prev) => (prev === expandedId ? null : prev)));
+  }, [expandedId, requests, periodsById]);
+
   async function act(r: LeaveRequest, action: "APPROVE" | "REJECT") {
     const isHodOtherDecision = r.status === "PENDING_HOD" && !!r.isOtherRequest;
     const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && !!r.isOtherRequest;
@@ -71,6 +99,17 @@ export function LeaveApprovalQueue() {
     }
     setActingId(r.id);
     try {
+      const picks = substitutionsById[r.id] ?? {};
+      const periodSubstitutions =
+        action === "APPROVE" && isHodOtherDecision && Object.keys(picks).length > 0
+          ? (periodsById[r.id] ?? [])
+              .filter((p) => picks[`${p.date}|${p.timetableSlotId}`])
+              .map((p) => ({
+                date: p.date,
+                timetableSlotId: p.timetableSlotId,
+                substituteFacultyId: picks[`${p.date}|${p.timetableSlotId}`],
+              }))
+          : undefined;
       const res = await fetch(`/api/leave/applications/${r.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -79,6 +118,7 @@ export function LeaveApprovalQueue() {
           remarks: remarksById[r.id],
           isPaidLeave: needsPaidLeaveDecision ? paidById[r.id] : undefined,
           otherLeaveCategory: isPrincipalOtherDecision ? categoryById[r.id] : undefined,
+          periodSubstitutions,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -186,6 +226,65 @@ export function LeaveApprovalQueue() {
                             <SelectItem value="false">Unpaid</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                    )}
+
+                    {!isOtherRequest && r.status === "PENDING_HOD" && !!r.periodSubstitutions?.length && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                          <label className="text-xs text-muted-foreground">Coverage arranged by {r.employeeName}</label>
+                        </div>
+                        <div className="rounded-lg border p-2.5 space-y-1">
+                          {r.periodSubstitutions.map((p) => (
+                            <p key={`${p.date}|${p.timetableSlotId}`} className="text-sm">
+                              {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""} · {formatDate(new Date(p.date))} P{p.periodNumber}
+                              <span className="text-muted-foreground"> — covered by {p.substituteFacultyName}</span>
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {isHodOtherDecision && (
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground">Adjust / replace periods (optional)</label>
+                        {loadingPeriodsId === r.id ? (
+                          <div className="h-12 bg-muted animate-pulse rounded-lg" />
+                        ) : (periodsById[r.id]?.length ?? 0) === 0 ? (
+                          <p className="text-xs text-muted-foreground italic">No teaching periods fall within this leave range.</p>
+                        ) : (
+                          <div className="space-y-2 rounded-lg border p-2.5">
+                            {periodsById[r.id]!.map((p) => {
+                              const key = `${p.date}|${p.timetableSlotId}`;
+                              return (
+                                <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
+                                  <span className="text-sm">
+                                    {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""} · {formatDate(new Date(p.date))} P{p.periodNumber}
+                                  </span>
+                                  <Select
+                                    value={substitutionsById[r.id]?.[key] ?? ""}
+                                    onValueChange={(v) =>
+                                      setSubstitutionsById((prev) => ({
+                                        ...prev,
+                                        [r.id]: { ...(prev[r.id] ?? {}), [key]: v },
+                                      }))
+                                    }
+                                  >
+                                    <SelectTrigger className="w-44">
+                                      <SelectValue placeholder="Not covered" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {p.candidates.map((c) => (
+                                        <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
 
