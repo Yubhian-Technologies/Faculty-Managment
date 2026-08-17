@@ -11,21 +11,6 @@ export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
   PROJECT: "Project",
 };
 
-// Standard AICTE model-curriculum categories, used across most Indian
-// engineering colleges' L-T-P-C curriculum tables.
-export type SubjectCategory = "HSMC" | "BSC" | "ESC" | "PCC" | "PEC" | "OEC" | "MC" | "PROJ";
-
-export const SUBJECT_CATEGORY_LABELS: Record<SubjectCategory, string> = {
-  HSMC: "Humanities & Social Sciences (HSMC)",
-  BSC: "Basic Science (BSC)",
-  ESC: "Engineering Science (ESC)",
-  PCC: "Professional Core (PCC)",
-  PEC: "Professional Elective (PEC)",
-  OEC: "Open Elective (OEC)",
-  MC: "Mandatory Courses (MC)",
-  PROJ: "Project / Seminar / Internship (PROJ)",
-};
-
 // Two independent shapes share this collection (see api/college/subjects/route.ts):
 // course/year-scoped (departmentId/courseId/year set) and semester-scoped
 // (semester set, no course link).
@@ -43,39 +28,10 @@ export interface Subject {
   // a subject (see dean/subjects/new/page.tsx); optional/absent on subjects
   // created before this field existed or via the HOD's own Subjects page.
   academicYear?: string;
-  // The curriculum regulation this subject's syllabus follows (e.g. "R20",
-  // "R23") - one of the college's declared AcademicRegulationSettings.regulations
-  // (colleges/{collegeId}/settings/academicRegulations). Different batches of
-  // the same year-of-study can be on different regulations at once (e.g. a
-  // transition year), so this is set per-subject rather than inherited from
-  // Settings' one-regulation-per-year default. Required for course/year-scoped
-  // subjects going forward (enforced in POST); absent on semester-scoped
-  // subjects (no course/year link to hang a regulation off of) and on subjects
-  // created before this field existed, until backfilled - see
-  // scripts/backfill-subject-regulations.mjs. Immutable once set (like
-  // courseId/year) - not editable via PATCH.
-  regulation?: string;
-  // Row position in the Dean's curriculum-table view of a course/year -
-  // editable, so the Dean can match a printed curriculum sheet's ordering
-  // instead of being stuck with alphabetical-by-name. Course/year-scoped
-  // subjects only; absent on legacy subjects created before this field
-  // existed (those sort after any with a serialNumber, then by name).
-  serialNumber?: number;
-  // Curriculum category (e.g. Professional Core, Open Elective) - see
-  // SUBJECT_CATEGORY_LABELS. Course/year-scoped subjects only.
-  category?: SubjectCategory;
   name: string;
   code: string;
   hoursPerWeek: number;
   totalHoursPerSemester?: number;
-  // L-T-P breakdown (Lecture/Tutorial/Practical hours per week) alongside
-  // `hoursPerWeek` and `type` above - a single subject's weekly load is
-  // often split across more than one of these (e.g. 3 lecture + 2 lab
-  // hours), which neither hoursPerWeek nor the single-valued `type` capture
-  // on their own. Course/year-scoped subjects only.
-  lectureHours?: number;
-  tutorialHours?: number;
-  practicalHours?: number;
   credits: number;
   type: SubjectType;
   isActive: boolean;
@@ -203,16 +159,6 @@ export interface TimetableSlot {
   isPinned?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-
-  // Attached at read time only (never persisted on the doc itself) when
-  // today has an APPROVED leave's PeriodSubstitution covering this exact
-  // slot - see lib/leave/periodCoverage.ts's getActiveSubstitutionsForDate,
-  // applied by GET college/timetable-slots, college/class-leader/timetable,
-  // and college/teaching-assignments. Absent on every other day, and absent
-  // for a slot nobody's covering today even if `day` matches today.
-  substituteFacultyId?: string;
-  substituteFacultyName?: string;
-  substituteForName?: string; // the regularly-scheduled faculty's name, on leave today
 }
 
 // ─── Timetable Rules ──────────────────────────────────────────────────────────

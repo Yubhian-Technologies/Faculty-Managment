@@ -37,32 +37,6 @@ export function todayISODate(): string {
   return `${y}-${m}-${d}`;
 }
 
-// Every calendar date between `from` and `to` (inclusive) that counts as a
-// working day - same rule countWorkingDays uses (no Sundays, no declared
-// holidays) - but returning the actual Date objects instead of just a count.
-// Used by the period-coverage feature (lib/leave/periodCoverage.ts) to know
-// which real dates within a leave range need a TimetableSlot lookup.
-export function enumerateWorkingDates(from: Date, to: Date, holidayDates: Set<string>): Date[] {
-  const dates: Date[] = [];
-  const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
-  while (cursor <= end) {
-    if (cursor.getDay() !== 0 && !holidayDates.has(dateKey(cursor))) dates.push(new Date(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dates;
-}
-
-// "YYYY-MM-DD" for a Date, local calendar day - the form period-coverage
-// entries key their date by (distinct from dateKey()'s "Y-M-D" used only for
-// holiday-set membership checks).
-export function isoDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 // Full completed years between two dates (used to gate new-joining conversion).
 export function yearsOfService(dateOfJoining: Date, asOf: Date): number {
   let years = asOf.getFullYear() - dateOfJoining.getFullYear();

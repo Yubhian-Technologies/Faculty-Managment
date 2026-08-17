@@ -15,13 +15,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const deptFilter = searchParams.get("department");
     const statusFilter = searchParams.get("status");
-    // Opt-in for a plain HOD's own Faculty roster (see hod/faculty/page.tsx) -
-    // a parent/managing HOD's sub-departments' and managed branches' faculty
-    // were showing up unannounced in what reads as "my department's roster",
-    // confusing an HOD who created someone under a different department into
-    // thinking it landed in their own. Every other caller (Teaching
-    // Assignments' faculty picker, etc.) keeps the roll-up by not passing this.
-    const ownOnly = searchParams.get("scope") === "own";
 
     const db = getAdminDb();
     const facultyColl = db.collection("colleges").doc(session.collegeId).collection("facultyMembers");
@@ -48,9 +41,8 @@ export async function GET(request: Request) {
       if (scope.departmentName) primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
 
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD)
-      // are both fully-owned, so one query covers both, tagged "primary" below -
-      // skipped entirely for the own-only roster (see ownOnly above).
-      const ownedNames = ownOnly ? [] : [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
+      // are both fully-owned, so one query covers both, tagged "primary" below.
+      const ownedNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
       if (ownedNames.length > 0) {
         childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
       }

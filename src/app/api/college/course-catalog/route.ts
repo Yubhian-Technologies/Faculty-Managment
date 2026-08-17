@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { loadAcademicRegulations } from "@/lib/firestore/academicRegulations";
 
 // colleges/{collegeId}/courseCatalog - the Principal's master list of course
 // definitions (canonical name + short code + duration). Departments only *select*
@@ -43,7 +42,6 @@ export async function POST(request: Request) {
       name?: string;
       code?: string;
       durationYears?: number;
-      regulations?: string[];
     };
 
     const name = body.name?.trim();
@@ -58,18 +56,6 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
-
-    const regulations = Array.from(new Set((body.regulations ?? []).map((r) => r.trim()).filter(Boolean)));
-    if (regulations.length > 0) {
-      const { regulations: declared } = await loadAcademicRegulations(db, session.collegeId);
-      const invalid = regulations.filter((r) => !declared.includes(r));
-      if (invalid.length > 0) {
-        return NextResponse.json(
-          { error: `Not declared under Settings > Academic Regulations: ${invalid.join(", ")}` },
-          { status: 400 },
-        );
-      }
-    }
     const catalogCol = db.collection("colleges").doc(session.collegeId).collection("courseCatalog");
 
     // Reject a case-insensitive duplicate of an existing name or code so the
@@ -93,7 +79,6 @@ export async function POST(request: Request) {
       name,
       code,
       durationYears,
-      regulations,
       isActive: true,
       createdBy: session.uid,
       createdByName: actorName,

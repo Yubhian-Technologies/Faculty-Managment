@@ -5,17 +5,14 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
-import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
-import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
-import { validatePeriodSubstitutions, notifySubstitutes, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
 import { OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
-import type { LeaveRequest, LeaveActionRecord, OtherLeaveCategory, PeriodSubstitution } from "@/types/leave";
+import type { LeaveRequest, LeaveActionRecord, OtherLeaveCategory } from "@/types/leave";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -61,7 +58,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       isPaidLeave?: boolean;
       otherLeaveCategory?: OtherLeaveCategory;
       reason?: string;
-      periodSubstitutions?: PeriodSubstitutionInput[];
     };
     if (!body.action) {
       return NextResponse.json({ error: "action is required" }, { status: 400 });
@@ -195,35 +191,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           return NextResponse.json({ error: "isPaidLeave is required to forward an Other request" }, { status: 400 });
         }
         actionRecord.isPaidLeave = body.isPaidLeave;
-
-        // Optional - unlike a standard leave type (where the requester must
-        // name a substitute for every affected period up front), an "Other"
-        // request never collects that at submission. The HOD may adjust/
-        // replace some or all of the requester's periods here while
-        // forwarding - anything left unpicked is simply left for the
-        // Principal/HOD to sort out manually (see periodCoverage.ts's
-        // "PARTIAL" mode).
-        let periodSubstitutions: PeriodSubstitution[] | undefined;
-        if (body.periodSubstitutions?.length && req.department) {
-          const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, req.uid);
-          const reqFromDate = (req.fromDate as unknown as { toDate(): Date }).toDate();
-          const reqToDate = (req.toDate as unknown as { toDate(): Date }).toDate();
-          const holidayDates = await getHolidayDateKeys(db, session.collegeId, reqFromDate, reqToDate);
-          const result = await validatePeriodSubstitutions({
-            db, collegeId: session.collegeId, facultyMemberId, department: req.department,
-            fromDate: reqFromDate, toDate: reqToDate, holidayDates,
-            submitted: body.periodSubstitutions, mode: "PARTIAL",
-          });
-          if (!result.ok) {
-            return NextResponse.json({ error: result.error }, { status: 400 });
-          }
-          if (result.resolved.length > 0) periodSubstitutions = result.resolved;
-        }
-
-        await ref.update({
-          status: "PENDING_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now,
-          ...(periodSubstitutions ? { periodSubstitutions } : {}),
-        });
+        await ref.update({ status: "PENDING_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now });
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId, action: "LEAVE_HOD_FORWARDED", performedBy: session.uid,
           performedByName: session.email || "HOD", targetId: id, details: { isPaidLeave: body.isPaidLeave }, timestamp: now,
@@ -268,7 +236,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         `Your leave request for ${req.totalDays} day(s) was approved by your HOD` +
           (lopDays > 0 ? ` — ${lopDays} day(s) exceed your balance and will be treated as Loss of Pay.` : "."),
         "/panel/leave");
-      await notifySubstitutes(db, session.collegeId, req);
       return NextResponse.json({ ok: true });
     }
 

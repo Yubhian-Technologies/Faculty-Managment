@@ -13,9 +13,7 @@ import { countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
-import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
-import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
-import type { LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
+import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 
 // Sorts newest-first in memory instead of chaining .orderBy() onto a
 // .where() on a different field - that combination needs a Firestore
@@ -123,7 +121,6 @@ export async function POST(request: Request) {
       halfDaySession?: "FN" | "AN";
       reason?: string;
       extendsRequestId?: string;
-      periodSubstitutions?: PeriodSubstitutionInput[];
     };
 
     if (!body.fromDate || !body.toDate || !body.reason?.trim()) {
@@ -231,27 +228,6 @@ export async function POST(request: Request) {
     // (see splitLeaveDays in applications/[id]/route.ts). The Apply form
     // warns the requester about this before they submit, but doesn't block it.
 
-    // For a standard type (CL/SL/SCL/EL/OD - never "Other"), a teaching
-    // faculty member must name a same-department substitute for every one of
-    // their own TimetableSlots that falls within this range before the
-    // request can be submitted at all - see lib/leave/periodCoverage.ts. An
-    // "Other" request skips this entirely; the HOD may optionally adjust
-    // periods later when tagging it paid/unpaid (applications/[id]/route.ts).
-    let periodSubstitutions: PeriodSubstitution[] | undefined;
-    if (!body.isOtherRequest && identity.isTeachingStaff && identity.department) {
-      const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
-      const result = await validatePeriodSubstitutions({
-        db, collegeId: session.collegeId, facultyMemberId, department: identity.department,
-        fromDate, toDate, holidayDates,
-        submitted: body.periodSubstitutions ?? [],
-        mode: "FULL",
-      });
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error }, { status: 400 });
-      }
-      if (result.resolved.length > 0) periodSubstitutions = result.resolved;
-    }
-
     const now = new Date();
     // Faculty (PANEL_MEMBER - covers both Teaching and Technical designations)
     // always report to their department's HOD. Supporting Staff (COLLEGE_STAFF,
@@ -276,7 +252,6 @@ export async function POST(request: Request) {
       ...(body.leaveTypeCode ? { leaveTypeCode: body.leaveTypeCode } : {}),
       isOtherRequest: body.isOtherRequest || false,
       ...(body.extendsRequestId ? { extendsRequestId: body.extendsRequestId } : {}),
-      ...(periodSubstitutions ? { periodSubstitutions } : {}),
       fromDate: fromDate as unknown as LeaveRequest["fromDate"],
       toDate: toDate as unknown as LeaveRequest["toDate"],
       totalDays,

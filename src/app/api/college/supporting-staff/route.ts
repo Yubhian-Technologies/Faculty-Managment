@@ -23,11 +23,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
     const categoryFilter = SUPPORTING_STAFF_ROLE_CATEGORY[session.role] ?? searchParams.get("staffCategory");
-    // Opt-in for a plain HOD's own Supporting Staff roster - mirrors
-    // scope=own on college/faculty/route.ts. Without it, a parent/managing
-    // HOD's sub-departments'/managed branches' staff roll up alongside their
-    // own, which reads as "another department's staff leaking into mine".
-    const ownOnly = searchParams.get("scope") === "own";
 
     const db = getAdminDb();
     const staffColl = db.collection("colleges").doc(session.collegeId).collection("supportingStaff");
@@ -38,15 +33,12 @@ export async function GET(request: Request) {
     if (statusFilter) query = query.where("status", "==", statusFilter);
 
     // HOD only sees Technical staff within their own department (plus any
-    // sub-departments/managed branches they own, unless ownOnly) - mirrors
-    // the scoping src/app/api/college/faculty/route.ts applies for HOD's
-    // Faculty view.
+    // sub-departments/managed branches they own) - mirrors the scoping
+    // src/app/api/college/faculty/route.ts applies for HOD's Faculty view.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const ownedNames = ownOnly
-        ? [scope.departmentName].filter((n): n is string => !!n)
-        : [scope.departmentName, ...scope.childDepartmentNames, ...scope.managedDepartmentNames]
-            .filter((n): n is string => !!n);
+      const ownedNames = [scope.departmentName, ...scope.childDepartmentNames, ...scope.managedDepartmentNames]
+        .filter((n): n is string => !!n);
       if (ownedNames.length > 0) {
         query = query.where("department", "in", ownedNames.slice(0, 30));
       }

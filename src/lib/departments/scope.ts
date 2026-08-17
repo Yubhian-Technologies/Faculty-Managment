@@ -48,23 +48,6 @@ export function canHodEditDepartment(scope: HodDepartmentScope, departmentName: 
   return editableDepartmentNames(scope).includes(departmentName);
 }
 
-/**
- * This HOD's own identity in the literal department tree: their own
- * department plus true sub-departments beneath it. Deliberately excludes
- * `managedDepartmentNames` - a grouped/managed branch is a delegated
- * administrative claim (full edit rights over an otherwise-unrelated
- * top-level department), not a statement that the branch IS this HOD or was
- * addressed to them. Use this wherever code must know "was this specifically
- * sent/addressed to me" (e.g. an incoming faculty-lend request naming a
- * target department) rather than "do I have edit rights over this" - see
- * api/college/faculty-assignment-requests, where routing a request through
- * the managed-branch rollup meant an unrelated department's HOD (the one
- * managing the addressee) could see and fulfill it instead of the addressee.
- */
-export function ownDepartmentNames(scope: HodDepartmentScope): string[] {
-  return scope.departmentName ? [scope.departmentName, ...scope.childDepartmentNames] : [];
-}
-
 /** Same check by department id, for routes that receive an id rather than a name. */
 export function canHodEditDepartmentId(scope: HodDepartmentScope, departmentId: string): boolean {
   if (!departmentId) return false;

@@ -3,36 +3,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, Clock, Coffee, Lock, PencilLine, Plus, Send, Trash2, Upload, Utensils, X,
+  ArrowLeft, Coffee, Lock, PencilLine, Plus, Send, Trash2, Upload, Utensils, X,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
-import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { buildRows } from "@/lib/timetable/buildGrid";
 import type {
   Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
-  TeachingAssignment, FacultyAssignmentRequest, PeriodTiming,
+  TeachingAssignment, FacultyAssignmentRequest,
 } from "@/types";
 import { DAY_LABELS, DEFAULT_TIMETABLE_RULES } from "@/types";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
-}
-
-/** "09:00" -> "9:00 AM" - display only, stored/submitted values stay 24h "HH:MM". */
-function formatTime12h(hhmm: string) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 /** What the grid is currently showing. */
@@ -98,14 +89,6 @@ export default function HODTimetableGridPage() {
   // this same page, so myAssignmentIds/pickableAssignments below exclude them
   // here regardless of who's currently viewing this section.
   const [lentInAssignmentIds, setLentInAssignmentIds] = useState<Set<string>>(new Set());
-  // Editing state for the "Edit Period Timings" dialog - each period's own
-  // start/end, within the college day the Principal already set
-  // (timing.collegeStartTime/collegeEndTime). `period` numbers are always
-  // derived from array position at save time (see handleSavePeriods), not
-  // tracked per-row, so adding/removing a row never needs renumbering here.
-  const [showPeriodDialog, setShowPeriodDialog] = useState(false);
-  const [editPeriods, setEditPeriods] = useState<{ startTime: string; endTime: string }[]>([]);
-  const [savingPeriods, setSavingPeriods] = useState(false);
 
   const days: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
@@ -393,69 +376,6 @@ export default function HODTimetableGridPage() {
     }
   }
 
-  function openPeriodDialog() {
-    if (!timing) return;
-    setEditPeriods(
-      timing.periods && timing.periods.length > 0
-        ? timing.periods.map((p) => ({ startTime: p.startTime, endTime: p.endTime }))
-        : defaultPeriodTimings(timing).map((p) => ({ startTime: p.startTime, endTime: p.endTime }))
-    );
-    setShowPeriodDialog(true);
-  }
-
-  function updateEditPeriod(idx: number, field: "startTime" | "endTime", value: string) {
-    setEditPeriods((prev) => prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)));
-  }
-
-  function addEditPeriod() {
-    setEditPeriods((prev) => {
-      const last = prev[prev.length - 1];
-      // Picks up right where the previous period left off, same span as it
-      // had - just a starting guess, every field stays freely editable.
-      const spanMinutes = last
-        ? (Number(last.endTime.slice(0, 2)) * 60 + Number(last.endTime.slice(3))) -
-          (Number(last.startTime.slice(0, 2)) * 60 + Number(last.startTime.slice(3)))
-        : 50;
-      const startTime = last?.endTime ?? timing?.collegeStartTime ?? "09:00";
-      const startMinutes = Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3));
-      const endMinutes = Math.min(startMinutes + spanMinutes, 23 * 60 + 59);
-      const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
-      return [...prev, { startTime, endTime }];
-    });
-  }
-
-  function removeEditPeriod(idx: number) {
-    setEditPeriods((prev) => prev.filter((_, i) => i !== idx));
-  }
-
-  async function handleSavePeriods() {
-    if (editPeriods.length === 0) {
-      toast({ variant: "destructive", title: "Add at least one period" });
-      return;
-    }
-    setSavingPeriods(true);
-    try {
-      const periods: PeriodTiming[] = editPeriods.map((p, i) => ({ period: i + 1, startTime: p.startTime, endTime: p.endTime }));
-      const res = await fetch("/api/college/course-year-timings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId, year: Number(year), periods }),
-      });
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not save period timings", description: json.error });
-        return;
-      }
-      toast({ variant: "success", title: "Period timings saved", description: "Applies to every section of this course & year." });
-      setShowPeriodDialog(false);
-      await loadAll();
-    } catch {
-      toast({ variant: "destructive", title: "Network error" });
-    } finally {
-      setSavingPeriods(false);
-    }
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -483,15 +403,6 @@ export default function HODTimetableGridPage() {
             {!hasDraft && (
               <Button variant="outline" onClick={handleStartBlank} loading={busy === "blank"} disabled={busy !== null}>
                 <PencilLine className="h-4 w-4 mr-2" />Build manually
-              </Button>
-            )}
-            {/* The college day's outer bounds are Principal-set - this only
-                fills in this HOD's own period-by-period breakdown within
-                them (see PATCH /api/college/course-year-timings), so it needs
-                that record to already exist and isn't offered cross-department. */}
-            {timing && !isCrossDepartment && (
-              <Button variant="outline" onClick={openPeriodDialog}>
-                <Clock className="h-4 w-4 mr-2" />Edit Period Timings
               </Button>
             )}
           </div>
@@ -592,14 +503,7 @@ export default function HODTimetableGridPage() {
                 }
                 return (
                   <tr key={`period_${row.period}`} className="border-b last:border-b-0">
-                    <td className="p-2.5 font-medium text-muted-foreground">
-                      {row.period}
-                      {row.startTime && row.endTime && (
-                        <p className="text-[10px] font-normal whitespace-nowrap">
-                          {formatTime12h(row.startTime)}&ndash;{formatTime12h(row.endTime)}
-                        </p>
-                      )}
-                    </td>
+                    <td className="p-2.5 font-medium text-muted-foreground">{row.period}</td>
                     {days.map((d) => {
                       const pinned = mode === "draft" ? pinnedSlotFor(d, row.period) : undefined;
                       const dSlot = mode === "draft" ? draftSlotFor(d, row.period) : undefined;
@@ -641,14 +545,7 @@ export default function HODTimetableGridPage() {
                                 {isPinnedCell && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
                                 {slot.subjectName}
                               </p>
-                              {pSlot?.substituteFacultyName ? (
-                                <>
-                                  <p className="text-[11px] font-medium text-amber-700 mt-0.5">{pSlot.substituteFacultyName}</p>
-                                  <p className="text-[10px] text-muted-foreground">Substituting for {pSlot.substituteForName} today</p>
-                                </>
-                              ) : (
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
-                              )}
+                              <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
                               {"classroom" in slot && slot.classroom && (
                                 <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>
                               )}
@@ -741,70 +638,6 @@ export default function HODTimetableGridPage() {
               ))}
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Free-form per-period start/end, within the college day the Principal
-          already bounded (timing.collegeStartTime/collegeEndTime) - see
-          PATCH /api/college/course-year-timings. Shared by every section of
-          this course & year, not just this one. */}
-      <Dialog open={showPeriodDialog} onOpenChange={(o) => { if (!o) setShowPeriodDialog(false); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Period Timings</DialogTitle>
-            <DialogDescription>
-              {timing && (
-                <>
-                  Within the college day {formatTime12h(timing.collegeStartTime)}&ndash;{formatTime12h(timing.collegeEndTime)}.
-                  Applies to every section of this course &amp; year, not just this one.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-80 space-y-2 overflow-y-auto">
-            {editPeriods.map((p, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-xs text-muted-foreground">Period {idx + 1}</span>
-                <Input
-                  type="time"
-                  value={p.startTime}
-                  onChange={(e) => updateEditPeriod(idx, "startTime", e.target.value)}
-                  className="flex-1"
-                />
-                <span className="shrink-0 text-xs text-muted-foreground">to</span>
-                <Input
-                  type="time"
-                  value={p.endTime}
-                  onChange={(e) => updateEditPeriod(idx, "endTime", e.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => removeEditPeriod(idx)}
-                  disabled={editPeriods.length <= 1}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          <Button type="button" variant="outline" size="sm" onClick={addEditPeriod}>
-            <Plus className="h-4 w-4 mr-1.5" />Add Period
-          </Button>
-
-          <div className="flex justify-end gap-2 pt-2 border-t">
-            <Button type="button" variant="outline" onClick={() => setShowPeriodDialog(false)} disabled={savingPeriods}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={handleSavePeriods} loading={savingPeriods}>
-              Save
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 

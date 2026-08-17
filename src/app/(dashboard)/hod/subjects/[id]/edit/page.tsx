@@ -181,7 +181,6 @@ export default function EditSubjectPage() {
               <Input
                 type="number"
                 min={0}
-                step="any"
                 value={form.credits}
                 onChange={(e) => setF({ credits: stripLeadingZeros(e.target.value) })}
               />

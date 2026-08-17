@@ -563,9 +563,7 @@ export default function EditSectionPage() {
                     <div key={subj.id} className="flex items-center gap-3 rounded-md border p-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{subj.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {subj.code} · {subj.hoursPerWeek} hrs/week{subj.regulation ? ` · ${subj.regulation}` : ""}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{subj.code} · {subj.hoursPerWeek} hrs/week</p>
                       </div>
                       <Select
                         value={stagedFaculty[subj.id] || "none"}

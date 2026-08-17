@@ -78,13 +78,7 @@ export default function HODFacultyPage() {
   async function load(status: string) {
     setIsLoading(true);
     try {
-      // scope=own: this is "my department's roster", not the wider set a
-      // parent/managing HOD administers (sub-departments/managed branches
-      // still show up in Teaching Assignments' faculty picker, which does
-      // not pass this) - see college/faculty/route.ts.
-      const params = new URLSearchParams({ scope: "own" });
-      if (status) params.set("status", status);
-      const res = await fetch(`/api/college/faculty?${params.toString()}`);
+      const res = await fetch(`/api/college/faculty${status ? `?status=${status}` : ""}`);
       const data = await res.json() as { faculty: FacultyRow[] };
       setFaculty(data.faculty ?? []);
     } catch {
