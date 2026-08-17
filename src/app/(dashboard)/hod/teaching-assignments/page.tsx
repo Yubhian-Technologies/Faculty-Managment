@@ -574,7 +574,9 @@ export default function TeachingAssignmentsPage() {
                       {availableSubjectsForAssign.length === 0 && (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground">All subjects already staffed for this section</div>
                       )}
-                      {availableSubjectsForAssign.map((s) => <SelectItem key={s.id} value={s.id}>{s.name} ({s.code})</SelectItem>)}
+                      {availableSubjectsForAssign.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name} ({s.code}{s.regulation ? ` · ${s.regulation}` : ""})</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

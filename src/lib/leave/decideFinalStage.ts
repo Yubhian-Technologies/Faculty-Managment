@@ -3,6 +3,7 @@ import { REQUESTS_COL, commitApproval, releasePending, splitLeaveDays } from "@/
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify } from "@/lib/notify";
 import { resolveWorkflowNotifications } from "@/lib/notifications/workflowNotifications";
+import { notifySubstitutes } from "@/lib/leave/periodCoverage";
 import type { LeaveRequest, LeaveActionRecord } from "@/types/leave";
 
 export type FinalStageDecider = "PRINCIPAL" | "MANAGEMENT";
@@ -102,6 +103,9 @@ export async function decideFinalStageLeave(params: {
       (action === "APPROVE" && lopDays > 0 ? ` — ${lopDays} day(s) exceed your balance and will be treated as Loss of Pay.` : "."),
     "/panel/leave"
   );
+  if (action === "APPROVE") {
+    await notifySubstitutes(db, collegeId, req);
+  }
 
   return { lopDays };
 }

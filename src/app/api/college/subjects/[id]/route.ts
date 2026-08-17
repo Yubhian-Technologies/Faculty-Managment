@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import type { SubjectType } from "@/types";
+import type { SubjectCategory, SubjectType } from "@/types";
+import { SUBJECT_CATEGORY_LABELS } from "@/types";
 
 export async function PATCH(
   request: Request,
@@ -21,7 +22,16 @@ export async function PATCH(
       credits?: number;
       type?: SubjectType;
       isActive?: boolean;
+      serialNumber?: number;
+      category?: SubjectCategory;
+      lectureHours?: number;
+      tutorialHours?: number;
+      practicalHours?: number;
     };
+
+    if (body.category != null && !(body.category in SUBJECT_CATEGORY_LABELS)) {
+      return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("subjects").doc(id);
@@ -53,6 +63,11 @@ export async function PATCH(
     if (body.credits != null) updates.credits = Number(body.credits);
     if (body.type != null) updates.type = body.type;
     if (body.isActive != null) updates.isActive = body.isActive;
+    if (body.serialNumber != null) updates.serialNumber = Number(body.serialNumber);
+    if (body.category != null) updates.category = body.category;
+    if (body.lectureHours != null) updates.lectureHours = Number(body.lectureHours);
+    if (body.tutorialHours != null) updates.tutorialHours = Number(body.tutorialHours);
+    if (body.practicalHours != null) updates.practicalHours = Number(body.practicalHours);
 
     await ref.update(updates);
 
