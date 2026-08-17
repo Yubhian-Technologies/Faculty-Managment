@@ -187,7 +187,7 @@ export const NAV_ITEMS: NavItem[] = [
   // times over.
   { label: "Faculty", href: "/college-office/faculty", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
   { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
-  { label: "Hiring Pipeline", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
+  { label: "Hiring Pipeline", href: "/college-office/pipeline", iconName: "GitBranch", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
   { label: "Leave History", href: "/college-office/leave-history", iconName: "History", roles: ["COLLEGE_OFFICE"], section: "Leave & Attendance" },
   { label: "Leave Profiles", href: "/college-office/leave/profiles", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"] },
@@ -476,7 +476,7 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"] },
     { label: "Faculty", href: "/college-office/faculty", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
     { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
-    { label: "Hiring Pipeline", href: "/college-office/documents", iconName: "FolderOpen", roles: ["COLLEGE_OFFICE"] },
+    { label: "Hiring Pipeline", href: "/college-office/pipeline", iconName: "GitBranch", roles: ["COLLEGE_OFFICE"] },
     { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
     { label: "Profile", href: "/college-office/profile", iconName: "UserCircle", roles: ["COLLEGE_OFFICE"] },
   ],

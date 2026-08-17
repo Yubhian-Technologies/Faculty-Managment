@@ -27,7 +27,7 @@ All routes use `requireCollegeMember()` (`src/lib/auth/verifySession.ts`) + Fire
 8. **Final Decision** — PRINCIPAL/VP negotiates terms, then decides APPROVED/REJECTED. Terminal guard (409 on re-decide). APPROVED decrements `VacancyRequest.requiredCount`. **Batch auto-closes** (`currentPhase: COMPLETED`) once all applications reach terminal status — but this is NOT the same as `isHiringClosed()` (see below).
    `/api/college/candidate-applications/[id]`
 
-9. **Offer Letter** — COLLEGE_OFFICE (or Principal-tier/ACCOUNTS) sends offer. **Gated on `bioDataSubmitted`.** Writes `status: SENT` directly — no DRAFT state used despite type support. Snapshots `offeredTerms` (immutable). **Does NOT provision faculty accounts** (deferred to Stage 13/14). PDF/email sending is manual (staff-triggered).
+9. **Offer Letter** — COLLEGE_OFFICE (or Principal-tier/ACCOUNTS) sends offer. **Gated on `bioDataSubmitted`.** Writes `status: SENT` directly — no DRAFT state used despite type support. Snapshots `offeredTerms` (immutable). **Does NOT provision faculty accounts** (deferred to Stage 13/14). PDF/email sending is manual (staff-triggered, Gmail-compose-draft handoff — no server-side send). The email body's "contact your Interview Coordinator" block (`src/lib/offerLetterContactBlock.ts`, shared by all three offer-email composers) **falls back to the batch's HOD** if no coordinator is assigned or the coordinator has neither phone nor email on file.
    `/api/college/offer-letters`
 
 10. **Candidate Response** — Candidate accepts/rejects (public) OR staff overrides (phone/paper). Both funnel through shared transaction `applyOfferDecision()` — prevents double-write races. Only applies from `status: SENT`. ACCEPTED → `Candidate.status: APPROVED`; if a pre-existing `facultyMembers` doc exists, flips to `ACTIVE`.
@@ -38,13 +38,23 @@ All routes use `requireCollegeMember()` (`src/lib/auth/verifySession.ts`) + Fire
 
 13. **Faculty Account Request** — COLLEGE_OFFICE/Principal-tier requests credentials + submits account request. **Strict gate order**: offer `ACCEPTED` → `candidateConfirmedJoiningDate` set → matching `AppointmentLetter` exists. One request per offer (409 on dup). Only records/notifies WEBMASTER — no provisioning yet.
 
-14. **Webmaster Fulfillment (terminal)** — `START_REVIEW → CREATE_CREDENTIALS → COMPLETE` (hardcoded `TRANSITIONS` map). `CREATE_CREDENTIALS` calls `provisionFacultyFromOffer()` BEFORE flipping status (failed provision never leaves it stuck). Idempotent (existing `facultyMembers` doc → `already_exists`). Falls back `officialEmail → alternateEmail1 → alternateEmail2`. **New hires get `role: PANEL_MEMBER`** (UI label "Faculty") — no separate FACULTY role. Status `ACTIVE` if offer accepted, else `INTERVIEW_DONE`. `REVEAL_CREDENTIALS` is Office-gated, scrubs password transactionally on read (one-time view). Manual retry: `POST /offer-letters/[id]/provision`.
+14. **Webmaster Fulfillment (terminal)** — `START_REVIEW → CREATE_CREDENTIALS → COMPLETE` (hardcoded `TRANSITIONS` map). **`CREATE_CREDENTIALS` also accepts straight from `SUBMITTED`** (one webmaster click; the `IN_PROGRESS` review step is still recorded in `history` for audit purposes even when skipped in the UI). `CREATE_CREDENTIALS` calls `provisionFacultyFromOffer()` BEFORE flipping status (failed provision never leaves it stuck). Idempotent (existing `facultyMembers` doc → `already_exists`). Falls back `officialEmail → alternateEmail1 → alternateEmail2`. **New hires get `role: PANEL_MEMBER`** (UI label "Faculty") — no separate FACULTY role. Status `ACTIVE` if offer accepted, else `INTERVIEW_DONE`. `REVEAL_CREDENTIALS` is Office-gated, scrubs password transactionally on read (one-time view). Manual retry: `POST /offer-letters/[id]/provision`. **`LINK_EXISTING_ACCOUNT`** (alternate action, same status transitions as `CREATE_CREDENTIALS`) lets Webmaster attach the request to a person's already-existing login (`linkFacultyToExistingAccount()`) instead of provisioning a new Firebase Auth user — no password/role change on the existing account.
 
 ## Key gotchas
 - `isHiringClosed()` (`src/lib/hiringPipeline.ts`) requires EVERY approved candidate's `FacultyAccountRequestStatus` to reach `CREDENTIALS_CREATED`/`COMPLETED` — batch `COMPLETED` (Stage 8) alone is insufficient.
 - `DetailedHiringStatus` (from `getDetailedHiringStatus()`) is client-derived, never persisted, and drives the unified progress badge across all role dashboards.
 - Terminal guards (409 on re-decide) exist at: vacancy request decision, candidate-application decision.
 - Public/no-auth write paths: careers-page apply, candidate-form bio-data, student feedback, offer acceptance.
+- `OFFICE_STAGE_BY_STATUS`/`OFFICE_STAGE_LABELS` (`src/lib/hiringPipeline.ts`) bucket `DetailedHiringStatus` into Office's own 4-stage view (Offer Letter → Documents & Joining Letter → Appointment Letter → Credentials & Email) — shared by the department-scoped vacancy view and the consolidated all-departments board so both render identical stages.
+- ACCOUNTS (not COLLEGE_ACCOUNTS) has read-only access to `/candidate-profile` and `panel-feedback` GET — granted via `src/proxy.ts`'s `ROLE_PATH_MAP`, surfaced as a "View Profile" action on `accounts/pipeline`'s candidate rows rather than a separate candidates list page.
+
+## Role/UI map (who reaches what)
+- **HOD** — `/hod/pipeline` (own vacancies, full pipeline board + actions).
+- **PRINCIPAL/VICE_PRINCIPAL** — `/principal/vacancies` (all vacancies, decisions).
+- **COLLEGE_OFFICE** — `/college-office/pipeline` (all departments' vacancies, read-only Office-stage stepper; "Manage Candidates & Credentials" per vacancy deep-links into the unchanged `documents/[department]/[vacancyId]` → `documents/candidate/[applicationId]` action pages, which still handle sending offers, document verification, joining letters, appointment-letter/credential requests). The older `/college-office/documents` department-picker still exists and works (internal back-links, notification `link` fields still point there) but is no longer the primary nav entry.
+- **ACCOUNTS** — `/accounts/pipeline` (all vacancies, read-only, "View Profile" per candidate) + `/accounts/hiring` (send offers for Principal-approved candidates).
+- **COLLEGE_ACCOUNTS** — `/college-accounts/candidates` + `/candidate-profile/[id]`.
+- **WEBMASTER** — `/webmaster/credential-requests` (fulfills Stage 14; "Create Credentials" works directly off `SUBMITTED`; "Link Existing Account" opens a searchable picker over `/api/college/users`).
 
 ## Source map
 | Stage | File |
@@ -60,3 +70,5 @@ All routes use `requireCollegeMember()` (`src/lib/auth/verifySession.ts`) + Fire
 | 11 | `src/app/api/college/appointment-letters/route.ts` |
 | 13 | `.../offer-letters/[id]/request-credentials/route.ts`, `faculty-account-requests/route.ts` |
 | 14 | `faculty-account-requests/[id]/route.ts`, `src/lib/firestore/facultyProvisioning.ts` |
+| UI (Office) | `src/app/(dashboard)/college-office/pipeline/` (consolidated board, new), `documents/[department]/[vacancyId]/`, `documents/candidate/[applicationId]/`, `offers/`, `offers/new/` |
+| UI (Webmaster) | `src/app/(dashboard)/webmaster/credential-requests/page.tsx` |

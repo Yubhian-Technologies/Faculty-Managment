@@ -391,7 +391,7 @@ export default function CandidateFormPage() {
         </Card>
 
         <form onSubmit={handleSubmitClick} className="space-y-5">
-        <div className="columns-1 md:columns-2 gap-5 [&>*]:mb-5 [&>*]:break-inside-avoid">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
             <CardContent className="space-y-4">

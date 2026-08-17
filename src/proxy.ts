@@ -61,7 +61,7 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   T_AND_P: ["/t-and-p"],
   R_AND_D: ["/r-and-d"],
   PANEL_MEMBER: ["/panel", "/coordinator", EVALUATION_PATH],
-  ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
+  ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
   COLLEGE_ACCOUNTS: ["/college-accounts", CANDIDATE_PROFILE_PATH],
   FINANCE: ["/finance"],
   PURCHASE_DEPT: ["/purchase"],

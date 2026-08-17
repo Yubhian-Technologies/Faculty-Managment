@@ -14,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
+import { resolveOfferContactBlock } from "@/lib/offerLetterContactBlock";
 import { Plus, FileText, CheckCircle2, XCircle, Send, ChevronDown, ChevronUp, KeyRound, Clock, Download, PenLine, Copy } from "lucide-react";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
 import type { OfferLetter, FacultyAccountRequest } from "@/types";
@@ -108,9 +109,11 @@ export default function CollegeOfficeOffersPage() {
     interviewDate?: string;
     coordinatorUid?: string;
     coordinatorName?: string;
+    hodUid?: string;
+    hodName?: string;
   }> {
     type CandRes = { candidate?: { email?: string; permanentAddress?: string; residenceAddress?: string } };
-    type BatchRes = { batch?: { interviewDate?: Parameters<typeof formatDate>[0]; coordinatorUid?: string; coordinatorName?: string } };
+    type BatchRes = { batch?: { interviewDate?: Parameters<typeof formatDate>[0]; coordinatorUid?: string; coordinatorName?: string; hodUid?: string; hodName?: string } };
     const [candData, batchData] = await Promise.all([
       fetch(`/api/college/candidates/${letter.candidateId}`).then((r) => r.json() as Promise<CandRes>).catch((): CandRes => ({})),
       fetch(`/api/college/hiring-batches/${letter.batchId}`).then((r) => r.json() as Promise<BatchRes>).catch((): BatchRes => ({})),
@@ -122,25 +125,9 @@ export default function CollegeOfficeOffersPage() {
       interviewDate: batchData.batch?.interviewDate ? formatDate(batchData.batch.interviewDate) : undefined,
       coordinatorUid: batchData.batch?.coordinatorUid,
       coordinatorName: batchData.batch?.coordinatorName,
+      hodUid: batchData.batch?.hodUid,
+      hodName: batchData.batch?.hodName,
     };
-  }
-
-  // Coordinator contact - best-effort; omit whichever of phone/email is
-  // missing, and skip the whole block if there's no coordinator at all
-  // (matches the same lookup college-office/documents/candidate/[applicationId]/page.tsx uses).
-  async function coordinatorBlockFor(coordinatorUid?: string, coordinatorName?: string): Promise<string> {
-    if (!coordinatorUid) return "";
-    type UsersRes = { users?: { uid: string; phone?: string; email?: string }[] };
-    const usersRes = await fetch("/api/college/users?allDepts=true&includeAll=true")
-      .then((r) => r.json() as Promise<UsersRes>)
-      .catch((): UsersRes => ({}));
-    const coordinator = (usersRes.users ?? []).find((u) => u.uid === coordinatorUid);
-    const lines = [
-      coordinatorName,
-      coordinator?.phone ? `Phone: ${coordinator.phone}` : "",
-      coordinator?.email ? `Email: ${coordinator.email}` : "",
-    ].filter(Boolean);
-    return lines.length > 0 ? `\nFor any queries, please contact your Interview Coordinator:\n${lines.join("\n")}\n` : "";
   }
 
   async function generatePdf(letter: OfferRow) {
@@ -175,7 +162,7 @@ export default function CollegeOfficeOffersPage() {
   async function composeEmail(letter: OfferRow) {
     setDownloadingId(letter.id);
     try {
-      const [{ candidateAddress, candidateEmail, interviewDate, coordinatorUid, coordinatorName }, ccRes] = await Promise.all([
+      const [{ candidateAddress, candidateEmail, interviewDate, coordinatorUid, coordinatorName, hodUid, hodName }, ccRes] = await Promise.all([
         fetchLetterExtras(letter),
         // Recomputed live, not read off `letter` - covers letters sent before
         // ccEmails was persisted, and stays correct if the roster changed since.
@@ -185,7 +172,7 @@ export default function CollegeOfficeOffersPage() {
         toast({ variant: "destructive", title: "Candidate has no email on file" });
         return;
       }
-      const coordinatorBlock = await coordinatorBlockFor(coordinatorUid, coordinatorName);
+      const coordinatorBlock = await resolveOfferContactBlock({ coordinatorUid, coordinatorName, hodUid, hodName });
 
       await downloadOfferLetterPdf(
         {

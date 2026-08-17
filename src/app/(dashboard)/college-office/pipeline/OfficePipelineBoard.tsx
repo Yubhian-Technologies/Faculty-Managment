@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Clock, GitBranch } from "lucide-react";
+import { Clock, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step, type StepState } from "@/components/shared/PipelineStep";
@@ -18,7 +17,6 @@ import {
   type DetailedHiringStatus,
   type OfficeStage,
 } from "@/lib/hiringPipeline";
-import { BATCH_PHASE_LABELS } from "@/types";
 import type {
   VacancyRequest,
   CandidateApplication,
@@ -29,11 +27,10 @@ import type {
   FacultyAccountRequestStatus,
 } from "@/types";
 
-// Ascending progress order - same declaration order as DETAILED_HIRING_STATUS_LABELS.
 const DETAILED_STATUS_ORDER = Object.keys(DETAILED_HIRING_STATUS_LABELS) as DetailedHiringStatus[];
 
-// Same joined view HOD's and Principal's pipeline boards use, trimmed to the
-// fields getDetailedHiringStatus needs.
+// Same joined view college-office/documents/[department]/page.tsx uses,
+// trimmed to the fields getDetailedHiringStatus needs.
 type PipelineCandidateView = {
   id: string;
   candidateId: string;
@@ -51,18 +48,23 @@ type PipelineEntry = {
 
 type OfferStatus = "SENT" | "ACCEPTED" | "REJECTED";
 
-export default function CollegeOfficeDepartmentVacanciesPage() {
-  const { department } = useParams<{ department: string }>();
-  const decodedDepartment = decodeURIComponent(department);
+// One-screen equivalent of college-office/documents' department-picker ->
+// department-vacancy-list drill-down: every department's vacancies in a
+// single board, matching the unified pipeline view HOD/Principal/Accounts
+// already get (src/lib/hiringPipeline.ts). Office's own 4-stage stepper
+// (Offer Letter -> Documents -> Appointment Letter -> Credentials) is reused
+// as-is from documents/[department]/page.tsx; each card still deep-links into
+// the existing, unmodified "Manage Candidates & Credentials" action page
+// rather than re-implementing any of that logic here.
+export function OfficePipelineBoard({ scope }: { scope: "active" | "closed" }) {
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
   const [offerStatusByCandidate, setOfferStatusByCandidate] = useState<Record<string, OfferStatus>>({});
   const [appointmentCandidateIds, setAppointmentCandidateIds] = useState<Set<string>>(new Set());
   const [accountRequestStatusByCandidate, setAccountRequestStatusByCandidate] = useState<Record<string, FacultyAccountRequestStatus>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [scope, setScope] = useState<"active" | "closed">("active");
 
   function load() {
-    Promise.all([
+    void Promise.all([
       fetch("/api/college/vacancy-requests").then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>).then((d) => d.vacancyRequests ?? []),
       fetch("/api/college/candidate-applications").then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>).then((d) => d.applications ?? []),
       fetch("/api/college/hiring-batches").then((r) => r.json() as Promise<{ batches: HiringBatch[] }>).then((d) => d.batches ?? []),
@@ -95,17 +97,15 @@ export default function CollegeOfficeDepartmentVacanciesPage() {
           else viewsByVacancy.set(a.vacancyRequestId, [view]);
         }
 
-        const built: PipelineEntry[] = vacancies
-          .filter((v) => v.department === decodedDepartment)
-          .map((v) => ({
-            vacancy: v,
-            candidates: viewsByVacancy.get(v.id) ?? [],
-            batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
-          }));
+        const built: PipelineEntry[] = vacancies.map((v) => ({
+          vacancy: v,
+          candidates: viewsByVacancy.get(v.id) ?? [],
+          batch: batches.find((b) => b.vacancyId === v.id && b.status !== "REJECTED") ?? null,
+        }));
         built.sort((a, b) => (toDate(b.vacancy.createdAt)?.getTime() ?? 0) - (toDate(a.vacancy.createdAt)?.getTime() ?? 0));
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -118,8 +118,7 @@ export default function CollegeOfficeDepartmentVacanciesPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decodedDepartment]);
+  }, []);
 
   function closedFor(e: PipelineEntry): boolean {
     const approvedCandidateIds = e.candidates.filter((c) => c.status === "APPROVED" && c.currentStage === "DECISION").map((c) => c.candidateId);
@@ -128,65 +127,47 @@ export default function CollegeOfficeDepartmentVacanciesPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="h-8 w-48 bg-muted animate-pulse rounded" />
-        {[1, 2].map((i) => <div key={i} className="h-40 rounded-xl bg-muted animate-pulse" />)}
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => <div key={i} className="h-44 rounded-xl bg-muted animate-pulse" />)}
       </div>
     );
   }
 
   const visible = entries.filter((e) => (scope === "closed" ? closedFor(e) : !closedFor(e)));
 
+  if (visible.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-14 text-center">
+        <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+        <p className="font-semibold text-muted-foreground">
+          {scope === "closed" ? "No past hirings yet" : "No active hiring requests"}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <Link href="/college-office/documents" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> Back to Departments
-      </Link>
-
-      <div>
-        <h1 className="text-xl font-bold">{decodedDepartment}</h1>
-        <p className="text-sm text-muted-foreground">Offer letter → document verification & joining letter → appointment letter → credentials & official email setup</p>
-      </div>
-
-      <div className="flex gap-2">
-        <Button size="sm" variant={scope === "active" ? "default" : "outline"} onClick={() => setScope("active")}>Active</Button>
-        <Button size="sm" variant={scope === "closed" ? "default" : "outline"} onClick={() => setScope("closed")}>Completed</Button>
-      </div>
-
-      {visible.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-14 text-center">
-          <GitBranch className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-          <p className="font-semibold text-muted-foreground">
-            {scope === "closed" ? "No past hirings yet" : "No active hiring requests in this department"}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {visible.map((entry) => (
-            <DepartmentVacancyCard
-              key={entry.vacancy.id}
-              entry={entry}
-              department={department}
-              offerStatusByCandidate={offerStatusByCandidate}
-              appointmentCandidateIds={appointmentCandidateIds}
-              accountRequestStatusByCandidate={accountRequestStatusByCandidate}
-            />
-          ))}
-        </div>
-      )}
+    <div className="space-y-3">
+      {visible.map((entry) => (
+        <VacancyOfficeCard
+          key={entry.vacancy.id}
+          entry={entry}
+          offerStatusByCandidate={offerStatusByCandidate}
+          appointmentCandidateIds={appointmentCandidateIds}
+          accountRequestStatusByCandidate={accountRequestStatusByCandidate}
+        />
+      ))}
     </div>
   );
 }
 
-function DepartmentVacancyCard({
+function VacancyOfficeCard({
   entry,
-  department,
   offerStatusByCandidate,
   appointmentCandidateIds,
   accountRequestStatusByCandidate,
 }: {
   entry: PipelineEntry;
-  department: string;
   offerStatusByCandidate: Record<string, OfferStatus>;
   appointmentCandidateIds: Set<string>;
   accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>;
@@ -195,7 +176,7 @@ function DepartmentVacancyCard({
 
   // Office's own concern starts at the interview decision, not before - the
   // stepper below tracks the least-advanced decided candidate through Office's
-  // 4 stages, same "least advanced wins" rule getOnboardingSummary used.
+  // 4 stages, same "least advanced wins" rule getOnboardingSummary uses.
   const decidedCandidates = candidates.filter((c) => c.status === "APPROVED" && c.currentStage === "DECISION");
   const statuses = decidedCandidates.map((c) =>
     getDetailedHiringStatus({
@@ -220,7 +201,7 @@ function DepartmentVacancyCard({
       if (vacancy.status !== "APPROVED") return "Awaiting Principal's approval of the request";
       if (!batch) return "Awaiting HOD to schedule interviews";
       if (batch.currentPhase === "COMPLETED") return "No candidates selected";
-      return `In progress with HOD/Panel — ${BATCH_PHASE_LABELS[batch.currentPhase]}`;
+      return "In progress with HOD/Panel";
     }
     if (stage < currentOfficeStage) return "Completed";
     if (stage > currentOfficeStage) return "-";
@@ -250,7 +231,7 @@ function DepartmentVacancyCard({
               <StatusBadge status={vacancy.status} />
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Raised {formatDate(vacancy.createdAt)} · {vacancy.requiredCount} post{vacancy.requiredCount !== 1 ? "s" : ""} open
+              {vacancy.department} · Raised {formatDate(vacancy.createdAt)} · {vacancy.requiredCount} post{vacancy.requiredCount !== 1 ? "s" : ""} open
             </p>
           </div>
           <span className="shrink-0 text-[11px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
@@ -271,7 +252,7 @@ function DepartmentVacancyCard({
       <div className="px-5 pb-4 flex items-center justify-between gap-3 flex-wrap border-t pt-3">
         {readyForOffice ? (
           <Button size="sm" asChild>
-            <Link href={`/college-office/documents/${department}/${vacancy.id}`}>Manage Candidates & Credentials →</Link>
+            <Link href={`/college-office/documents/${encodeURIComponent(vacancy.department)}/${vacancy.id}`}>Manage Candidates &amp; Credentials →</Link>
           </Button>
         ) : (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">

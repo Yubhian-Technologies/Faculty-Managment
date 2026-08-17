@@ -13,74 +13,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { useCollegeType } from "@/hooks/useCollegeType";
-import { getTeachingDesignations, getSupportingDesignations } from "@/lib/designations/config";
+import {
+  getHiringTeachingDesignations, getHiringSupportingDesignations, HIRING_DESIGNATION_TO_CADRE,
+} from "@/lib/designations/config";
 import { toast } from "@/hooks/useToast";
 import { Plus, Trash2 } from "lucide-react";
 import type { FacultyRequirementResult } from "@/app/api/college/faculty-requirement/route";
 
 // ─── Position catalogue ──────────────────────────────────────────────────────
-// The rich catalogue below (with Dental/Medical-flavored supporting roles and
-// AICTE cadre-ratio auto-fill via DESIGNATION_TO_CADRE) is what Engineering/
-// Pharmacy/Dental colleges have always used - kept exactly as-is for those.
-// Degree/Polytechnic/School colleges instead draw from the shared per-
-// college-type lists in src/lib/designations/config.ts (the same ones Faculty/
-// Supporting Staff add/edit use), so hiring and staff addition stay in sync.
+// Role options are entirely driven by the college's type, via the shared
+// hiring catalogues in src/lib/designations/config.ts - one source for every
+// college type, in sync with Faculty/Supporting Staff add-edit's own
+// per-type lists (kept separate there since those feed stored FacultyMember
+// designation codes and CSV import/export).
 
 type Category = "TEACHING" | "SUPPORTING_STAFF";
-
-const TEACHING_ROLES = [
-  "Professor & Head",
-  "Professor",
-  "Associate Professor",
-  "Reader",
-  "Assistant Professor",
-  "Senior Lecturer",
-  "Lecturer",
-  "Medical Officer",
-  "Psychology Counsellor",
-  "Others",
-] as const;
-
-const SUPPORTING_ROLES = [
-  "Assistant Manager (Admin)",
-  "Senior Assistant",
-  "Junior Assistant",
-  "Librarian",
-  "Assistant Librarian",
-  "Nurse",
-  "Lab Technician",
-  "Assistant",
-  "Lab Assistant",
-  "OT Assistant",
-  "Sr. Dental Equipment Technician",
-  "Dental Equipment Technician",
-  "Dental Technician",
-  "Radiographer",
-  "Receptionist",
-  "Stores Incharge",
-  "Physical Director",
-  "Accounts Officer",
-  "Electrician",
-  "Plumber",
-  "Stores Assistant",
-  "Driver",
-  "Warden",
-  "Assistant Systems Administrator",
-  "Trainee Dental Technician",
-  "Others",
-] as const;
 
 const CATEGORY_LABELS: Record<Category, string> = {
   TEACHING: "Teaching",
   SUPPORTING_STAFF: "Supporting Staff",
-};
-
-const DESIGNATION_TO_CADRE: Record<string, "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR"> = {
-  "Professor":           "PROFESSOR",
-  "Associate Professor": "ASSOCIATE_PROFESSOR",
-  "Assistant Professor": "ASSISTANT_PROFESSOR",
-  "Senior Lecturer":     "ASSISTANT_PROFESSOR",
-  "Lecturer":            "ASSISTANT_PROFESSOR",
 };
 
 const QUALIFICATION_OPTIONS = [
@@ -160,15 +111,10 @@ function getFirstValidationError(entries: PositionEntry[]): string | null {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-// Colleges with their own per-type designation lists (not the Engineering/
-// Pharmacy/Dental catalogue above) - see src/lib/designations/config.ts.
-const CUSTOM_CATALOGUE_TYPES = ["DEGREE", "POLYTECHNIC", "SCHOOL"];
-
 export default function NewVacancyPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const { collegeType } = useCollegeType();
-  const usesCustomCatalogue = !!collegeType && CUSTOM_CATALOGUE_TYPES.includes(collegeType);
 
   const [requirement, setRequirement] = useState<FacultyRequirementResult | null>(null);
   const [reqLoading, setReqLoading] = useState(true);
@@ -199,7 +145,7 @@ export default function NewVacancyPage() {
     const patch: Partial<PositionEntry> = { designation: val, customDesignation: "" };
 
     if (requirement) {
-      const cadreKey = DESIGNATION_TO_CADRE[val];
+      const cadreKey = HIRING_DESIGNATION_TO_CADRE[val];
       if (cadreKey) {
         const cadreRow = requirement.cadre.find((c) => c.key === cadreKey);
         if (cadreRow) {
@@ -353,15 +299,15 @@ export default function NewVacancyPage() {
         {entries.map((entry, idx) => {
           const roleOptions: readonly string[] =
             entry.category === "TEACHING"
-              ? usesCustomCatalogue ? [...getTeachingDesignations(collegeType), "Others"] : TEACHING_ROLES
+              ? [...getHiringTeachingDesignations(collegeType), "Others"]
               : entry.category === "SUPPORTING_STAFF"
-              ? usesCustomCatalogue ? [...getSupportingDesignations(collegeType), "Others"] : SUPPORTING_ROLES
+              ? [...getHiringSupportingDesignations(collegeType), "Others"]
               : [];
 
           const finalPosition =
             entry.designation === "Others" ? entry.customDesignation.trim() : entry.designation;
 
-          const highlightedCadre = entry.designation ? (DESIGNATION_TO_CADRE[entry.designation] ?? null) : null;
+          const highlightedCadre = entry.designation ? (HIRING_DESIGNATION_TO_CADRE[entry.designation] ?? null) : null;
 
           return (
             <Card key={entry.key} className="relative">
@@ -416,7 +362,7 @@ export default function NewVacancyPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {roleOptions.map((role) => {
-                            const cadreKey = DESIGNATION_TO_CADRE[role];
+                            const cadreKey = HIRING_DESIGNATION_TO_CADRE[role];
                             const cadreRow = requirement?.cadre.find((c) => c.key === cadreKey);
                             return (
                               <SelectItem key={role} value={role}>

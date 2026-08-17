@@ -146,3 +146,68 @@ const DEFAULT_SUPPORTING_QUALIFICATION_LEVELS = ["SSC", "Intermediate", "Degree"
 export function getSupportingQualificationLevels(type: CollegeType | undefined | null): string[] {
   return type === "SCHOOL" ? SCHOOL_SUPPORTING_QUALIFICATION_LEVELS : DEFAULT_SUPPORTING_QUALIFICATION_LEVELS;
 }
+
+// ─── Vacancy Request (hiring) designation catalogues ────────────────────────
+// Separate from TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE/SUPPORTING_DESIGNATIONS_
+// BY_COLLEGE_TYPE above: those feed Faculty/Supporting Staff add-edit and MUST
+// keep their exact stored values (FacultyMember records, CSV, cadre-ratio
+// matching by code). The Vacancy Request role picker (src/app/(dashboard)/hod/
+// vacancy/new) shows a HOD "what role am I hiring for" list, which is free to
+// be richer/more descriptive, and cadre-ratio auto-fills via
+// HIRING_DESIGNATION_TO_CADRE. Degree/Polytechnic/School have no such richer
+// list, so hiring reuses their Faculty/Staff catalogue directly.
+//
+// Engineering/Pharmacy/Dental share the same academic-rank teaching roles and
+// generic admin/support roles - Dental additionally gets its clinic-specific
+// supporting roles (Nurse, OT Assistant, Dental/Radiographer techs), which
+// don't belong on an Engineering or Pharmacy college's picker.
+const HIRING_TEACHING_COMMON = [
+  "Professor & Head", "Professor", "Associate Professor", "Reader", "Assistant Professor",
+  "Senior Lecturer", "Lecturer", "Medical Officer", "Psychology Counsellor",
+];
+const HIRING_SUPPORTING_COMMON = [
+  "Assistant Manager (Admin)", "Senior Assistant", "Junior Assistant", "Librarian", "Assistant Librarian",
+  "Lab Technician", "Assistant", "Lab Assistant", "Receptionist", "Stores Incharge", "Physical Director",
+  "Accounts Officer", "Electrician", "Plumber", "Stores Assistant", "Driver", "Warden",
+  "Assistant Systems Administrator",
+];
+const HIRING_SUPPORTING_DENTAL_ONLY = [
+  "Nurse", "OT Assistant", "Sr. Dental Equipment Technician", "Dental Equipment Technician",
+  "Dental Technician", "Radiographer", "Trainee Dental Technician",
+];
+const HIRING_SUPPORTING_DENTAL = [...HIRING_SUPPORTING_COMMON, ...HIRING_SUPPORTING_DENTAL_ONLY];
+
+const HIRING_TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
+  ENGINEERING: HIRING_TEACHING_COMMON,
+  PHARMACY: HIRING_TEACHING_COMMON,
+  DENTAL: HIRING_TEACHING_COMMON,
+  DEGREE: TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE.DEGREE,
+  POLYTECHNIC: TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE.POLYTECHNIC,
+  SCHOOL: TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE.SCHOOL,
+};
+const HIRING_SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE: Record<CollegeType, string[]> = {
+  ENGINEERING: HIRING_SUPPORTING_COMMON,
+  PHARMACY: HIRING_SUPPORTING_COMMON,
+  DENTAL: HIRING_SUPPORTING_DENTAL,
+  DEGREE: SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE.DEGREE,
+  POLYTECHNIC: SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE.POLYTECHNIC,
+  SCHOOL: SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE.SCHOOL,
+};
+
+export function getHiringTeachingDesignations(type: CollegeType | undefined | null): string[] {
+  return HIRING_TEACHING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? HIRING_TEACHING_COMMON;
+}
+export function getHiringSupportingDesignations(type: CollegeType | undefined | null): string[] {
+  return HIRING_SUPPORTING_DESIGNATIONS_BY_COLLEGE_TYPE[type as CollegeType] ?? HIRING_SUPPORTING_COMMON;
+}
+
+// AICTE cadre-ratio auto-fill (src/app/api/college/faculty-requirement) only
+// applies to the Engineering/Pharmacy/Dental hiring catalogue above - Degree/
+// Polytechnic/School have no cadre-ratio requirement.
+export const HIRING_DESIGNATION_TO_CADRE: Record<string, "PROFESSOR" | "ASSOCIATE_PROFESSOR" | "ASSISTANT_PROFESSOR"> = {
+  "Professor":           "PROFESSOR",
+  "Associate Professor": "ASSOCIATE_PROFESSOR",
+  "Assistant Professor": "ASSISTANT_PROFESSOR",
+  "Senior Lecturer":     "ASSISTANT_PROFESSOR",
+  "Lecturer":            "ASSISTANT_PROFESSOR",
+};
