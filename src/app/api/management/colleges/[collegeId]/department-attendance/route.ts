@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
+import { isSunday } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceRecord } from "@/types";
 
 interface RosterEntry {
@@ -18,10 +19,11 @@ interface RosterEntry {
   // Attendance Report page uses.
   courseIds?: string[];
   // AttendanceStatus, or a synthetic value for "no record exists yet for the
-  // day": "NOT_REGISTERED" (hasn't registered their face at all - takes
-  // priority) or "NOT_MARKED" (registered, just hasn't checked in yet today).
-  // Deliberately NOT "ABSENT" for a past day with no record - see
-  // /api/college/attendance/report for why that derivation is deferred.
+  // day": "NOT_REGISTERED" (never registered their face) or "NOT_MARKED"
+  // (registered, hasn't checked in *today* yet). A past day with no record
+  // derives to ABSENT (or HOLIDAY on a Sunday) once on/after that person's
+  // face-registration date - see /api/college/attendance/report for the
+  // full rationale.
   status: string;
   checkIn: string | null;
   checkOut: string | null;
@@ -63,9 +65,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
       .where("role", "in", ["PANEL_MEMBER", "HOD"])
       .get();
 
+    const uidToRegisteredAt = new Map<string, Date | null>();
     const roster: RosterEntry[] = usersSnap.docs.map((d) => {
-      const u = d.data() as { name?: string; role?: string; faceEmbedding?: number[] };
+      const u = d.data() as { name?: string; role?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
       const role: "PANEL_MEMBER" | "HOD" = u.role === "HOD" ? "HOD" : "PANEL_MEMBER";
+      if (role === "HOD") uidToRegisteredAt.set(d.id, u.faceRegisteredAt ? u.faceRegisteredAt.toDate() : null);
       return {
         uid: d.id, name: u.name ?? "", role,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
@@ -127,19 +131,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
       const facultyMembersSnap = await collegeRef.collection("facultyMembers").where("department", "==", department).get();
       const uidToFacultyMemberId = new Map<string, string>();
       for (const doc of facultyMembersSnap.docs) {
-        const fm = doc.data() as { userUid?: string; faceEmbedding?: number[] };
+        const fm = doc.data() as { userUid?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
         if (!fm.userUid) continue;
         uidToFacultyMemberId.set(fm.userUid, doc.id);
+        uidToRegisteredAt.set(fm.userUid, fm.faceRegisteredAt ? fm.faceRegisteredAt.toDate() : null);
         if (rosterByUid.get(fm.userUid)?.role === "PANEL_MEMBER") {
           rosterByUid.get(fm.userUid)!.registered = Array.isArray(fm.faceEmbedding) && fm.faceEmbedding.length > 0;
         }
       }
 
-      // "No record yet" defaults to NOT_MARKED above - promote it to
-      // NOT_REGISTERED when the person hasn't registered their face at all.
+      // "No record yet" defaults to NOT_MARKED above - refine it:
+      //   - Never registered at all -> NOT_REGISTERED (most actionable).
+      //   - A past date, on/after their registration date -> ABSENT (or
+      //     HOLIDAY if that date is a Sunday). Before registration, or
+      //     today, stays NOT_MARKED.
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       for (const entry of roster) {
-        if (entry.status === "NOT_MARKED" && !entry.registered) {
+        if (entry.status !== "NOT_MARKED") continue;
+        if (!entry.registered) {
           entry.status = "NOT_REGISTERED";
+          continue;
+        }
+        const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
+        const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
+        if (start < todayStart && regStart && start >= regStart) {
+          entry.status = isSunday(start) ? "HOLIDAY" : "ABSENT";
         }
       }
 

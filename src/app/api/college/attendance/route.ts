@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
+import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
+import { resolveFaceRegisteredAt } from "@/lib/attendance/registration";
+import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import type { AttendanceRecord, AttendanceSummary } from "@/types";
 
 export async function GET(request: Request) {
@@ -24,8 +27,51 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
+    // Viewing someone else's month (the monthly per-person view HOD/Principal/
+    // VP use to review and correct a whole month, not just today) - same
+    // one-tier cascade as /api/college/attendance/manual: HOD -> same-
+    // department Faculty, PRINCIPAL/VICE_PRINCIPAL -> an HOD in this college.
+    const requestedFacultyId = searchParams.get("facultyId")?.trim();
+    let facultyId = session.uid;
+    let facultyRole: string = session.role;
+    let facultyName = "";
+    let department = "";
+    let personName: string | null = null;
+
+    if (requestedFacultyId && requestedFacultyId !== session.uid) {
+      if (session.role !== "HOD" && session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+        return NextResponse.json({ error: "You can only view your own attendance" }, { status: 403 });
+      }
+      const targetSnap = await collegeRef.collection("users").doc(requestedFacultyId).get();
+      if (!targetSnap.exists) {
+        return NextResponse.json({ error: "Person not found" }, { status: 404 });
+      }
+      const target = targetSnap.data() as { name?: string; department?: string; role?: string };
+      if (session.role === "HOD") {
+        if (target.role !== "PANEL_MEMBER") {
+          return NextResponse.json({ error: "You can only view attendance for Faculty" }, { status: 403 });
+        }
+        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+        if (!canHodEditDepartment(scope, target.department ?? "")) {
+          return NextResponse.json({ error: "You can only view attendance for faculty in your department" }, { status: 403 });
+        }
+      } else if (target.role !== "HOD") {
+        return NextResponse.json({ error: "You can only view attendance for an HOD" }, { status: 403 });
+      }
+      facultyId = requestedFacultyId;
+      facultyRole = target.role ?? "";
+      facultyName = target.name ?? "";
+      department = target.department ?? "";
+      personName = facultyName;
+    } else {
+      const selfSnap = await collegeRef.collection("users").doc(session.uid).get();
+      const self = selfSnap.data() as { name?: string; department?: string } | undefined;
+      facultyName = self?.name ?? "";
+      department = self?.department ?? "";
+    }
+
     // Fetch monthly attendance summary by computed doc id
-    const summaryId = `${session.uid}_${year}_${month}`;
+    const summaryId = `${facultyId}_${year}_${month}`;
     const summarySnap = await collegeRef
       .collection("attendanceSummaries")
       .doc(summaryId)
@@ -38,7 +84,7 @@ export async function GET(request: Request) {
     // Fetch all attendance records for this faculty member
     const recordsSnap = await collegeRef
       .collection("attendanceRecords")
-      .where("facultyId", "==", session.uid)
+      .where("facultyId", "==", facultyId)
       .get();
 
     // Filter in-memory to the requested year + month
@@ -55,10 +101,21 @@ export async function GET(request: Request) {
 
     await closeMissedCheckouts(db, records);
 
+    const registeredAt = await resolveFaceRegisteredAt(db, session.collegeId, facultyId, facultyRole);
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the real records
+    const realRecords = records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec);
+    const filledRecords = fillMissingDays(realRecords, monthStart, monthEnd, registeredAt, {
+      collegeId: session.collegeId,
+      facultyId,
+      facultyName,
+      department,
+    });
+
     return NextResponse.json({
+      personName,
       summary,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the response
-      records: records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec),
+      records: filledRecords,
     });
   } catch (err) {
     if (
