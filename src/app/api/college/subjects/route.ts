@@ -3,8 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { SubjectCategory, SubjectType } from "@/types";
-import { SUBJECT_CATEGORY_LABELS } from "@/types";
+import type { SubjectType } from "@/types";
 import {
   getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames, resolveSubjectDepartment,
 } from "@/lib/departments/scope";
@@ -18,7 +17,6 @@ export async function GET(request: Request) {
     const year = searchParams.get("year");
     const deptFilter = searchParams.get("department");
     const academicYear = searchParams.get("academicYear");
-    const regulation = searchParams.get("regulation");
 
     const db = getAdminDb();
     let query: FirebaseFirestore.Query = db.collection("colleges").doc(session.collegeId).collection("subjects");
@@ -73,16 +71,6 @@ export async function GET(request: Request) {
       });
     }
 
-    // Same leniency as academicYear above - a subject with no regulation set
-    // (semester-scoped, or created before this field existed / not yet
-    // backfilled) still matches any filter rather than disappearing.
-    if (regulation) {
-      subjects = subjects.filter((s) => {
-        const sr = (s as { regulation?: string }).regulation;
-        return !sr || sr === regulation;
-      });
-    }
-
     return NextResponse.json({ subjects });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -112,12 +100,6 @@ export async function POST(request: Request) {
       type?: SubjectType;
       department?: string;
       academicYear?: string;
-      regulation?: string;
-      serialNumber?: number;
-      category?: SubjectCategory;
-      lectureHours?: number;
-      tutorialHours?: number;
-      practicalHours?: number;
     };
 
     if (!body.name?.trim() || !body.code?.trim()) {
@@ -138,44 +120,6 @@ export async function POST(request: Request) {
       const course = courseSnap.data() as { name: string; departmentId: string; durationYears: number; catalogId?: string };
       if (year < 1 || year > course.durationYears) {
         return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
-      }
-
-      const regulation = body.regulation?.trim();
-      if (!regulation) {
-        return NextResponse.json({ error: "Regulation is required" }, { status: 400 });
-      }
-      // Validated against this course's OWN assigned regulations (Course
-      // Catalog > Regulations), not just the college's full declared list -
-      // a Pharmacy-only code should never be accepted for a B.Tech subject.
-      if (!course.catalogId) {
-        return NextResponse.json(
-          { error: "This course isn't linked to a Course Catalog entry. Ask the Principal to fix this under Settings > Course Catalog." },
-          { status: 400 },
-        );
-      }
-      const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
-      const catalogRegulations = catalogSnap.exists ? ((catalogSnap.data() as { regulations?: string[] }).regulations ?? []) : [];
-      if (catalogRegulations.length === 0) {
-        return NextResponse.json(
-          { error: `${course.name} has no regulations assigned yet. Ask the Principal to assign them under Settings > Course Catalog.` },
-          { status: 400 },
-        );
-      }
-      if (!catalogRegulations.includes(regulation)) {
-        return NextResponse.json(
-          { error: `That regulation isn't assigned to ${course.name}. Check Settings > Course Catalog.` },
-          { status: 400 },
-        );
-      }
-
-      if (body.serialNumber == null || Number.isNaN(Number(body.serialNumber))) {
-        return NextResponse.json({ error: "S.No. is required" }, { status: 400 });
-      }
-      if (!body.category || !(body.category in SUBJECT_CATEGORY_LABELS)) {
-        return NextResponse.json({ error: "A valid category is required" }, { status: 400 });
-      }
-      if (body.lectureHours == null || body.tutorialHours == null || body.practicalHours == null) {
-        return NextResponse.json({ error: "L, T and P are required" }, { status: 400 });
       }
 
       let dept = "";
@@ -255,19 +199,13 @@ export async function POST(request: Request) {
           courseId,
           courseName: course.name,
           year: Number(year),
-          serialNumber: Number(body.serialNumber),
-          category: body.category,
           name: body.name.trim(),
           code: body.code.toUpperCase().trim(),
           hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : 0,
           totalHoursPerSemester: body.totalHoursPerSemester != null ? Number(body.totalHoursPerSemester) : null,
-          lectureHours: Number(body.lectureHours),
-          tutorialHours: Number(body.tutorialHours),
-          practicalHours: Number(body.practicalHours),
           credits: body.credits != null ? Number(body.credits) : 0,
           type: body.type ?? "THEORY",
           ...(body.academicYear ? { academicYear: body.academicYear } : {}),
-          regulation,
           isActive: true,
           createdAt: now,
           updatedAt: now,

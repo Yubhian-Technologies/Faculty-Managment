@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Pencil, Trash2, Clock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,6 @@ import { useAuth } from "@/hooks/useAuth";
 import type { Course, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
-
-const ALL_REGULATIONS = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -37,10 +35,6 @@ export default function HODSubjectsPage() {
   // needing an effect to sync state just to pick a default.
   const [pickedCourseId, setPickedCourseId] = useState("");
   const [pickedYear, setPickedYear] = useState("");
-  // "" means "All regulations" - lets an HOD tell apart subjects filed under
-  // different curriculum regulations when a year has more than one active
-  // (e.g. a transition batch).
-  const [pickedRegulation, setPickedRegulation] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
 
@@ -106,25 +100,6 @@ export default function HODSubjectsPage() {
   }, [selectedCourse, departmentById]);
   const selectedYear = pickedYear || (yearOptions.length > 0 ? String(yearOptions[0]) : "");
 
-  // Regulation codes actually present among this course/year's subjects -
-  // only offer ones that would narrow the list down, not every regulation
-  // the college has ever declared.
-  const regulationOptions = useMemo(
-    () => Array.from(new Set(subjects.map((s) => s.regulation).filter((r): r is string => !!r))).sort(),
-    [subjects]
-  );
-  const visibleSubjects = useMemo(() => {
-    const filtered = pickedRegulation ? subjects.filter((s) => !s.regulation || s.regulation === pickedRegulation) : subjects;
-    // Curriculum-table order: by S.No. when set, falling back to name for
-    // legacy subjects that predate the field.
-    return [...filtered].sort((a, b) => {
-      if (a.serialNumber != null && b.serialNumber != null) return a.serialNumber - b.serialNumber;
-      if (a.serialNumber != null) return -1;
-      if (b.serialNumber != null) return 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [subjects, pickedRegulation]);
-
   const loadSubjects = useCallback(async (courseId: string, year: string) => {
     if (!courseId || !year) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
@@ -146,12 +121,6 @@ export default function HODSubjectsPage() {
   function selectCourse(courseId: string) {
     setPickedCourseId(courseId);
     setPickedYear(""); // fall back to the new course's own first year
-    setPickedRegulation("");
-  }
-
-  function selectYear(year: string) {
-    setPickedYear(year);
-    setPickedRegulation("");
   }
 
   async function handleDelete() {
@@ -185,7 +154,7 @@ export default function HODSubjectsPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Course</Label>
                 <Select value={selectedCourseId} onValueChange={selectCourse}>
@@ -197,24 +166,10 @@ export default function HODSubjectsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Year</Label>
-                <Select value={selectedYear} onValueChange={selectYear} disabled={!selectedCourse}>
+                <Select value={selectedYear} onValueChange={setPickedYear} disabled={!selectedCourse}>
                   <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                   <SelectContent>
                     {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Regulation</Label>
-                <Select
-                  value={pickedRegulation || ALL_REGULATIONS}
-                  onValueChange={(v) => setPickedRegulation(v === ALL_REGULATIONS ? "" : v)}
-                  disabled={regulationOptions.length === 0}
-                >
-                  <SelectTrigger><SelectValue placeholder="All regulations" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_REGULATIONS}>All regulations</SelectItem>
-                    {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -237,76 +192,47 @@ export default function HODSubjectsPage() {
                   <p className="text-sm text-muted-foreground py-6 text-center">
                     No subjects added yet for this year.
                   </p>
-                ) : visibleSubjects.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">
-                    No subjects for this year under regulation {pickedRegulation}.
-                  </p>
                 ) : (
-                  <Card className="overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          <tr>
-                            <th className="px-4 py-3">S.No.</th>
-                            <th className="px-4 py-3">Category</th>
-                            <th className="px-4 py-3">Name of the Subject</th>
-                            <th className="px-4 py-3 text-center">L</th>
-                            <th className="px-4 py-3 text-center">T</th>
-                            <th className="px-4 py-3 text-center">P</th>
-                            <th className="px-4 py-3 text-center">Credits</th>
-                            <th className="px-4 py-3" />
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {visibleSubjects.map((s) => {
-                            // A subject viewed here that isn't actually filed under
-                            // this HOD's own department (e.g. Basic Science's shared
-                            // 1st-year subject, seen from a fed department like IT)
-                            // is read-only - editing/deleting it from a department
-                            // that doesn't own it would change/remove it for every
-                            // other department sharing it too.
-                            const isOwnDepartment = s.department === user?.department;
-                            return (
-                              <tr key={s.id}>
-                                <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
-                                <td className="px-4 py-2.5">
-                                  {s.category ? <Badge variant="outline" className="text-xs">{s.category}</Badge> : "—"}
-                                </td>
-                                <td className="px-4 py-2.5">
-                                  <div className="font-medium text-foreground">{s.name}</div>
-                                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                                    <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
-                                    <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
-                                    {s.regulation && <Badge variant="secondary" className="text-xs">{s.regulation}</Badge>}
-                                    {!isOwnDepartment && (
-                                      <Badge variant="outline" className="text-xs">From {s.department}</Badge>
-                                    )}
-                                    <span className="text-xs text-muted-foreground">{s.hoursPerWeek} hrs/week</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2.5 text-center">{s.lectureHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.tutorialHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.practicalHours ?? "—"}</td>
-                                <td className="px-4 py-2.5 text-center">{s.credits}</td>
-                                <td className="px-4 py-2.5 text-right">
-                                  {isOwnDepartment && (
-                                    <div className="flex justify-end gap-1">
-                                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/hod/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}>
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(s)}>
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </Card>
+                  <div className="space-y-2">
+                    {subjects.map((s) => {
+                      // A subject viewed here that isn't actually filed under
+                      // this HOD's own department (e.g. Basic Science's shared
+                      // 1st-year subject, seen from a fed department like IT)
+                      // is read-only - editing/deleting it from a department
+                      // that doesn't own it would change/remove it for every
+                      // other department sharing it too.
+                      const isOwnDepartment = s.department === user?.department;
+                      return (
+                        <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                              <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                              {!isOwnDepartment && (
+                                <Badge variant="outline" className="text-xs">From {s.department}</Badge>
+                              )}
+                            </div>
+                            <p className="font-medium text-sm">{s.name}</p>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{s.hoursPerWeek} hrs/week</span>
+                              {s.totalHoursPerSemester != null && <span>{s.totalHoursPerSemester} hrs/semester</span>}
+                              {s.credits > 0 && <span>{s.credits} credits</span>}
+                            </div>
+                          </div>
+                          {isOwnDepartment && (
+                            <div className="flex gap-1 shrink-0">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/hod/subjects/${s.id}/edit?courseId=${selectedCourseId}&year=${selectedYear}`)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(s)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>

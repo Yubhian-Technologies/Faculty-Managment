@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { loadAcademicRegulations } from "@/lib/firestore/academicRegulations";
 
 export async function PATCH(
   request: Request,
@@ -17,7 +16,6 @@ export async function PATCH(
       code?: string;
       durationYears?: number;
       isActive?: boolean;
-      regulations?: string[];
     };
 
     const db = getAdminDb();
@@ -59,20 +57,6 @@ export async function PATCH(
       updates.durationYears = Number(body.durationYears);
     }
     if (body.isActive != null) updates.isActive = body.isActive;
-    if (body.regulations != null) {
-      const regulations = Array.from(new Set(body.regulations.map((r) => r.trim()).filter(Boolean)));
-      if (regulations.length > 0) {
-        const { regulations: declared } = await loadAcademicRegulations(db, session.collegeId);
-        const invalid = regulations.filter((r) => !declared.includes(r));
-        if (invalid.length > 0) {
-          return NextResponse.json(
-            { error: `Not declared under Settings > Academic Regulations: ${invalid.join(", ")}` },
-            { status: 400 },
-          );
-        }
-      }
-      updates.regulations = regulations;
-    }
 
     await ref.update(updates);
     return NextResponse.json({ success: true });

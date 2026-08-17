@@ -25,8 +25,7 @@ type Entry = InternalExamMarksBatch["entries"][number];
 // gain an All option, per the request.
 const ALL = "__ALL__";
 
-function ordinalYear(year: number | undefined) {
-  if (year == null) return "—";
+function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} Year`;
 }

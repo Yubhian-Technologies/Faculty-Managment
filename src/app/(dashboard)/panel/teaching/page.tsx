@@ -1,27 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, Layers } from "lucide-react";
+import { BookOpen, Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import type { TeachingAssignment, TimetableSlot, DayOfWeek } from "@/types";
+import type { TeachingAssignment, TimetableSlot } from "@/types";
 import { DAY_LABELS } from "@/types";
-
-// Grid instead of a per-subject card list: a faculty member thinks in terms
-// of "what am I teaching on Monday period 3", not a flat list of subjects, so
-// this lays their own slots out the same way the HOD/Principal Timetable
-// pages do (Day columns x Period rows). Unlike those pages, this never picks
-// a single CourseYearTiming - a faculty member's own slots can span several
-// course-years with different period configs - so rows are period NUMBERS
-// only, no clock times.
-
-const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
-function ordinalYear(year: number) {
-  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
-  return `${year}${suffix} Year`;
-}
 
 export default function TeachingLoadPage() {
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
@@ -50,23 +36,24 @@ export default function TeachingLoadPage() {
 
   const totalHoursPerWeek = assignments.reduce((sum, a) => sum + (a.hoursPerWeek ?? 0), 0);
   const subjectCount = assignments.length;
-  const assignmentById = new Map(assignments.map((a) => [a.id, a]));
-  const maxPeriod = timetableSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
-  const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <PageHeader
           title="Teaching Load"
-          description="Assigned subjects and your weekly timetable, period by period"
+          description="Assigned subjects and timetable for current semester"
         />
         <div className="grid grid-cols-2 gap-3">
           {[1, 2].map((i) => (
             <div key={i} className="h-24 rounded-lg border bg-muted/30 animate-pulse" />
           ))}
         </div>
-        <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-40 rounded-lg border bg-muted/30 animate-pulse" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -75,7 +62,7 @@ export default function TeachingLoadPage() {
     <div className="space-y-6">
       <PageHeader
         title="Teaching Load"
-        description="Assigned subjects and your weekly timetable, period by period"
+        description="Assigned subjects and timetable for current semester"
       />
 
       {/* Summary cards */}
@@ -100,59 +87,108 @@ export default function TeachingLoadPage() {
         </Card>
       </div>
 
-      {periods.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No timetable slots have been published for you yet.
-        </div>
+      {/* Assignment cards */}
+      {assignments.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <BookOpen className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">
+              No teaching assignments found for the current semester.
+            </p>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-muted/50">
-                <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-24">Period</th>
-                {DAYS.map((d) => (
-                  <th key={d} className="p-2.5 text-left font-medium text-muted-foreground border-b min-w-35">
-                    {DAY_LABELS[d]}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {periods.map((period) => (
-                <tr key={period} className="border-b last:border-b-0">
-                  <td className="p-2.5 font-medium text-muted-foreground">{period}</td>
-                  {DAYS.map((d) => {
-                    const slot = timetableSlots.find((s) => s.day === d && s.periodNumber === period);
-                    const assignment = slot ? assignmentById.get(slot.assignmentId) : undefined;
-                    const subline = [
-                      assignment?.courseName,
-                      assignment?.year ? ordinalYear(assignment.year) : null,
-                      assignment?.sectionName ? `Section ${assignment.sectionName}` : null,
-                    ].filter(Boolean).join(" · ");
-                    return (
-                      <td key={d} className="p-2 align-top">
-                        {slot ? (
-                          <div className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
-                            <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
-                            {slot.substituteFacultyName ? (
-                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Covered by {slot.substituteFacultyName} today</p>
-                            ) : slot.substituteForName ? (
-                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Substituting for {slot.substituteForName} today</p>
-                            ) : (
-                              subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>
+        <div className="space-y-4">
+          {assignments.map((assignment) => {
+            const slots = timetableSlots.filter(
+              (s) => s.assignmentId === assignment.id
+            );
+
+            const DAY_ORDER: Record<string, number> = {
+              MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5,
+            };
+            const sortedSlots = [...slots].sort((a, b) => {
+              const dayDiff = (DAY_ORDER[a.day] ?? 99) - (DAY_ORDER[b.day] ?? 99);
+              if (dayDiff !== 0) return dayDiff;
+              return a.periodNumber - b.periodNumber;
+            });
+
+            return (
+              <Card key={assignment.id}>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <CardTitle className="text-base leading-tight">
+                        {assignment.subjectName}
+                      </CardTitle>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          {assignment.subjectCode}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  {/* Metadata row */}
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                    {assignment.courseName && (
+                      <span>
+                        <span className="font-medium text-foreground">Course:</span>{" "}
+                        {assignment.courseName}
+                      </span>
+                    )}
+                    {assignment.year !== undefined && (
+                      <span>
+                        <span className="font-medium text-foreground">Year:</span>{" "}
+                        {assignment.year}
+                      </span>
+                    )}
+                    {assignment.sectionName && (
+                      <span>
+                        <span className="font-medium text-foreground">Section:</span>{" "}
+                        {assignment.sectionName}
+                      </span>
+                    )}
+                    <span>
+                      <span className="font-medium text-foreground">Hours/Week:</span>{" "}
+                      {assignment.hoursPerWeek}
+                    </span>
+                  </div>
+
+                  {/* Timetable slots */}
+                  {sortedSlots.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                        Timetable
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {sortedSlots.map((slot) => (
+                          <div
+                            key={slot.id}
+                            className="rounded-md border bg-muted/40 px-3 py-1.5 text-sm"
+                          >
+                            <span className="font-medium">
+                              {DAY_LABELS[slot.day] ?? slot.day}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {" "}· Period {slot.periodNumber}
+                            </span>
+                            {slot.classroom && (
+                              <span className="text-muted-foreground">
+                                {" "}· {slot.classroom}
+                              </span>
                             )}
-                            {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
                           </div>
-                        ) : (
-                          <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">-</div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

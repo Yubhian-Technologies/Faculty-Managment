@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
-import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
+import { AlertTriangle, CalendarPlus } from "lucide-react";
 import { countWorkingDays, dateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { toDate as toJsDate, formatDate } from "@/lib/utils";
@@ -24,16 +24,6 @@ interface BalanceEntry {
   label: string;
   unlimited: boolean;
   remaining?: number;
-}
-
-interface PeriodCoverageEntry {
-  date: string;
-  day: string;
-  periodNumber: number;
-  timetableSlotId: string;
-  sectionName?: string;
-  subjectName: string;
-  candidates: { facultyId: string; facultyName: string }[];
 }
 
 interface LeaveApplyFormProps {
@@ -60,35 +50,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
-  const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
-  const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
-  const [substituteByPeriod, setSubstituteByPeriod] = useState<Record<string, string>>({});
 
   const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
-  // Forenoon's window has already passed for a half-day request filed for
-  // today, once it's 11am or later - only a future date still has a whole
-  // forenoon ahead of it, so this never restricts those.
-  const isForenoonBlocked = isHalfDay && fromDate === todayISO && new Date().getHours() >= 11;
-  // Derived, not stored - if the requester picked Forenoon earlier and it
-  // only just became blocked (they left the tab open past 11am), this
-  // silently falls back to Afternoon everywhere it's read (the Select's
-  // value below and the submitted payload) without needing an effect to
-  // "correct" halfDaySession after the fact.
-  const effectiveHalfDaySession = isForenoonBlocked ? "AN" : halfDaySession;
-
-  function handleDurationModeChange(mode: "FULL" | "HALF") {
-    const half = mode === "HALF";
-    setIsHalfDay(half);
-    // Half day is a single day - From and To lock to the same date the
-    // moment the mode switches (see handleFromDateChange for the reverse:
-    // keeping them locked as From changes afterwards).
-    if (half && fromDate) setToDate(fromDate);
-  }
-
-  function handleFromDateChange(value: string) {
-    setFromDate(value);
-    if (isHalfDay) setToDate(value);
-  }
 
   useEffect(() => {
     fetch("/api/college/holidays")
@@ -120,35 +83,6 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     setLeaveTypeCode(value);
     if (!HALF_DAY_ELIGIBLE_TYPES.includes(value as LeaveTypeCode)) setIsHalfDay(false);
   }
-
-  // Standard leave types only (never "Other" - see PeriodSubstitution in
-  // types/leave.ts) - fetches which of the requester's own teaching periods
-  // fall within this date range and who in their department is free to cover
-  // each one. Empty for a non-teaching requester or a range with no affected
-  // periods; the picker below simply doesn't render in that case.
-  useEffect(() => {
-    if (!leaveTypeCode || leaveTypeCode === "OTHER" || !fromDate || !toDate || toDate < fromDate) {
-      setPeriods([]);
-      setSubstituteByPeriod({});
-      return;
-    }
-    let cancelled = false;
-    setIsLoadingPeriods(true);
-    fetch(`/api/leave/period-coverage?fromDate=${fromDate}&toDate=${toDate}`)
-      .then((r) => r.json() as Promise<{ periods?: PeriodCoverageEntry[]; error?: string }>)
-      .then((data) => {
-        if (cancelled) return;
-        setPeriods(data.periods ?? []);
-        setSubstituteByPeriod({});
-      })
-      .catch(() => {
-        if (!cancelled) setPeriods([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingPeriods(false);
-      });
-    return () => { cancelled = true; };
-  }, [leaveTypeCode, fromDate, toDate]);
 
   useEffect(() => {
     fetch("/api/leave/balances")
@@ -188,10 +122,6 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       toast({ variant: "destructive", title: "Leave cannot be applied for a date before today" });
       return;
     }
-    if (periods.length > 0 && periods.some((p) => !substituteByPeriod[`${p.date}|${p.timetableSlotId}`])) {
-      toast({ variant: "destructive", title: "Select a substitute for every affected period before submitting" });
-      return;
-    }
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/leave/applications", {
@@ -203,16 +133,9 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           fromDate,
           toDate,
           isHalfDay,
-          halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
+          halfDaySession: isHalfDay ? halfDaySession : undefined,
           reason: reason.trim(),
           extendsRequestId: extendId ?? undefined,
-          periodSubstitutions: periods.length > 0
-            ? periods.map((p) => ({
-                date: p.date,
-                timetableSlotId: p.timetableSlotId,
-                substituteFacultyId: substituteByPeriod[`${p.date}|${p.timetableSlotId}`],
-              }))
-            : undefined,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -266,109 +189,44 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <SelectItem value="OTHER">Other</SelectItem>
               </SelectContent>
             </Select>
-            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you&rsquo;re extending.</p>}
+            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you're extending.</p>}
           </div>
 
-          <div className="space-y-2">
-            <Label>Duration</Label>
-            <div className="flex items-center gap-2">
-              <SegmentedTabs
-                value={isHalfDay ? "HALF" : "FULL"}
-                onChange={(v) => isHalfDayEligible && handleDurationModeChange(v as "FULL" | "HALF")}
-                options={[
-                  { key: "FULL", label: "Full day" },
-                  { key: "HALF", label: "Half day" },
-                ]}
-                className={!isHalfDayEligible ? "cursor-not-allowed opacity-50" : undefined}
-              />
-              {!isHalfDayEligible && leaveTypeCode && (
-                <span className="text-xs text-muted-foreground">Half day not available for this leave type</span>
-              )}
-            </div>
-          </div>
-
-          <div className={isHalfDay ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>From</Label>
-              <Input type="date" value={fromDate} min={todayISO} onChange={(e) => handleFromDateChange(e.target.value)} />
+              <Input type="date" value={fromDate} min={todayISO} onChange={(e) => setFromDate(e.target.value)} />
             </div>
-            {/* Half day is always that same single day - To stays locked equal
-                to From under the hood (see handleFromDateChange/
-                handleDurationModeChange) and is still sent as such on submit,
-                just not shown here since there's nothing to actually pick. */}
-            {!isHalfDay && (
-              <div className="space-y-2">
-                <Label>To</Label>
-                <Input
-                  type="date"
-                  value={toDate}
-                  min={fromDate || todayISO}
-                  onChange={(e) => setToDate(e.target.value)}
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>To</Label>
+              <Input type="date" value={toDate} min={fromDate || todayISO} onChange={(e) => setToDate(e.target.value)} />
+            </div>
           </div>
+
+          <label className={`flex items-center gap-2 text-sm ${isHalfDayEligible ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>
+            <Checkbox
+              checked={isHalfDay}
+              onCheckedChange={(c) => setIsHalfDay(c === true)}
+              disabled={!isHalfDayEligible}
+            />
+            Half day
+            {!isHalfDayEligible && leaveTypeCode && (
+              <span className="text-xs text-muted-foreground">(not available for this leave type)</span>
+            )}
+          </label>
 
           {isHalfDay && isHalfDayEligible && (
             <div className="space-y-2">
               <Label>Which half?</Label>
-              <Select value={effectiveHalfDaySession} onValueChange={(v) => setHalfDaySession(v as "FN" | "AN")}>
+              <Select value={halfDaySession} onValueChange={(v) => setHalfDaySession(v as "FN" | "AN")}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {!isForenoonBlocked && <SelectItem value="FN">Forenoon</SelectItem>}
+                  <SelectItem value="FN">Forenoon</SelectItem>
                   <SelectItem value="AN">Afternoon</SelectItem>
                 </SelectContent>
               </Select>
-              {isForenoonBlocked && (
-                <p className="text-xs text-muted-foreground">
-                  Forenoon is no longer available for today after 11am - only Afternoon can be selected.
-                </p>
-              )}
-            </div>
-          )}
-
-          {isLoadingPeriods && (
-            <div className="h-20 bg-muted animate-pulse rounded-lg" />
-          )}
-
-          {!isLoadingPeriods && periods.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <Label>Who&rsquo;s covering your classes?</Label>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Pick a substitute from your department for each period you&rsquo;d otherwise teach on this leave.
-              </p>
-              <div className="space-y-2 rounded-lg border p-3">
-                {periods.map((p) => {
-                  const key = `${p.date}|${p.timetableSlotId}`;
-                  return (
-                    <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="text-sm min-w-0">
-                        <span className="font-medium">{p.subjectName}</span>
-                        {p.sectionName && <span className="text-muted-foreground"> · {p.sectionName}</span>}
-                        <span className="text-muted-foreground"> · {formatDate(new Date(p.date))} P{p.periodNumber}</span>
-                      </div>
-                      <Select
-                        value={substituteByPeriod[key] ?? ""}
-                        onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
-                      >
-                        <SelectTrigger className="w-48">
-                          <SelectValue placeholder={p.candidates.length === 0 ? "None available" : "Select faculty"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {p.candidates.map((c) => (
-                            <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           )}
 

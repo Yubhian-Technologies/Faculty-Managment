@@ -499,14 +499,6 @@ export interface CourseCatalogItem {
   name: string; // canonical name, e.g. "Bachelor of Technology"
   code: string; // "BTECH"
   durationYears: number; // e.g. 4, 2
-  // Subset of the college's declared AcademicRegulationSettings.regulations
-  // (colleges/{collegeId}/settings/academicRegulations) that this course
-  // actually uses (e.g. B.Tech -> R20/R23, B.Pharm -> R19/R22) - a different
-  // course can have an entirely different set. Empty/absent until the
-  // Principal assigns at least one here, which blocks the Dean from adding
-  // subjects to any Course created from this catalog entry (see
-  // api/college/subjects POST) until it's set.
-  regulations?: string[];
   isActive: boolean;
   createdBy?: string;
   createdByName?: string;
@@ -536,40 +528,18 @@ export interface BreakConfig {
   durationMinutes: number;
 }
 
-// One period's explicit clock range, set by the HOD (see
-// api/college/course-year-timings/route.ts PATCH) - free-form, not required
-// to be equal-length or back-to-back, but validated to fall within
-// [collegeStartTime, collegeEndTime]. `period` is 1-based and must be
-// contiguous from 1 - there's no such thing as a gap in the period numbering
-// itself, only possibly a gap in clock time between two periods' start/end
-// (e.g. an unlisted break).
-export interface PeriodTiming {
-  period: number;
-  startTime: string; // "HH:MM" 24h
-  endTime: string; // "HH:MM" 24h
-}
-
 export interface CourseYearTiming {
   id: string; // `${courseId}_year${year}`
   collegeId: string;
   departmentId: string;
   courseId: string;
   year: number;
-  collegeStartTime: string; // "HH:MM" 24h - the day's outer bound, Principal-set
-  collegeEndTime: string; // "HH:MM" 24h - the day's outer bound, Principal-set
+  collegeStartTime: string; // "HH:MM" 24h
+  collegeEndTime: string; // "HH:MM" 24h
   numberOfPeriods: number;
   periodDurationMinutes: number;
   lunchBreak: BreakConfig;
   shortBreaks: BreakConfig[];
-  // The HOD's own period-by-period breakdown within [collegeStartTime,
-  // collegeEndTime] - absent until an HOD sets it (see PATCH, HOD-only),
-  // at which point it's the source of truth for numberOfPeriods and for each
-  // period's displayed clock range (see buildGrid.ts's buildRows) instead of
-  // the numberOfPeriods/periodDurationMinutes formula above. That formula
-  // stays in place as the fallback for a course-year an HOD hasn't broken
-  // down yet, so nothing already relying on it (isContiguousBlockAvailable,
-  // the timetable solver, ...) has to change.
-  periods?: PeriodTiming[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }

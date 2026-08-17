@@ -39,9 +39,7 @@ export default function AssignmentRequestsPage() {
     try {
       const [reqRes, facRes] = await Promise.all([
         fetch("/api/college/faculty-assignment-requests"),
-        // scope=own: you're lending one of YOUR faculty out, not a managed
-        // branch's - see college/faculty/route.ts.
-        fetch("/api/college/faculty?status=ACTIVE&scope=own"),
+        fetch("/api/college/faculty?status=ACTIVE"),
       ]);
       const reqData = await reqRes.json() as { requests: FacultyAssignmentRequest[] };
       const facData = await facRes.json() as { faculty: FacultyMember[] };
