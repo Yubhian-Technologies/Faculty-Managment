@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
+import { isoDateKey } from "@/lib/leave/dayCounter";
 import type { DayOfWeek } from "@/types";
 
 export async function GET(request: Request) {
@@ -19,7 +21,20 @@ export async function GET(request: Request) {
     const snap = await db.collection("colleges").doc(session.collegeId).collection("timetableSlots")
       .where("sectionId", "==", sectionId)
       .get();
-    const slots = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const rawSlots = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Overlay today's approved-leave substitutions, if any - who's actually
+    // taking a period today instead of the regular weekly assignment (see
+    // lib/leave/periodCoverage.ts). Never changes the underlying record,
+    // just what this read returns.
+    const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, isoDateKey(new Date()));
+    const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
+    const slots = rawSlots.map((s) => {
+      const sub = substitutionBySlotId.get((s as { id: string }).id);
+      return sub
+        ? { ...s, substituteFacultyId: sub.substituteFacultyId, substituteFacultyName: sub.substituteFacultyName, substituteForName: sub.requesterName }
+        : s;
+    });
 
     return NextResponse.json({ slots });
   } catch (err) {

@@ -23,6 +23,15 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
+/** "09:00" -> "9:00 AM" - display only, absent until an HOD has broken this
+ *  course-year's day down period-by-period (see CourseYearTiming.periods). */
+function formatTime12h(hhmm: string) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
 export default function PrincipalTimetablePage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -275,15 +284,29 @@ export default function PrincipalTimetablePage() {
                 }
                 return (
                   <tr key={`period_${row.period}`} className="border-b last:border-b-0">
-                    <td className="p-2.5 font-medium text-muted-foreground">{row.period}</td>
+                    <td className="p-2.5 font-medium text-muted-foreground">
+                      {row.period}
+                      {row.startTime && row.endTime && (
+                        <p className="text-[10px] font-normal whitespace-nowrap">
+                          {formatTime12h(row.startTime)}&ndash;{formatTime12h(row.endTime)}
+                        </p>
+                      )}
+                    </td>
                     {DAYS.map((d) => {
                       const slot = slots.find((s) => s.day === d && s.periodNumber === row.period);
                       return (
                         <td key={d} className="p-2 align-top">
                           {slot ? (
-                            <div className="rounded-md border bg-primary/5 border-primary/20 p-2">
+                            <div className={`rounded-md border p-2 ${slot.substituteFacultyName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
                               <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
+                              {slot.substituteFacultyName ? (
+                                <>
+                                  <p className="text-[11px] font-medium text-amber-700 mt-0.5">{slot.substituteFacultyName}</p>
+                                  <p className="text-[10px] text-muted-foreground">Substituting for {slot.substituteForName}</p>
+                                </>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
+                              )}
                               {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
                             </div>
                           ) : (

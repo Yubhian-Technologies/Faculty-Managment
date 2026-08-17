@@ -114,9 +114,16 @@ export default function ClassLeaderTimetablePage() {
                       return (
                         <td key={d} className="p-2 align-top">
                           {slot ? (
-                            <div className="rounded-md border bg-primary/5 border-primary/20 p-2">
+                            <div className={`rounded-md border p-2 ${slot.substituteFacultyName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
                               <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
+                              {slot.substituteFacultyName ? (
+                                <>
+                                  <p className="text-[11px] font-medium text-amber-700 mt-0.5">{slot.substituteFacultyName}</p>
+                                  <p className="text-[10px] text-muted-foreground">Substituting for {slot.substituteForName}</p>
+                                </>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
+                              )}
                               {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
                             </div>
                           ) : (
