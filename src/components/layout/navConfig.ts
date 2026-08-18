@@ -84,8 +84,10 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Library
   { label: "Dashboard", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
+  { label: "Staff Attendance", href: "/library/staff-attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
   { label: "My Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"], section: "Personal" },
   { label: "My Leave", href: "/library/leave", iconName: "CalendarClock", roles: ["LIBRARY"] },
+  { label: "My Attendance", href: "/library/attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"], section: "My Work" },
 
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
@@ -211,8 +213,10 @@ export const NAV_ITEMS: NavItem[] = [
 
   // T&P
   { label: "Dashboard", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
+  { label: "Staff Attendance", href: "/t-and-p/staff-attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"] },
   { label: "My Profile", href: "/t-and-p/profile", iconName: "UserCircle", roles: ["T_AND_P"], section: "Personal" },
   { label: "My Leave", href: "/t-and-p/leave", iconName: "CalendarClock", roles: ["T_AND_P"] },
+  { label: "My Attendance", href: "/t-and-p/attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"], section: "My Work" },
 
   // R&D
   { label: "Dashboard", href: "/r-and-d", iconName: "LayoutDashboard", roles: ["R_AND_D"] },
@@ -430,6 +434,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   LIBRARY: [
     { label: "Home", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
+    { label: "Attendance", href: "/library/attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
+    { label: "Staff", href: "/library/staff-attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
     { label: "Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"] },
   ],
   EXAM_CELL: [
@@ -492,6 +498,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   T_AND_P: [
     { label: "Home", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
+    { label: "Attendance", href: "/t-and-p/attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"] },
+    { label: "Staff", href: "/t-and-p/staff-attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"] },
     { label: "Profile", href: "/t-and-p/profile", iconName: "UserCircle", roles: ["T_AND_P"] },
   ],
   R_AND_D: [

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlyRows } from "@/lib/attendance/rosterMonthlyExport";
-import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
+import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 
 // MANAGEMENT is read-only - this route only implements GET.
 // Department-wide or college-wide monthly CSV data for any college, mirroring
@@ -41,9 +41,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
     }
 
     if (scope === "unit") {
-      const unit = searchParams.get("unit");
-      if (unit !== "COLLEGE_OFFICE" && unit !== "EXAM_CELL") {
-        return NextResponse.json({ error: "unit must be 'COLLEGE_OFFICE' or 'EXAM_CELL'" }, { status: 400 });
+      const unit = searchParams.get("unit") ?? "";
+      if (!isCollegeStaffUnitHead(unit)) {
+        return NextResponse.json({ error: `unit must be one of: ${COLLEGE_STAFF_UNIT_HEAD_ROLES.join(", ")}` }, { status: 400 });
       }
       const roster = await resolveCollegeStaffUnitRoster(db, collegeId, unit);
       const rows = await buildRosterMonthlyRows(db, collegeId, roster, year, month);

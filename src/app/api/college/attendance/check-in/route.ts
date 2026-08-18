@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { checkCampusGeofence } from "@/lib/attendance/geofence";
 import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
+import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import type { College } from "@/types";
 
 function todayDocDate(): { date: Date; docSuffix: string } {
@@ -25,7 +26,7 @@ function currentTimeHHMM(): string {
 // distance) and records the client's reported face-match result.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     if (isSunday()) {
       return NextResponse.json({ error: SUNDAY_HOLIDAY_MESSAGE }, { status: 403 });
     }
