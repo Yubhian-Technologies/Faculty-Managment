@@ -45,7 +45,9 @@ export async function GET(request: Request) {
     // instead - see hod/teaching-assignments/page.tsx.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (scope.departmentName) primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
+      if (scope.ownDepartmentNames.length > 0) {
+        primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+      }
 
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD)
       // are both fully-owned, so one query covers both, tagged "primary" below -
@@ -170,7 +172,13 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
-      department = requested || scope.departmentName;
+      if (!requested && scope.ownDepartmentNames.length > 1) {
+        return NextResponse.json(
+          { error: "You manage more than one department - specify which department this faculty member belongs to" },
+          { status: 400 },
+        );
+      }
+      department = requested || scope.ownDepartmentNames[0] || "";
     } else if (!department) {
       const hodSnap = await db
         .collection("colleges")

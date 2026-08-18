@@ -76,17 +76,12 @@ export async function GET(request: Request) {
       });
     }
 
-    // HOD sees only their department's users unless allDepts=true
+    // HOD sees only their own department(s)' users unless allDepts=true
     if (session.role === "HOD" && !allDepts) {
-      const hodSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("users")
-        .doc(session.uid)
-        .get();
-      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-      if (hodDept) {
-        users = users.filter((u) => (u as unknown as { department?: string }).department === hodDept);
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (scope.ownDepartmentNames.length > 0) {
+        const ownSet = new Set(scope.ownDepartmentNames);
+        users = users.filter((u) => ownSet.has((u as unknown as { department?: string }).department ?? ""));
       }
     }
 
@@ -219,16 +214,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // For HOD: auto-assign their department if not provided
+    // For HOD: auto-assign their department if not provided - only safe when
+    // they head exactly one; an HOD running two or more must say which one
+    // this new login belongs to.
     let resolvedDepartment = department ?? "";
-    if (session.role === "HOD" && !resolvedDepartment) {
-      const hodSnap = await db
-        .collection("colleges")
-        .doc(collegeId)
-        .collection("users")
-        .doc(session.uid)
-        .get();
-      resolvedDepartment = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+    if (session.role === "HOD" && !resolvedDepartment && role !== "CLASS_LEADER") {
+      const scope = await getHodDepartmentScope(db, collegeId, session.uid);
+      if (scope.ownDepartmentNames.length > 1) {
+        return NextResponse.json(
+          { error: "You manage more than one department - specify which department this account belongs to" },
+          { status: 400 }
+        );
+      }
+      resolvedDepartment = scope.ownDepartmentNames[0] ?? "";
     }
     // Class Leader: department/sectionName always come from the Section itself
     if (role === "CLASS_LEADER" && sectionData) {

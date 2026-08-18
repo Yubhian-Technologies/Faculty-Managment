@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { isPathHidden } from "@/components/layout/navConfig";
@@ -53,6 +54,7 @@ const PERSONAL_MODULES = [
 
 export default function HODDashboard() {
   const user = useAuthStore((s) => s.user);
+  const myDepartments = useMyDepartments();
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const { collegeType } = useCollegeType();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
@@ -95,18 +97,26 @@ export default function HODDashboard() {
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => {
         const departments = d.departments ?? [];
-        const own = departments.find((dept) => dept.name === user?.department);
+        // Parent-department note only makes sense for a single owned
+        // sub-department - an HOD running two or more departments at once
+        // just gets the plain list below instead.
+        if (myDepartments.length !== 1) { setParentDeptName(null); return; }
+        const own = departments.find((dept) => dept.name === myDepartments[0]);
         const parent = own?.parentDepartmentId ? departments.find((dept) => dept.id === own.parentDepartmentId) : null;
         setParentDeptName(parent?.name ?? null);
       })
       .catch(() => {});
-  }, [user?.department]);
+  }, [myDepartments]);
+
+  const departmentLabel = myDepartments.length > 1
+    ? myDepartments.join(", ")
+    : `${myDepartments[0] ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""}`;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name ?? "HOD"}`}
-        description={`${user?.department ?? "Department"}${parentDeptName ? ` (sub-department of ${parentDeptName})` : ""} - Department Portal`}
+        description={`${departmentLabel} - Department Portal`}
         actions={
           !isHiringHidden && (
             <Button asChild>

@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
+import { deriveHodScope, managedBranchYearsMap, yearsInScope } from "@/lib/departments/hodScope";
 import type { Course, Department } from "@/types";
 
 function ordinalYear(year: number) {
@@ -18,6 +19,7 @@ function ordinalYear(year: number) {
 export default function HODTimetableYearsPage() {
   const router = useRouter();
   const { courseId } = useParams<{ courseId: string }>();
+  const myDepartments = useMyDepartments();
   const [course, setCourse] = useState<Course | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,16 +39,27 @@ export default function HODTimetableYearsPage() {
       .finally(() => setIsLoading(false));
   }, [courseId]);
 
-  // Scoped to the course's own department's "Years Taught"
-  // (resolveDepartmentCourseScope), not the raw 1..durationYears span - e.g.
-  // Basic Science only builds a 1st-year timetable even for a shared 4-year
-  // B.Tech course.
+  // Scoped to the course's own department's "Years Taught" - but for a
+  // department reached through a managed-branch relationship (e.g. Basic
+  // Science's HOD viewing CSE's own course row, now reachable as its own
+  // tile - see the courses API's managed-branch union), also includes
+  // whatever shared year the manager (BS-Maths, or Basic Science itself)
+  // contributes via managedBranchYearsMap - otherwise the one year this HOD
+  // actually needs to build a timetable for (the shared first year) would
+  // never appear, even though the course tile itself is reachable. Mirrors
+  // hod/sections/page.tsx's identical need (yearsInScope).
+  // An HOD who heads more than one department may be viewing a course owned
+  // by any one of them - true if ANY of their own departments would view
+  // this relationship, since `years` below is already scoped to the course's
+  // own owning department alone; this only widens which shared years are
+  // included, never which department's data is shown.
+  const viewsManagedBranchYears = myDepartments.some((name) => deriveHodScope(departments, name).viewsManagedBranchYears);
+  const managedBranchYears = managedBranchYearsMap(departments, course?.catalogId);
   const years = (() => {
     if (!course) return [];
-    const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
     const dept = departments.find((d) => d.id === course.departmentId);
-    const assigned = dept ? resolveDepartmentCourseScope(dept, course.catalogId).assignedYears : [];
-    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
+    if (!dept) return [];
+    return yearsInScope(course.durationYears, [dept], managedBranchYears, viewsManagedBranchYears, course.catalogId);
   })();
 
   return (

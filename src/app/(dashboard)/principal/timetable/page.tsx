@@ -125,19 +125,33 @@ export default function PrincipalTimetablePage() {
 
   // Sections + timing for the resolved course-year. Downstream state is cleared
   // by the choose* handlers, so this effect never has to reset anything itself.
+  //
+  // Sections are fetched by DEPARTMENT (not the resolved courseId) because a
+  // shared first-year department (e.g. "Basic Science") never has any section
+  // filed against its own Course doc - sections created through the
+  // managed-branch flow store the real branch's own courseId/department
+  // instead (see hod/sections/new). /api/college/sections?departmentId=
+  // resolves this the same way the HOD Sections page already does
+  // (deriveHodScope), so picking "Basic Science" here correctly reaches its
+  // real branches' sections. Results are still narrowed to the chosen course
+  // NAME client-side, in case the department in scope runs more than one
+  // differently-named program for the same year.
   useEffect(() => {
-    if (!courseId || !year) return;
+    if (!departmentId || !year) return;
     let cancelled = false;
     void (async () => {
       try {
         const [s, t] = await Promise.all([
-          fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
+          fetch(`/api/college/sections?departmentId=${encodeURIComponent(departmentId)}&year=${encodeURIComponent(year)}`)
             .then((r) => r.json() as Promise<{ sections: Section[] }>),
           fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(courseId)}`)
             .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>),
         ]);
         if (cancelled) return;
-        const list = (s.sections ?? []).sort((a, b) => a.name.localeCompare(b.name));
+        const courseIdsForName = new Set(courses.filter((c) => c.name === courseName).map((c) => c.id));
+        const list = (s.sections ?? [])
+          .filter((sec) => courseIdsForName.has(sec.courseId))
+          .sort((a, b) => a.name.localeCompare(b.name));
         setSections(list);
         setSectionId(list[0]?.id ?? "");
         setTiming((t.timings ?? []).find((x) => Number(x.year) === Number(year)) ?? null);
@@ -146,7 +160,7 @@ export default function PrincipalTimetablePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [courseId, year]);
+  }, [departmentId, year, courseId, courseName, courses]);
 
   useEffect(() => {
     if (!sectionId) return;

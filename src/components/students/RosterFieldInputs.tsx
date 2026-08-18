@@ -9,7 +9,8 @@ import {
   EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS,
   rosterFieldDisplay, type RosterField,
 } from "@/lib/students/rosterFields";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId } from "@/lib/college/academicStructure";
+import { managerEffectiveYears } from "@/lib/departments/hodScope";
 import type { Department, StudentRecord, Course } from "@/types";
 
 // Renders the roster fields for the Office students page - the Add/Edit form
@@ -26,25 +27,6 @@ function ordinalYear(year: number) {
 }
 
 /**
- * The catalog course a department's own Course doc resolves `courseName` to -
- * needed to look up that course's per-course override in
- * Department.courseScopes (resolveDepartmentCourseScope). Prefers the
- * department's own Course doc; falls back to any other department's Course
- * doc with the same name (a department that inherits a course through a
- * common first-year feeder, rather than owning it directly, has none of its
- * own) - safe because the course catalog itself prevents two entries sharing
- * a name, so any Course doc named "Master of Technology" always points to the
- * same catalog id.
- */
-function resolveCatalogId(courses: Course[], departmentId: string | undefined, courseName: string): string | undefined {
-  if (!courseName) return undefined;
-  return (
-    courses.find((c) => c.departmentId === departmentId && c.name === courseName)
-    ?? courses.find((c) => c.name === courseName)
-  )?.catalogId;
-}
-
-/**
  * The programmes `departmentId` can actually register a student into - the
  * distinct names of its OWN Course docs. Unlike Sections (which reference a
  * specific Course doc by id and so can fall back to a shared-year feeder's -
@@ -58,10 +40,16 @@ function resolveCatalogId(courses: Course[], departmentId: string | undefined, c
  * the department(s) the Principal actually added it to (see
  * principal/departments/[id]/courses) offer it.
  */
-export function courseNamesForDepartment(courses: Course[], departmentId: string | undefined): string[] {
+export function courseNamesForDepartment(courses: Course[], departments: Department[], departmentId: string | undefined): string[] {
   if (!departmentId) return [];
+  // A sub-department never owns a Course doc of its own - it shares its
+  // parent's program (same fallback the server uses for section/course
+  // resolution, e.g. api/college/courses's departmentId handling) - so its
+  // courses resolve through the parent instead of coming up empty.
+  const dept = departments.find((d) => d.id === departmentId);
+  const effectiveId = dept?.parentDepartmentId ?? departmentId;
   return Array.from(new Set(
-    courses.filter((c) => c.departmentId === departmentId).map((c) => c.name?.trim()).filter(Boolean) as string[]
+    courses.filter((c) => c.departmentId === effectiveId).map((c) => c.name?.trim()).filter(Boolean) as string[]
   )).sort((a, b) => a.localeCompare(b));
 }
 
@@ -69,11 +57,14 @@ export function courseNamesForDepartment(courses: Course[], departmentId: string
  * The reverse of courseNamesForDepartment: departments that actually own a
  * Course doc named `courseName`. Keeps the Department picker from offering a
  * department that never had `courseName` added to it once a course is picked
- * first - the other half of the same constraint.
+ * first - the other half of the same constraint. Also offers any sub-department
+ * whose PARENT owns the course, for the same reason courseNamesForDepartment
+ * falls back to the parent - a shared-first-year sub-department (e.g. "Basic
+ * Science - Maths") is a real, selectable Department for a student otherwise.
  */
 export function departmentsOfferingCourse(departments: Department[], courses: Course[], courseName: string): Department[] {
   const deptIds = new Set(courses.filter((c) => c.name === courseName).map((c) => c.departmentId));
-  return departments.filter((d) => deptIds.has(d.id));
+  return departments.filter((d) => deptIds.has(d.id) || (d.parentDepartmentId != null && deptIds.has(d.parentDepartmentId)));
 }
 
 /**
@@ -117,8 +108,14 @@ export function secondaryDepartmentOptions(
  * Department.assignedYears, e.g. a shared-first-year grouping sub-department
  * like BS-CHEMISTRY is set to [1] only, since its later years belong to the
  * branches it feeds (picked via Secondary Department, not by registering the
- * student under BS-CHEMISTRY again). Falls back to every college-configured
- * year when the department has neither, so an unconfigured department isn't
+ * student under BS-CHEMISTRY again). A sub-department an HOD created carries
+ * neither of its own (Principal-only override, stripped from anything
+ * HOD-created - see college/departments POST) - managerEffectiveYears falls
+ * back to its parent's for that case, same as Sections/Teaching
+ * Assignments/Timetable already do, so this doesn't fall all the way to
+ * fallbackYears just because a sub-department was picked. Falls back to
+ * every college-configured year only when NEITHER the department nor its
+ * parent has anything set, so a genuinely unconfigured department isn't
  * locked out entirely.
  */
 export function yearOptionsForDepartment(
@@ -131,7 +128,7 @@ export function yearOptionsForDepartment(
   const dept = departments.find((d) => d.name === departmentName);
   if (!dept) return fallbackYears;
   const catalogId = resolveCatalogId(courses, dept.id, courseName);
-  const assigned = resolveDepartmentCourseScope(dept, catalogId).assignedYears;
+  const assigned = managerEffectiveYears(dept, departments, catalogId);
   return assigned.length > 0 ? [...assigned].sort((a, b) => a - b) : fallbackYears;
 }
 
@@ -185,7 +182,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
     // course name college-wide) until a department is picked, same "don't
     // block a field before the other is chosen" rule the Year field uses.
     const currentDeptId = departments.find((d) => d.name === values.department)?.id;
-    const options = values.department ? courseNamesForDepartment(courses, currentDeptId) : courseNames;
+    const options = values.department ? courseNamesForDepartment(courses, departments, currentDeptId) : courseNames;
     return (
       <div className="space-y-2">
         <Label>{label}</Label>
@@ -201,7 +198,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             // register the student into a programme that department doesn't
             // run. Mirrors the Department field clearing Course the other way.
             const deptStillOffersIt = !courseName || !values.department
-              || courseNamesForDepartment(courses, currentDeptId).includes(courseName);
+              || courseNamesForDepartment(courses, departments, currentDeptId).includes(courseName);
             const nextDepartment = deptStillOffersIt ? values.department : "";
             if (!deptStillOffersIt) {
               onChange("department", "");
@@ -245,7 +242,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             // direction) - only AIDS owns a Master of Technology Course doc,
             // so moving off AIDS can't leave that course silently selected.
             const newDeptId = departments.find((d) => d.name === v)?.id;
-            const courseStillOffered = !values.course || courseNamesForDepartment(courses, newDeptId).includes(values.course);
+            const courseStillOffered = !values.course || courseNamesForDepartment(courses, departments, newDeptId).includes(values.course);
             const nextCourse = courseStillOffered ? (values.course ?? "") : "";
             if (!courseStillOffered) onChange("course", "");
             // Nor can a previously chosen year, if the new department doesn't

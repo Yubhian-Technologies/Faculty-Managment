@@ -18,9 +18,30 @@
 // re-checking `assignedYears`/`hasSubDepartments` inline, so the definition
 // can't drift between routes. If the heuristic ever needs to change (or become
 // a stored flag), this file is the only thing to edit.
-import type { Department, DepartmentCourseScope } from "@/types";
+import type { Course, Department, DepartmentCourseScope } from "@/types";
 
 export type DepartmentWithId = Department & { id: string };
+
+/**
+ * The catalog course a department's own Course doc resolves `courseName` to -
+ * needed to look up that course's per-course override in
+ * Department.courseScopes (resolveDepartmentCourseScope). Prefers the
+ * department's own Course doc; falls back to any other department's Course
+ * doc with the same name (a department that inherits a course through a
+ * common first-year feeder, rather than owning it directly, has none of its
+ * own) - safe because the course catalog itself prevents two entries sharing
+ * a name, so any Course doc named "Master of Technology" always points to the
+ * same catalog id. Isomorphic (client roster forms and the students API both
+ * import this) so the two never resolve a student's per-course year override
+ * differently.
+ */
+export function resolveCatalogId(courses: Course[], departmentId: string | undefined, courseName: string | undefined): string | undefined {
+  if (!courseName) return undefined;
+  return (
+    courses.find((c) => c.departmentId === departmentId && c.name === courseName)
+    ?? courses.find((c) => c.name === courseName)
+  )?.catalogId;
+}
 
 /**
  * A department's academic-structure fields (assignedYears/secondaryDepartments),

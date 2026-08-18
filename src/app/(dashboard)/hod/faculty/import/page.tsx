@@ -6,7 +6,10 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
+import { useAuthStore } from "@/store/authStore";
 import { toCSV, parseCSV, downloadCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { IMPORT_COLUMNS as COLUMNS, IMPORT_HINTS as HINTS } from "@/lib/faculty/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
@@ -26,6 +29,12 @@ export default function FacultyImportPage() {
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const myDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
+  // The template has no per-row Department column - every row in one import
+  // lands in the same department - so an HOD running more than one must say
+  // which one up front, same rule the API enforces.
+  const [importDepartment, setImportDepartment] = useState("");
 
   function downloadTemplate() {
     const headers = COLUMNS.map((c) => c.label);
@@ -102,13 +111,17 @@ export default function FacultyImportPage() {
 
   async function handleImport() {
     if (rows.length === 0) return;
+    if (myDepartments.length > 1 && !importDepartment) {
+      toast({ variant: "destructive", title: "Choose which department this import belongs to" });
+      return;
+    }
     setIsImporting(true);
     setResult(null);
     try {
       const res = await fetch("/api/college/faculty/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: rows }),
+        body: JSON.stringify({ records: rows, ...(importDepartment ? { department: importDepartment } : {}) }),
       });
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
@@ -140,6 +153,20 @@ export default function FacultyImportPage() {
           </Button>
         }
       />
+
+      {myDepartments.length > 1 && (
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            <Label>Importing into which department? <span className="text-destructive">*</span></Label>
+            <Select value={importDepartment} onValueChange={setImportDepartment}>
+              <SelectTrigger className="max-w-xs"><SelectValue placeholder="Select department" /></SelectTrigger>
+              <SelectContent>
+                {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Step 1: Download Template */}
       <Card>

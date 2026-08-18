@@ -307,7 +307,15 @@ export interface FMSUser {
   collegeEmail?: string; // same field name as FacultyMember below, for consistency
   phone?: string;
   role: UserRole;
-  department?: string; // for HOD / LOCATION_DEPT_HEAD
+  // for HOD / LOCATION_DEPT_HEAD - kept as the first entry of `departments`
+  // (the HOD's "primary" department) for every screen that hasn't been
+  // updated to the multi-department list below; always write both together.
+  department?: string;
+  // Every department this HOD heads (HOD only - a college HOD can now run
+  // more than one department at once, assigned from the Principal's
+  // Departments page; see src/lib/departments/scope.ts). Falls back to
+  // `[department]` wherever a doc predates this field.
+  departments?: string[];
   locationDeptId?: string; // for LOCATION_DEPT_HEAD
   sectionId?: string; // for CLASS_LEADER - the one Section this login is bound to
   sectionName?: string; // for CLASS_LEADER - denormalized Section.name

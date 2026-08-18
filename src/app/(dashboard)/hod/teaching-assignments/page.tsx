@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
 import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
 import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember, FacultyAssignmentRequest } from "@/types";
@@ -27,7 +27,16 @@ function ordinalYear(year: number) {
 const ALL_DEPARTMENTS = "__all__";
 
 export default function TeachingAssignmentsPage() {
-  const user = useAuthStore((s) => s.user);
+  const myDepartments = useMyDepartments();
+  // Which of this HOD's own departments the page is scoped to - choosable
+  // only when they head more than one (see useMyDepartments). `pickedTopDepartment`
+  // holds only an explicit user choice; `topDepartment` (derived, not stored)
+  // falls back to the first owned department, so nothing needs syncing via an
+  // effect when the department list itself loads/changes.
+  const [pickedTopDepartment, setPickedTopDepartment] = useState("");
+  const topDepartment = pickedTopDepartment && myDepartments.includes(pickedTopDepartment)
+    ? pickedTopDepartment
+    : myDepartments[0] ?? "";
   // Two sources, kept apart and merged below rather than written into one
   // `courses` list. load()'s own-scope fetch and the scope-wide fetch further
   // down resolve independently, so a single list meant whichever landed second
@@ -71,7 +80,6 @@ export default function TeachingAssignmentsPage() {
   function load() {
     setIsLoading(true);
     Promise.all([
-      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => setOwnCourses(d.courses ?? [])),
       fetch("/api/college/faculty?status=ACTIVE").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty(d.faculty ?? [])),
       fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>).then((d) => setAssignments(d.assignments ?? [])),
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
@@ -89,8 +97,23 @@ export default function TeachingAssignmentsPage() {
     })();
   }, []);
 
-  const scope = useMemo(() => deriveHodScope(departments, user?.department), [departments, user?.department]);
+  const scope = useMemo(() => deriveHodScope(departments, topDepartment), [departments, topDepartment]);
   const { deptOptions } = scope;
+  const topDepartmentId = scope.ownDept?.id ?? "";
+
+  // Own-scope course fetch, reactive to which top-level department is
+  // selected - an HOD with more than one must not have its default (every
+  // owned department unioned - see api/college/courses) leak into a single
+  // department's Course dropdown. A single-department HOD's own id is the
+  // same either way, so this mirrors the previous unscoped fetch exactly.
+  useEffect(() => {
+    if (myDepartments.length > 1 && !topDepartmentId) return;
+    const qs = myDepartments.length > 1 ? `?departmentId=${encodeURIComponent(topDepartmentId)}` : "";
+    fetch(`/api/college/courses${qs}`)
+      .then((r) => r.json() as Promise<{ courses: Course[] }>)
+      .then((d) => setOwnCourses(d.courses ?? []))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+  }, [myDepartments, topDepartmentId]);
 
   // load()'s course fetch resolves to this HOD's own department only (or its
   // parent, for a sub-HOD) - it never reaches a MANAGED branch's own Course
@@ -235,6 +258,14 @@ export default function TeachingAssignmentsPage() {
       const byId = new Map(lists.flat().map((s) => [s.id, s]));
       setSubjectsCache((c) => ({ ...c, [k]: Array.from(byId.values()) }));
     }
+  }
+
+  function handleTopDepartmentChange(v: string) {
+    setPickedTopDepartment(v);
+    // A different top-level department has a different course list, sub-
+    // department cascade, and assigned years - clear everything downstream.
+    setCourseKey(""); setYear(""); setDepartmentFilter("");
+    setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
   function handleCourseChange(v: string) {
@@ -456,6 +487,18 @@ export default function TeachingAssignmentsPage() {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Course, Year &amp; Department</CardTitle></CardHeader>
         <CardContent>
+          {/* Only for an HOD who heads more than one department. */}
+          {myDepartments.length > 1 && (
+            <div className="mb-4 max-w-xs space-y-2">
+              <Label>Department</Label>
+              <Select value={topDepartment} onValueChange={handleTopDepartmentChange}>
+                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                <SelectContent>
+                  {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:max-w-3xl">
             <div className="space-y-2">
               <Label>Course</Label>

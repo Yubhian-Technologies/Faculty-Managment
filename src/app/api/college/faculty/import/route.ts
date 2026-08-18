@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
+import { getHodDepartmentScope } from "@/lib/departments/scope";
 import type { Designation, EmploymentType } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
@@ -118,7 +119,7 @@ function parseDate(v: string | undefined): Date | undefined {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { records: ImportRow[] };
+    const body = (await request.json()) as { records: ImportRow[]; department?: string };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
       return NextResponse.json({ error: "No records provided" }, { status: 400 });
@@ -143,8 +144,18 @@ export async function POST(request: Request) {
     if (session.role !== "HOD") {
       return NextResponse.json({ error: "Only an HOD can bulk-import faculty - sign in as the HOD of the target department" }, { status: 403 });
     }
-    const hodSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(session.uid).get();
-    const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
+    const scope = await getHodDepartmentScope(db, collegeId, session.uid);
+    let hodDept = body.department?.trim() ?? "";
+    if (hodDept && !scope.ownDepartmentNames.includes(hodDept)) {
+      return NextResponse.json({ error: "That department is not yours" }, { status: 403 });
+    }
+    if (!hodDept && scope.ownDepartmentNames.length > 1) {
+      return NextResponse.json(
+        { error: "You manage more than one department - choose which department this import belongs to" },
+        { status: 400 }
+      );
+    }
+    if (!hodDept) hodDept = scope.ownDepartmentNames[0] ?? "";
     if (!hodDept) {
       return NextResponse.json({ error: "Your account has no department set - ask your Principal to assign one before importing faculty" }, { status: 400 });
     }

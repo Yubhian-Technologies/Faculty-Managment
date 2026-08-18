@@ -66,7 +66,7 @@ export async function GET(request: Request) {
     let scopeDepartments: string[] | null = null;
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      scopeDepartments = [scope.departmentName, ...scope.childDepartmentNames].filter(Boolean).slice(0, 30);
+      scopeDepartments = [...scope.ownDepartmentNames, ...scope.childDepartmentNames].slice(0, 30);
       if (scopeDepartments.length === 0) {
         return NextResponse.json({ date: docSuffix, roster: [] });
       }
