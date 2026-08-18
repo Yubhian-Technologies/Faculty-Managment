@@ -50,6 +50,23 @@ export interface AttendanceRecord {
   updatedAt: Timestamp;
 }
 
+// ─── Roster monthly export (department-wide / college-wide CSV) ───────────────
+// One row per person per day - flattened output of running fillMissingDays
+// once per roster member and concatenating the results, sorted by
+// department, then name, then date (see buildRosterMonthlyRows).
+
+export interface MonthlyExportRow {
+  facultyId: string;
+  facultyName: string;
+  role: string;          // human-readable label: "HOD" | "Faculty" | "Principal" | "Vice Principal"
+  department: string;
+  date: string;           // yyyy-mm-dd
+  status: AttendanceStatus | string; // real status, or a synthetic one from fillMissingDays (HOLIDAY/ABSENT)
+  checkIn: string | null;
+  checkOut: string | null;
+  remarks: string | null;
+}
+
 // ─── Monthly Attendance Summary ───────────────────────────────────────────────
 // Aggregated each time attendance is marked. doc id: `${facultyId}_${year}_${month}`
 

@@ -26,7 +26,7 @@ async function loadTargetInScope(
   if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
     // Matches CREATABLE_ROLES in principal/staff/new/page.tsx - every role a
     // Principal/VP can create here, they can also view/edit/deactivate.
-    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER"].includes(target.role)) {
+    if (!["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS"].includes(target.role)) {
       return { targetSnap: null, error: "Cannot access this user", status: 403 };
     }
   } else if (session.role === "HOD") {
@@ -43,14 +43,8 @@ async function loadTargetInScope(
         return { targetSnap: null, error: "Can only manage Class Leaders in your department", status: 403 };
       }
     } else {
-      const hodSnap = await db
-        .collection("colleges")
-        .doc(session.collegeId)
-        .collection("users")
-        .doc(session.uid)
-        .get();
-      const hodDept = (hodSnap.data() as { department?: string } | undefined)?.department ?? "";
-      if (hodDept && target.department !== hodDept) {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (scope.ownDepartmentNames.length > 0 && !scope.ownDepartmentNames.includes(target.department ?? "")) {
         return { targetSnap: null, error: "Can only manage faculty in your department", status: 403 };
       }
     }
@@ -113,7 +107,21 @@ export async function PATCH(
 
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
-    const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string };
+    const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string; departments?: string[] };
+
+    // This generic account editor only ever offers ONE department field - safe
+    // for an HOD who heads just one (mirrors it into `departments` below so the
+    // two stay in sync), but an HOD already running two or more must be
+    // reassigned from the Departments page instead, or this single-value save
+    // would silently look like a no-op (getHodDepartmentScope prefers the
+    // untouched `departments` array) while actually drifting `department`
+    // (the legacy display field) out of sync with it.
+    if (body.department !== undefined && target.role === "HOD" && (target.departments?.length ?? 0) > 1) {
+      return NextResponse.json(
+        { error: "This HOD manages multiple departments - change their assignments from the Departments page" },
+        { status: 400 }
+      );
+    }
 
     if (body.newPassword !== undefined) {
       const { getAdminAuth } = await import("@/lib/firebase/admin");
@@ -139,7 +147,12 @@ export async function PATCH(
     if (body.email !== undefined && body.email.trim()) updates.email = body.email.trim();
     if (body.collegeEmail !== undefined) updates.collegeEmail = body.collegeEmail;
     if (body.employeeId !== undefined) updates.employeeId = body.employeeId;
-    if (body.department !== undefined) updates.department = body.department;
+    if (body.department !== undefined) {
+      updates.department = body.department;
+      // Single-department HOD only (multi-department is rejected above) -
+      // keep the canonical array mirroring the one legacy field this form edits.
+      if (target.role === "HOD") updates.departments = body.department ? [body.department] : [];
+    }
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;
     if (body.profilePhotoUrl !== undefined) updates.profilePhotoUrl = body.profilePhotoUrl;

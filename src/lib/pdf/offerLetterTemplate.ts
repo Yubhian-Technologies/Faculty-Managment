@@ -1,6 +1,4 @@
-// Same logo used on the login page (src/app/(auth)/login/page.tsx).
-const VISHNU_LOGO_URL =
-  "https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png";
+import { VISHNU_LOGO_URL } from "@/lib/pdf/logo";
 
 const LETTERHEAD = `<div class="letterhead"><img src="${VISHNU_LOGO_URL}" alt="Vishnu Logo" /></div>`;
 

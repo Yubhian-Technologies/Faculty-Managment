@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Coffee, Utensils } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "@/hooks/useToast";
+import { buildRows } from "@/lib/timetable/buildGrid";
 import type { Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -14,23 +15,12 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
-type Row =
-  | { kind: "period"; period: number }
-  | { kind: "lunch"; durationMinutes: number }
-  | { kind: "short"; durationMinutes: number };
-
-function buildRows(timing: CourseYearTiming): Row[] {
-  const rows: Row[] = [];
-  for (let p = 1; p <= timing.numberOfPeriods; p++) {
-    rows.push({ kind: "period", period: p });
-    if (timing.lunchBreak?.afterPeriod === p) {
-      rows.push({ kind: "lunch", durationMinutes: timing.lunchBreak.durationMinutes });
-    }
-    for (const sb of timing.shortBreaks ?? []) {
-      if (sb.afterPeriod === p) rows.push({ kind: "short", durationMinutes: sb.durationMinutes });
-    }
-  }
-  return rows;
+/** "09:00" -> "9:00 AM" - display only. */
+function formatTime12h(hhmm: string) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 export default function ClassLeaderTimetablePage() {
@@ -108,7 +98,14 @@ export default function ClassLeaderTimetablePage() {
                 }
                 return (
                   <tr key={`period_${row.period}`} className="border-b last:border-b-0">
-                    <td className="p-2.5 font-medium text-muted-foreground">{row.period}</td>
+                    <td className="p-2.5 font-medium text-muted-foreground">
+                      {row.period}
+                      {row.startTime && row.endTime && (
+                        <p className="text-[10px] font-normal whitespace-nowrap">
+                          {formatTime12h(row.startTime)}&ndash;{formatTime12h(row.endTime)}
+                        </p>
+                      )}
+                    </td>
                     {DAYS.map((d) => {
                       const slot = slotFor(d, row.period);
                       return (

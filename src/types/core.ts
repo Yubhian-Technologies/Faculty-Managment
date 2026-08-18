@@ -25,6 +25,7 @@ export type UserRole =
   | "LIBRARY"
   | "EXAM_CELL"
   | "WEBMASTER"
+  | "COLLEGE_ACCOUNTS"
   | "PANEL_MEMBER"
   | "ACCOUNTS"
   | "FINANCE"
@@ -52,6 +53,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   LIBRARY: "Library",
   EXAM_CELL: "Exam Cell",
   WEBMASTER: "Webmaster",
+  COLLEGE_ACCOUNTS: "College Accounts",
   PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
   FINANCE: "Finance",
@@ -80,6 +82,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   LIBRARY: "/library",
   EXAM_CELL: "/exam-cell",
   WEBMASTER: "/webmaster",
+  COLLEGE_ACCOUNTS: "/college-accounts",
   PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
   FINANCE: "/finance",
@@ -118,6 +121,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   LIBRARY: 4,
   EXAM_CELL: 4,
   WEBMASTER: 4,
+  COLLEGE_ACCOUNTS: 4,
   PANEL_MEMBER: 5,
   STUDENT: 6,
   CLASS_LEADER: 6,
@@ -162,6 +166,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   LIBRARY: "COLLEGE",
   EXAM_CELL: "COLLEGE",
   WEBMASTER: "COLLEGE",
+  COLLEGE_ACCOUNTS: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
   STUDENT: "COLLEGE",
   CLASS_LEADER: "COLLEGE",
@@ -302,7 +307,15 @@ export interface FMSUser {
   collegeEmail?: string; // same field name as FacultyMember below, for consistency
   phone?: string;
   role: UserRole;
-  department?: string; // for HOD / LOCATION_DEPT_HEAD
+  // for HOD / LOCATION_DEPT_HEAD - kept as the first entry of `departments`
+  // (the HOD's "primary" department) for every screen that hasn't been
+  // updated to the multi-department list below; always write both together.
+  department?: string;
+  // Every department this HOD heads (HOD only - a college HOD can now run
+  // more than one department at once, assigned from the Principal's
+  // Departments page; see src/lib/departments/scope.ts). Falls back to
+  // `[department]` wherever a doc predates this field.
+  departments?: string[];
   locationDeptId?: string; // for LOCATION_DEPT_HEAD
   sectionId?: string; // for CLASS_LEADER - the one Section this login is bound to
   sectionName?: string; // for CLASS_LEADER - denormalized Section.name

@@ -5,18 +5,30 @@ import { Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
-import type { TeachingAssignment, TimetableSlot, DayOfWeek } from "@/types";
+import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming } from "@/types";
 import { DAY_LABELS } from "@/types";
 
 // Grid instead of a per-subject card list: a faculty member thinks in terms
 // of "what am I teaching on Monday period 3", not a flat list of subjects, so
 // this lays their own slots out the same way the HOD/Principal Timetable
 // pages do (Day columns x Period rows). Unlike those pages, this never picks
-// a single CourseYearTiming - a faculty member's own slots can span several
-// course-years with different period configs - so rows are period NUMBERS
-// only, no clock times.
+// a single CourseYearTiming for the whole grid - a faculty member's own slots
+// can span several course-years with different period configs (e.g. 1st Year
+// runs shorter periods than 3rd Year), so the leading "Period" column stays a
+// plain number, and each occupied cell resolves its own clock time from ITS
+// slot's courseId+year instead - two cells in the same period row can (and
+// often do) show different times.
 
 const DAYS: DayOfWeek[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+/** "09:00" -> "9:00 AM" - display only. */
+function formatTime12h(hhmm: string) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -26,20 +38,31 @@ function ordinalYear(year: number) {
 export default function TeachingLoadPage() {
   const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
+  const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     void (async () => {
       setIsLoading(true);
       try {
-        const res = await fetch("/api/college/teaching-assignments");
-        if (!res.ok) throw new Error("Failed to load teaching assignments");
-        const json = await res.json() as {
+        const [assignRes, timingsRes] = await Promise.all([
+          fetch("/api/college/teaching-assignments"),
+          // No courseId filter - a faculty's own slots can span several
+          // courses/years, so this needs every course-year's timing to
+          // resolve clock times cell by cell (see periodTimeFor below).
+          fetch("/api/college/course-year-timings"),
+        ]);
+        if (!assignRes.ok) throw new Error("Failed to load teaching assignments");
+        const json = await assignRes.json() as {
           assignments: TeachingAssignment[];
           timetableSlots: TimetableSlot[];
         };
         setAssignments(json.assignments ?? []);
         setTimetableSlots(json.timetableSlots ?? []);
+        if (timingsRes.ok) {
+          const timingsJson = await timingsRes.json() as { timings: CourseYearTiming[] };
+          setTimings(timingsJson.timings ?? []);
+        }
       } catch {
         toast({ variant: "destructive", title: "Failed to load teaching load" });
       } finally {
@@ -53,6 +76,21 @@ export default function TeachingLoadPage() {
   const assignmentById = new Map(assignments.map((a) => [a.id, a]));
   const maxPeriod = timetableSlots.reduce((max, s) => Math.max(max, s.periodNumber), 0);
   const periods = Array.from({ length: maxPeriod }, (_, i) => i + 1);
+
+  // Each course-year's own period-by-period breakdown, resolved once up
+  // front (falls back to the plain numberOfPeriods/periodDurationMinutes
+  // formula for a course-year the HOD hasn't broken down yet - same
+  // fallback the HOD/Principal Timetable pages use).
+  const periodsByCourseYear = new Map<string, PeriodTiming[]>(
+    timings.map((t) => [
+      `${t.courseId}_${t.year}`,
+      t.periods && t.periods.length > 0 ? t.periods : defaultPeriodTimings(t),
+    ]),
+  );
+  function periodTimeFor(courseId: string | undefined, year: number | undefined, period: number) {
+    if (!courseId || !year) return undefined;
+    return periodsByCourseYear.get(`${courseId}_${year}`)?.find((p) => p.period === period);
+  }
 
   if (isLoading) {
     return (
@@ -118,9 +156,28 @@ export default function TeachingLoadPage() {
               </tr>
             </thead>
             <tbody>
-              {periods.map((period) => (
+              {periods.map((period) => {
+                // Shown once beside the period number, not per cell - picks
+                // the first slot THIS row actually has (across any day) to
+                // resolve a representative time. Different course-years can
+                // technically run a period at different clock times, but a
+                // faculty member's own week rarely straddles that for the
+                // same period number, so one time per row reads far better
+                // than repeating it in every cell.
+                const rowTime = DAYS
+                  .map((d) => timetableSlots.find((s) => s.day === d && s.periodNumber === period))
+                  .map((s) => s && periodTimeFor(s.courseId, s.year, s.periodNumber))
+                  .find(Boolean);
+                return (
                 <tr key={period} className="border-b last:border-b-0">
-                  <td className="p-2.5 font-medium text-muted-foreground">{period}</td>
+                  <td className="p-2.5 font-medium text-muted-foreground">
+                    {period}
+                    {rowTime && (
+                      <p className="text-[10px] font-normal whitespace-nowrap">
+                        {formatTime12h(rowTime.startTime)}&ndash;{formatTime12h(rowTime.endTime)}
+                      </p>
+                    )}
+                  </td>
                   {DAYS.map((d) => {
                     const slot = timetableSlots.find((s) => s.day === d && s.periodNumber === period);
                     const assignment = slot ? assignmentById.get(slot.assignmentId) : undefined;
@@ -150,7 +207,8 @@ export default function TeachingLoadPage() {
                     );
                   })}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

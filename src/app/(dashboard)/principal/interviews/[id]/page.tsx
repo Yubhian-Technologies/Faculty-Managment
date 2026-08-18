@@ -12,7 +12,8 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { ExternalLink, FileText, Users, Calendar, Briefcase } from "lucide-react";
+import { ExternalLink, FileText, Users, Calendar, Briefcase, Video, MapPin } from "lucide-react";
+import { MEETING_PLATFORM_LABELS } from "@/types";
 import type { HiringBatch, Candidate, CandidateApplication, CandidateSource, CandidateStatus } from "@/types";
 
 type BatchRow = Record<string, unknown> & HiringBatch;
@@ -179,6 +180,31 @@ export default function InterviewDetailPage() {
               <Users className="h-4 w-4 shrink-0" />
               <span><strong className="text-foreground">Candidates:</strong> {(detailBatch?.applicationIds as string[] | undefined)?.length ?? 0}</span>
             </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              {detailBatch?.hiringMode === "ONLINE" ? <Video className="h-4 w-4 shrink-0" /> : <MapPin className="h-4 w-4 shrink-0" />}
+              <span>
+                <strong className="text-foreground">Mode:</strong>{" "}
+                {detailBatch?.hiringMode === "ONLINE" ? "Online" : "Offline"}
+              </span>
+            </div>
+            {detailBatch?.hiringMode === "ONLINE" && (
+              <>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Video className="h-4 w-4 shrink-0" />
+                  <span><strong className="text-foreground">Platform:</strong> {detailBatch.meetingPlatform ? MEETING_PLATFORM_LABELS[detailBatch.meetingPlatform] : "-"}</span>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground col-span-2">
+                  <ExternalLink className="h-4 w-4 shrink-0" />
+                  {detailBatch.meetingLink ? (
+                    <a href={detailBatch.meetingLink} target="_blank" rel="noreferrer" className="text-primary underline break-all">
+                      {detailBatch.meetingLink}
+                    </a>
+                  ) : (
+                    <span>-</span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Candidates */}

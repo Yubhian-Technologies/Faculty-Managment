@@ -17,7 +17,9 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "PANEL_MEMBER");
+    // COLLEGE_OFFICE/ACCOUNTS are read-only here (never write panel feedback) -
+    // added so the consolidated Candidate Profile page can show interview scores too.
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE", "ACCOUNTS", "COLLEGE_ACCOUNTS");
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get("batchId");
     const candidateId = searchParams.get("candidateId");

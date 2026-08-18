@@ -39,6 +39,12 @@ interface RosterEntry {
   checkInVerified: boolean;
   checkOutVerified: boolean;
   registered: boolean;
+  // The reason an HOD/Principal/VP wrote when manually marking/correcting
+  // this record (see /api/college/attendance/manual), or the auto-generated
+  // explanation when a day gets corrected/derived to Absent - so anyone
+  // reviewing this roster (including Management, viewing the same data
+  // elsewhere) can see why, not just what.
+  remarks: string | null;
 }
 
 function parseDateParam(dateParam: string | null): { start: Date; end: Date; docSuffix: string } {
@@ -66,7 +72,7 @@ export async function GET(request: Request) {
     let scopeDepartments: string[] | null = null;
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      scopeDepartments = [scope.departmentName, ...scope.childDepartmentNames].filter(Boolean).slice(0, 30);
+      scopeDepartments = [...scope.ownDepartmentNames, ...scope.childDepartmentNames].slice(0, 30);
       if (scopeDepartments.length === 0) {
         return NextResponse.json({ date: docSuffix, roster: [] });
       }
@@ -97,7 +103,7 @@ export async function GET(request: Request) {
       return {
         uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "PANEL_MEMBER" as const,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
-        registered: uidToRegistered.get(d.id) ?? false,
+        registered: uidToRegistered.get(d.id) ?? false, remarks: null,
       };
     });
 
@@ -113,7 +119,7 @@ export async function GET(request: Request) {
         roster.push({
           uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "HOD" as const,
           status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
-          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0,
+          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null,
         });
         uidToRegisteredAt.set(d.id, u.faceRegisteredAt ? u.faceRegisteredAt.toDate() : null);
       }
@@ -170,6 +176,7 @@ export async function GET(request: Request) {
       p.entry.checkOut = p.checkOut;
       p.entry.checkInVerified = p.checkInVerified;
       p.entry.checkOutVerified = p.checkOutVerified;
+      p.entry.remarks = p.remarks;
     }
 
     // "No record yet" defaults to NOT_MARKED above - refine it:
@@ -188,7 +195,9 @@ export async function GET(request: Request) {
       const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
       const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
       if (start < todayStart && regStart && start >= regStart) {
-        entry.status = isSunday(start) ? "HOLIDAY" : "ABSENT";
+        const holiday = isSunday(start);
+        entry.status = holiday ? "HOLIDAY" : "ABSENT";
+        if (!holiday) entry.remarks = "No check-in recorded";
       }
     }
 

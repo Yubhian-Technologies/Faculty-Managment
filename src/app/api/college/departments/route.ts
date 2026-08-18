@@ -17,7 +17,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "EXAM_CELL", "DEAN");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "COLLEGE_ACCOUNTS", "PANEL_MEMBER", "EXAM_CELL", "DEAN");
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -36,14 +36,24 @@ export async function GET() {
     // recruitment/indent routing) sees the correct person too. Departments
     // with more than one HOD login claiming them are left untouched rather
     // than guessed.
+    //
+    // An HOD's `departments` array can legitimately list more than one
+    // department (see college/departments PATCH below) - the SAME uid
+    // appearing against several department names here is expected, not a
+    // drift signal. Only two *different* HOD logins both claiming the same
+    // department name is a real conflict.
     const hodByDepartment = new Map<string, { uid: string; name: string }>();
     const ambiguousDepartments = new Set<string>();
     for (const doc of hodSnap.docs) {
-      const data = doc.data() as { department?: string; name?: string };
-      const dept = data.department?.trim();
-      if (!dept) continue;
-      if (hodByDepartment.has(dept)) ambiguousDepartments.add(dept);
-      else hodByDepartment.set(dept, { uid: doc.id, name: data.name ?? "" });
+      const data = doc.data() as { department?: string; departments?: string[]; name?: string };
+      const depts = (data.departments && data.departments.length > 0 ? data.departments : [data.department ?? ""])
+        .map((d) => d.trim())
+        .filter(Boolean);
+      for (const dept of depts) {
+        const existing = hodByDepartment.get(dept);
+        if (existing && existing.uid !== doc.id) ambiguousDepartments.add(dept);
+        else hodByDepartment.set(dept, { uid: doc.id, name: data.name ?? "" });
+      }
     }
 
     const departments = await Promise.all(
@@ -221,14 +231,14 @@ export async function POST(request: Request) {
     let parentDepartmentId: string | undefined;
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
-      if (!scope.departmentId || body.parentDepartmentId !== scope.departmentId) {
+      if (!body.parentDepartmentId || !scope.ownDepartmentIds.includes(body.parentDepartmentId)) {
         return NextResponse.json({ error: "You can only add sub-departments under your own department" }, { status: 403 });
       }
-      const ownDeptSnap = await db.collection("colleges").doc(collegeId).collection("departments").doc(scope.departmentId).get();
+      const ownDeptSnap = await db.collection("colleges").doc(collegeId).collection("departments").doc(body.parentDepartmentId).get();
       if (!(ownDeptSnap.data() as { hasSubDepartments?: boolean } | undefined)?.hasSubDepartments) {
         return NextResponse.json({ error: "Sub-departments are not enabled for your department" }, { status: 403 });
       }
-      parentDepartmentId = scope.departmentId;
+      parentDepartmentId = body.parentDepartmentId;
     }
 
     const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
@@ -279,10 +289,11 @@ export async function POST(request: Request) {
 
     // Keep the HOD's own profile department in sync - faculty-requirement
     // and other HOD-scoped routes resolve department from their user doc,
-    // not from the department's hodUid pointer.
+    // not from the department's hodUid pointer. Additive: this HOD may
+    // already head other departments, which stay untouched.
     if (hodUid) {
       await db.collection("colleges").doc(collegeId).collection("users").doc(hodUid)
-        .update({ department: name.trim(), updatedAt: now })
+        .update({ department: name.trim(), departments: FieldValue.arrayUnion(name.trim()), updatedAt: now })
         .catch(() => {});
     }
 
@@ -329,13 +340,13 @@ export async function DELETE(request: Request) {
     if (!deptSnap.exists) {
       return NextResponse.json({ error: "Department not found" }, { status: 404 });
     }
-    const dept = deptSnap.data() as { name: string; hodUid?: string; parentDepartmentId?: string };
+    const dept = deptSnap.data() as { name: string; hodUid?: string; parentDepartmentId?: string; managedDepartments?: string[] };
 
     // An HOD may only delete a sub-department under their own department -
     // this is the "sub-HOD" management surface, not general department admin.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, collegeId, session.uid);
-      if (!scope.departmentId || dept.parentDepartmentId !== scope.departmentId) {
+      if (!dept.parentDepartmentId || !scope.ownDepartmentIds.includes(dept.parentDepartmentId)) {
         return NextResponse.json({ error: "You can only delete sub-departments under your own department" }, { status: 403 });
       }
     }
@@ -361,26 +372,87 @@ export async function DELETE(request: Request) {
 
     // Refuse to delete a department that still has students or sections -
     // deleting it would silently orphan their `department` string references.
-    const [studentsSnap, sectionsSnap] = await Promise.all([
+    // A shared-first-year student stays filed under their common department
+    // (preserved until promotion) with secondaryDepartment naming this
+    // department instead, when THIS department is their real destination
+    // branch - the department-only check misses them entirely, which would
+    // let a branch with a live, un-promoted cohort be deleted outright.
+    const [studentsSnap, studentsSecondarySnap, sectionsSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("students").where("department", "==", dept.name).limit(1).get(),
+      db.collection("colleges").doc(collegeId).collection("students").where("secondaryDepartment", "==", dept.name).limit(1).get(),
       db.collection("colleges").doc(collegeId).collection("sections").where("department", "==", dept.name).limit(1).get(),
     ]);
-    if (!studentsSnap.empty || !sectionsSnap.empty) {
+    if (!studentsSnap.empty || !studentsSecondarySnap.empty || !sectionsSnap.empty) {
       return NextResponse.json(
         { error: "Cannot delete a department that still has students or sections. Remove them first." },
         { status: 409 }
       );
     }
 
-    // Keep the (sub-)HOD's own profile in sync - otherwise their account is
-    // left pointing at a department that no longer exists.
-    if (dept.hodUid) {
-      await db.collection("colleges").doc(collegeId).collection("users").doc(dept.hodUid)
-        .update({ department: "", updatedAt: new Date() })
-        .catch(() => {});
+    // A sub-department that still manages real branches (Department.
+    // managedDepartments) with their own active students/sections can't be
+    // deleted either - those branches would become unreachable by any HOD
+    // until re-grouped elsewhere. Remove them from Managed Departments first.
+    const managedBranches = dept.managedDepartments ?? [];
+    if (managedBranches.length > 0) {
+      const branchChecks = await Promise.all(
+        managedBranches.map(async (branchName) => {
+          const [branchSections, branchStudents] = await Promise.all([
+            db.collection("colleges").doc(collegeId).collection("sections").where("department", "==", branchName).limit(1).get(),
+            db.collection("colleges").doc(collegeId).collection("students").where("secondaryDepartment", "==", branchName).limit(1).get(),
+          ]);
+          return !branchSections.empty || !branchStudents.empty;
+        })
+      );
+      if (branchChecks.some(Boolean)) {
+        return NextResponse.json(
+          { error: "Cannot delete: this department still manages branches with active students or sections. Remove them from Managed Departments first." },
+          { status: 409 }
+        );
+      }
     }
 
-    await deptRef.delete();
+    const batch = db.batch();
+
+    // Keep the (sub-)HOD's own profile in sync - otherwise their account is
+    // left pointing at a department that no longer exists. Only THIS
+    // department leaves their portfolio; any other department they head
+    // (see college/departments PATCH) stays untouched.
+    if (dept.hodUid) {
+      const hodRef = db.collection("colleges").doc(collegeId).collection("users").doc(dept.hodUid);
+      const hodSnap = await hodRef.get();
+      const hodData = hodSnap.data() as { department?: string; departments?: string[] } | undefined;
+      const currentDepts = (hodData?.departments && hodData.departments.length > 0 ? hodData.departments : [hodData?.department ?? ""])
+        .filter(Boolean);
+      const remaining = currentDepts.filter((d) => d !== dept.name);
+      batch.update(hodRef, { department: remaining[0] ?? "", departments: remaining, updatedAt: new Date() });
+    }
+
+    // Strip this department's name from any OTHER department's
+    // managedDepartments/secondaryDepartments arrays. Without this, a stale
+    // reference survives the delete - and if a NEW, unrelated department is
+    // later created reusing this exact name, it would be silently and
+    // instantly "claimed" by whichever sub-department still lists it, purely
+    // by name coincidence, with no confirmation step.
+    const allDeptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+    for (const d of allDeptsSnap.docs) {
+      if (d.id === deptId) continue;
+      const other = d.data() as { managedDepartments?: string[]; secondaryDepartments?: string[] };
+      const managed = other.managedDepartments ?? [];
+      const secondary = other.secondaryDepartments ?? [];
+      const newManaged = managed.filter((n) => n !== dept.name);
+      const newSecondary = secondary.filter((n) => n !== dept.name);
+      if (newManaged.length !== managed.length || newSecondary.length !== secondary.length) {
+        batch.update(d.ref, {
+          ...(newManaged.length !== managed.length ? { managedDepartments: newManaged } : {}),
+          ...(newSecondary.length !== secondary.length ? { secondaryDepartments: newSecondary } : {}),
+          updatedAt: new Date(),
+        });
+      }
+    }
+
+    batch.delete(deptRef);
+    await batch.commit();
 
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -407,6 +479,15 @@ export async function PATCH(request: Request) {
       hasSubDepartments?: boolean;
       secondaryDepartments?: string[];
       managedDepartments?: string[];
+      // Clearing this (empty string or null) promotes a sub-department back
+      // to a plain top-level department - e.g. converting one from the
+      // hasSubDepartments/parentDepartmentId model to the flat
+      // managedDepartments model, so it can have its own independent HOD and
+      // "Years Taught" for the years its former parent doesn't manage it for.
+      // Principal/VP/Super Admin only - structural, same tier as
+      // hasSubDepartments below. Re-parenting (a non-empty value) is
+      // deliberately not supported here; only promotion.
+      parentDepartmentId?: string | null;
       commonYearStart?: string;
       commonYearEnd?: string;
       // Per-course override of assignedYears/secondaryDepartments - see
@@ -436,7 +517,7 @@ export async function PATCH(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const targetSnap = await deptRef.get();
       const targetDept = targetSnap.data() as { parentDepartmentId?: string } | undefined;
-      if (!scope.departmentId || !targetDept || targetDept.parentDepartmentId !== scope.departmentId) {
+      if (!targetDept?.parentDepartmentId || !scope.ownDepartmentIds.includes(targetDept.parentDepartmentId)) {
         return NextResponse.json({ error: "You can only manage your own sub-departments" }, { status: 403 });
       }
       const restricted: typeof rawUpdates = {};
@@ -574,6 +655,20 @@ export async function PATCH(request: Request) {
       if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
     }
 
+    // Promote a sub-department back to top-level (see the field's own doc
+    // above) - the only supported change here is clearing it entirely.
+    let clearParentDepartmentId = false;
+    if ("parentDepartmentId" in updates) {
+      if (updates.parentDepartmentId) {
+        return NextResponse.json(
+          { error: "Re-parenting a department isn't supported - only clearing parentDepartmentId to promote it to top-level" },
+          { status: 400 }
+        );
+      }
+      clearParentDepartmentId = true;
+      delete updates.parentDepartmentId;
+    }
+
     for (const label of ["commonYearStart", "commonYearEnd"] as const) {
       const value = updates[label];
       if (value !== undefined && value !== "" && !DATE_RE.test(value)) {
@@ -588,18 +683,31 @@ export async function PATCH(request: Request) {
 
     // Keep the outgoing/incoming HOD's own profile department in sync with
     // the assignment - faculty-requirement and other HOD-scoped routes
-    // resolve department from their user doc, not from hodUid.
+    // resolve department from their user doc, not from hodUid. Additive: an
+    // HOD can now head more than one department at once (see
+    // src/lib/departments/scope.ts), so reassigning this ONE department only
+    // ever adds/removes that one name from each side's `departments` array -
+    // it must never touch any other department either of them heads.
     if (updates.hodUid !== undefined) {
       const deptSnap = await deptRef.get();
       const prev = deptSnap.data() as { hodUid?: string; name?: string } | undefined;
       const finalName = updates.name?.trim() ?? prev?.name ?? "";
       const usersColl = db.collection("colleges").doc(session.collegeId).collection("users");
 
-      if (prev?.hodUid && prev.hodUid !== updates.hodUid) {
-        await usersColl.doc(prev.hodUid).update({ department: "", updatedAt: now }).catch(() => {});
+      if (prev?.hodUid && prev.hodUid !== updates.hodUid && finalName) {
+        const outgoingRef = usersColl.doc(prev.hodUid);
+        const outgoingSnap = await outgoingRef.get();
+        const outgoingData = outgoingSnap.data() as { department?: string; departments?: string[] } | undefined;
+        const remaining = (outgoingData?.departments && outgoingData.departments.length > 0 ? outgoingData.departments : [outgoingData?.department ?? ""])
+          .filter((d) => d && d !== finalName);
+        await outgoingRef.update({ department: remaining[0] ?? "", departments: remaining, updatedAt: now }).catch(() => {});
       }
-      if (updates.hodUid) {
-        await usersColl.doc(updates.hodUid).update({ department: finalName, updatedAt: now }).catch(() => {});
+      if (updates.hodUid && finalName) {
+        await usersColl.doc(updates.hodUid).update({
+          department: finalName,
+          departments: FieldValue.arrayUnion(finalName),
+          updatedAt: now,
+        }).catch(() => {});
       }
     }
 
@@ -616,10 +724,20 @@ export async function PATCH(request: Request) {
           deptId
         );
         if (conflicts.length > 0) throw new Error(`BRANCH_CLAIMED:${branchClaimConflictMessage(conflicts)}`);
-        tx.update(deptRef, { ...updates, ...courseScopePatch, updatedAt: now });
+        tx.update(deptRef, {
+          ...updates,
+          ...courseScopePatch,
+          ...(clearParentDepartmentId ? { parentDepartmentId: FieldValue.delete() } : {}),
+          updatedAt: now,
+        });
       });
     } else {
-      await deptRef.update({ ...updates, ...courseScopePatch, updatedAt: now });
+      await deptRef.update({
+        ...updates,
+        ...courseScopePatch,
+        ...(clearParentDepartmentId ? { parentDepartmentId: FieldValue.delete() } : {}),
+        updatedAt: now,
+      });
     }
 
     return NextResponse.json({ ok: true });

@@ -37,7 +37,7 @@ async function assertHodOwnsSection(
   const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
   const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
   const owner = resolveBranchYearOwner(departments, sectionDepartment, sectionYear);
-  return owner === scope.departmentName || scope.childDepartmentNames.includes(owner);
+  return scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner);
 }
 
 export async function PATCH(
@@ -121,8 +121,20 @@ export async function PATCH(
           .collection("departments").where("name", "==", sectionDept).limit(1).get();
         if (!deptSnap.empty) {
           const deptDoc = deptSnap.docs[0].data() as
-            { assignedYears?: number[]; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope> };
-          const allowedYears = resolveDepartmentCourseScope(deptDoc, course.catalogId).assignedYears;
+            { assignedYears?: number[]; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>; parentDepartmentId?: string };
+          let allowedYears = resolveDepartmentCourseScope(deptDoc, course.catalogId).assignedYears;
+          // A sub-department created by an HOD carries no assignedYears/
+          // courseScopes of its own (Principal-only override, stripped from
+          // anything HOD-created) - it inherits its parent's instead, same
+          // fallback managerEffectiveYears (hodScope.ts) already uses for
+          // Sections/Teaching Assignments/Timetable.
+          if (allowedYears.length === 0 && deptDoc.parentDepartmentId) {
+            const parentSnap = await db.collection("colleges").doc(session.collegeId)
+              .collection("departments").doc(deptDoc.parentDepartmentId).get();
+            if (parentSnap.exists) {
+              allowedYears = resolveDepartmentCourseScope(parentSnap.data() as typeof deptDoc, course.catalogId).assignedYears;
+            }
+          }
           if (allowedYears.length > 0 && !allowedYears.includes(targetYear)) {
             return NextResponse.json(
               { error: `"${sectionDept}" is not assigned to teach Year ${targetYear} for ${course.name}` },
@@ -162,7 +174,15 @@ export async function PATCH(
       // `assignedYears` read - a target department with a per-course override
       // (e.g. an independent M.Tech run on different years than its shared
       // B.Tech) needs THIS course's own override, not always its flat years.
-      const assignedYears = resolveDepartmentCourseScope(targetDept, course?.catalogId).assignedYears;
+      let assignedYears = resolveDepartmentCourseScope(targetDept, course?.catalogId).assignedYears;
+      // Same sub-department-inherits-its-parent's-years fallback as above.
+      if (assignedYears.length === 0 && targetDept.parentDepartmentId) {
+        const parentSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("departments").doc(targetDept.parentDepartmentId).get();
+        if (parentSnap.exists) {
+          assignedYears = resolveDepartmentCourseScope(parentSnap.data() as typeof targetDept, course?.catalogId).assignedYears;
+        }
+      }
       if (targetYear != null && assignedYears.length > 0 && !assignedYears.includes(Number(targetYear))) {
         return NextResponse.json({ error: `"${targetDeptName}" is not assigned to teach Year ${targetYear}` }, { status: 400 });
       }
@@ -267,14 +287,40 @@ export async function PATCH(
 
     if (identityChanged && sectionDept && oldSection.name) {
       const now = new Date();
-      const enrolledSnap = await db.collection("colleges").doc(session.collegeId).collection("students")
-        .where("department", "==", sectionDept)
-        .where("section", "==", oldSection.name)
-        .where("year", "==", oldSection.year ?? 0)
-        .get();
-      for (const studentDoc of enrolledSnap.docs) {
-        batch.update(studentDoc.ref, { department: newDepartment, section: newName, year: newYear, updatedAt: now });
-        const history = departmentHistoryEntry(db, session.collegeId, studentDoc.id, newDepartment, newName, newYear, now);
+      // A shared-first-year student in this section stays filed under their
+      // common department (preserved until promotion) with secondaryDepartment
+      // naming this section's real branch instead - the department-only query
+      // below misses them, silently leaving them behind under a now-stale
+      // section identity. Match on secondaryDepartment too, and for a student
+      // found only that way, follow the section's move via secondaryDepartment
+      // (their real-branch pointer) rather than their own (unaffected)
+      // department.
+      const [primarySnap, secondarySnap] = await Promise.all([
+        db.collection("colleges").doc(session.collegeId).collection("students")
+          .where("department", "==", sectionDept)
+          .where("section", "==", oldSection.name)
+          .where("year", "==", oldSection.year ?? 0)
+          .get(),
+        db.collection("colleges").doc(session.collegeId).collection("students")
+          .where("secondaryDepartment", "==", sectionDept)
+          .where("section", "==", oldSection.name)
+          .where("year", "==", oldSection.year ?? 0)
+          .get(),
+      ]);
+      const primaryIds = new Set(primarySnap.docs.map((d) => d.id));
+      const seen = new Set<string>();
+      for (const studentDoc of [...primarySnap.docs, ...secondarySnap.docs]) {
+        if (seen.has(studentDoc.id)) continue;
+        seen.add(studentDoc.id);
+        const isSecondaryMatch = !primaryIds.has(studentDoc.id);
+        const studentUpdate = isSecondaryMatch
+          ? { secondaryDepartment: newDepartment, section: newName, year: newYear, updatedAt: now }
+          : { department: newDepartment, section: newName, year: newYear, updatedAt: now };
+        batch.update(studentDoc.ref, studentUpdate);
+        const historyDept = isSecondaryMatch
+          ? ((studentDoc.data() as { department?: string }).department ?? "")
+          : newDepartment;
+        const history = departmentHistoryEntry(db, session.collegeId, studentDoc.id, historyDept, newName, newYear, now);
         batch.set(history.ref, history.data);
       }
     }
@@ -314,9 +360,21 @@ export async function DELETE(
       }
     }
 
-    const [enrolledSnap, siblingSnap] = await Promise.all([
+    const [enrolledPrimarySnap, enrolledSecondarySnap, siblingSnap] = await Promise.all([
       db.collection("colleges").doc(session.collegeId).collection("students")
         .where("department", "==", data.department ?? "")
+        .where("section", "==", data.name ?? "")
+        .where("year", "==", data.year ?? 0)
+        .limit(1)
+        .get(),
+      // A shared-first-year student sitting in this section stays filed under
+      // their common department (department preserved until promotion - see
+      // students/[id] PATCH) with secondaryDepartment naming this section's
+      // real branch instead - the primary-only check above misses them
+      // entirely, which would let a section full of live students be deleted
+      // outright. Catch them too.
+      db.collection("colleges").doc(session.collegeId).collection("students")
+        .where("secondaryDepartment", "==", data.department ?? "")
         .where("section", "==", data.name ?? "")
         .where("year", "==", data.year ?? 0)
         .limit(1)
@@ -341,7 +399,7 @@ export async function DELETE(
       return (s.name ?? "").toUpperCase() === (data.name ?? "").toUpperCase()
         && (s.secondaryDepartments?.[0] ?? "").toLowerCase() === secondary;
     });
-    if (!enrolledSnap.empty && !hasTwin) {
+    if ((!enrolledPrimarySnap.empty || !enrolledSecondarySnap.empty) && !hasTwin) {
       return NextResponse.json(
         { error: "Cannot delete a section that has students. Remove all students first." },
         { status: 409 }

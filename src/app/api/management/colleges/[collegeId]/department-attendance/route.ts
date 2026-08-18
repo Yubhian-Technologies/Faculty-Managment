@@ -30,6 +30,11 @@ interface RosterEntry {
   checkInVerified: boolean;
   checkOutVerified: boolean;
   registered: boolean;
+  // The reason an HOD/Principal/VP wrote when manually marking/correcting
+  // this record, or the auto-generated explanation when a day gets
+  // corrected/derived to Absent - visible to Management here too, not just
+  // the person's own view.
+  remarks: string | null;
 }
 
 function parseDateParam(dateParam: string | null): { start: Date; end: Date; docSuffix: string } {
@@ -76,6 +81,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         // HOD registers directly on this same users/{uid} doc; PANEL_MEMBER
         // registers on their facultyMembers doc instead (filled in below).
         registered: role === "HOD" ? Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0 : false,
+        remarks: null,
       };
     });
 
@@ -126,6 +132,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         p.entry.checkOut = p.checkOut;
         p.entry.checkInVerified = p.checkInVerified;
         p.entry.checkOutVerified = p.checkOutVerified;
+        p.entry.remarks = p.remarks;
       }
 
       const facultyMembersSnap = await collegeRef.collection("facultyMembers").where("department", "==", department).get();
@@ -156,7 +163,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
         const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
         if (start < todayStart && regStart && start >= regStart) {
-          entry.status = isSunday(start) ? "HOLIDAY" : "ABSENT";
+          const holiday = isSunday(start);
+          entry.status = holiday ? "HOLIDAY" : "ABSENT";
+          if (!holiday) entry.remarks = "No check-in recorded";
         }
       }
 

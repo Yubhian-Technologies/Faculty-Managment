@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { Timestamp } from "firebase/firestore";
-import type { WorkflowStatus, CandidateStatus } from "@/types";
+import { ATTENDANCE_STATUS_LABELS, type WorkflowStatus, type CandidateStatus, type AttendanceStatus, type MonthlyExportRow } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 
 type FirestoreTimestampLike = { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
 
-export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): Date | null {
+export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | string | null | undefined): Date | null {
   if (!timestamp) return null;
   if (timestamp instanceof Date) return timestamp;
   if (typeof (timestamp as Timestamp).toDate === "function") return (timestamp as Timestamp).toDate();
@@ -17,6 +17,14 @@ export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | nu
   const secs = (timestamp as { _seconds?: number; seconds?: number })._seconds
     ?? (timestamp as { seconds?: number }).seconds;
   if (typeof secs === "number") return new Date(secs * 1000);
+  // A plain Date serialises over JSON as an ISO string (e.g. a display-only
+  // synthesized record - see fillMissingDays - that was never a Firestore
+  // Timestamp to begin with) - fall back to parsing it directly rather than
+  // silently collapsing to the Unix epoch.
+  if (typeof timestamp === "string") {
+    const d = new Date(timestamp);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
   return null;
 }
 
@@ -112,6 +120,42 @@ export function exportToCSV<T extends Record<string, unknown>>(
   link.download = `${filename}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+// Shared CSV shape for the department-wide / college-wide monthly exports
+// (one row per person per day, from buildRosterMonthlyRows) - reused by
+// every "Export Month CSV" button (HOD, Principal/VP, Management) so the
+// column set and status/date formatting stay identical everywhere, matching
+// the single-person monthly export's existing Date/Day/Status/Check In/
+// Check Out/Reason shape (see PersonMonthlyAttendanceView.handleExport) with
+// Name/Role/Department columns added for the multi-person roster.
+export function exportRosterMonthlyCSV(rows: MonthlyExportRow[], filenameBase: string): void {
+  const csvRows = rows.map((r) => {
+    const d = new Date(`${r.date}T00:00:00`);
+    const valid = !Number.isNaN(d.getTime());
+    return {
+      name: r.facultyName,
+      role: r.role,
+      department: r.department,
+      date: valid ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : r.date,
+      day: valid ? d.toLocaleDateString("en-IN", { weekday: "long" }) : "",
+      status: ATTENDANCE_STATUS_LABELS[r.status as AttendanceStatus] ?? r.status,
+      checkIn: r.checkIn ?? "",
+      checkOut: r.checkOut ?? "",
+      reason: r.remarks ?? "",
+    };
+  });
+  exportToCSV(csvRows, filenameBase, [
+    { key: "name", header: "Name" },
+    { key: "role", header: "Role" },
+    { key: "department", header: "Department" },
+    { key: "date", header: "Date" },
+    { key: "day", header: "Day" },
+    { key: "status", header: "Status" },
+    { key: "checkIn", header: "Check In" },
+    { key: "checkOut", header: "Check Out" },
+    { key: "reason", header: "Reason" },
+  ]);
 }
 
 export function truncate(str: string, length: number): string {

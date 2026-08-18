@@ -15,7 +15,7 @@ async function assertHodOwnsAssignment(
   assignmentDepartment: string
 ): Promise<boolean> {
   const scope = await getHodDepartmentScope(db, collegeId, uid);
-  return !!scope.departmentName && scope.departmentName === assignmentDepartment;
+  return !!assignmentDepartment && scope.ownDepartmentNames.includes(assignmentDepartment);
 }
 
 export async function PATCH(

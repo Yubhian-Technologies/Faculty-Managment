@@ -9,7 +9,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
-import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode } from "@/types/leave";
+import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 
 export interface BalanceEntry {
   code: LeaveTypeCode;
@@ -288,6 +288,22 @@ function isCancellable(request: LeaveRequest): boolean {
   return toEnd >= new Date();
 }
 
+// One line per distinct substitute, e.g. "gandhiji (24 periods), sardar (8
+// periods)" - a long-running leave (a term-length "Other" request) can carry
+// dozens of individual PeriodSubstitutions, so this collapses them down to
+// "who", not a period-by-period dump. Whether a substitute got there via the
+// Replacement toggle (one name for everything) or per-period Adjustment
+// picks, this reads the same either way - see LeaveApprovalQueue's
+// coverageModeById/replacementFacultyById for how these get built.
+function summarizeCoverage(subs: PeriodSubstitution[]): string {
+  const counts = new Map<string, number>();
+  for (const s of subs) counts.set(s.substituteFacultyName, (counts.get(s.substituteFacultyName) ?? 0) + 1);
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `${name} (${count} period${count === 1 ? "" : "s"})`)
+    .join(", ");
+}
+
 // categoryLabel (Maternity/Family Planning/Quarantine/Extraordinary/
 // Compensatory) is opt-in and passed in by the caller, never fetched here -
 // only the Principal's own Staff Leave History view ever supplies it (see
@@ -332,6 +348,12 @@ export function LeaveHistoryRow({
           {formatDate(request.fromDate)} - {formatDate(request.toDate)}
         </p>
         <p className="text-xs text-muted-foreground truncate mt-0.5">{request.reason}</p>
+        {!!request.periodSubstitutions?.length && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <span className="font-medium text-foreground/80">Covered by:</span>{" "}
+            {summarizeCoverage(request.periodSubstitutions)}
+          </p>
+        )}
         {request.status === "CANCELLED" && request.cancelReason && (
           <p className="text-xs text-muted-foreground mt-0.5">
             <span className="font-medium text-foreground/80">Cancellation reason:</span> {request.cancelReason}

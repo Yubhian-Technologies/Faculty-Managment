@@ -17,18 +17,20 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 //
 // Two escalation tiers reset each other, mirroring the org hierarchy:
 //   - HOD resets a same-department Faculty member (facultyMembers doc).
-//   - PRINCIPAL resets an HOD or Vice Principal in their own college
-//     (users/{uid} doc — HOD/Principal/VP have no FacultyMember record).
+//   - PRINCIPAL/VICE_PRINCIPAL (equal authority - see manual/route.ts's
+//     identical treatment of the two) resets an HOD or the other of
+//     Principal/Vice Principal in their own college (users/{uid} doc —
+//     HOD/Principal/VP have no FacultyMember record).
 // Management resetting Principal is a separate route (Management's session
 // isn't scoped to one college) — see
 // /api/management/colleges/[collegeId]/principal-attendance/reset.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    if (session.role === "PRINCIPAL") {
+    if (session.role !== "HOD") {
       const body = (await request.json()) as { uid?: string };
       const uid = body.uid;
       if (!uid) {
@@ -40,9 +42,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
       }
       const target = targetSnap.data() as { role?: string };
-      if (target.role !== "HOD" && target.role !== "VICE_PRINCIPAL") {
+      // Principal and Vice Principal reset each other symmetrically (equal
+      // authority), plus either can reset an HOD - mirrors manual/route.ts's
+      // identical PRINCIPAL/VICE_PRINCIPAL treatment there.
+      const validTargetRoles = session.role === "PRINCIPAL" ? ["HOD", "VICE_PRINCIPAL"] : ["HOD", "PRINCIPAL"];
+      if (!target.role || !validTargetRoles.includes(target.role)) {
         return NextResponse.json(
-          { error: "You can only reset face registration for an HOD or Vice Principal" },
+          { error: "You can only reset face registration for an HOD or the Principal/Vice Principal" },
           { status: 403 }
         );
       }

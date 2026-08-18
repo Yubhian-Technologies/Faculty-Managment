@@ -22,7 +22,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { CreateHodDialog } from "@/components/college/CreateHodDialog";
-import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { toast } from "@/hooks/useToast";
 import { buildManagedBranchOwner, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department, FMSUser, Section, StudentListItem } from "@/types";
@@ -34,16 +34,19 @@ interface SubDeptSummary {
 }
 
 export default function SubDepartmentsSettingsPage() {
-  const user = useAuthStore((s) => s.user);
-  // A local primitive, not `user.department` inline in the closure below -
-  // useAuth's onIdTokenChanged legitimately re-fires (producing a new `user`
-  // object reference) shortly after initial sign-in even when nothing
-  // relevant changed, which was retriggering the whole load a second time
-  // and causing a loading -> loaded -> loading flicker. Referencing `user`
-  // directly inside the callback also defeats the React Compiler's own
-  // dependency inference (it sees the whole object as read), so this needs
-  // to be its own variable, not just a narrower useCallback dependency array.
-  const department = user?.department;
+  const myDepartments = useMyDepartments();
+  // Which of this HOD's own departments Sub-Departments is currently showing -
+  // only choosable when they head more than one (see useMyDepartments).
+  // `pickedDept` holds only an explicit user choice; `department` (derived,
+  // not stored - not `user.department` either, a bare primitive rather than
+  // reading the auth store's `user` object directly here, which previously
+  // caused a loading -> loaded -> loading flicker: useAuth's onIdTokenChanged
+  // legitimately re-fires with a new `user` reference shortly after sign-in
+  // even when nothing relevant changed, retriggering the whole load a second
+  // time) falls back to the first owned department, so nothing needs syncing
+  // via an effect when the department list itself loads/changes.
+  const [pickedDept, setPickedDept] = useState("");
+  const department = pickedDept && myDepartments.includes(pickedDept) ? pickedDept : myDepartments[0] ?? "";
   const [ownDept, setOwnDept] = useState<Department | null>(null);
   const [allDepartments, setAllDepartments] = useState<Department[]>([]);
   const [children, setChildren] = useState<SubDeptSummary[]>([]);
@@ -99,11 +102,23 @@ export default function SubDepartmentsSettingsPage() {
         const sections = sectionsRes.sections ?? [];
         const students = studentsRes.students ?? [];
         setChildren(
-          childDepts.map((dept) => ({
-            dept,
-            studentCount: students.filter((s) => s.department === dept.name).length,
-            sectionCount: sections.filter((s) => s.department === dept.name).length,
-          }))
+          childDepts.map((dept) => {
+            // Real sections are filed under the real branch's own name (e.g.
+            // "CIVIL ENGINEERING"), never this sub-department's own name -
+            // count by its managed branches instead, same as
+            // hod/sections/page.tsx's identical count. A shared-first-year
+            // STUDENT is different: they stay filed under their common
+            // department (department unchanged) until promotion, with
+            // secondaryDepartment naming their real branch (see
+            // students/[id] PATCH) - so a student counts here when EITHER
+            // field is one of this sub-department's managed branches.
+            const branchNames = new Set(dept.managedDepartments ?? []);
+            return {
+              dept,
+              studentCount: students.filter((s) => branchNames.has(s.department) || branchNames.has(s.secondaryDepartment ?? "")).length,
+              sectionCount: sections.filter((s) => branchNames.has(s.department)).length,
+            };
+          })
         );
       } else {
         setChildren([]);
@@ -273,9 +288,24 @@ export default function SubDepartmentsSettingsPage() {
     );
   }
 
+  // Only choosable when this HOD heads more than one department - a plain
+  // single-department HOD sees nothing extra.
+  const deptPicker = myDepartments.length > 1 ? (
+    <div className="max-w-xs space-y-1.5">
+      <Label htmlFor="sub-dept-top">Department</Label>
+      <Select value={department} onValueChange={setPickedDept}>
+        <SelectTrigger id="sub-dept-top"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  ) : null;
+
   if (!ownDept?.hasSubDepartments) {
     return (
       <div className="space-y-6">
+        {deptPicker}
         <PageHeader
           title="Sub-Departments"
           description="Split your department into sub-branches, each with its own HOD"
@@ -295,6 +325,7 @@ export default function SubDepartmentsSettingsPage() {
 
   return (
     <div className="space-y-6">
+      {deptPicker}
       <PageHeader
         title="Sub-Departments"
         description={`Add sub-departments under ${ownDept.name}, assign each its own Sub-HOD, and group whole branches under them - the Sub-HOD then fully manages those branches' students and sections.`}

@@ -142,18 +142,19 @@ export async function POST(request: Request) {
       for (let i = 0; i < sections.length; i++) {
         const section = sections[i];
         for (const student of slices[i]) {
-          // Cleared only when it's actually what resolved this branch - leaves
-          // an unrelated secondaryDepartment value untouched otherwise.
-          const resolvedViaSecondary = (student.secondaryDepartment ?? "").trim() === branch;
+          // department/secondaryDepartment are deliberately left untouched -
+          // this route only ever processes the shared-year cohort, so every
+          // student here stays enrolled under their original grouping
+          // department until promotion (students/promote or advance-year)
+          // actually transitions them into `branch`, same fix as the
+          // per-student PATCH and the per-department distribute route.
           batch.update(collegeRef.collection("students").doc(student.id), {
-            department: branch,
-            ...(resolvedViaSecondary ? { secondaryDepartment: null } : {}),
             section: section.name,
             year,
             updatedAt: now,
           });
           const history = departmentHistoryEntry(
-            db, session.collegeId, student.id, branch, section.name, year, now
+            db, session.collegeId, student.id, student.department, section.name, year, now
           );
           batch.set(history.ref, history.data);
         }

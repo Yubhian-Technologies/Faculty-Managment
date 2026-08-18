@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from "@/hooks/useToast";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
+import { resolveOfferContactBlock } from "@/lib/offerLetterContactBlock";
 import { formatDate } from "@/lib/utils";
 import { FileText, CheckCircle2 } from "lucide-react";
 import type { Candidate, CandidateApplication } from "@/types";
@@ -122,6 +123,20 @@ export default function AccountsHiringPage() {
       .catch(() => {});
   }, []);
 
+  // Coordinator contact — falls back to the batch's HOD if there's no
+  // coordinator assigned or the coordinator has no phone/email on file.
+  async function coordinatorBlockFor(batchId?: string): Promise<string> {
+    if (!batchId) return "";
+    type BatchRes = { batch?: { coordinatorUid?: string; coordinatorName?: string; hodUid?: string; hodName?: string } };
+    const batchRes = await fetch(`/api/college/hiring-batches/${batchId}`).then((r) => r.json() as Promise<BatchRes>).catch((): BatchRes => ({}));
+    return resolveOfferContactBlock({
+      coordinatorUid: batchRes.batch?.coordinatorUid,
+      coordinatorName: batchRes.batch?.coordinatorName,
+      hodUid: batchRes.batch?.hodUid,
+      hodName: batchRes.batch?.hodName,
+    });
+  }
+
   function openForm(c: DecisionCandidateView) {
     setSelected(c);
     setForm({
@@ -182,13 +197,14 @@ export default function AccountsHiringPage() {
 
       if (selected?.email) {
         const institution = collegeInfo.name || "the institution";
+        const coordinatorBlock = await coordinatorBlockFor(batchId);
         const subject = `Offer Letter – ${designation} | ${institution}`;
         const body = `Dear ${selected.name},
 
 Greetings from ${institution}.
 
 We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}. Please find your offer letter attached.
-
+${coordinatorBlock}
 Congratulations, and welcome aboard!
 
 Warm regards,

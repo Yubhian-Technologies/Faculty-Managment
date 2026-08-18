@@ -55,13 +55,20 @@ export async function GET(request: Request) {
     // a stale leftover (defaults to 0 at creation, nothing writes the real
     // number back to it; see the on-the-fly recompute in sections/route.ts
     // GET, which only surfaces it for display and never persists it).
-    const studentsSnap = await db
-      .collection("colleges").doc(session.collegeId)
-      .collection("students")
-      .where("department", "==", dept)
-      .get();
+    // A shared-first-year student stays filed under their common department
+    // (preserved until promotion) with secondaryDepartment naming this
+    // department instead, when it's their real destination branch - counted
+    // too, same union sections/route.ts's own studentCount aggregation uses,
+    // or a branch's year-1 intake would be missing from its own hiring plan.
+    const [studentsSnap, studentsSecondarySnap] = await Promise.all([
+      db.collection("colleges").doc(session.collegeId).collection("students").where("department", "==", dept).get(),
+      db.collection("colleges").doc(session.collegeId).collection("students").where("secondaryDepartment", "==", dept).get(),
+    ]);
 
-    const totalStudents = studentsSnap.size;
+    const countedIds = new Set<string>();
+    for (const d of studentsSnap.docs) countedIds.add(d.id);
+    for (const d of studentsSecondarySnap.docs) countedIds.add(d.id);
+    const totalStudents = countedIds.size;
 
     // ── Total faculty required (1:15) ─────────────────────────────────────────
     const totalRequired = requiredFacultyCount(totalStudents);

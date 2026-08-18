@@ -11,12 +11,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
 // through our own origin sidesteps that without needing bucket-level CORS
 // config. Self-serve only: always the caller's own reference photo.
 //
-// Same PANEL_MEMBER/HOD roles as check-in/check-out, and the same "faculty
-// member doc, else own user doc" fallback as /api/college/faculty/me - HODs
-// have no separate FacultyMember record, so their photo lives on users/{uid}.
+// Same roles as check-in/check-out, and the same "faculty member doc, else
+// own user doc" fallback as /api/college/faculty/me - HOD/Principal/VP have
+// no separate FacultyMember record, so their photo lives on users/{uid}.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 

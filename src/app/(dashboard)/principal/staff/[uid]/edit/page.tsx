@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -23,6 +24,7 @@ type StaffUser = {
   phone?: string;
   role: UserRole;
   department?: string;
+  departments?: string[];
   designation?: string;
   profilePhotoUrl?: string;
 } & Record<string, unknown>;
@@ -46,6 +48,7 @@ export default function EditStaffAccountPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
+  const [multiDepartments, setMultiDepartments] = useState<string[]>([]);
   const [designation, setDesignation] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
 
@@ -73,6 +76,7 @@ export default function EditStaffAccountPage() {
         setEmployeeId(user.employeeId ?? "");
         setPhone(user.phone ?? "");
         setDepartment(user.department ?? "");
+        setMultiDepartments(user.departments ?? []);
         setDesignation(user.designation ?? "");
         setPhotoUrl(user.profilePhotoUrl || undefined);
       })
@@ -80,7 +84,8 @@ export default function EditStaffAccountPage() {
       .finally(() => setLoaded(true));
   }, [uid, router]);
 
-  const isValid = !!name.trim() && !!email.trim() && (role !== "HOD" || !!department);
+  const isMultiDepartment = multiDepartments.length > 1;
+  const isValid = !!name.trim() && !!email.trim() && (role !== "HOD" || isMultiDepartment || !!department);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -96,7 +101,7 @@ export default function EditStaffAccountPage() {
           collegeEmail: collegeEmail.trim(),
           employeeId: employeeId.trim(),
           phone: phone.trim(),
-          ...(role === "HOD" ? { department } : {}),
+          ...(role === "HOD" && !isMultiDepartment ? { department } : {}),
           ...(role === "COLLEGE_STAFF" ? { designation } : {}),
           ...(photoUrl !== undefined ? { profilePhotoUrl: photoUrl } : {}),
         }),
@@ -169,7 +174,16 @@ export default function EditStaffAccountPage() {
                 <Label>Employee ID</Label>
                 <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="Optional" />
               </div>
-              {role === "HOD" && (
+              {role === "HOD" && isMultiDepartment && (
+                <div className="space-y-2">
+                  <Label>Departments</Label>
+                  <p className="text-sm text-muted-foreground pt-2">
+                    {multiDepartments.join(", ")} — manage from the{" "}
+                    <Link href="/principal/departments" className="underline">Departments page</Link>.
+                  </p>
+                </div>
+              )}
+              {role === "HOD" && !isMultiDepartment && (
                 <div className="space-y-2">
                   <Label>Department <span className="text-destructive">*</span></Label>
                   <Select value={department} onValueChange={setDepartment}>

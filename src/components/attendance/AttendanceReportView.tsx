@@ -14,10 +14,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { exportToCSV } from "@/lib/utils";
+import { exportToCSV, exportRosterMonthlyCSV } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
-import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, type Department, type Course } from "@/types";
+import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, type Department, type Course, type MonthlyExportRow } from "@/types";
 
 interface RosterEntry {
   uid: string;
@@ -34,12 +34,22 @@ interface RosterEntry {
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
+  // The reason an HOD/Principal/VP wrote when manually marking/correcting
+  // this record, or the auto-generated explanation for a derived Absent day
+  // - visible here so Management (and anyone else reviewing this roster)
+  // can see why, not just what.
+  remarks?: string | null;
   [key: string]: unknown;
 }
 
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function currentMonthValue(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function statusBadgeClass(status: string): string {
@@ -94,6 +104,12 @@ function CheckOutCell({ row }: { row: RosterEntry }) {
   ) : <>—</>;
 }
 
+function ReasonCell({ row }: { row: RosterEntry }) {
+  return row.remarks ? (
+    <span className="text-xs text-muted-foreground italic">{row.remarks}</span>
+  ) : <>—</>;
+}
+
 function RosterTable({ rows, onMark, monthlyViewBasePath }: { rows: RosterEntry[]; onMark?: (row: RosterEntry) => void; monthlyViewBasePath?: string }) {
   const showActions = !!onMark || !!monthlyViewBasePath;
   return (
@@ -106,6 +122,7 @@ function RosterTable({ rows, onMark, monthlyViewBasePath }: { rows: RosterEntry[
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Status</th>
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Check In</th>
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Check Out</th>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Reason</th>
               {showActions && <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap" />}
             </tr>
           </thead>
@@ -116,6 +133,7 @@ function RosterTable({ rows, onMark, monthlyViewBasePath }: { rows: RosterEntry[
                 <td className="px-4 py-3 whitespace-nowrap"><StatusCell row={row} /></td>
                 <td className="px-4 py-3 whitespace-nowrap"><CheckInCell row={row} /></td>
                 <td className="px-4 py-3 whitespace-nowrap"><CheckOutCell row={row} /></td>
+                <td className="px-4 py-3 max-w-xs"><ReasonCell row={row} /></td>
                 {showActions && (
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
@@ -182,6 +200,13 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+
+  // Department-wide / college-wide monthly CSV export (every day of the
+  // selected month, every person in scope) - distinct from the existing
+  // per-date "Export CSV" above, which only ever covers the single picked
+  // `date`. Shared month picker for both scopes.
+  const [exportMonth, setExportMonth] = useState(currentMonthValue());
+  const [exportingScope, setExportingScope] = useState<"department" | "college" | null>(null);
 
   const [markTarget, setMarkTarget] = useState<RosterEntry | null>(null);
   const [manualCheckIn, setManualCheckIn] = useState("");
@@ -284,6 +309,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     { key: "status", header: "Status", render: (row) => <StatusCell row={row} /> },
     { key: "checkIn", header: "Check In", render: (row) => <CheckInCell row={row} /> },
     { key: "checkOut", header: "Check Out", render: (row) => <CheckOutCell row={row} /> },
+    { key: "remarks", header: "Reason", render: (row) => <ReasonCell row={row} /> },
     ...(allowManualMark || monthlyViewBasePath
       ? [{
           key: "actions",
@@ -336,6 +362,35 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   function handleGroupedExport() {
     const rows = [...(searchedHod ? [searchedHod] : []), ...searchedFaculty];
     exportToCSV(rows, `attendance-${date}`, columns.map((c) => ({ key: c.key, header: c.header })));
+  }
+
+  async function handleExportMonth(scope: "department" | "college") {
+    const [y, m] = exportMonth.split("-").map(Number);
+    if (!y || !m) {
+      toast({ variant: "destructive", title: "Select a month first" });
+      return;
+    }
+    const params = new URLSearchParams({ scope, year: String(y), month: String(m) });
+    if (scope === "department" && selectedDepartment) params.set("department", selectedDepartment.name);
+    setExportingScope(scope);
+    try {
+      const res = await fetch(`/api/college/attendance/monthly-export?${params.toString()}`);
+      const d = await res.json() as { rows?: MonthlyExportRow[]; department?: string; error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: d.error ?? "Failed to export" });
+        return;
+      }
+      if (!d.rows || d.rows.length === 0) {
+        toast({ title: "Nothing to export for that month" });
+        return;
+      }
+      const label = scope === "college" ? "college" : (d.department || selectedDepartment?.name || "department");
+      exportRosterMonthlyCSV(d.rows, `attendance-${label}-${exportMonth}`);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to export" });
+    } finally {
+      setExportingScope(null);
+    }
   }
 
   return (
@@ -396,6 +451,37 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
             )}
           </div>
 
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/20 p-3">
+            <div className="space-y-2">
+              <Label htmlFor="export-month">Export month</Label>
+              <Input
+                id="export-month"
+                type="month"
+                value={exportMonth}
+                onChange={(e) => setExportMonth(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!selectedDepartment || exportingScope !== null}
+              onClick={() => void handleExportMonth("department")}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {exportingScope === "department" ? "Exporting…" : "Export Department (Month)"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exportingScope !== null}
+              onClick={() => void handleExportMonth("college")}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {exportingScope === "college" ? "Exporting…" : "Export College (Month)"}
+            </Button>
+          </div>
+
           {!selectedDepartment ? (
             <EmptyState title="Select a department to view its attendance report" />
           ) : !selectedCourse ? (
@@ -448,16 +534,39 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
           )}
         </div>
       ) : (
-        <DataTable
-          data={roster}
-          columns={columns}
-          isLoading={isLoading}
-          keyExtractor={(r) => r.uid}
-          searchPlaceholder="Search faculty..."
-          searchKeys={["name", "department"]}
-          emptyTitle="No faculty found"
-          csvFilename={`attendance-${date}`}
-        />
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/20 p-3">
+            <div className="space-y-2">
+              <Label htmlFor="export-month">Export month</Label>
+              <Input
+                id="export-month"
+                type="month"
+                value={exportMonth}
+                onChange={(e) => setExportMonth(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exportingScope !== null}
+              onClick={() => void handleExportMonth("department")}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {exportingScope === "department" ? "Exporting…" : "Export Department (Month)"}
+            </Button>
+          </div>
+          <DataTable
+            data={roster}
+            columns={columns}
+            isLoading={isLoading}
+            keyExtractor={(r) => r.uid}
+            searchPlaceholder="Search faculty..."
+            searchKeys={["name", "department"]}
+            emptyTitle="No faculty found"
+            csvFilename={`attendance-${date}`}
+          />
+        </div>
       )}
 
       {allowManualMark && (() => {

@@ -52,10 +52,18 @@ export interface DepartmentScopeSelectProps {
   /** Shown under the select to explain what the choice affects. */
   hint?: string;
   disabled?: boolean;
+  /**
+   * Overrides which of the signed-in HOD's own departments is the root this
+   * cascade branches from - for an HOD who heads more than one department at
+   * once (see hooks/useMyDepartments), the caller picks one via its own
+   * top-level selector and passes it here. Defaults to `user.department`
+   * (unchanged behaviour for every single-department HOD).
+   */
+  ownDepartmentName?: string;
 }
 
 export function DepartmentScopeSelect({
-  value, onChange, label = "Department", hint, disabled,
+  value, onChange, label = "Department", hint, disabled, ownDepartmentName,
 }: DepartmentScopeSelectProps) {
   const { user } = useAuthStore();
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -77,7 +85,14 @@ export function DepartmentScopeSelect({
     return () => { cancelled = true; };
   }, []);
 
-  const ownName = user?.department ?? "";
+  // A multi-department HOD switching which of their departments this cascade
+  // is rooted at (see ownDepartmentName) needs the one-time default-seeding
+  // effect below to be eligible to fire again for the new root.
+  useEffect(() => {
+    didDefault.current = false;
+  }, [ownDepartmentName]);
+
+  const ownName = ownDepartmentName ?? user?.department ?? "";
   const own = departments.find((d) => d.name === ownName) ?? null;
   const children = useMemo(
     () => (own ? departments.filter((d) => d.parentDepartmentId === own.id).sort((a, b) => a.name.localeCompare(b.name)) : []),

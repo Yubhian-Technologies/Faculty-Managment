@@ -17,7 +17,7 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "ACCOUNTS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "ACCOUNTS", "COLLEGE_ACCOUNTS");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const department = searchParams.get("department");
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
       studentStrength?: number;
       totalFacultyRequired?: number;
       cadreRatioData?: unknown[];
+      hiringMode?: "ONLINE" | "OFFLINE";
     };
 
     const { position, department, positionCategory, requiredCount, availableCount, qualification, justification } = body;
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
         qualification: qualification?.trim() ?? "",
         justification: justification?.trim() ?? "",
         hodJustification: body.hodJustification?.trim() ?? "",
+        hiringMode: body.hiringMode === "ONLINE" ? "ONLINE" : "OFFLINE",
         status: "PENDING",
         // Ratio-backed justification data
         studentStrength: body.studentStrength ?? 0,

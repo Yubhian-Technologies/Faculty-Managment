@@ -17,7 +17,7 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS", "COLLEGE_ACCOUNTS");
     const { searchParams } = new URL(request.url);
     const candidateId = searchParams.get("candidateId");
     const vacancyRequestId = searchParams.get("vacancyRequestId");

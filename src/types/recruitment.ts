@@ -33,6 +33,10 @@ export interface VacancyRequest {
     surplus: number;
   }>;
   hodAcknowledged?: boolean;      // HOD acknowledges after principal approval before collecting candidates
+  // Chosen once at creation - drives the whole downstream interview flow
+  // (batch platform/link vs venue/coordinator, panel "join meeting" links,
+  // and skipping student demo feedback). Undefined on old data = Offline.
+  hiringMode?: InterviewMode;
   principalResponse?: {
     action: WorkflowStatus;
     reason?: string;
@@ -92,6 +96,15 @@ export const CANDIDATE_STATUS_LABELS: Record<CandidateStatus, string> = {
 };
 
 export type InterviewMode = "ONLINE" | "OFFLINE";
+
+export type MeetingPlatform = "GOOGLE_MEET" | "ZOOM" | "MICROSOFT_TEAMS" | "OTHER";
+
+export const MEETING_PLATFORM_LABELS: Record<MeetingPlatform, string> = {
+  GOOGLE_MEET: "Google Meet",
+  ZOOM: "Zoom",
+  MICROSOFT_TEAMS: "Microsoft Teams",
+  OTHER: "Other",
+};
 
 // Self-reported by the candidate via the public /candidate-form link sent with
 // the interview call letter. Field names match FacultyMember/PersonalDetailsFields
@@ -304,6 +317,10 @@ export interface HiringBatch {
   interviewVenue?: string;
   demoClassroom?: string;
   meetingLink?: string;
+  // Copied from VacancyRequest.hiringMode at creation - drives which of the
+  // above (venue/coordinator vs platform/link) is required and shown.
+  hiringMode?: InterviewMode;
+  meetingPlatform?: MeetingPlatform;
   coordinatorFacultyId?: string;
   coordinatorUid?: string;
   coordinatorName?: string;

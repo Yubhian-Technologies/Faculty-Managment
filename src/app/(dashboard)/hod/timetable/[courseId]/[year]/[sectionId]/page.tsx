@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { useAuth } from "@/hooks/useAuth";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import type {
   Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
@@ -40,7 +40,7 @@ type Mode = "published" | "draft";
 
 export default function HODTimetableGridPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const myDepartments = useMyDepartments();
   const { courseId, year, sectionId } = useParams<{ courseId: string; year: string; sectionId: string }>();
   const searchParams = useSearchParams();
   // A lending HOD placing an allocated cross-department assignment (see
@@ -167,7 +167,7 @@ export default function HODTimetableGridPage() {
   // access to a department that isn't literally their own (e.g. a BS
   // sub-HOD who manages CSE). Either way this is someone else's timetable,
   // so "Publish" reads as "Update" - see handlePublish.
-  const isCrossDepartment = !isLoading && (!section || (!!user?.department && section.department !== user.department));
+  const isCrossDepartment = !isLoading && (!section || (myDepartments.length > 0 && !myDepartments.includes(section.department)));
   // A cross-department contributor never publishes this section themselves
   // (see handleNotify/handlePublish below and the server-side guard in
   // /api/college/timetable/publish) - so there's nothing for them to "view
@@ -176,19 +176,24 @@ export default function HODTimetableGridPage() {
   const mode: Mode = isCrossDepartment ? "draft" : modeState;
   // Which assignments on this section this HOD may actually place/move/remove
   // periods for - both here and in the "Add a subject" picker below, so
-  // "Update"/"Publish" only ever touches their own subjects. Cross-department:
-  // their own faculty's assignments, regardless of whether they arrived via a
-  // specific "Place on timetable" link (fulfillingAssignmentId) or navigated
-  // here directly (e.g. a BS sub-HOD opening a CSE section they manage
-  // straight from the sidebar). Own section: everything except a subject lent
+  // "Update"/"Publish" only ever touches their own subjects. Cross-department
+  // splits into two distinct visits that must NOT be merged into one broad
+  // set: arriving via a specific "Place on timetable" link
+  // (fulfillingAssignmentId) is a one-off fulfillment of exactly that lend
+  // request - scoped to only that one assignment, even if this HOD's own
+  // administered faculty pool (myFacultyIds) also happens to teach other
+  // subjects on this same section, so the requesting department's unrelated
+  // subjects never show up in the picker. Arriving with no request context
+  // (e.g. a BS sub-HOD opening a CSE section they fully manage straight from
+  // the sidebar) falls back to their own faculty's assignments across the
+  // whole section, as before. Own section: everything except a subject lent
   // in through a cross-department Assignment Request (lentInAssignmentIds) -
   // the lending HOD manages its periods from their own cross-department view
   // of this same page, so this HOD can see it on the grid but not touch it.
   const myAssignmentIds = isCrossDepartment
-    ? Array.from(new Set([
-        ...assignments.filter((a) => myFacultyIds.has(a.facultyId)).map((a) => a.id),
-        ...(fulfillingAssignmentId ? [fulfillingAssignmentId] : []),
-      ]))
+    ? fulfillingAssignmentId
+      ? [fulfillingAssignmentId]
+      : assignments.filter((a) => myFacultyIds.has(a.facultyId)).map((a) => a.id)
     : assignments.filter((a) => !lentInAssignmentIds.has(a.id)).map((a) => a.id);
   // Same restriction, applied to the "Add a subject" picker.
   const pickableAssignments = assignments.filter((a) => myAssignmentIds.includes(a.id));
@@ -482,7 +487,8 @@ export default function HODTimetableGridPage() {
                 needs somewhere to click. */}
             {!hasDraft && (
               <Button variant="outline" onClick={handleStartBlank} loading={busy === "blank"} disabled={busy !== null}>
-                <PencilLine className="h-4 w-4 mr-2" />Build manually
+                <PencilLine className="h-4 w-4 mr-2" />
+                {slots.length > 0 ? "Edit Timetable" : "Build manually"}
               </Button>
             )}
             {/* The college day's outer bounds are Principal-set - this only
@@ -511,6 +517,23 @@ export default function HODTimetableGridPage() {
               Draft {draftIsUnpublished && <Badge variant="secondary" className="ml-1.5">unpublished</Badge>}
             </Button>
           </div>
+          {/* Published mode: a draft already exists (its slots mirror exactly
+              what was last published - see the publish route, which flips
+              the draft to PUBLISHED in the same write instead of deleting
+              it), so re-editing the live timetable is one click - jump
+              straight to the draft, already in edit mode - rather than
+              needing the HOD to first discover the Draft toggle above. */}
+          {mode === "published" && !isCrossDepartment && (
+            <div className="ml-auto">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setModeState("draft"); setIsEditing(true); setSelected(null); }}
+              >
+                <PencilLine className="h-4 w-4 mr-1.5" />Edit
+              </Button>
+            </div>
+          )}
           {mode === "draft" && (
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button size="sm" variant={isEditing ? "default" : "outline"} onClick={() => { setIsEditing((v) => !v); setSelected(null); }}>

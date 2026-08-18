@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Department } from "@/types";
 
 // The "Sub-Departments" nav link only ever leads somewhere useful when the
@@ -12,24 +13,37 @@ import type { Department } from "@/types";
 // sidebar for every HOD whose department hasn't opted in.
 export function useIsSubDepartmentHod() {
   const user = useAuthStore((s) => s.user);
+  const myDepartments = useMyDepartments();
   const [hideSubDepartmentsLink, setHideSubDepartmentsLink] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user?.role !== "HOD") {
-      setLoading(false);
-      return;
-    }
+    // Awaited in a wrapper so the setState calls below aren't reachable
+    // synchronously from the effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+      if (user?.role !== "HOD") {
+        setLoading(false);
+        return;
+      }
 
-    fetch("/api/college/departments")
-      .then((r) => r.json() as Promise<{ departments?: Department[] }>)
-      .then((d) => {
-        const ownDept = (d.departments ?? []).find((dept) => dept.name === user.department);
-        setHideSubDepartmentsLink(!!ownDept?.parentDepartmentId || !ownDept?.hasSubDepartments);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [user?.role, user?.uid, user?.department]);
+      try {
+        const d = await fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>);
+        const departments = d.departments ?? [];
+        // Visible the moment ANY owned department (not itself a sub-department)
+        // has sub-departments enabled - an HOD running several departments at
+        // once may only have opted a subset of them in.
+        const eligible = myDepartments.some((name) => {
+          const own = departments.find((dept) => dept.name === name);
+          return !!own && !own.parentDepartmentId && !!own.hasSubDepartments;
+        });
+        setHideSubDepartmentsLink(!eligible);
+      } catch {
+        // Non-fatal - the link simply stays visible.
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user?.role, user?.uid, myDepartments]);
 
   return { hideSubDepartmentsLink, loading };
 }

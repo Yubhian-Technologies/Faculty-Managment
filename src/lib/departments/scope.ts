@@ -1,3 +1,6 @@
+import type { DepartmentCourseScope } from "@/types";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+
 // Resolves an HOD's department-scoping info, including sub-department (child
 // Department) awareness. Centralizes what used to be a duplicated per-route
 // `getHodDept()` - the difference here is `childDepartmentNames`, used to
@@ -10,11 +13,25 @@
 // department - authority flows down the tree, never up or sideways.
 // Use `canHodEditDepartment` / `editableDepartmentNames` for that check rather
 // than comparing `departmentName` directly, so the rule stays in one place.
+//
+// An HOD can also directly head MORE THAN ONE top-level department at once
+// (assigned from the Principal's Departments page - see
+// src/app/api/college/departments/route.ts PATCH). `ownDepartmentNames`/`Ids`
+// is that full set; `childDepartmentNames`/`managedDepartmentNames` are the
+// UNION of every owned department's own sub-departments/managed branches (and
+// their sub-HODs' managed branches, same rollup as before, just repeated per
+// owned department). `departmentName`/`departmentId` stay as the first owned
+// department, purely so any caller that hasn't been updated to the plural
+// fields still gets a sensible single answer instead of an empty one.
 export interface HodDepartmentScope {
   departmentName: string;
   departmentId: string | null;
-  // Populated only when this HOD's own department has hasSubDepartments -
-  // the names of its child departments, for cross-department queries.
+  /** Every department this HOD directly heads (usually one, can be more). */
+  ownDepartmentNames: string[];
+  /** Same set, by id (same order). */
+  ownDepartmentIds: string[];
+  // Populated when any owned department has hasSubDepartments - the union of
+  // all their child departments, for cross-department queries.
   childDepartmentNames: string[];
   // Same set, by id (same order) - needed wherever a route must validate a
   // *target* department id (e.g. reassigning a section to a sub-department)
@@ -32,17 +49,16 @@ export interface HodDepartmentScope {
 }
 
 /**
- * Every department name this HOD may WRITE to: their own, every sub-department
- * beneath it, and every grouped/managed branch. For a sub-HOD this is their own
- * sub-department plus whatever branches were grouped under it (often none).
+ * Every department name this HOD may WRITE to: everything they directly head,
+ * every sub-department beneath any of those, and every grouped/managed
+ * branch. For a sub-HOD this is their own sub-department plus whatever
+ * branches were grouped under it (often none).
  */
 export function editableDepartmentNames(scope: HodDepartmentScope): string[] {
-  return scope.departmentName
-    ? [scope.departmentName, ...scope.childDepartmentNames, ...scope.managedDepartmentNames]
-    : [];
+  return [...scope.ownDepartmentNames, ...scope.childDepartmentNames, ...scope.managedDepartmentNames];
 }
 
-/** True when `departmentName` is this HOD's own department, a child, or a managed branch. */
+/** True when `departmentName` is one of this HOD's own departments, a child, or a managed branch. */
 export function canHodEditDepartment(scope: HodDepartmentScope, departmentName: string): boolean {
   if (!departmentName) return false;
   return editableDepartmentNames(scope).includes(departmentName);
@@ -69,11 +85,22 @@ export function ownDepartmentNames(scope: HodDepartmentScope): string[] {
 export function canHodEditDepartmentId(scope: HodDepartmentScope, departmentId: string): boolean {
   if (!departmentId) return false;
   return (
-    departmentId === scope.departmentId ||
+    scope.ownDepartmentIds.includes(departmentId) ||
     scope.childDepartmentIds.includes(departmentId) ||
     scope.managedDepartmentIds.includes(departmentId)
   );
 }
+
+const emptyScope: HodDepartmentScope = {
+  departmentName: "",
+  departmentId: null,
+  ownDepartmentNames: [],
+  ownDepartmentIds: [],
+  childDepartmentNames: [],
+  childDepartmentIds: [],
+  managedDepartmentNames: [],
+  managedDepartmentIds: [],
+};
 
 export async function getHodDepartmentScope(
   db: FirebaseFirestore.Firestore,
@@ -81,57 +108,67 @@ export async function getHodDepartmentScope(
   uid: string
 ): Promise<HodDepartmentScope> {
   const userSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-  const departmentName = (userSnap.data() as { department?: string } | undefined)?.department ?? "";
+  const userData = userSnap.data() as { department?: string; departments?: string[] } | undefined;
+  // `departments` is the source of truth once present; a doc that predates it
+  // (or was only ever touched by the old single-field write path) falls back
+  // to its one `department` string.
+  const ownDepartmentNames = Array.from(
+    new Set(
+      (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
+        .map((n) => n.trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 30);
 
-  const empty: HodDepartmentScope = {
-    departmentName: "",
-    departmentId: null,
-    childDepartmentNames: [],
-    childDepartmentIds: [],
-    managedDepartmentNames: [],
-    managedDepartmentIds: [],
-  };
-
-  if (!departmentName) {
-    return empty;
+  if (ownDepartmentNames.length === 0) {
+    return emptyScope;
   }
 
   const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
-  const deptSnap = await deptsColl.where("name", "==", departmentName).limit(1).get();
-  if (deptSnap.empty) {
-    return { ...empty, departmentName };
-  }
+  const ownSnaps = await Promise.all(ownDepartmentNames.map((n) => deptsColl.where("name", "==", n).limit(1).get()));
 
-  const deptDoc = deptSnap.docs[0];
-  const dept = deptDoc.data() as { hasSubDepartments?: boolean; managedDepartments?: string[] };
+  const ownDepartmentIds: string[] = [];
+  const childNameSet = new Set<string>();
+  const childIdSet = new Set<string>();
+  const managedNameSet = new Set<string>();
 
-  let childDepartmentNames: string[] = [];
-  let childDepartmentIds: string[] = [];
-  // Start with this department's own grouped branches; a parent HOD also rolls
-  // up every branch grouped under its sub-HODs (below), so e.g. the Basic
-  // Science HOD manages IT/CSE that a BS-Maths sub-HOD manages - "manages the
-  // whole tree", not just the direct sub-departments.
-  const managedNameSet = new Set((dept.managedDepartments ?? []).map((n) => n.trim()).filter(Boolean));
-  if (dept.hasSubDepartments) {
-    const childrenSnap = await deptsColl.where("parentDepartmentId", "==", deptDoc.id).get();
-    // Firestore `in` filters cap at 30 values - realistically a handful of sub-departments per parent.
-    const children = childrenSnap.docs
-      .map((d) => ({ id: d.id, ...(d.data() as { name?: string; managedDepartments?: string[] }) }))
-      .filter((d) => d.name)
-      .slice(0, 30);
-    childDepartmentNames = children.map((d) => d.name as string);
-    childDepartmentIds = children.map((d) => d.id);
-    for (const c of children) {
-      for (const n of c.managedDepartments ?? []) {
-        const t = n.trim();
-        if (t) managedNameSet.add(t);
+  for (const snap of ownSnaps) {
+    const deptDoc = snap.docs[0];
+    if (!deptDoc) continue;
+    ownDepartmentIds.push(deptDoc.id);
+    const dept = deptDoc.data() as { hasSubDepartments?: boolean; managedDepartments?: string[] };
+
+    // Start with this department's own grouped branches; a parent HOD also
+    // rolls up every branch grouped under its sub-HODs (below), so e.g. the
+    // Basic Science HOD manages IT/CSE that a BS-Maths sub-HOD manages -
+    // "manages the whole tree", not just the direct sub-departments.
+    for (const n of dept.managedDepartments ?? []) {
+      const t = n.trim();
+      if (t) managedNameSet.add(t);
+    }
+    if (dept.hasSubDepartments) {
+      const childrenSnap = await deptsColl.where("parentDepartmentId", "==", deptDoc.id).get();
+      const children = childrenSnap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as { name?: string; managedDepartments?: string[] }) }))
+        .filter((d) => d.name);
+      for (const c of children) {
+        childNameSet.add(c.name as string);
+        childIdSet.add(c.id);
+        for (const n of c.managedDepartments ?? []) {
+          const t = n.trim();
+          if (t) managedNameSet.add(t);
+        }
       }
     }
   }
 
+  // Firestore `in` filters cap at 30 values at the call sites that consume
+  // these arrays - realistically a handful of departments/sub-departments per HOD.
+  const childDepartmentNames = Array.from(childNameSet).slice(0, 30);
+  const childDepartmentIds = Array.from(childIdSet).slice(0, 30);
+
   // Grouped/managed branches: resolve the collected `managedDepartments` names
   // (own + sub-HODs') to their department ids (skip any that no longer exist).
-  // Capped at 30 to stay within Firestore `in`-query limits at the call sites.
   const managedDepartmentNames: string[] = [];
   const managedDepartmentIds: string[] = [];
   const managedNames = Array.from(managedNameSet).slice(0, 30);
@@ -148,8 +185,10 @@ export async function getHodDepartmentScope(
   }
 
   return {
-    departmentName,
-    departmentId: deptDoc.id,
+    departmentName: ownDepartmentNames[0] ?? "",
+    departmentId: ownDepartmentIds[0] ?? null,
+    ownDepartmentNames,
+    ownDepartmentIds,
     childDepartmentNames,
     childDepartmentIds,
     managedDepartmentNames,
@@ -305,17 +344,38 @@ export async function getDepartmentTreeNames(
 // own 2nd-year subjects, CSE's own 2nd-year subjects). Picks the first feeder
 // that actually claims the year; a department with no such feeder (or whose
 // feeder doesn't reserve this year) resolves to itself.
+//
+// catalogId-aware via resolveDepartmentCourseScope: a department can offer
+// several courses under one catalog entry (e.g. a B.Tech with a common first
+// year through a feeder, and an M.Tech it runs fully independently) - reading
+// the flat fields directly here (as this used to) meant an M.Tech's own Year
+// 1 got silently swept into the same feeder as that department's B.Tech Year
+// 1, even when courseScopes explicitly marks the M.Tech as independent (empty
+// secondaryDepartments). Every other caller of assignedYears/
+// secondaryDepartments already goes through resolveDepartmentCourseScope for
+// exactly this reason - this was the one holdout.
 export async function resolveSubjectDepartment(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
   targetDepartmentName: string,
-  year: number
+  year: number,
+  catalogId: string | undefined | null
 ): Promise<string> {
   const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
-  const feederSnap = await deptsColl.where("secondaryDepartments", "array-contains", targetDepartmentName).get();
-  for (const d of feederSnap.docs) {
-    const data = d.data() as { name?: string; assignedYears?: number[] };
-    if (data.name && (data.assignedYears ?? []).includes(year)) {
+  // courseScopes is a map keyed by catalogId, not a flat array Firestore can
+  // query into - has to be fetched and resolved in code rather than filtered
+  // server-side, same as getAcademicStructure().
+  const allSnap = await deptsColl.get();
+  for (const d of allSnap.docs) {
+    const data = d.data() as {
+      name?: string;
+      assignedYears?: number[];
+      secondaryDepartments?: string[];
+      courseScopes?: Record<string, DepartmentCourseScope>;
+    };
+    if (!data.name) continue;
+    const courseScope = resolveDepartmentCourseScope(data, catalogId);
+    if (courseScope.secondaryDepartments.includes(targetDepartmentName) && courseScope.assignedYears.includes(year)) {
       return data.name;
     }
   }

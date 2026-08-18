@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, GitBranch, XCircle, MapPin, Monitor, UserCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronUp, GitBranch, XCircle, MapPin, Monitor, UserCheck, UserSquare2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
 import { getCurrentStage, stateForStage, getApprovedDetailedStatuses, getOnboardingSummary, getDetailedHiringStatus, isHiringClosed, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
@@ -50,6 +52,7 @@ function PipelineCard({
 }) {
   const { vacancy, candidates, batch } = entry;
   const [expanded, setExpanded] = useState(false);
+  const router = useRouter();
 
   const currentStage = getCurrentStage(vacancy, batch);
   const shortlisted = candidates.filter((c) => c.isShortlisted).length;
@@ -197,6 +200,14 @@ function PipelineCard({
                           </Badge>
                         ) : null;
                       })()}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => router.push(`/candidate-profile/${c.candidateId}`)}
+                      >
+                        <UserSquare2 className="h-3.5 w-3.5 mr-1" /> View Profile
+                      </Button>
                     </div>
                   </div>
                 ))}

@@ -15,13 +15,22 @@ interface FillContext {
 
 // Synthesizes a display-only Absent/Holiday entry (never persisted to
 // Firestore) for any day in [monthStart, monthEnd) that has no real
-// attendanceRecords doc, starting from the person's face-registration date -
-// before that, or for today/future days, the day is left out entirely,
-// exactly like a day with nothing to show has always rendered. Sundays
-// synthesize as Holiday, matching the fixed weekly rule self check-in
-// already enforces live (see isSunday). Approved leave and the office
-// Holidays calendar are still NOT cross-referenced here - deliberately
-// deferred, same as the NOT_REGISTERED/NOT_MARKED roster split.
+// attendanceRecords doc. A real record - a self check-in, or an HOD/
+// Principal manual mark (e.g. a faculty member who genuinely worked a
+// Sunday for a specific reason) - always wins and is never overridden here;
+// that check runs first. Two independent rules apply only once a day has
+// no real record:
+//   1. Sunday always synthesizes as Holiday - a fact about the calendar,
+//      true whether or not the person had registered their face yet.
+//      Matches the fixed weekly rule self check-in already enforces live
+//      (see isSunday).
+//   2. Any other day only synthesizes as Absent from the person's
+//      face-registration date onward - before that, or for today/future
+//      days, the day is left out entirely, exactly like a day with nothing
+//      to show has always rendered.
+// Approved leave and the office Holidays calendar are still NOT
+// cross-referenced here - deliberately deferred, same as the
+// NOT_REGISTERED/NOT_MARKED roster split.
 export function fillMissingDays(
   realRecords: (AttendanceRecord & { id: string })[],
   monthStart: Date,
@@ -42,11 +51,12 @@ export function fillMissingDays(
   for (const cursor = new Date(monthStart); cursor < monthEnd; cursor.setDate(cursor.getDate() + 1)) {
     const day = new Date(cursor);
     if (day >= todayStart) continue; // today/future - not judged yet
-    if (!regStart || day < regStart) continue; // before registration - leave as no record
     const key = dateKey(day);
-    if (byKey.has(key)) continue; // a real record already covers this day
+    if (byKey.has(key)) continue; // a real record already covers this day - always wins
 
-    const status = isSunday(day) ? "HOLIDAY" : "ABSENT";
+    const isHoliday = isSunday(day);
+    if (!isHoliday && (!regStart || day < regStart)) continue; // before registration - leave as no record
+
     filled.push({
       id: `synthetic_${key}`,
       collegeId: ctx.collegeId,
@@ -54,9 +64,9 @@ export function fillMissingDays(
       facultyName: ctx.facultyName,
       department: ctx.department,
       date: day as unknown as AttendanceRecord["date"],
-      status,
+      status: isHoliday ? "HOLIDAY" : "ABSENT",
       source: "SYSTEM",
-      ...(status === "ABSENT" ? { remarks: "No check-in recorded" } : {}),
+      ...(isHoliday ? {} : { remarks: "No check-in recorded" }),
       createdAt: day as unknown as AttendanceRecord["createdAt"],
       updatedAt: day as unknown as AttendanceRecord["updatedAt"],
     } as AttendanceRecord & { id: string });
