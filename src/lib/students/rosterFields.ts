@@ -128,7 +128,12 @@ export function normalizeRosterDetails(input: Record<string, unknown>): Record<s
     if (!(key in input)) continue;
     const field = ROSTER_FIELD_BY_KEY.get(key);
     const raw = input[key];
-    if (raw === undefined || raw === null) continue;
+    // An explicit null (only ever sent by the Edit form's
+    // writeBlanksAsNull - see rosterFormToPayload) means the user actively
+    // cleared this field - write it through as a real clear, distinct from
+    // the key being absent altogether (nothing to change).
+    if (raw === null) { out[key] = null; continue; }
+    if (raw === undefined) continue;
 
     if (field?.kind === "yesno") {
       if (typeof raw === "boolean") { out[key] = raw; continue; }
@@ -192,11 +197,23 @@ export function rosterFieldFormValue(field: RosterField, student: Partial<Studen
  * so a manual add and an imported row store identically shaped documents.
  * Blank values are omitted rather than written as empty.
  */
-export function rosterFormToPayload(values: Record<string, string>): Record<string, unknown> {
+export function rosterFormToPayload(
+  values: Record<string, string>,
+  options?: { writeBlanksAsNull?: boolean }
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const f of EDITABLE_ROSTER_FIELDS) {
     const v = (values[f.key] ?? "").trim();
-    if (!v) continue;
+    if (!v) {
+      // On Add, a never-entered field is correctly omitted (nothing to
+      // preserve). On Edit, the form is pre-filled from the student's
+      // current values, so a blank here means the user actively cleared it
+      // (e.g. Secondary Department back to "Not specified") - write an
+      // explicit null so the update actually removes it, instead of the
+      // omitted key leaving the old value untouched on the document.
+      if (options?.writeBlanksAsNull) out[f.key] = null;
+      continue;
+    }
     if (f.kind === "yesno") {
       out[f.key] = v.toLowerCase() === "yes";
     } else if (f.kind === "number") {

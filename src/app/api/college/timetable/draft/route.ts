@@ -6,8 +6,42 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTimetableContext, pinnedCells, type TimetableContext } from "@/lib/timetable/loadContext";
 import { isContiguousBlockAvailable } from "@/lib/timetable/buildGrid";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import type { DayOfWeek, DraftSlot, TimetableDraft } from "@/types";
+import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames, type HodDepartmentScope } from "@/lib/departments/scope";
+import type { DayOfWeek, DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
+
+// A lending HOD (see api/college/faculty-assignment-requests) doesn't own
+// this section's department, but legitimately needs to place/move/remove
+// periods for the one TeachingAssignment they were allocated - the section's
+// own HOD publishes, they only "Notify" (see the timetable grid page).
+// Scoped to ALLOCATED requests only (never PENDING/DECLINED), and - when
+// `assignmentId` is given - to that exact assignment, so a lending HOD can
+// never touch another department's other subjects via this exception.
+async function findAllocatedRequestsForSection(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  sectionId: string,
+): Promise<{ targetDepartmentName?: string; teachingAssignmentId?: string }[]> {
+  const snap = await db.collection("colleges").doc(collegeId).collection("facultyAssignmentRequests")
+    .where("sectionId", "==", sectionId)
+    .where("status", "==", "ALLOCATED")
+    .get();
+  return snap.docs.map((d) => d.data() as { targetDepartmentName?: string; teachingAssignmentId?: string });
+}
+
+async function isCrossDepartmentLender(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  scope: HodDepartmentScope,
+  sectionId: string,
+  assignmentId?: string,
+): Promise<boolean> {
+  const myNames = ownDepartmentNames(scope);
+  if (myNames.length === 0) return false;
+  const allocated = await findAllocatedRequestsForSection(db, collegeId, sectionId);
+  return allocated.some(
+    (r) => myNames.includes(r.targetDepartmentName ?? "") && (!assignmentId || r.teachingAssignmentId === assignmentId),
+  );
+}
 
 // Read, hand-build, hand-edit, or discard the draft for one section.
 //
@@ -146,7 +180,7 @@ export async function GET(request: Request) {
       if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
       const section = sectionSnap.data() as { department: string };
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, section.department)) {
+      if (!canHodEditDepartment(scope, section.department) && !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId))) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
       }
     }
@@ -162,7 +196,19 @@ export async function GET(request: Request) {
   }
 }
 
-/** Starts an empty draft so a timetable can be built entirely by hand. */
+/**
+ * Starts a draft for hand editing. Normally reached only when no draft exists
+ * yet (see hasDraft in the grid page - a draft persists as status PUBLISHED
+ * after publish, so its own PATCH/Edit toggle covers the common re-edit case).
+ * That still leaves a real gap when a section already has a live, published
+ * timetable but its draft doc is gone (e.g. discarded after publishing) - a
+ * blank draft would silently drop every previously generated period from
+ * view the moment editing starts. So: seed from this section's current
+ * GENERATED slots when there are any, instead of starting empty. MANUAL/pinned
+ * slots are deliberately left out - they already show up on the grid via
+ * ctx.pinnedSlots regardless of draft content, and publish never touches them
+ * either (see publish/route.ts).
+ */
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
@@ -171,6 +217,7 @@ export async function POST(request: Request) {
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
 
     const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
     const ctx = await loadTimetableContext(db, session.collegeId, sectionId);
     if (!ctx) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     if (!ctx.timing) {
@@ -182,10 +229,41 @@ export async function POST(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, ctx.section.department)) {
+      if (!canHodEditDepartment(scope, ctx.section.department) && !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId))) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
       }
     }
+
+    const publishedSnap = await collegeRef.collection("timetableSlots")
+      .where("sectionId", "==", sectionId).where("source", "==", "GENERATED").get();
+    const published = publishedSnap.docs.map((d) => d.data() as TimetableSlot);
+
+    // A block's 2nd..Nth period is the only thing that needs recomputing -
+    // everything else on TimetableSlot maps straight onto DraftSlot.
+    const continuationKeys = new Set<string>();
+    const byAssignmentDay = new Map<string, Set<number>>();
+    for (const s of published) {
+      const key = `${s.assignmentId}|${s.day}`;
+      const periods = byAssignmentDay.get(key) ?? new Set<number>();
+      periods.add(s.periodNumber);
+      byAssignmentDay.set(key, periods);
+    }
+    for (const s of published) {
+      const periods = byAssignmentDay.get(`${s.assignmentId}|${s.day}`)!;
+      if (periods.has(s.periodNumber - 1)) continuationKeys.add(`${s.assignmentId}|${s.day}|${s.periodNumber}`);
+    }
+
+    const seededSlots: DraftSlot[] = published.map((s) => ({
+      assignmentId: s.assignmentId,
+      facultyId: s.facultyId,
+      facultyName: s.facultyName,
+      subjectId: s.subjectId,
+      subjectName: s.subjectName,
+      subjectType: ctx.subjectsById.get(s.subjectId)?.type ?? "THEORY",
+      day: s.day,
+      periodNumber: s.periodNumber,
+      isBlockContinuation: continuationKeys.has(`${s.assignmentId}|${s.day}|${s.periodNumber}`),
+    }));
 
     const draft = {
       collegeId: session.collegeId,
@@ -195,8 +273,10 @@ export async function POST(request: Request) {
       sectionId,
       sectionName: ctx.section.name,
       status: "DRAFT" as const,
-      slots: [] as DraftSlot[],
-      diagnostics: ["Started as a blank timetable - add subjects by clicking a period."],
+      slots: seededSlots,
+      diagnostics: seededSlots.length > 0
+        ? ["Started from the currently published timetable - edit and republish when ready."]
+        : ["Started as a blank timetable - add subjects by clicking a period."],
       generatedAt: FieldValue.serverTimestamp(),
       generatedByName: session.email,
     };
@@ -241,7 +321,10 @@ export async function PATCH(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, ctx.section.department)) {
+      if (
+        !canHodEditDepartment(scope, ctx.section.department) &&
+        !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId, assignmentId))
+      ) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
       }
     }

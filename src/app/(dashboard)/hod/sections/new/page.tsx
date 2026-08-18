@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
@@ -39,7 +39,7 @@ export default function NewSectionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefilledCourseId = searchParams.get("courseId") ?? "";
-  const user = useAuthStore((s) => s.user);
+  const myDepartments = useMyDepartments();
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -52,6 +52,16 @@ export default function NewSectionPage() {
     facultyInchargeName: "",
   });
   const [saving, setSaving] = useState(false);
+  // Which of this HOD's own departments the section is being created under -
+  // only shown/choosable when they head more than one (see useMyDepartments).
+  // `pickedTopDepartment` holds only an explicit user choice; `topDepartment`
+  // (derived, not stored) falls back to the first owned department so a
+  // single-department HOD's flow is unchanged and nothing needs syncing via
+  // an effect when the department list itself loads/changes.
+  const [pickedTopDepartment, setPickedTopDepartment] = useState("");
+  const topDepartment = pickedTopDepartment && myDepartments.includes(pickedTopDepartment)
+    ? pickedTopDepartment
+    : myDepartments[0] ?? "";
   // Empty unless a parent HOD explicitly targets one of their sub-departments.
   const [departmentName, setDepartmentName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
@@ -83,6 +93,11 @@ export default function NewSectionPage() {
       .catch(() => { /* non-critical - falls back to the full course span */ });
   }, []);
 
+  const topDepartmentId = useMemo(
+    () => departments.find((d) => d.name === topDepartment)?.id ?? "",
+    [departments, topDepartment]
+  );
+
   // Refetched whenever the resolved owning department changes - a real branch
   // reached through a sub-department's managed grouping (e.g. IT under
   // BS-Maths) owns its OWN course doc, separate from the common department's,
@@ -90,12 +105,20 @@ export default function NewSectionPage() {
   // never surface it. Empty departmentId (nothing picked yet, or a plain HOD
   // with no scope override) falls back to the server's own-department default.
   useEffect(() => {
-    const qs = departmentId ? `?departmentId=${encodeURIComponent(departmentId)}` : "";
+    // An HOD with more than one department must always scope the fetch to
+    // the chosen top-level department (topDepartmentId) - otherwise the
+    // server's own-scope default unions courses across ALL of them, and the
+    // Course dropdown would offer courses outside whichever one is selected.
+    // A single-department HOD keeps the previous unscoped request, whose
+    // server-side default also unions in that one department's own managed
+    // branches - an explicit departmentId here would skip that extra union.
+    const effectiveId = departmentId || (myDepartments.length > 1 ? topDepartmentId : "");
+    const qs = effectiveId ? `?departmentId=${encodeURIComponent(effectiveId)}` : "";
     fetch(`/api/college/courses${qs}`)
       .then((r) => r.json() as Promise<{ courses: Course[] }>)
       .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
-  }, [departmentId]);
+  }, [departmentId, topDepartmentId, myDepartments]);
 
   function setF(patch: Partial<SectionForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -117,9 +140,10 @@ export default function NewSectionPage() {
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
 
   // The department this section is being created under: the sub-department a
-  // parent HOD explicitly targeted, otherwise their own department. Its
+  // parent HOD explicitly targeted, otherwise the chosen top-level department
+  // (topDepartment - their only department, unless they head several). Its
   // `assignedYears` ("Years Taught") is what the Year dropdown must honour.
-  const activeDeptName = departmentName || user?.department || "";
+  const activeDeptName = departmentName || topDepartment || "";
   const activeDept = useMemo(
     () => departments.find((d) => d.name === activeDeptName) ?? null,
     [departments, activeDeptName]
@@ -160,8 +184,8 @@ export default function NewSectionPage() {
   // picked their way through the cascade (departmentName set) is in
   // managed-branch mode.
   const branchManager = useMemo(
-    () => (departmentName && activeDept ? findBranchManager(departments, activeDept.name) : null),
-    [departmentName, activeDept, departments]
+    () => (departmentName && activeDept ? findBranchManager(departments, activeDept.name, formCourse?.catalogId) : null),
+    [departmentName, activeDept, departments, formCourse]
   );
 
   // Which container the cascade actually routed through, as reported by
@@ -221,11 +245,17 @@ export default function NewSectionPage() {
   const formYearOptions = useMemo(() => {
     if (!formCourse) return [];
     const courseYears = Array.from({ length: formCourse.durationYears }, (_, i) => i + 1);
+    // managerEffectiveYears (not resolveDepartmentCourseScope directly) even
+    // in the plain, non-managed-branch case: a sub-department targeted
+    // directly usually carries no assignedYears/courseScopes of its own
+    // (Principal-only override, stripped from anything HOD-created) and must
+    // inherit its parent's, or every year in the course's span was silently
+    // offered here regardless of what the parent was actually assigned.
     const assigned = isManagedBranchMode
       ? managingYears
-      : (activeDept ? resolveDepartmentCourseScope(activeDept, formCourse.catalogId).assignedYears : []);
+      : (activeDept ? managerEffectiveYears(activeDept, departments, formCourse.catalogId) : []);
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
-  }, [formCourse, isManagedBranchMode, managingYears, activeDept]);
+  }, [formCourse, isManagedBranchMode, managingYears, activeDept, departments]);
 
   // Legacy branch mode: the owning department cross-lists to one or more
   // branches (Department.secondaryDepartments, resolved per the selected
@@ -295,10 +325,13 @@ export default function NewSectionPage() {
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
           ...(isBranchMode && !isManagedBranchMode ? { secondaryDepartment: branch } : {}),
-          // Omitted unless a parent HOD picked a sub-department (or, in
-          // managed-branch mode, the resolved real branch); the API then falls
-          // back to their own department, as before.
-          ...(departmentId ? { departmentId } : {}),
+          // Omitted only when this HOD has exactly one department and picked
+          // no sub-department - the API then falls back to that one
+          // department, as before. Otherwise always sent: a parent HOD's
+          // sub-department pick (or, in managed-branch mode, the resolved
+          // real branch) takes priority; failing that, the chosen top-level
+          // department disambiguates for an HOD who heads more than one.
+          ...(departmentId ? { departmentId } : topDepartmentId ? { departmentId: topDepartmentId } : {}),
         }),
       });
       if (!res.ok) {
@@ -328,9 +361,34 @@ export default function NewSectionPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Only shown for an HOD who heads more than one department. */}
+            {myDepartments.length > 1 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="top-department">Department *</Label>
+                <Select
+                  value={topDepartment}
+                  onValueChange={(v) => {
+                    setPickedTopDepartment(v);
+                    // A different top-level department has a different sub-
+                    // department cascade, assigned years, and course list -
+                    // clear everything downstream.
+                    setDepartmentName(""); setDepartmentId(""); setViaDepartmentId("");
+                    setF({ year: "", courseId: "" }); setBranch(""); setLetter("");
+                  }}
+                >
+                  <SelectTrigger id="top-department"><SelectValue placeholder="Select department" /></SelectTrigger>
+                  <SelectContent>
+                    {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">You manage more than one department - choose which this section belongs to.</p>
+              </div>
+            )}
+
             {/* Only rendered for a parent HOD who actually has sub-departments. */}
             <DepartmentScopeSelect
               value={departmentName}
+              ownDepartmentName={topDepartment}
               onChange={(name, id, via) => {
                 setDepartmentName(name); setDepartmentId(id); setViaDepartmentId(via);
                 // The owning department changed - its assigned years, its

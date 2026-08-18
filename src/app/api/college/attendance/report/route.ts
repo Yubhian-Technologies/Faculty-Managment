@@ -6,13 +6,14 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
 import { isSunday } from "@/lib/attendance/attendanceWindow";
+import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import type { AttendanceRecord } from "@/types";
 
 interface RosterEntry {
   uid: string;
   name: string;
   department: string;
-  role: "PANEL_MEMBER" | "HOD";
+  role: "PANEL_MEMBER" | "HOD" | "COLLEGE_STAFF";
   // Course id(s) (Course.id in the `courses` collection) this faculty has an
   // explicit teaching assignment under, derived from teachingAssignments and
   // matched by courseId — teachingAssignments also carries a free-text
@@ -39,6 +40,12 @@ interface RosterEntry {
   checkInVerified: boolean;
   checkOutVerified: boolean;
   registered: boolean;
+  // The reason an HOD/Principal/VP wrote when manually marking/correcting
+  // this record (see /api/college/attendance/manual), or the auto-generated
+  // explanation when a day gets corrected/derived to Absent - so anyone
+  // reviewing this roster (including Management, viewing the same data
+  // elsewhere) can see why, not just what.
+  remarks: string | null;
 }
 
 function parseDateParam(dateParam: string | null): { start: Date; end: Date; docSuffix: string } {
@@ -55,18 +62,108 @@ function parseDateParam(dateParam: string | null): { start: Date; end: Date; doc
 // show up as "NOT_MARKED" instead of silently disappearing.
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const { searchParams } = new URL(request.url);
     const { start, end, docSuffix } = parseDateParam(searchParams.get("date"));
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
+    // A unit head (College Office / Exam Cell / Library / T&P / ...): a
+    // separate, simpler roster - their own COLLEGE_STAFF (linked by the
+    // `department` field matching the unit's label, see
+    // collegeStaffUnits.ts), no department-tree scoping and no course
+    // grouping (neither concept applies to these units) - handled entirely
+    // here and returned early rather than folded into the PANEL_MEMBER/HOD
+    // logic below.
+    if (isCollegeStaffUnitHead(session.role)) {
+      const unitLabel = unitLabelForHeadRole(session.role)!;
+      const usersSnap = await collegeRef
+        .collection("users")
+        .where("role", "==", "COLLEGE_STAFF")
+        .where("department", "==", unitLabel)
+        .get();
+
+      const uidToRegisteredAt = new Map<string, Date | null>();
+      const roster: RosterEntry[] = usersSnap.docs.map((d) => {
+        const u = d.data() as { name?: string; department?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
+        uidToRegisteredAt.set(d.id, u.faceRegisteredAt ? u.faceRegisteredAt.toDate() : null);
+        return {
+          uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "COLLEGE_STAFF" as const,
+          status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null,
+        };
+      });
+
+      if (roster.length === 0) {
+        return NextResponse.json({ date: docSuffix, roster: [] });
+      }
+
+      const rosterByUid = new Map(roster.map((r) => [r.uid, r]));
+      const recordsSnap = await collegeRef.collection("attendanceRecords").where("department", "==", unitLabel).get();
+
+      const pending: {
+        ref: FirebaseFirestore.DocumentReference;
+        resolvedDate: Date | null;
+        status: string;
+        checkIn: string | null;
+        checkOut: string | null;
+        remarks: string | null;
+        checkInVerified: boolean;
+        checkOutVerified: boolean;
+        entry: RosterEntry;
+      }[] = [];
+
+      for (const doc of recordsSnap.docs) {
+        const rec = doc.data() as AttendanceRecord;
+        if (!rosterByUid.has(rec.facultyId)) continue;
+        const d = toAttendanceDate(rec.date);
+        if (!d || d < start || d >= end) continue;
+        pending.push({
+          ref: doc.ref, resolvedDate: d, status: rec.status,
+          checkIn: rec.checkIn ?? null, checkOut: rec.checkOut ?? null, remarks: rec.remarks ?? null,
+          checkInVerified: !!rec.checkInVerified, checkOutVerified: !!rec.checkOutVerified,
+          entry: rosterByUid.get(rec.facultyId)!,
+        });
+      }
+
+      await closeMissedCheckouts(db, pending);
+
+      for (const p of pending) {
+        p.entry.status = p.status;
+        p.entry.checkIn = p.checkIn;
+        p.entry.checkOut = p.checkOut;
+        p.entry.checkInVerified = p.checkInVerified;
+        p.entry.checkOutVerified = p.checkOutVerified;
+        p.entry.remarks = p.remarks;
+      }
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      for (const entry of roster) {
+        if (entry.status !== "NOT_MARKED") continue;
+        if (!entry.registered) {
+          entry.status = "NOT_REGISTERED";
+          continue;
+        }
+        const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
+        const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
+        if (start < todayStart && regStart && start >= regStart) {
+          const holiday = isSunday(start);
+          entry.status = holiday ? "HOLIDAY" : "ABSENT";
+          if (!holiday) entry.remarks = "No check-in recorded";
+        }
+      }
+
+      roster.sort((a, b) => a.name.localeCompare(b.name));
+      return NextResponse.json({ date: docSuffix, roster });
+    }
+
     let usersQuery: FirebaseFirestore.Query = collegeRef.collection("users").where("role", "==", "PANEL_MEMBER");
     let scopeDepartments: string[] | null = null;
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      scopeDepartments = [scope.departmentName, ...scope.childDepartmentNames].filter(Boolean).slice(0, 30);
+      scopeDepartments = [...scope.ownDepartmentNames, ...scope.childDepartmentNames].slice(0, 30);
       if (scopeDepartments.length === 0) {
         return NextResponse.json({ date: docSuffix, roster: [] });
       }
@@ -97,7 +194,7 @@ export async function GET(request: Request) {
       return {
         uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "PANEL_MEMBER" as const,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
-        registered: uidToRegistered.get(d.id) ?? false,
+        registered: uidToRegistered.get(d.id) ?? false, remarks: null,
       };
     });
 
@@ -113,7 +210,7 @@ export async function GET(request: Request) {
         roster.push({
           uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "HOD" as const,
           status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
-          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0,
+          registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null,
         });
         uidToRegisteredAt.set(d.id, u.faceRegisteredAt ? u.faceRegisteredAt.toDate() : null);
       }
@@ -170,6 +267,7 @@ export async function GET(request: Request) {
       p.entry.checkOut = p.checkOut;
       p.entry.checkInVerified = p.checkInVerified;
       p.entry.checkOutVerified = p.checkOutVerified;
+      p.entry.remarks = p.remarks;
     }
 
     // "No record yet" defaults to NOT_MARKED above - refine it:
@@ -188,7 +286,9 @@ export async function GET(request: Request) {
       const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
       const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
       if (start < todayStart && regStart && start >= regStart) {
-        entry.status = isSunday(start) ? "HOLIDAY" : "ABSENT";
+        const holiday = isSunday(start);
+        entry.status = holiday ? "HOLIDAY" : "ABSENT";
+        if (!holiday) entry.remarks = "No check-in recorded";
       }
     }
 

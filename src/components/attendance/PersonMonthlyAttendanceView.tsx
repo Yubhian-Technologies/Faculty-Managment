@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Pencil } from "lucide-react";
+import { ArrowLeft, CalendarDays, Download, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { formatDate } from "@/lib/utils";
+import { exportToCSV, formatDate, toDate } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
@@ -42,13 +42,6 @@ function dateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function resolveDate(raw: unknown): Date | null {
-  const withToDate = raw as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
-  if (!withToDate) return null;
-  if (typeof withToDate.toDate === "function") return withToDate.toDate();
-  const secs = withToDate._seconds ?? withToDate.seconds;
-  return secs != null ? new Date(secs * 1000) : null;
-}
 
 interface PersonMonthlyAttendanceViewProps {
   // The login uid (users/{uid} doc id) of the person whose month this is -
@@ -71,6 +64,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [personName, setPersonName] = useState<string | null>(null);
+  const [registered, setRegistered] = useState(true);
   const [records, setRecords] = useState<(AttendanceRecord & { id: string })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -84,12 +78,13 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
     setIsLoading(true);
     try {
       const res = await fetch(`/api/college/attendance?year=${year}&month=${month}&facultyId=${facultyId}`);
-      const json = await res.json() as { personName?: string | null; records?: (AttendanceRecord & { id: string })[]; error?: string };
+      const json = await res.json() as { personName?: string | null; registered?: boolean; records?: (AttendanceRecord & { id: string })[]; error?: string };
       if (!res.ok) {
         toast({ variant: "destructive", title: json.error ?? "Failed to load attendance" });
         return;
       }
       setPersonName(json.personName ?? null);
+      setRegistered(json.registered ?? true);
       setRecords(json.records ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load attendance" });
@@ -139,7 +134,13 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
     }
   }
 
-  const recordByDate = new Map(records.map((r) => [dateKey(resolveDate(r.date) ?? new Date(0)), r]));
+  // Skips (rather than epoch-fallback-collapsing) any record whose date
+  // can't be parsed, so unrelated records never collide on the same map key.
+  const recordByDate = new Map<string, AttendanceRecord & { id: string }>();
+  for (const r of records) {
+    const d = toDate(r.date);
+    if (d) recordByDate.set(dateKey(d), r);
+  }
 
   // The month's real calendar days, not just days with a record, so "no
   // record yet" days are still reachable to mark - same rationale as the
@@ -158,15 +159,43 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
   // readable, just without the "Mark" action on any of its days.
   const canEditThisMonth = isManualEditWindowOpen(new Date(year, month - 1, 1));
 
+  function handleExport() {
+    const rows = days.map(({ date, key, record }) => ({
+      date: formatDate(date),
+      day: date.toLocaleDateString("en-IN", { weekday: "long" }),
+      status: record
+        ? ATTENDANCE_STATUS_LABELS[record.status]
+        : key === todayKey && registered
+          ? "Not Checked In Yet"
+          : "No record",
+      checkIn: record?.checkIn ?? "",
+      checkOut: record?.checkOut ?? "",
+      reason: record?.remarks ?? "",
+    }));
+    exportToCSV(rows, `attendance-${personName ?? "person"}-${MONTH_NAMES[month - 1]}-${year}`, [
+      { key: "date", header: "Date" },
+      { key: "day", header: "Day" },
+      { key: "status", header: "Status" },
+      { key: "checkIn", header: "Check In" },
+      { key: "checkOut", header: "Check Out" },
+      { key: "reason", header: "Reason" },
+    ]);
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={personName ? `${personName}'s Attendance` : "Attendance"}
         description="Review and correct any day this month"
         actions={
-          <Button variant="outline" asChild>
-            <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleExport} disabled={days.length === 0}>
+              <Download className="h-4 w-4 mr-2" />Export CSV
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href={backHref}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            </Button>
+          </div>
         }
       />
 
@@ -231,6 +260,17 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
                             </span>
                           )}
                         </>
+                      ) : key === todayKey && registered ? (
+                        // Today never gets a synthesized Absent (fillMissingDays
+                        // deliberately excludes it - the day isn't over yet), so
+                        // it needs its own label instead of reading like a
+                        // no-record gap - but only once they can actually check
+                        // in (registered). If they haven't registered at all,
+                        // today falls through to the same plain "No record" as
+                        // every other empty row below.
+                        <span className="inline-flex items-center rounded-full border bg-gray-100 text-gray-600 border-gray-200 px-2.5 py-0.5 text-xs font-semibold">
+                          Not Checked In Yet
+                        </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">No record</span>
                       )}

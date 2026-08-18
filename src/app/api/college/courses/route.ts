@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getRelatedDepartmentIds } from "@/lib/departments/scope";
-import { isSharedYearStructuralDepartment, findUnconnectedCourseOwners, type DepartmentWithId } from "@/lib/college/academicStructure";
+import type { DepartmentWithId } from "@/lib/college/academicStructure";
 import { validateAssignedYears, validateSecondaryDepartmentNames } from "@/lib/departments/courseScopeValidation";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import type { Department } from "@/types";
@@ -15,26 +15,59 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const explicitDepartmentId = searchParams.get("departmentId");
     let departmentId = explicitDepartmentId;
+    // Populated only for an HOD's own (no explicit departmentId) course list,
+    // when their scope includes real branches reached via managedDepartments
+    // (see below) - a wider set than the single `departmentId` above can express.
+    let unionDepartmentIds: string[] | null = null;
 
     const db = getAdminDb();
 
     if (session.role === "HOD") {
       const userSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-      const deptName = (userSnap.data() as { department?: string } | undefined)?.department;
+      const userData = userSnap.data() as { department?: string; departments?: string[] } | undefined;
+      // Every department this HOD directly heads (usually one, can be more -
+      // see src/lib/departments/scope.ts) - each contributes its own course
+      // scope below, unioned together.
+      const ownDeptNames = (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
+        .filter((n): n is string => !!n);
 
       if (!explicitDepartmentId) {
-        if (deptName) {
-          const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
-            .where("name", "==", deptName).limit(1).get();
-          if (deptSnap.empty) {
-            departmentId = "__none__";
-          } else {
+        if (ownDeptNames.length > 0) {
+          const allDeptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+          const allDepartments = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
+          const byName = new Map(allDepartments.map((d) => [d.name, d]));
+
+          const courseDeptIdSet = new Set<string>();
+          for (const name of ownDeptNames) {
+            const deptDoc = byName.get(name);
+            if (!deptDoc) continue;
             // A sub-department never owns courses of its own - it shares its
             // parent's program - so a sub-HOD resolves courses against the
             // parent instead, same fallback already used for section creation.
-            const deptData = deptSnap.docs[0].data() as { parentDepartmentId?: string };
-            departmentId = deptData.parentDepartmentId ?? deptSnap.docs[0].id;
+            const courseDeptId = deptDoc.parentDepartmentId ?? deptDoc.id;
+            courseDeptIdSet.add(courseDeptId);
+            const relatedIds = await getRelatedDepartmentIds(db, session.collegeId, courseDeptId);
+            for (const id of relatedIds) courseDeptIdSet.add(id);
+
+            // Additionally union in any REAL branch this department (or, for a
+            // parent HOD, any of its sub-departments) fully manages via
+            // managedDepartments - a shared-first-year section is filed
+            // against that branch's OWN Course doc (see sections/route.ts
+            // POST), never the manager's, so without this an HOD managing
+            // branches this way could never see (or build a timetable for)
+            // their own shared-year sections. This only adds to the
+            // parent/legacy secondaryDepartments feeder resolution above,
+            // never replaces it, so that shape keeps working unchanged.
+            const scope = deriveHodScope(allDepartments, name);
+            for (const d of scope.deptOptions) courseDeptIdSet.add(d.id);
           }
+          if (courseDeptIdSet.size > 0) {
+            unionDepartmentIds = Array.from(courseDeptIdSet).slice(0, 30);
+          } else {
+            departmentId = "__none__";
+          }
+        } else {
+          departmentId = "__none__";
         }
       } else {
         // An explicitly-requested departmentId (Teaching Assignments/Sections
@@ -44,8 +77,8 @@ export async function GET(request: Request) {
         // department elsewhere in the college. Was previously unchecked.
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
-        const scope = deriveHodScope(departments, deptName);
-        if (!scope.deptOptions.some((d) => d.id === explicitDepartmentId)) {
+        const inScope = ownDeptNames.some((name) => deriveHodScope(departments, name).deptOptions.some((d) => d.id === explicitDepartmentId));
+        if (!inScope) {
           return NextResponse.json({ error: "That department is outside your scope" }, { status: 403 });
         }
       }
@@ -56,7 +89,11 @@ export async function GET(request: Request) {
       .doc(session.collegeId)
       .collection("courses") as FirebaseFirestore.Query;
 
-    if (departmentId && departmentId !== "__none__") {
+    if (unionDepartmentIds) {
+      query = unionDepartmentIds.length > 1
+        ? query.where("departmentId", "in", unionDepartmentIds)
+        : query.where("departmentId", "==", unionDepartmentIds[0]);
+    } else if (departmentId && departmentId !== "__none__") {
       // A department fed by another (e.g. IT fed by Basic Science's shared
       // 1st-year course - see resolveSubjectDepartment) never owns a course
       // of its own for that shared year, so its Course dropdown falls back to
@@ -92,14 +129,20 @@ export async function POST(request: Request) {
       departmentId: string;
       catalogId: string;
       // This course's own academic-structure override, set atomically with its
-      // creation rather than as a separate follow-up edit - see
-      // isSharedYearStructuralDepartment below for when it's required.
+      // creation rather than as a separate follow-up edit. Required
+      // unconditionally - a department's flat assignedYears is a legacy
+      // fallback only (no longer editable from Add/Edit Department), so every
+      // course must decide its own years right here or it would resolve to
+      // nothing.
       courseScope?: { assignedYears: number[]; secondaryDepartments: string[] };
     };
 
     const { departmentId, catalogId } = body;
     if (!departmentId || !catalogId) {
       return NextResponse.json({ error: "departmentId and catalogId are required" }, { status: 400 });
+    }
+    if (!body.courseScope || !Array.isArray(body.courseScope.assignedYears) || body.courseScope.assignedYears.length === 0) {
+      return NextResponse.json({ error: "Select at least one year this department teaches this course" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -126,68 +169,58 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This course is already added to the department" }, { status: 409 });
     }
 
-    const [deptSnap, allDeptsSnap, sameCatalogCoursesSnap] = await Promise.all([
+    const [deptSnap, allDeptsSnap] = await Promise.all([
       collegeRef.collection("departments").doc(departmentId).get(),
       collegeRef.collection("departments").get(),
-      collegeRef.collection("courses").where("catalogId", "==", catalogId).get(),
     ]);
     if (!deptSnap.exists) {
       return NextResponse.json({ error: "Department not found" }, { status: 400 });
     }
     const dept = { id: deptSnap.id, ...(deptSnap.data() as object) } as DepartmentWithId;
     const allDepartments = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
-    const otherDepartmentIds = Array.from(
-      new Set(sameCatalogCoursesSnap.docs.map((d) => (d.data() as { departmentId: string }).departmentId))
-    );
 
-    // A department already acting as a shared-year structural node (has
-    // sub-departments, or already cross-lists someone for some course) must
-    // deliberately decide how a NEW course relates to its branches, rather
-    // than silently inheriting whatever cross-listing already exists - that's
-    // exactly what let an M.Tech added here come out cross-listed to the same
-    // branches as an unrelated B.Tech by accident. An ordinary branch adding
-    // its own independent copy of any course is never restricted by this.
-    if (isSharedYearStructuralDepartment(dept) && otherDepartmentIds.length > 0) {
-      const unconnected = findUnconnectedCourseOwners(
-        dept, catalogId, otherDepartmentIds, allDepartments, body.courseScope?.secondaryDepartments
+    const years = Array.from(new Set(body.courseScope.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
+    const tooLong = years.filter((y) => y > catalog.durationYears);
+    if (tooLong.length > 0) {
+      return NextResponse.json(
+        { error: `Year(s) ${tooLong.join(", ")} are beyond this course's ${catalog.durationYears}-year duration` },
+        { status: 400 }
       );
-      if (unconnected.length > 0 && !body.courseScope) {
-        return NextResponse.json(
-          {
-            error: `${catalog.name} is already offered by ${unconnected.map((d) => d.name).join(", ")}, with no shared-year link to ${dept.name}. Set this course's own Years Taught / Secondary Departments when adding it here to say how the two relate.`,
-          },
-          { status: 409 }
-        );
-      }
+    }
+    const yearsError = await validateAssignedYears(db, session.collegeId, years);
+    if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
+
+    const secNames = Array.from(new Set(body.courseScope.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
+    if (secNames.length > 0) {
+      const byName = new Map(allDepartments.map((d) => [d.name, d]));
+      const secError = validateSecondaryDepartmentNames(secNames, dept.name, byName);
+      if (secError) return NextResponse.json({ error: secError }, { status: 400 });
     }
 
-    let scopeToWrite: { assignedYears: number[]; secondaryDepartments: string[] } | null = null;
-    if (body.courseScope) {
-      const years = Array.from(new Set(body.courseScope.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
-      const tooLong = years.filter((y) => y > catalog.durationYears);
-      if (tooLong.length > 0) {
-        return NextResponse.json(
-          { error: `Year(s) ${tooLong.join(", ")} are beyond this course's ${catalog.durationYears}-year duration` },
-          { status: 400 }
-        );
-      }
-      const yearsError = await validateAssignedYears(db, session.collegeId, years);
-      if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
-
-      const secNames = Array.from(new Set(body.courseScope.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
-      if (secNames.length > 0) {
-        const byName = new Map(allDepartments.map((d) => [d.name, d]));
-        const secError = validateSecondaryDepartmentNames(secNames, dept.name, byName);
-        if (secError) return NextResponse.json({ error: secError }, { status: 400 });
-      }
-
-      scopeToWrite = { assignedYears: years, secondaryDepartments: secNames };
-    }
+    const scopeToWrite: { assignedYears: number[]; secondaryDepartments: string[] } = { assignedYears: years, secondaryDepartments: secNames };
 
     const now = new Date();
-    const ref = await collegeRef
-      .collection("courses")
-      .add({
+    const coursesCol = collegeRef.collection("courses");
+    // Re-checked here, transactionally, right before the write - the plain
+    // get()-then-add() duplicate check above (line ~120) has a race: two
+    // submits for the same (departmentId, catalogId) landing close together
+    // (a double-click, or two people submitting at once) could both read
+    // "not a duplicate" before either had written, and both succeed, leaving
+    // this course listed twice everywhere it's picked from. Re-validating
+    // inside the transaction that actually writes closes that window -
+    // Firestore retries whichever one loses the race once it notices the
+    // query's result set changed underneath it.
+    const ref = coursesCol.doc();
+    let duplicateError: string | null = null;
+    await db.runTransaction(async (tx) => {
+      const dupeSnap = await tx.get(
+        coursesCol.where("departmentId", "==", departmentId).where("catalogId", "==", catalogId).limit(1)
+      );
+      if (!dupeSnap.empty) {
+        duplicateError = "This course is already added to the department";
+        return;
+      }
+      tx.set(ref, {
         collegeId: session.collegeId,
         departmentId,
         catalogId,
@@ -198,6 +231,10 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       });
+    });
+    if (duplicateError) {
+      return NextResponse.json({ error: duplicateError }, { status: 409 });
+    }
 
     if (scopeToWrite) {
       await collegeRef.collection("departments").doc(departmentId).update({

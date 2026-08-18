@@ -8,6 +8,7 @@ import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
+import { getAcademicStructure } from "@/lib/college/academicStructure";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
 // Move a single student to a different section (roster-management fix-up -
@@ -29,16 +30,74 @@ async function loadStudentAndScope(
   // year-scoped, so "in scope" for a student depends on their year, not just
   // their department. Mirrors the students-list GET and distribute POST checks.
   let allDepts: DepartmentYearRow[] | null = null;
-  const inHodScope = (dept: string, year: number) => {
+  // `catalogId` lets a manager that runs more than one course (e.g. sharing a
+  // B.Tech's first year while also running an independent course of its own)
+  // resolve ownership against the student's own course, not always the
+  // manager's flat years - see catalogIdForStudent below.
+  const inHodScope = (dept: string, year: number, catalogId?: string) => {
     if (!scope) return true;
     if (!allDepts) return false;
-    return canHodEditDepartmentYear(scope, allDepts, dept, year);
+    return canHodEditDepartmentYear(scope, allDepts, dept, year, catalogId);
   };
   if (scope?.departmentName) {
     const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
     allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
   }
   return { scope, inHodScope };
+}
+
+async function catalogIdForCourseId(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  courseId: string | undefined
+): Promise<string | undefined> {
+  if (!courseId) return undefined;
+  const snap = await db.collection("colleges").doc(collegeId).collection("courses").doc(courseId).get();
+  return snap.exists ? (snap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
+}
+
+// StudentRecord has no courseId of its own (see findCurrentSectionDoc above) -
+// their course is only ever determined by the Section they're currently
+// sitting in.
+async function catalogIdForStudent(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  student: Pick<StudentRecord, "department" | "secondaryDepartment" | "section" | "year">
+): Promise<string | undefined> {
+  const sectionDoc = await findCurrentSectionDoc(db, collegeId, student);
+  const courseId = sectionDoc ? (sectionDoc.data() as { courseId?: string }).courseId : undefined;
+  return catalogIdForCourseId(db, collegeId, courseId);
+}
+
+// Finds the Section doc a student is currently sitting in. A shared-first-
+// year student is filed under their common department (department, preserved
+// until promotion) with secondaryDepartment naming their real branch instead
+// - the section they're actually in is filed under THAT branch, not their own
+// department (see students/[id] PATCH's write further down, and
+// sections/new's managed-branch mode). Try the student's own department
+// first (covers the plain and legacy-cross-listed cases, where it's already
+// correct), then their secondaryDepartment.
+async function findCurrentSectionDoc(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  student: Pick<StudentRecord, "department" | "secondaryDepartment" | "section" | "year">
+): Promise<FirebaseFirestore.QueryDocumentSnapshot | null> {
+  const sectionsColl = db.collection("colleges").doc(collegeId).collection("sections");
+  const byOwnDept = await sectionsColl
+    .where("department", "==", student.department)
+    .where("name", "==", student.section)
+    .where("year", "==", student.year)
+    .limit(1)
+    .get();
+  if (!byOwnDept.empty) return byOwnDept.docs[0];
+  if (!student.secondaryDepartment) return null;
+  const bySecondaryDept = await sectionsColl
+    .where("department", "==", student.secondaryDepartment)
+    .where("name", "==", student.section)
+    .where("year", "==", student.year)
+    .limit(1)
+    .get();
+  return bySecondaryDept.empty ? null : bySecondaryDept.docs[0];
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -83,7 +142,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       if (session.role === "HOD") {
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-        if (!inHodScope(student.department, student.year)) {
+        const catalogId = await catalogIdForStudent(db, session.collegeId, student);
+        if (!inHodScope(student.department, student.year, catalogId)) {
           return NextResponse.json({ error: "Outside your department" }, { status: 403 });
         }
       } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
@@ -118,7 +178,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       if (session.role === "HOD") {
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-        if (!inHodScope(student.department, student.year)) {
+        const catalogId = await catalogIdForStudent(db, session.collegeId, student);
+        if (!inHodScope(student.department, student.year, catalogId)) {
           return NextResponse.json({ error: "Outside your department" }, { status: 403 });
         }
       }
@@ -175,20 +236,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!targetSection.facultyInchargeUid || !candidateIds.includes(targetSection.facultyInchargeUid)) {
         return NextResponse.json({ error: "You are not in charge of the target section" }, { status: 403 });
       }
-      const currentSectionSnap = await collegeRef.collection("sections")
-        .where("department", "==", student.department)
-        .where("name", "==", student.section)
-        .where("year", "==", student.year)
-        .limit(1)
-        .get();
-      const currentInchargeUid = currentSectionSnap.docs[0]?.data().facultyInchargeUid;
-      if (currentSectionSnap.empty || !currentInchargeUid || !candidateIds.includes(currentInchargeUid)) {
+      const currentSectionDoc = await findCurrentSectionDoc(db, session.collegeId, student);
+      const currentInchargeUid = currentSectionDoc?.data().facultyInchargeUid;
+      if (!currentSectionDoc || !currentInchargeUid || !candidateIds.includes(currentInchargeUid)) {
         return NextResponse.json({ error: "You are not in charge of this student's current section" }, { status: 403 });
       }
     }
     if (session.role === "HOD") {
       const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-      if (!inHodScope(student.department, student.year) || !inHodScope(targetSection.department, targetSection.year)) {
+      const [fromCatalogId, toCatalogId] = await Promise.all([
+        catalogIdForStudent(db, session.collegeId, student),
+        catalogIdForCourseId(db, session.collegeId, targetSection.courseId),
+      ]);
+      if (!inHodScope(student.department, student.year, fromCatalogId) || !inHodScope(targetSection.department, targetSection.year, toCatalogId)) {
         return NextResponse.json({ error: "Outside your department" }, { status: 403 });
       }
     }
@@ -229,17 +289,37 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
+    // A shared-first-year student (currently filed under the college's common
+    // department or one of its sub-departments - see academicStructure.ts)
+    // keeps that department for their whole first year, no matter which real
+    // branch's section they're placed into - only students/promote (or
+    // advance-year) actually transitions them into their branch. Moving into
+    // a section still filed under their OWN current department (a legacy
+    // cross-listed section, or a plain non-shared department's own section)
+    // is unaffected either way, since targetSection.department already
+    // equals student.department there.
+    const structure = await getAcademicStructure(db, session.collegeId);
+    const isSharedDept = (name: string) =>
+      structure.commonDepartment?.name === name || structure.subDepartments.some((sd) => sd.name === name);
+
     const now = new Date();
     const batch = db.batch();
-    batch.update(studentRef, {
-      department: targetSection.department,
-      section: targetSection.name,
-      year: targetSection.year,
-      secondaryDepartment: secondaryDept || null,
-      updatedAt: now,
-    });
+    const staysInSharedDept = isSharedDept(student.department) && targetSection.department !== student.department;
+    if (staysInSharedDept) {
+      batch.update(studentRef, { section: targetSection.name, year: targetSection.year, updatedAt: now });
+    } else {
+      batch.update(studentRef, {
+        department: targetSection.department,
+        section: targetSection.name,
+        year: targetSection.year,
+        secondaryDepartment: secondaryDept || null,
+        updatedAt: now,
+      });
+    }
     const history = departmentHistoryEntry(
-      db, session.collegeId, id, targetSection.department, targetSection.name, targetSection.year, now
+      db, session.collegeId, id,
+      staysInSharedDept ? student.department : targetSection.department,
+      targetSection.name, targetSection.year, now
     );
     batch.set(history.ref, history.data);
     await batch.commit();
@@ -270,14 +350,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
     if (session.role === "PANEL_MEMBER") {
       const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
-      const currentSectionSnap = await collegeRef.collection("sections")
-        .where("department", "==", student.department)
-        .where("name", "==", student.section)
-        .where("year", "==", student.year)
-        .limit(1)
-        .get();
-      const currentInchargeUid = currentSectionSnap.docs[0]?.data().facultyInchargeUid;
-      if (currentSectionSnap.empty || !currentInchargeUid || !candidateIds.includes(currentInchargeUid)) {
+      const currentSectionDoc = await findCurrentSectionDoc(db, session.collegeId, student);
+      const currentInchargeUid = currentSectionDoc?.data().facultyInchargeUid;
+      if (!currentSectionDoc || !currentInchargeUid || !candidateIds.includes(currentInchargeUid)) {
         return NextResponse.json({ error: "You are not in charge of this student's section" }, { status: 403 });
       }
     }

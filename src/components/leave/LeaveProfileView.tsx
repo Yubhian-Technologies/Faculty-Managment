@@ -9,7 +9,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
-import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode } from "@/types/leave";
+import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 
 export interface BalanceEntry {
   code: LeaveTypeCode;
@@ -96,20 +96,37 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   const trackedBalances = balances.filter((b) => !b.unlimited);
   const odBalance = balances.find((b) => b.unlimited);
 
-  // An APPROVED request that hasn't run its course yet - either ongoing right
-  // now, or approved for a future date not yet taken. Either way it isn't
-  // "completed", so the Apply button is disabled below (same as while a
-  // request is still undecided) so a faculty member can't submit a new one
-  // on top of it (the server enforces both too - see applications/route.ts
-  // POST's hasPendingRequest/overlapsApprovedLeave).
+  // Every APPROVED request that hasn't run its course yet - either ongoing
+  // right now, or approved for a future date not yet taken. At most one of
+  // these can already be ongoing (overlapsApprovedLeave in
+  // applications/route.ts POST rejects any new request whose dates overlap
+  // an existing approved one), so "started" below is unambiguous.
   const today = new Date();
-  const unfinishedApprovedLeave = requests.find((r) => {
+  const unfinishedApprovedLeaves = requests.filter((r) => {
     if (r.status !== "APPROVED") return false;
     const to = toDate(r.toDate);
     if (!to) return false;
     const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
     return toEnd >= today;
   });
+  // Prefer the one actually happening right now over one merely queued up
+  // for later. A Sick Leave extension submitted WHILE still on the leave
+  // it extends (the normal case - you don't wait for today's leave to end
+  // before asking for more) creates a second APPROVED-eventually request
+  // that hasn't started yet. Picking `requests.find(...)` naively (newest
+  // first) would let that not-yet-started extension silently take over as
+  // "the" unfinished leave, which flips isOngoingLeave to false below and
+  // hides the Extend Leave button entirely - even though the requester is
+  // still on approved leave right now and should be able to extend it
+  // again. Falls back to the not-yet-started one (requests is already
+  // newest-first) when nothing is currently ongoing, same as before.
+  const unfinishedApprovedLeave =
+    unfinishedApprovedLeaves.find((r) => {
+      const from = toDate(r.fromDate);
+      if (!from) return false;
+      const fromStart = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+      return fromStart <= today;
+    }) ?? unfinishedApprovedLeaves[0];
   const isOngoingLeave = (() => {
     if (!unfinishedApprovedLeave) return false;
     const from = toDate(unfinishedApprovedLeave.fromDate);
@@ -288,6 +305,22 @@ function isCancellable(request: LeaveRequest): boolean {
   return toEnd >= new Date();
 }
 
+// One line per distinct substitute, e.g. "gandhiji (24 periods), sardar (8
+// periods)" - a long-running leave (a term-length "Other" request) can carry
+// dozens of individual PeriodSubstitutions, so this collapses them down to
+// "who", not a period-by-period dump. Whether a substitute got there via the
+// Replacement toggle (one name for everything) or per-period Adjustment
+// picks, this reads the same either way - see LeaveApprovalQueue's
+// coverageModeById/replacementFacultyById for how these get built.
+function summarizeCoverage(subs: PeriodSubstitution[]): string {
+  const counts = new Map<string, number>();
+  for (const s of subs) counts.set(s.substituteFacultyName, (counts.get(s.substituteFacultyName) ?? 0) + 1);
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `${name} (${count} period${count === 1 ? "" : "s"})`)
+    .join(", ");
+}
+
 // categoryLabel (Maternity/Family Planning/Quarantine/Extraordinary/
 // Compensatory) is opt-in and passed in by the caller, never fetched here -
 // only the Principal's own Staff Leave History view ever supplies it (see
@@ -299,6 +332,7 @@ export function LeaveHistoryRow({
   categoryLabel,
   onCancel,
   cancelling,
+  onAdjustCoverage,
 }: {
   request: LeaveRequest;
   categoryLabel?: string;
@@ -308,8 +342,16 @@ export function LeaveHistoryRow({
   // PATCH's CANCEL branch), so the button isn't offered there at all.
   onCancel?: (request: LeaveRequest) => void;
   cancelling?: boolean;
+  // The reverse of onCancel: only offered to an HOD/Principal browsing
+  // someone ELSE's history (see AdjustCoverageDialog) - the requester can't
+  // adjust their own coverage after the fact, only their approver can. Only
+  // makes sense once the request is APPROVED (see applications/[id]/route.ts's
+  // ADJUST_COVERAGE branch, which rejects anything still pending/decided
+  // otherwise).
+  onAdjustCoverage?: (request: LeaveRequest) => void;
 }) {
   const canCancel = !!onCancel && isCancellable(request);
+  const canAdjustCoverage = !!onAdjustCoverage && request.status === "APPROVED";
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">
@@ -332,6 +374,12 @@ export function LeaveHistoryRow({
           {formatDate(request.fromDate)} - {formatDate(request.toDate)}
         </p>
         <p className="text-xs text-muted-foreground truncate mt-0.5">{request.reason}</p>
+        {!!request.periodSubstitutions?.length && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <span className="font-medium text-foreground/80">Covered by:</span>{" "}
+            {summarizeCoverage(request.periodSubstitutions)}
+          </p>
+        )}
         {request.status === "CANCELLED" && request.cancelReason && (
           <p className="text-xs text-muted-foreground mt-0.5">
             <span className="font-medium text-foreground/80">Cancellation reason:</span> {request.cancelReason}
@@ -351,6 +399,16 @@ export function LeaveHistoryRow({
           </>
         )}
         <Badge variant={STATUS_VARIANT[request.status]}>{LEAVE_REQUEST_STATUS_LABELS[request.status]}</Badge>
+        {canAdjustCoverage && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs"
+            onClick={() => onAdjustCoverage!(request)}
+          >
+            Adjust coverage
+          </Button>
+        )}
         {canCancel && (
           <Button
             size="sm"

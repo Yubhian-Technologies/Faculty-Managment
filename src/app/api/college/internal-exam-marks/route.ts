@@ -155,16 +155,31 @@ export async function POST(request: Request) {
     // assignments resolve to a real section (department+section+year); the
     // semester-scoped shape has no course "year" to filter by, so it matches
     // on department+section name alone (best-effort until this college's data
-    // has been migrated to real sections).
-    let studentsQuery = collegeRef.collection("students")
+    // has been migrated to real sections). A shared-first-year student in
+    // this section stays filed under their common department (preserved
+    // until promotion) with secondaryDepartment naming this section's real
+    // branch instead - matched separately and merged, or the roster (and
+    // therefore marks entry for the whole class) would come up empty.
+    let primaryQuery = collegeRef.collection("students")
       .where("department", "==", assignment.department)
       .where("section", "==", sectionName);
-    if (year != null) studentsQuery = studentsQuery.where("year", "==", year);
+    let secondaryQuery = collegeRef.collection("students")
+      .where("secondaryDepartment", "==", assignment.department)
+      .where("section", "==", sectionName);
+    if (year != null) {
+      primaryQuery = primaryQuery.where("year", "==", year);
+      secondaryQuery = secondaryQuery.where("year", "==", year);
+    }
 
-    const studentsSnap = await studentsQuery.get();
-    const students = studentsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as StudentRecord)
-      .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+    const [primarySnap, secondarySnap] = await Promise.all([primaryQuery.get(), secondaryQuery.get()]);
+    const seenStudentIds = new Set<string>();
+    const students: StudentRecord[] = [];
+    for (const d of [...primarySnap.docs, ...secondarySnap.docs]) {
+      if (seenStudentIds.has(d.id)) continue;
+      seenStudentIds.add(d.id);
+      students.push({ id: d.id, ...d.data() } as StudentRecord);
+    }
+    students.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
     if (!existingSnap.exists) {
       const entries: InternalExamMarkEntry[] = students.map((s) => ({

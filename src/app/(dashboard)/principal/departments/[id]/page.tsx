@@ -7,8 +7,6 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
@@ -38,12 +36,11 @@ export default function DepartmentDetailPage() {
 
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
 
-  // Per-course "Edit Academic Structure" dialog - null when closed.
+  // Per-course "Edit Academic Structure" dialog - null when closed. Every
+  // course now has its own explicit courseScopes override (set mandatorily at
+  // creation - see courses/new), so this always edits that override directly
+  // rather than offering an on/off "custom vs. department default" toggle.
   const [structureTarget, setStructureTarget] = useState<Course | null>(null);
-  // Whether this course has its own override vs. following the department's
-  // flat defaults. Turning it on seeds the two lists below from whatever is
-  // currently resolved (override or fallback), not blank.
-  const [structureCustom, setStructureCustom] = useState(false);
   const [structureAssignedYears, setStructureAssignedYears] = useState<number[]>([]);
   const [structureSecondaryDepartments, setStructureSecondaryDepartments] = useState<string[]>([]);
   const [isSavingStructure, setIsSavingStructure] = useState(false);
@@ -144,10 +141,8 @@ export default function DepartmentDetailPage() {
   }
 
   function openStructureEditor(course: Course) {
-    const hasOwnOverride = !!department?.courseScopes?.[course.catalogId ?? ""];
     const scope = scopeForCourse(course);
     setStructureTarget(course);
-    setStructureCustom(hasOwnOverride);
     setStructureAssignedYears(scope.assignedYears);
     setStructureSecondaryDepartments(scope.secondaryDepartments);
   }
@@ -179,24 +174,20 @@ export default function DepartmentDetailPage() {
 
   async function handleSaveStructure() {
     if (!department || !structureTarget?.catalogId) return;
-    const hadOverride = !!department.courseScopes?.[structureTarget.catalogId];
-    if (!structureCustom && !hadOverride) {
-      // Never had an override and isn't getting one - nothing to save.
-      setStructureTarget(null);
+    if (structureAssignedYears.length === 0) {
+      toast({ variant: "destructive", title: "Select at least one year this department teaches this course" });
       return;
     }
     setIsSavingStructure(true);
     try {
-      const body = structureCustom
-        ? {
-            deptId: department.id,
-            courseScope: {
-              catalogId: structureTarget.catalogId,
-              assignedYears: structureAssignedYears,
-              secondaryDepartments: structureSecondaryDepartments,
-            },
-          }
-        : { deptId: department.id, courseScope: { catalogId: structureTarget.catalogId, clear: true } };
+      const body = {
+        deptId: department.id,
+        courseScope: {
+          catalogId: structureTarget.catalogId,
+          assignedYears: structureAssignedYears,
+          secondaryDepartments: structureSecondaryDepartments,
+        },
+      };
       const res = await fetch("/api/college/departments", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -466,40 +457,22 @@ export default function DepartmentDetailPage() {
             <DialogTitle>{structureTarget?.name} - Academic Structure</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="flex items-start gap-2 rounded-md border p-3">
-              <Checkbox
-                id="structure-custom"
-                checked={structureCustom}
-                onCheckedChange={(v) => setStructureCustom(v === true)}
-              />
-              <div className="space-y-1">
-                <Label htmlFor="structure-custom" className="font-normal">Custom for this course</Label>
-                <p className="text-xs text-muted-foreground">
-                  Off follows {department?.name ?? "this department"}&apos;s own Years Taught / Secondary
-                  Departments. Turn on to set them just for {structureTarget?.name} - e.g. a B.Tech shares a
-                  first year here while an M.Tech under the same department runs independently.
-                </p>
-              </div>
-            </div>
-
-            {structureCustom && (
-              <YearsTaughtAndSecondaryFields
-                openYears={openYears}
-                onAddYear={handleAddYear}
-                isAddingYear={addingYear}
-                assignedYears={structureAssignedYears}
-                onToggleYear={toggleStructureYear}
-                maxYear={structureTarget?.durationYears}
-                yearsHelperText={`Which years of this ${structureTarget?.durationYears ?? ""}-year course ${department?.name ?? "this department"} teaches.`}
-                secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId)}
-                secondaryDepartments={structureSecondaryDepartments}
-                onToggleSecondaryDepartment={toggleStructureSecondaryDepartment}
-              />
-            )}
+            <YearsTaughtAndSecondaryFields
+              openYears={openYears}
+              onAddYear={handleAddYear}
+              isAddingYear={addingYear}
+              assignedYears={structureAssignedYears}
+              onToggleYear={toggleStructureYear}
+              maxYear={structureTarget?.durationYears}
+              yearsHelperText={`Which years of this ${structureTarget?.durationYears ?? ""}-year course ${department?.name ?? "this department"} teaches. HODs can only create sections for these years.`}
+              secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId)}
+              secondaryDepartments={structureSecondaryDepartments}
+              onToggleSecondaryDepartment={toggleStructureSecondaryDepartment}
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setStructureTarget(null)}>Cancel</Button>
-            <Button onClick={() => void handleSaveStructure()} loading={isSavingStructure}>Save</Button>
+            <Button onClick={() => void handleSaveStructure()} loading={isSavingStructure} disabled={structureAssignedYears.length === 0}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

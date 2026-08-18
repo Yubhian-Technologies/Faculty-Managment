@@ -4,15 +4,28 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
+import { getAcademicStructure } from "@/lib/college/academicStructure";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { evenSplit } from "@/lib/students/evenSplit";
 import type { Firestore } from "firebase-admin/firestore";
 import type { Section, StudentRecord } from "@/types";
 
-// Moves a whole year's cohort up to the next year, keeping every student in
-// the SAME branch and the SAME section letter - "the same students, same
-// branches and same sections move to next year". After a shared first year
-// this is what hands each branch's cohort back to its own core HOD, but it is
-// deliberately not first-year-specific: any year advances the same way.
+// Moves a whole year's cohort up to the next year. Two groups, two placement
+// strategies:
+//  - A PLAIN student (department is not the college's common department or
+//    one of its sub-departments) keeps the SAME branch and SAME section
+//    letter - "the same students, same branches and same sections move to
+//    next year".
+//  - A SHARED-FIRST-YEAR student is still filed under the common department
+//    at this point (section-assignment deliberately leaves it that way - see
+//    college/students/[id] PATCH, distribute, distribute-cohort) - promotion
+//    is where they actually transition into their real branch
+//    (secondaryDepartment), same as the per-student college/students/promote
+//    flow. Their current section is a shared-year label (e.g. "BSC-CSE-A")
+//    with no counterpart in the branch's own naming, so they're matched by
+//    branch alone and evenly redistributed across whatever Year N+1 sections
+//    that branch has - the same placement students/distribute-cohort uses to
+//    section them the first time.
 //
 // Target sections must already exist. Rather than inventing sections on a
 // Principal's behalf, a run that would land students nowhere refuses and names
@@ -66,17 +79,51 @@ export async function POST(request: Request) {
       );
     }
 
-    // Index the destination year's sections by branch + section name.
-    const targetSnap = await collegeRef.collection("sections").where("year", "==", toYear).get();
-    const targetByKey = new Map<string, Section>();
-    for (const d of targetSnap.docs) {
-      const s = { id: d.id, ...(d.data() as object) } as Section;
-      targetByKey.set(`${(s.department ?? "").trim()}|${(s.name ?? "").trim().toUpperCase()}`, s);
+    // A student currently filed under the college's common department or one
+    // of its sub-departments hasn't reached their real branch yet - this is
+    // exactly where that transition happens for them (matches
+    // students/promote's already-correct per-student flow). Everyone else
+    // advances the plain way.
+    const structure = await getAcademicStructure(db, session.collegeId);
+    const isSharedDept = (name: string) =>
+      structure.commonDepartment?.name === name || structure.subDepartments.some((sd) => sd.name === name);
+    const plainCohort = cohort.filter((s) => !isSharedDept(s.department.trim()));
+    const sharedCohort = cohort.filter((s) => isSharedDept(s.department.trim()));
+
+    // A shared-year student with no Secondary Department can't be routed
+    // anywhere real - refuse up front (before touching sections at all)
+    // rather than silently leaving them behind or guessing their branch.
+    const unresolved = sharedCohort.filter((s) => !(s.secondaryDepartment ?? "").trim());
+    if (unresolved.length > 0) {
+      return NextResponse.json(
+        {
+          error: `${unresolved.length} student(s) have no Secondary Department set, so their real branch can't be resolved - fix these first: `
+            + unresolved.slice(0, 10).map((s) => s.name || s.id).join(", ")
+            + (unresolved.length > 10 ? `, and ${unresolved.length - 10} more` : ""),
+        },
+        { status: 409 }
+      );
     }
 
-    // Group the cohort by where each student needs to land.
+    // Destination year's sections, indexed two ways: by exact (department,
+    // section name) for the plain cohort's identical-letter match, and by
+    // department alone for the shared cohort's even-split placement (their
+    // current section is a shared-year label like "BSC-CSE-A" with no
+    // counterpart in the branch's own naming, so it can't be matched by name).
+    const targetSnap = await collegeRef.collection("sections").where("year", "==", toYear).get();
+    const targetByKey = new Map<string, Section>();
+    const targetSectionsByDept = new Map<string, Section[]>();
+    for (const d of targetSnap.docs) {
+      const s = { id: d.id, ...(d.data() as object) } as Section;
+      const dept = (s.department ?? "").trim();
+      targetByKey.set(`${dept}|${(s.name ?? "").trim().toUpperCase()}`, s);
+      const list = targetSectionsByDept.get(dept);
+      if (list) list.push(s); else targetSectionsByDept.set(dept, [s]);
+    }
+
+    // Plain cohort: group by where each student needs to land (unchanged).
     const groups = new Map<string, { department: string; section: string; students: typeof cohort }>();
-    for (const student of cohort) {
+    for (const student of plainCohort) {
       const department = student.department.trim();
       const section = student.section.trim();
       const key = `${department}|${section.toUpperCase()}`;
@@ -95,6 +142,30 @@ export async function POST(request: Request) {
           students: group.students.length,
         });
       }
+    }
+
+    // Shared cohort: group by resolved real branch only, evenly split across
+    // whatever Year N+1 sections that branch has - same placement strategy
+    // students/distribute-cohort uses to section them the first time.
+    const sharedByBranch = new Map<string, typeof cohort>();
+    for (const student of sharedCohort) {
+      const branch = (student.secondaryDepartment ?? "").trim();
+      const list = sharedByBranch.get(branch);
+      if (list) list.push(student); else sharedByBranch.set(branch, [student]);
+    }
+    const sharedPlacements: { branch: string; sections: Section[]; students: typeof cohort }[] = [];
+    for (const [branch, students] of sharedByBranch) {
+      const sections = (targetSectionsByDept.get(branch) ?? [])
+        .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+      if (sections.length === 0) {
+        missing.push({ department: branch, year: toYear, section: "(any)", students: students.length });
+        continue;
+      }
+      sharedPlacements.push({
+        branch,
+        sections,
+        students: students.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+      });
     }
 
     if (missing.length > 0) {
@@ -116,9 +187,14 @@ export async function POST(request: Request) {
       fromYear,
       toYear,
       eligible: cohort.length,
-      groups: Array.from(groups.values())
-        .map((g) => ({ department: g.department, section: g.section, students: g.students.length }))
-        .sort((a, b) => a.department.localeCompare(b.department) || a.section.localeCompare(b.section)),
+      groups: [
+        ...Array.from(groups.values()).map((g) => ({ department: g.department, section: g.section, students: g.students.length })),
+        ...sharedPlacements.map((p) => ({
+          department: p.branch,
+          section: `(${p.sections.length} section${p.sections.length === 1 ? "" : "s"})`,
+          students: p.students.length,
+        })),
+      ].sort((a, b) => a.department.localeCompare(b.department) || a.section.localeCompare(b.section)),
       missing: [] as MissingSection[],
     };
 
@@ -145,6 +221,28 @@ export async function POST(request: Request) {
           db, session.collegeId, student.id, group.department, group.section, toYear, now
         );
         batch.set(history.ref, history.data);
+      }
+    }
+    for (const placement of sharedPlacements) {
+      const slices = evenSplit(placement.students, placement.sections.length);
+      for (let i = 0; i < placement.sections.length; i++) {
+        const section = placement.sections[i];
+        for (const student of slices[i]) {
+          batch.update(collegeRef.collection("students").doc(student.id), {
+            // The actual shared-year -> real-branch transition: department
+            // becomes the resolved branch, secondaryDepartment (now redundant)
+            // is cleared.
+            department: placement.branch,
+            section: section.name,
+            year: toYear,
+            secondaryDepartment: null,
+            updatedAt: now,
+          });
+          const history = departmentHistoryEntry(
+            db, session.collegeId, student.id, placement.branch, section.name, toYear, now
+          );
+          batch.set(history.ref, history.data);
+        }
       }
     }
 

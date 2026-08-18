@@ -7,7 +7,7 @@ import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
-import { isoDateKey } from "@/lib/leave/dayCounter";
+import { todayISODate } from "@/lib/leave/dayCounter";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -42,7 +42,9 @@ export async function GET(request: Request) {
       // fully editable - matching what the POST/PATCH/DELETE guards on this same
       // route already allow via canHodEditDepartment().
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (scope.departmentName) assignmentQuery = assignmentQuery.where("department", "==", scope.departmentName);
+      if (scope.ownDepartmentNames.length > 0) {
+        assignmentQuery = assignmentQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+      }
       // Sub-departments AND grouped/managed branches (a Sub-HOD manages their
       // branches' assignments; a main HOD rolls up its sub-HODs' branches).
       const ownedDeptNames = [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
@@ -75,7 +77,7 @@ export async function GET(request: Request) {
       // else today (their own facultyId won't otherwise appear on that
       // slot). See lib/leave/periodCoverage.ts and the same overlay in
       // GET college/timetable-slots / college/class-leader/timetable.
-      const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, isoDateKey(new Date()));
+      const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, todayISODate());
       const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
       timetableSlots = ownSlots.map((s) => {
         const sub = substitutionBySlotId.get(s.id);
@@ -379,14 +381,23 @@ export async function POST(request: Request) {
       let ratioWarning: string | undefined;
       const dept = subject.department ?? faculty.department ?? "";
       if (dept) {
-        const [studentsSnap, assignmentsSnap] = await Promise.all([
+        // Includes shared-first-year students pre-registered to `dept` via
+        // secondaryDepartment (department preserved until promotion) - same
+        // union sections/route.ts's studentCount aggregation and
+        // faculty-requirement's own count use, so this warning isn't
+        // undercounting a branch's incoming year-1 cohort.
+        const [studentsSnap, studentsSecondarySnap, assignmentsSnap] = await Promise.all([
           collegeRef.collection("students").where("department", "==", dept).get(),
+          collegeRef.collection("students").where("secondaryDepartment", "==", dept).get(),
           collegeRef.collection("teachingAssignments")
             .where("department", "==", dept)
             .where("academicYear", "==", body.academicYear)
             .get(),
         ]);
-        const totalStudents = studentsSnap.size;
+        const countedStudentIds = new Set<string>();
+        for (const d of studentsSnap.docs) countedStudentIds.add(d.id);
+        for (const d of studentsSecondarySnap.docs) countedStudentIds.add(d.id);
+        const totalStudents = countedStudentIds.size;
         const required = requiredFacultyCount(totalStudents);
         const distinctFaculty = new Set(
           assignmentsSnap.docs.map((d) => (d.data() as { facultyId?: string }).facultyId).filter(Boolean)

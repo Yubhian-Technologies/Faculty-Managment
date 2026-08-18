@@ -8,15 +8,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { ManageHodDepartmentsDialog } from "@/components/college/ManageHodDepartmentsDialog";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
-import type { Course, Department } from "@/types";
+import type { Course, Department, FMSUser } from "@/types";
 
 export default function DepartmentsPage() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [hods, setHods] = useState<FMSUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingDept, setDeletingDept] = useState<Department | null>(null);
 
@@ -37,12 +39,14 @@ export default function DepartmentsPage() {
       // courses' years/cross-listing instead of one blended department-wide
       // badge (a department can offer several courses with different
       // structures - see resolveDepartmentCourseScope).
-      const [deptRes, coursesRes] = await Promise.all([
+      const [deptRes, coursesRes, hodsRes] = await Promise.all([
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
+        fetch("/api/college/users?role=HOD&allDepts=true").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
       ]);
       setDepartments(deptRes.departments ?? []);
       setCourses(coursesRes.courses ?? []);
+      setHods(hodsRes.users ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load departments" });
     } finally {
@@ -127,11 +131,32 @@ export default function DepartmentsPage() {
                       {!dept.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
                     </div>
                     <p className="font-semibold text-sm leading-tight">{dept.name}</p>
-                    {dept.hodName ? (
-                      <div className="flex items-center gap-1 mt-1.5">
-                        <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                        <p className="text-xs text-muted-foreground truncate">HOD: {dept.hodName}</p>
-                      </div>
+                    {dept.hodName && dept.hodUid ? (
+                      (() => {
+                        const hod = hods.find((h) => h.uid === dept.hodUid);
+                        const hodDepts = hod?.departments && hod.departments.length > 0 ? hod.departments : [dept.hodName ? dept.name : ""].filter(Boolean);
+                        const otherDepts = hodDepts.filter((n) => n !== dept.name);
+                        return (
+                          <div className="mt-1.5">
+                            <div className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                              <p className="text-xs text-muted-foreground truncate">
+                                HOD: {dept.hodName}
+                                {otherDepts.length > 0 && <span> · also {otherDepts.join(", ")}</span>}
+                              </p>
+                            </div>
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <ManageHodDepartmentsDialog
+                                hodUid={dept.hodUid}
+                                hodName={dept.hodName}
+                                currentDepartments={hodDepts}
+                                topLevelDepartments={topLevelDepartments}
+                                onSaved={() => void loadDepts()}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : (
                       <p className="text-xs text-orange-500 mt-1.5">No HOD assigned</p>
                     )}

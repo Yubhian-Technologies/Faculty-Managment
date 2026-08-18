@@ -4,12 +4,12 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CalendarDays, Download, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatDate } from "@/lib/utils";
+import { exportToCSV, formatDate, toDate } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 import type { AttendanceRecord, AttendanceStatus } from "@/types";
@@ -55,15 +55,42 @@ export default function ManagementVicePrincipalAttendancePage() {
   const vicePrincipalName = data?.vicePrincipalName;
   const records = data?.records ?? [];
 
+  function handleExport() {
+    const rows = records.map((rec) => {
+      const d = toDate(rec.date);
+      return {
+        date: formatDate(rec.date),
+        day: d ? d.toLocaleDateString("en-IN", { weekday: "long" }) : "",
+        status: ATTENDANCE_STATUS_LABELS[rec.status],
+        checkIn: rec.checkIn ?? "",
+        checkOut: rec.checkOut ?? "",
+        reason: rec.remarks ?? "",
+      };
+    });
+    exportToCSV(rows, `attendance-${vicePrincipalName ?? "vice-principal"}-${MONTH_NAMES[month - 1]}-${year}`, [
+      { key: "date", header: "Date" },
+      { key: "day", header: "Day" },
+      { key: "status", header: "Status" },
+      { key: "checkIn", header: "Check In" },
+      { key: "checkOut", header: "Check Out" },
+      { key: "reason", header: "Reason" },
+    ]);
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Vice Principal Attendance"
         description={vicePrincipalName ? `Monthly attendance record for ${vicePrincipalName}` : "Monthly attendance record"}
         actions={
-          <Button variant="outline" asChild>
-            <Link href={`/management/faculty/${collegeId}/vice-principal`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleExport} disabled={records.length === 0}>
+              <Download className="h-4 w-4 mr-2" />Export CSV
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href={`/management/faculty/${collegeId}/vice-principal`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+            </Button>
+          </div>
         }
       />
 
@@ -117,12 +144,7 @@ export default function ManagementVicePrincipalAttendancePage() {
           <CardContent className="p-0">
             <div className="divide-y">
               {records.map((rec) => {
-                const rawDate = rec.date as unknown as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
-                const d = rawDate
-                  ? typeof rawDate.toDate === "function"
-                    ? rawDate.toDate()
-                    : new Date(((rawDate._seconds ?? rawDate.seconds) ?? 0) * 1000)
-                  : null;
+                const d = toDate(rec.date);
                 const dayName = d ? d.toLocaleDateString("en-IN", { weekday: "short" }) : "";
 
                 return (

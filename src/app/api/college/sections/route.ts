@@ -7,7 +7,8 @@ import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments
 import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
-import type { DepartmentCourseScope } from "@/types";
+import { deriveHodScope } from "@/lib/departments/hodScope";
+import type { Department, DepartmentCourseScope } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const yearFilter = searchParams.get("year");
     const courseFilter = searchParams.get("courseId");
+    const departmentIdFilter = searchParams.get("departmentId");
 
     const db = getAdminDb();
     const sectionsColl = db.collection("colleges").doc(session.collegeId).collection("sections");
@@ -47,13 +49,45 @@ export async function GET(request: Request) {
     // when there's an actual managed-branch relationship to disambiguate.
     let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
     let hodDepartments: DepartmentYearRow[] = [];
+    const catalogIdByCourseId = new Map<string, string | undefined>();
 
-    if (session.role === "HOD") {
+    // A caller with unrestricted college-wide read access (Principal/VP/Super
+    // Admin/Office already see every section regardless of department) can
+    // narrow explicitly to one department - resolved through the same
+    // shared/managed-branch expansion the HOD scope below uses (deriveHodScope),
+    // so a shared first-year department (e.g. "Basic Science") reaches the real
+    // branches' own sections instead of matching a courseId/department value no
+    // section is ever filed against (see the Timetable page, this param's first
+    // caller). Deliberately NOT honored for HOD/PANEL_MEMBER: an HOD's own
+    // (no-param) query below already returns their full, correctly
+    // owner-checked scope for free - narrowing it further here would need
+    // resolveBranchYearOwner redone against an arbitrary requested department
+    // rather than the caller's own, so it's simplest and safest not to offer it.
+    if (
+      departmentIdFilter &&
+      (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL" || session.role === "SUPER_ADMIN" || session.role === "COLLEGE_OFFICE")
+    ) {
+      const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+      const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
+      const namedDept = allDepartments.find((d) => d.id === departmentIdFilter);
+      const scopeNames = namedDept
+        ? (() => {
+            const scope = deriveHodScope(allDepartments, namedDept.name);
+            return scope.deptOptions.length > 0 ? scope.deptOptions.map((d) => d.name) : [namedDept.name];
+          })()
+        : ["__none__"];
+      primaryQuery = sectionsColl.where("department", "in", scopeNames.slice(0, 30));
+    } else if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       hodScope = scope;
-      if (scope.departmentName) {
-        primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
-        secondaryDeptQuery = withCommonFilters(sectionsColl.where("secondaryDepartments", "array-contains", scope.departmentName));
+      if (scope.ownDepartmentNames.length > 0) {
+        primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+        // array-contains-any (not array-contains) since this HOD may own more
+        // than one department now - Firestore caps this variant at 10 values,
+        // tighter than the 30-value `in` cap used elsewhere in this route.
+        secondaryDeptQuery = withCommonFilters(
+          sectionsColl.where("secondaryDepartments", "array-contains-any", scope.ownDepartmentNames.slice(0, 10))
+        );
       }
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
       // both fully-owned - one `in` query covers both, tagged primary below.
@@ -61,9 +95,18 @@ export async function GET(request: Request) {
       if (ownedDeptNames.length > 0) {
         childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
       }
-      if (scope.departmentName) {
+      if (scope.ownDepartmentNames.length > 0) {
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+        // A manager can run more than one course with different years (e.g. a
+        // sub-department sharing a B.Tech's first year while also running an
+        // independent course of its own) - resolveBranchYearOwner below needs
+        // each section's own course to resolve ownership against the right
+        // one, not always the manager's flat years.
+        const coursesSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").get();
+        for (const c of coursesSnap.docs) {
+          catalogIdByCourseId.set(c.id, (c.data() as { catalogId?: string }).catalogId);
+        }
       }
     } else if (session.role === "PANEL_MEMBER") {
       const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
@@ -86,8 +129,9 @@ export async function GET(request: Request) {
       // by whoever manages this branch elsewhere (e.g. a shared first year
       // routed through a common department's sub-department instead).
       if (hodScope && hodDepartments.length > 0) {
-        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number);
-        if (owner !== hodScope.departmentName) continue;
+        const catalogId = catalogIdByCourseId.get(data.courseId as string);
+        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number, catalogId);
+        if (!hodScope.ownDepartmentNames.includes(owner)) continue;
       }
       seenIds.add(d.id);
       sections.push({ id: d.id, ...data, accessLevel: "primary" });
@@ -102,8 +146,9 @@ export async function GET(request: Request) {
         // that's the relationship that's year-scoped (only the years the
         // manager - this HOD, or one of their own children - actually teaches).
         if (hodScope!.managedDepartmentNames.includes(deptName) && hodDepartments.length > 0) {
-          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number);
-          if (owner !== hodScope!.departmentName && !hodScope!.childDepartmentNames.includes(owner)) continue;
+          const catalogId = catalogIdByCourseId.get(data.courseId as string);
+          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number, catalogId);
+          if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) continue;
         }
         seenIds.add(d.id);
         sections.push({ id: d.id, ...data, accessLevel: "primary" });
@@ -133,24 +178,57 @@ export async function GET(request: Request) {
     // Basic Science, one feeding CSE and one ECE - and without this, both
     // would be double-counted into a single merged total instead of their
     // own real counts.
+    //
+    // A shared-first-year student (department = the common department or one
+    // of its sub-departments, secondaryDepartment = their real branch) stays
+    // filed that way until promotion (see students/[id] PATCH, distribute,
+    // distribute-cohort) - so the section they're actually sitting in belongs
+    // to secondaryDepartment, not department. Matched via a second query
+    // rather than folded into the first, since it's keyed on a different
+    // field.
     const deptNames = Array.from(new Set(sections.map((s) => s.department as string).filter(Boolean)));
     if (deptNames.length > 0) {
       const chunks: string[][] = [];
       for (let i = 0; i < deptNames.length; i += 30) chunks.push(deptNames.slice(i, i + 30));
 
-      const studentSnaps = await Promise.all(
-        chunks.map((chunk) =>
-          db.collection("colleges").doc(session.collegeId).collection("students")
-            .where("department", "in", chunk)
-            .get()
-        )
-      );
+      const [primaryStudentSnaps, secondaryStudentSnaps] = await Promise.all([
+        Promise.all(
+          chunks.map((chunk) =>
+            db.collection("colleges").doc(session.collegeId).collection("students")
+              .where("department", "in", chunk)
+              .get()
+          )
+        ),
+        Promise.all(
+          chunks.map((chunk) =>
+            db.collection("colleges").doc(session.collegeId).collection("students")
+              .where("secondaryDepartment", "in", chunk)
+              .get()
+          )
+        ),
+      ]);
 
       const countMap = new Map<string, number>();
-      for (const snap of studentSnaps) {
+      const countedIds = new Set<string>();
+      for (const snap of primaryStudentSnaps) {
         for (const d of snap.docs) {
+          if (countedIds.has(d.id)) continue;
+          countedIds.add(d.id);
           const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string };
           const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}`;
+          countMap.set(key, (countMap.get(key) ?? 0) + 1);
+        }
+      }
+      for (const snap of secondaryStudentSnaps) {
+        for (const d of snap.docs) {
+          if (countedIds.has(d.id)) continue;
+          countedIds.add(d.id);
+          const s = d.data() as { secondaryDepartment?: string; section?: string; year?: number };
+          // The section a shared-first-year student actually sits in is their
+          // real branch's own - never itself cross-listed (see hod/sections/
+          // new's managed-branch mode) - so the disambiguator stays "", same
+          // as such a section's own (always-empty) secondaryDepartments.
+          const key = `${s.secondaryDepartment ?? ""}|${s.section ?? ""}|${s.year ?? 0}|`;
           countMap.set(key, (countMap.get(key) ?? 0) + 1);
         }
       }
@@ -258,8 +336,15 @@ export async function POST(request: Request) {
         const deptSnap = await db.collection("colleges").doc(session.collegeId)
           .collection("departments").doc(body.departmentId).get();
         dept = (deptSnap.data() as { name?: string } | undefined)?.name ?? "";
+      } else if (scope.ownDepartmentNames.length > 1) {
+        // Which of this HOD's several departments the section belongs to is
+        // no longer implicit - the client must say.
+        return NextResponse.json(
+          { error: "You manage more than one department - specify which department this section belongs to" },
+          { status: 400 },
+        );
       } else {
-        dept = scope.departmentName;
+        dept = scope.ownDepartmentNames[0] ?? "";
       }
     } else if (body.departmentId) {
       const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").doc(body.departmentId).get();
@@ -295,7 +380,20 @@ export async function POST(request: Request) {
       const deptDoc = allDepts.find((d) => d.name === dept);
       if (deptDoc) {
         const deptScope = resolveDepartmentCourseScope(deptDoc, course.catalogId);
-        const assignedYears = deptScope.assignedYears;
+        let assignedYears = deptScope.assignedYears;
+        // A sub-department created by an HOD carries no assignedYears/
+        // courseScopes of its own (Principal-only override, stripped from
+        // anything HOD-created) - it inherits its parent's instead, same
+        // fallback managerEffectiveYears (hodScope.ts) already uses for
+        // Sections/Teaching Assignments/Timetable. Without this, targeting a
+        // plain sub-department directly (not via a managed branch) silently
+        // accepted any year in the course's span.
+        if (assignedYears.length === 0 && deptDoc.parentDepartmentId) {
+          const parentDoc = allDepts.find((d) => d.id === deptDoc.parentDepartmentId);
+          if (parentDoc) {
+            assignedYears = resolveDepartmentCourseScope(parentDoc, course.catalogId).assignedYears;
+          }
+        }
         if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
           // A real branch (e.g. IT) reached through a sub-department's managed
           // grouping (BS-Maths managing IT + CSBS) never carries the shared
@@ -308,7 +406,7 @@ export async function POST(request: Request) {
           // otherwise this is the branch's own dedicated HOD naming their own
           // department directly, who must stay strictly within their own
           // assignedYears even though someone elsewhere also manages this branch.
-          const manager = viaManagedBranch ? findBranchManager(allDepts, dept) : null;
+          const manager = viaManagedBranch ? findBranchManager(allDepts, dept, course.catalogId) : null;
           const allowedViaManager = manager?.years.includes(Number(body.year)) ?? false;
           if (!allowedViaManager) {
             return NextResponse.json(

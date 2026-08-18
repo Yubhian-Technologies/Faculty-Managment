@@ -18,9 +18,30 @@
 // re-checking `assignedYears`/`hasSubDepartments` inline, so the definition
 // can't drift between routes. If the heuristic ever needs to change (or become
 // a stored flag), this file is the only thing to edit.
-import type { Department, DepartmentCourseScope } from "@/types";
+import type { Course, Department, DepartmentCourseScope } from "@/types";
 
 export type DepartmentWithId = Department & { id: string };
+
+/**
+ * The catalog course a department's own Course doc resolves `courseName` to -
+ * needed to look up that course's per-course override in
+ * Department.courseScopes (resolveDepartmentCourseScope). Prefers the
+ * department's own Course doc; falls back to any other department's Course
+ * doc with the same name (a department that inherits a course through a
+ * common first-year feeder, rather than owning it directly, has none of its
+ * own) - safe because the course catalog itself prevents two entries sharing
+ * a name, so any Course doc named "Master of Technology" always points to the
+ * same catalog id. Isomorphic (client roster forms and the students API both
+ * import this) so the two never resolve a student's per-course year override
+ * differently.
+ */
+export function resolveCatalogId(courses: Course[], departmentId: string | undefined, courseName: string | undefined): string | undefined {
+  if (!courseName) return undefined;
+  return (
+    courses.find((c) => c.departmentId === departmentId && c.name === courseName)
+    ?? courses.find((c) => c.name === courseName)
+  )?.catalogId;
+}
 
 /**
  * A department's academic-structure fields (assignedYears/secondaryDepartments),
@@ -45,6 +66,50 @@ export function resolveDepartmentCourseScope(
     assignedYears: override?.assignedYears ?? department.assignedYears ?? [],
     secondaryDepartments: override?.secondaryDepartments ?? department.secondaryDepartments ?? [],
   };
+}
+
+/**
+ * Years `department` does NOT teach itself for `catalogId`, even if its own
+ * assignedYears (flat or per-course override) says nothing about them - years
+ * some OTHER department has claimed as a feeder for this one
+ * (secondaryDepartments, resolved the same catalog-aware way - see
+ * resolveSubjectDepartment, which is what actually files a fed year's
+ * subjects under the feeder instead of `department`). A department's own
+ * assignedYears is supposed to already exclude whatever a feeder claims, but
+ * a department left unconfigured (assignedYears never set) falls back to
+ * offering every year it structurally can't own - this closes that gap.
+ * Callers building a "years this department teaches" list should always
+ * subtract this, not just trust assignedYears on its own.
+ */
+export function fedYears(
+  department: Pick<Department, "name">,
+  allDepartments: Department[],
+  catalogId: string | undefined | null
+): number[] {
+  const years = new Set<number>();
+  for (const feeder of allDepartments) {
+    // A feeder's FLAT fields are a department-wide default, not scoped to any
+    // one course - falling back to them here for a specific catalogId the
+    // feeder may not even offer would treat a totally unrelated department
+    // (e.g. one that runs a different program entirely) as "feeding" this
+    // course's years, purely because its flat secondaryDepartments happens to
+    // name `department` for a DIFFERENT course (e.g. Chemistry's own B.Tech
+    // cross-listing to civil engineering, wrongly reused when resolving civil
+    // engineering's unrelated, independent M.Tech - Chemistry doesn't run an
+    // M.Tech at all). Once a catalogId is given, only an EXPLICIT per-course
+    // override actually establishes a feeding relationship for it - every
+    // course that's actually cross-listed for that catalogId has one (set at
+    // course creation, mandatory - see college/courses POST). `catalogId`
+    // omitted (a legacy, pre-catalog lookup) keeps the flat fallback,
+    // unchanged from before per-course overrides existed.
+    const scope = catalogId
+      ? feeder.courseScopes?.[catalogId]
+      : { assignedYears: feeder.assignedYears ?? [], secondaryDepartments: feeder.secondaryDepartments ?? [] };
+    if (!scope) continue;
+    if (!scope.secondaryDepartments.includes(department.name)) continue;
+    for (const y of scope.assignedYears) years.add(y);
+  }
+  return Array.from(years);
 }
 
 /**
@@ -126,6 +191,22 @@ export interface AcademicStructure {
 }
 
 /**
+ * Every year `d` claims anywhere - its flat assignedYears (the legacy default,
+ * no longer settable from the Add/Edit Department forms but still honored for
+ * departments configured before per-course scoping existed) unioned with every
+ * per-course override's own assignedYears. Years taught is now decided per
+ * course (see Department.courseScopes), so structural checks that used to read
+ * the flat field alone - "does this department claim year 1 at all" - must
+ * look at both, or a department configured purely through courseScopes would
+ * look unconfigured.
+ */
+function allClaimedYears(d: Pick<Department, "assignedYears" | "courseScopes">): number[] {
+  const years = new Set<number>(d.assignedYears ?? []);
+  for (const s of Object.values(d.courseScopes ?? {})) for (const y of s.assignedYears) years.add(y);
+  return Array.from(years).sort((a, b) => a - b);
+}
+
+/**
  * A department qualifies as the shared first-year department when it claims
  * year 1 AND acts as a shared parent - either by being split into
  * sub-departments (`hasSubDepartments`) or by cross-listing the branches it
@@ -135,7 +216,7 @@ export interface AcademicStructure {
 function isCommonYearDepartment(d: DepartmentWithId): boolean {
   if (d.isActive === false) return false;
   if (d.parentDepartmentId) return false; // sub-departments never qualify
-  if (!(d.assignedYears ?? []).includes(1)) return false;
+  if (!allClaimedYears(d).includes(1)) return false;
   return Boolean(d.hasSubDepartments) || (d.secondaryDepartments ?? []).length > 0;
 }
 
@@ -185,7 +266,7 @@ export function structureFromDepartments(allDepartments: DepartmentWithId[]): Ac
   return {
     isCommonFirstYear: commonDepartment !== null,
     commonDepartment,
-    commonYears: commonDepartment ? [...(commonDepartment.assignedYears ?? [])].sort((a, b) => a - b) : [],
+    commonYears: commonDepartment ? allClaimedYears(commonDepartment) : [],
     subDepartments: commonDepartment
       ? allDepartments.filter((d) => d.parentDepartmentId === commonDepartment.id)
       : [],

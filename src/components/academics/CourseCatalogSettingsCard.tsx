@@ -15,17 +15,38 @@ import type { AcademicRegulationSettings, CourseCatalogItem } from "@/types";
 type Draft = { name: string; code: string; durationYears: string; regulations: string[] };
 const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [] };
 
-export function CourseCatalogSettingsCard() {
+interface CourseCatalogSettingsCardProps {
+  // Dean's dashboard reads the same catalog off the Principal's own GET
+  // endpoint, but can't POST/PATCH/DELETE it - so this hides the add form
+  // and per-item edit/delete/activate controls and shows courses + their
+  // assigned regulations only.
+  readOnly?: boolean;
+}
+
+export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSettingsCardProps) {
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // The college's declared regulation codes (Settings > Academic Regulations,
   // see RegulationSettingsCard) - each catalog entry picks the subset that's
   // actually valid for that course. A course with none picked here blocks the
-  // Dean from adding subjects to it until the Principal sets this.
+  // Dean from adding subjects to it until the Principal sets this, AND a
+  // regulation left out here is invisible to the Dean even if it's declared
+  // college-wide and even if RegulationSettingsCard's own per-year mapping
+  // points at it (that mapping only fixes ONE default regulation per year,
+  // for browsing convenience - see currentRegulation in dean/subjects/page.tsx
+  // - it was never meant to be an exhaustive list of what a course may use;
+  // a course can legitimately run more than one regulation at once, e.g. R23
+  // for continuing students alongside R26 for a fresh intake in the same
+  // year). So the default here is simply every declared regulation, not a
+  // narrower guess derived from any one year's fixed value.
   const [declaredRegulations, setDeclaredRegulations] = useState<string[]>([]);
 
   const [newDraft, setNewDraft] = useState<Draft>(EMPTY_DRAFT);
   const [isAdding, setIsAdding] = useState(false);
+  // False the moment the Principal manually toggles a chip on the add form -
+  // once they've made an explicit choice, the auto-fill below must never
+  // overwrite it again for this draft.
+  const [regulationsAutoFilled, setRegulationsAutoFilled] = useState(true);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -44,11 +65,19 @@ export function CourseCatalogSettingsCard() {
 
   useEffect(() => {
     load();
+    if (readOnly) return;
     fetch("/api/college/settings/regulations")
       .then((r) => r.json() as Promise<{ settings: AcademicRegulationSettings }>)
       .then((d) => setDeclaredRegulations(d.settings.regulations ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
-  }, []);
+  }, [readOnly]);
+
+  // Derived, not effect-synced state: as long as the Principal hasn't
+  // touched a chip by hand for this draft, the effective selection just
+  // tracks declaredRegulations live (nothing to keep in sync). The moment
+  // they toggle one manually (toggleNewDraftRegulation), newDraft.regulations
+  // itself takes over.
+  const effectiveNewRegulations = regulationsAutoFilled ? declaredRegulations : newDraft.regulations;
 
   function toggleRegulation(draft: Draft, setDraft: (d: Draft) => void, code: string) {
     setDraft({
@@ -57,6 +86,15 @@ export function CourseCatalogSettingsCard() {
         ? draft.regulations.filter((r) => r !== code)
         : [...draft.regulations, code],
     });
+  }
+
+  function toggleNewDraftRegulation(code: string) {
+    const base = effectiveNewRegulations;
+    setRegulationsAutoFilled(false);
+    setNewDraft((d) => ({
+      ...d,
+      regulations: base.includes(code) ? base.filter((r) => r !== code) : [...base, code],
+    }));
   }
 
   function validate(d: Draft): string | null {
@@ -79,7 +117,7 @@ export function CourseCatalogSettingsCard() {
           name: newDraft.name.trim(),
           code: newDraft.code.trim(),
           durationYears: Number(newDraft.durationYears),
-          regulations: newDraft.regulations,
+          regulations: effectiveNewRegulations,
         }),
       });
       if (!res.ok) {
@@ -87,6 +125,7 @@ export function CourseCatalogSettingsCard() {
         throw new Error(j.error ?? "Failed to add course");
       }
       setNewDraft(EMPTY_DRAFT);
+      setRegulationsAutoFilled(true);
       toast({ variant: "success", title: "Course added to catalog" });
       load();
     } catch (e) {
@@ -98,7 +137,16 @@ export function CourseCatalogSettingsCard() {
 
   function startEdit(item: CourseCatalogItem) {
     setEditingId(item.id);
-    setEditDraft({ name: item.name, code: item.code, durationYears: String(item.durationYears), regulations: item.regulations ?? [] });
+    setEditDraft({
+      name: item.name,
+      code: item.code,
+      durationYears: String(item.durationYears),
+      // A course stuck with none picked starts from every declared
+      // regulation instead of blank, so opening Edit gives the Principal
+      // something to just confirm (or narrow down) rather than an empty
+      // click-fest. A course that already has regulations keeps them as-is.
+      regulations: item.regulations?.length ? item.regulations : declaredRegulations,
+    });
   }
 
   async function saveEdit(id: string) {
@@ -147,6 +195,35 @@ export function CourseCatalogSettingsCard() {
     }
   }
 
+  // One click straight from the "No regulations assigned yet" warning - no
+  // need to open Edit, notice the chips came pre-filled, and remember to
+  // hit Save. Assigns every declared regulation, same default startEdit
+  // pre-fills with - otherwise there's nothing to auto-assign (nothing
+  // declared yet) and Edit is still the only way in, same as before this
+  // existed.
+  async function quickAssignRegulations(item: CourseCatalogItem) {
+    const regulations = declaredRegulations;
+    if (regulations.length === 0) return;
+    setBusyId(item.id);
+    try {
+      const res = await fetch(`/api/college/course-catalog/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regulations }),
+      });
+      if (!res.ok) {
+        const j = await res.json() as { error?: string };
+        throw new Error(j.error ?? "Failed to assign regulations");
+      }
+      toast({ variant: "success", title: `Assigned ${regulations.join(", ")}` });
+      load();
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to assign regulations" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function confirmDelete() {
     if (!deleteTarget) return;
     setIsDeleting(true);
@@ -179,65 +256,72 @@ export function CourseCatalogSettingsCard() {
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Add new */}
-        <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-          <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px_auto] sm:items-end">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Course Name</Label>
-              <Input
-                value={newDraft.name}
-                onChange={(e) => setNewDraft((d) => ({ ...d, name: e.target.value }))}
-                placeholder="e.g. Bachelor of Technology"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Short Code</Label>
-              <Input
-                value={newDraft.code}
-                onChange={(e) => setNewDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
-                placeholder="BTECH"
-                className="uppercase"
-                maxLength={10}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Years</Label>
-              <Input
-                type="number"
-                min={1}
-                max={10}
-                value={newDraft.durationYears}
-                onChange={(e) => setNewDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
-              />
-            </div>
-            <Button onClick={addItem} loading={isAdding} className="sm:mb-0.5">
-              <Plus className="h-4 w-4 mr-1" /> Add
-            </Button>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Regulations that apply to this course</Label>
-            {declaredRegulations.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Declare regulation codes under Academic Regulations below first.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {declaredRegulations.map((r) => {
-                  const active = newDraft.regulations.includes(r);
-                  return (
-                    <Badge
-                      key={r}
-                      variant={active ? "secondary" : "outline"}
-                      className="cursor-pointer text-xs"
-                      onClick={() => toggleRegulation(newDraft, setNewDraft, r)}
-                    >
-                      {active && <Check className="h-3 w-3 mr-1" />}{r}
-                    </Badge>
-                  );
-                })}
+        {!readOnly && (
+          <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+            <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px_auto] sm:items-end">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Course Name</Label>
+                <Input
+                  value={newDraft.name}
+                  onChange={(e) => setNewDraft((d) => ({ ...d, name: e.target.value }))}
+                  placeholder="e.g. Bachelor of Technology"
+                />
               </div>
-            )}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Short Code</Label>
+                <Input
+                  value={newDraft.code}
+                  onChange={(e) => setNewDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
+                  placeholder="BTECH"
+                  className="uppercase"
+                  maxLength={10}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Years</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={newDraft.durationYears}
+                  onChange={(e) => setNewDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
+                />
+              </div>
+              <Button onClick={addItem} loading={isAdding} className="sm:mb-0.5">
+                <Plus className="h-4 w-4 mr-1" /> Add
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Regulations that apply to this course</Label>
+              {declaredRegulations.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Declare regulation codes under Academic Regulations below first.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {declaredRegulations.map((r) => {
+                    const active = effectiveNewRegulations.includes(r);
+                    return (
+                      <Badge
+                        key={r}
+                        variant={active ? "secondary" : "outline"}
+                        className="cursor-pointer text-xs"
+                        onClick={() => toggleNewDraftRegulation(r)}
+                      >
+                        {active && <Check className="h-3 w-3 mr-1" />}{r}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+              {regulationsAutoFilled && effectiveNewRegulations.length > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Pre-filled with every declared regulation - click a badge to narrow it down.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* List */}
         {isLoading ? (
@@ -251,7 +335,7 @@ export function CourseCatalogSettingsCard() {
         ) : (
           <ul className="divide-y rounded-lg border">
             {items.map((item) => {
-              const isEditing = editingId === item.id;
+              const isEditing = !readOnly && editingId === item.id;
               const busy = busyId === item.id;
               return (
                 <li key={item.id} className="p-3 space-y-2">
@@ -297,17 +381,19 @@ export function CourseCatalogSettingsCard() {
                             {item.code} · {item.durationYears} {item.durationYears === 1 ? "year" : "years"}
                           </p>
                         </div>
-                        <div className="flex gap-1 ml-auto">
-                          <Button size="sm" variant="ghost" onClick={() => toggleActive(item)} disabled={busy}>
-                            {item.isActive ? "Deactivate" : "Activate"}
-                          </Button>
-                          <Button size="icon" variant="ghost" onClick={() => startEdit(item)} aria-label="Edit">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(item)} aria-label="Delete">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
+                        {!readOnly && (
+                          <div className="flex gap-1 ml-auto">
+                            <Button size="sm" variant="ghost" onClick={() => toggleActive(item)} disabled={busy}>
+                              {item.isActive ? "Deactivate" : "Activate"}
+                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => startEdit(item)} aria-label="Edit">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(item)} aria-label="Delete">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -333,9 +419,23 @@ export function CourseCatalogSettingsCard() {
                       )}
                     </div>
                   ) : (item.regulations ?? []).length === 0 ? (
-                    <p className="flex items-center gap-1 text-xs text-amber-600">
-                      <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you assign at least one.
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="flex items-center gap-1 text-xs text-amber-600">
+                        <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you assign at least one.
+                      </p>
+                      {!readOnly && declaredRegulations.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-xs"
+                          disabled={busy}
+                          loading={busy}
+                          onClick={() => quickAssignRegulations(item)}
+                        >
+                          Assign {declaredRegulations.join(", ")}
+                        </Button>
+                      )}
+                    </div>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {(item.regulations ?? []).map((r) => <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>)}

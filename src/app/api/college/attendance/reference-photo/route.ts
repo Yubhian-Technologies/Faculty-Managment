@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 
 // Firebase Storage download URLs don't send Access-Control-Allow-Origin, so
 // loading them directly into an <img> works (display only) but reading pixel
@@ -11,12 +12,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
 // through our own origin sidesteps that without needing bucket-level CORS
 // config. Self-serve only: always the caller's own reference photo.
 //
-// Same PANEL_MEMBER/HOD roles as check-in/check-out, and the same "faculty
-// member doc, else own user doc" fallback as /api/college/faculty/me - HODs
-// have no separate FacultyMember record, so their photo lives on users/{uid}.
+// Same roles as check-in/check-out, and the same "faculty member doc, else
+// own user doc" fallback as /api/college/faculty/me - HOD/Principal/VP have
+// no separate FacultyMember record, so their photo lives on users/{uid}.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 

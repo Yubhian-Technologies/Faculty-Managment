@@ -101,7 +101,12 @@ export async function POST(request: Request) {
     // assignments resolve to a real section (department+section+year); the
     // semester-scoped shape has no course "year" to filter by, so it matches
     // on department+section name alone (best-effort until this college's data
-    // has been migrated to real sections).
+    // has been migrated to real sections). A shared-first-year student in
+    // this section stays filed under their common department (preserved
+    // until promotion) with secondaryDepartment naming this section's real
+    // branch instead - fetchSectionStudents matches both and merges them, or
+    // the roster (and therefore attendance for the whole class) would come
+    // up empty.
     const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year }))
       .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 

@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { Timestamp } from "firebase/firestore";
-import type { WorkflowStatus, CandidateStatus } from "@/types";
+import { type WorkflowStatus, type CandidateStatus, type MonthlySummaryRow } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 
 type FirestoreTimestampLike = { _seconds: number; _nanoseconds?: number } | { seconds: number; nanoseconds?: number };
 
-export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): Date | null {
+export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | string | null | undefined): Date | null {
   if (!timestamp) return null;
   if (timestamp instanceof Date) return timestamp;
   if (typeof (timestamp as Timestamp).toDate === "function") return (timestamp as Timestamp).toDate();
@@ -17,6 +17,14 @@ export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | nu
   const secs = (timestamp as { _seconds?: number; seconds?: number })._seconds
     ?? (timestamp as { seconds?: number }).seconds;
   if (typeof secs === "number") return new Date(secs * 1000);
+  // A plain Date serialises over JSON as an ISO string (e.g. a display-only
+  // synthesized record - see fillMissingDays - that was never a Firestore
+  // Timestamp to begin with) - fall back to parsing it directly rather than
+  // silently collapsing to the Unix epoch.
+  if (typeof timestamp === "string") {
+    const d = new Date(timestamp);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
   return null;
 }
 
@@ -112,6 +120,44 @@ export function exportToCSV<T extends Record<string, unknown>>(
   link.download = `${filename}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+// Shared CSV shape for the department-wide / college-wide monthly exports
+// (one row per person for the whole month, from buildRosterMonthlySummary)
+// - reused by every "Export Month CSV" button (HOD, Principal/VP,
+// Management). Deliberately one row per person, not one row per person per
+// day - at real headcounts (hundreds to thousands) a day-by-day export
+// becomes tens of thousands of rows for one month, which is both slow to
+// open and not what a roster-wide export is for. The day-by-day breakdown
+// for one person is still available from that person's own "My Attendance"
+// export (see PersonMonthlyAttendanceView.handleExport).
+export function exportRosterMonthlyCSV(rows: MonthlySummaryRow[], filenameBase: string): void {
+  const csvRows = rows.map((r) => ({
+    facultyName: r.facultyName,
+    role: r.role,
+    department: r.department,
+    totalDays: r.totalDays,
+    present: r.present,
+    absent: r.absent,
+    halfDay: r.halfDay,
+    onLeave: r.onLeave,
+    onDuty: r.onDuty,
+    holiday: r.holiday,
+    lateArrivals: r.lateArrivals,
+  }));
+  exportToCSV(csvRows, filenameBase, [
+    { key: "facultyName", header: "Name" },
+    { key: "role", header: "Role" },
+    { key: "department", header: "Department" },
+    { key: "totalDays", header: "Total Days" },
+    { key: "present", header: "Present" },
+    { key: "absent", header: "Absent" },
+    { key: "halfDay", header: "Half Day" },
+    { key: "onLeave", header: "On Leave" },
+    { key: "onDuty", header: "On Duty" },
+    { key: "holiday", header: "Holiday" },
+    { key: "lateArrivals", header: "Late Arrivals" },
+  ]);
 }
 
 export function truncate(str: string, length: number): string {
