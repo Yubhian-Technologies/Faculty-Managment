@@ -1,5 +1,5 @@
 import { findBranchManager } from "@/lib/departments/managedBranches";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, fedYears } from "@/lib/college/academicStructure";
 import type { Course, Department } from "@/types";
 
 // Client-side counterpart to getHodDepartmentScope (which is server-only, since
@@ -143,18 +143,24 @@ export function buildCourseGroups(courses: Course[]): CourseGroup[] {
  * college/departments POST strips assignedYears from anything an HOD
  * creates, and the courseScope override is Principal-only), its parent's.
  * This is what a manager itself teaches - never a managed branch's own later
- * years, which belong to that branch's own dedicated HOD instead.
+ * years, which belong to that branch's own dedicated HOD instead. Always
+ * excludes any year a feeder elsewhere has already claimed for `manager`
+ * (fedYears) - own/inherited assignedYears is supposed to already reflect
+ * that, but an unconfigured department (assignedYears never set) would
+ * otherwise fall through to the parent, or nothing, without ever ruling out
+ * a year that structurally can never be this manager's own.
  */
 export function managerEffectiveYears(
   manager: Department,
   allDepartments: Department[],
   catalogId: string | undefined
 ): number[] {
+  const excluded = fedYears(manager, allDepartments, catalogId);
   const own = resolveDepartmentCourseScope(manager, catalogId).assignedYears;
-  if (own.length > 0) return own;
+  if (own.length > 0) return own.filter((y) => !excluded.includes(y));
   if (manager.parentDepartmentId) {
     const parent = allDepartments.find((p) => p.id === manager.parentDepartmentId);
-    if (parent) return resolveDepartmentCourseScope(parent, catalogId).assignedYears;
+    if (parent) return resolveDepartmentCourseScope(parent, catalogId).assignedYears.filter((y) => !excluded.includes(y));
   }
   return [];
 }
@@ -186,24 +192,34 @@ export function managedBranchYearsMap(departments: Department[], catalogId?: str
  * intersected with the course's own span, never the raw 1..durationYears,
  * which is what let Teaching Assignments offer years the department doesn't
  * run. Falls back to the full span when nothing is assigned anywhere, so an
- * unconfigured college isn't locked out. `catalogId` omitted (a legacy,
- * pre-catalog course - see CourseGroup) falls back to each department's flat
- * fields only, unchanged from before per-course overrides existed.
+ * unconfigured college isn't locked out - but a year some OTHER department
+ * has already claimed as a feeder FOR one of `relevantDepartments`
+ * (fedYears) is excluded from that fallback too, since assignedYears going
+ * unconfigured is exactly the case where "show every year" would otherwise
+ * incorrectly include one this department structurally can never teach
+ * itself (e.g. a common first year owned by Basic Science). `catalogId`
+ * omitted (a legacy, pre-catalog course - see CourseGroup) falls back to
+ * each department's flat fields only, unchanged from before per-course
+ * overrides existed.
  */
 export function yearsInScope(
   durationYears: number,
   relevantDepartments: Department[],
   managedBranchYears: Map<string, number[]>,
   viewsManagedBranchYears: boolean,
-  catalogId?: string
+  catalogId: string | undefined,
+  allDepartments: Department[]
 ): number[] {
   const courseYears = Array.from({ length: durationYears }, (_, i) => i + 1);
   const assigned = new Set<number>();
+  const excluded = new Set<number>();
   for (const d of relevantDepartments) {
+    for (const y of fedYears(d, allDepartments, catalogId)) excluded.add(y);
     for (const y of resolveDepartmentCourseScope(d, catalogId).assignedYears) assigned.add(y);
     if (viewsManagedBranchYears) {
       for (const y of managedBranchYears.get(d.name) ?? []) assigned.add(y);
     }
   }
-  return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
+  const base = assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
+  return base.filter((y) => !excluded.has(y));
 }

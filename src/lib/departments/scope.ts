@@ -1,3 +1,6 @@
+import type { DepartmentCourseScope } from "@/types";
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+
 // Resolves an HOD's department-scoping info, including sub-department (child
 // Department) awareness. Centralizes what used to be a duplicated per-route
 // `getHodDept()` - the difference here is `childDepartmentNames`, used to
@@ -341,17 +344,38 @@ export async function getDepartmentTreeNames(
 // own 2nd-year subjects, CSE's own 2nd-year subjects). Picks the first feeder
 // that actually claims the year; a department with no such feeder (or whose
 // feeder doesn't reserve this year) resolves to itself.
+//
+// catalogId-aware via resolveDepartmentCourseScope: a department can offer
+// several courses under one catalog entry (e.g. a B.Tech with a common first
+// year through a feeder, and an M.Tech it runs fully independently) - reading
+// the flat fields directly here (as this used to) meant an M.Tech's own Year
+// 1 got silently swept into the same feeder as that department's B.Tech Year
+// 1, even when courseScopes explicitly marks the M.Tech as independent (empty
+// secondaryDepartments). Every other caller of assignedYears/
+// secondaryDepartments already goes through resolveDepartmentCourseScope for
+// exactly this reason - this was the one holdout.
 export async function resolveSubjectDepartment(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
   targetDepartmentName: string,
-  year: number
+  year: number,
+  catalogId: string | undefined | null
 ): Promise<string> {
   const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
-  const feederSnap = await deptsColl.where("secondaryDepartments", "array-contains", targetDepartmentName).get();
-  for (const d of feederSnap.docs) {
-    const data = d.data() as { name?: string; assignedYears?: number[] };
-    if (data.name && (data.assignedYears ?? []).includes(year)) {
+  // courseScopes is a map keyed by catalogId, not a flat array Firestore can
+  // query into - has to be fetched and resolved in code rather than filtered
+  // server-side, same as getAcademicStructure().
+  const allSnap = await deptsColl.get();
+  for (const d of allSnap.docs) {
+    const data = d.data() as {
+      name?: string;
+      assignedYears?: number[];
+      secondaryDepartments?: string[];
+      courseScopes?: Record<string, DepartmentCourseScope>;
+    };
+    if (!data.name) continue;
+    const courseScope = resolveDepartmentCourseScope(data, catalogId);
+    if (courseScope.secondaryDepartments.includes(targetDepartmentName) && courseScope.assignedYears.includes(year)) {
       return data.name;
     }
   }

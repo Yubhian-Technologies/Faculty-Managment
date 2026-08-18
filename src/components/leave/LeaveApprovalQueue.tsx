@@ -27,6 +27,26 @@ interface PeriodCoverageEntry {
   candidates: { facultyId: string; facultyName: string }[];
 }
 
+// "Replacement" mode needs ONE faculty member who is actually free for every
+// affected period, not just some of them - each period's own eligibility
+// list (buildPeriodCoverage) already excludes anyone busy or on leave for
+// that specific day/period, so the only faculty safe to assign across the
+// whole leave are the ones appearing in ALL of them.
+function intersectCandidates(periods: PeriodCoverageEntry[]): { facultyId: string; facultyName: string }[] {
+  if (periods.length === 0) return [];
+  let ids: Set<string> = new Set(periods[0].candidates.map((c) => c.facultyId));
+  const nameById = new Map<string, string>();
+  for (const p of periods) {
+    const periodIds = new Set(p.candidates.map((c) => c.facultyId));
+    for (const c of p.candidates) nameById.set(c.facultyId, c.facultyName);
+    ids = new Set(Array.from(ids).filter((id) => periodIds.has(id)));
+    if (ids.size === 0) break;
+  }
+  return Array.from(ids)
+    .map((id) => ({ facultyId: id, facultyName: nameById.get(id) ?? id }))
+    .sort((a, b) => a.facultyName.localeCompare(b.facultyName));
+}
+
 // Shared by /hod/leave-approvals (department queue) and /principal/leave-approvals
 // (college-wide final sign-off) - the API scopes the results server-side.
 //
@@ -49,6 +69,11 @@ export function LeaveApprovalQueue() {
   const [periodsById, setPeriodsById] = useState<Record<string, PeriodCoverageEntry[]>>({});
   const [loadingPeriodsId, setLoadingPeriodsId] = useState<string | null>(null);
   const [substitutionsById, setSubstitutionsById] = useState<Record<string, Record<string, string>>>({});
+  // "Adjustment" (default) = the existing per-period picker below. "Replacement"
+  // = one faculty member covers every affected period for the whole leave -
+  // see intersectCandidates above.
+  const [coverageModeById, setCoverageModeById] = useState<Record<string, "ADJUSTMENT" | "REPLACEMENT">>({});
+  const [replacementFacultyById, setReplacementFacultyById] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -99,17 +124,30 @@ export function LeaveApprovalQueue() {
     }
     setActingId(r.id);
     try {
+      const mode = coverageModeById[r.id] ?? "ADJUSTMENT";
+      const periods = periodsById[r.id] ?? [];
       const picks = substitutionsById[r.id] ?? {};
+      const replacementFacultyId = replacementFacultyById[r.id];
       const periodSubstitutions =
-        action === "APPROVE" && isHodOtherDecision && Object.keys(picks).length > 0
-          ? (periodsById[r.id] ?? [])
-              .filter((p) => picks[`${p.date}|${p.timetableSlotId}`])
-              .map((p) => ({
-                date: p.date,
-                timetableSlotId: p.timetableSlotId,
-                substituteFacultyId: picks[`${p.date}|${p.timetableSlotId}`],
-              }))
-          : undefined;
+        action !== "APPROVE" || !isHodOtherDecision
+          ? undefined
+          : mode === "REPLACEMENT"
+            ? replacementFacultyId && periods.length > 0
+              ? periods.map((p) => ({
+                  date: p.date,
+                  timetableSlotId: p.timetableSlotId,
+                  substituteFacultyId: replacementFacultyId,
+                }))
+              : undefined
+            : Object.keys(picks).length > 0
+              ? periods
+                  .filter((p) => picks[`${p.date}|${p.timetableSlotId}`])
+                  .map((p) => ({
+                    date: p.date,
+                    timetableSlotId: p.timetableSlotId,
+                    substituteFacultyId: picks[`${p.date}|${p.timetableSlotId}`],
+                  }))
+              : undefined;
       const res = await fetch(`/api/leave/applications/${r.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -248,11 +286,54 @@ export function LeaveApprovalQueue() {
 
                     {isHodOtherDecision && (
                       <div className="space-y-1.5">
-                        <label className="text-xs text-muted-foreground">Adjust / replace periods (optional)</label>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <label className="text-xs text-muted-foreground">Adjust / replace periods (optional)</label>
+                          {(periodsById[r.id]?.length ?? 0) > 0 && (
+                            <SegmentedTabs
+                              value={coverageModeById[r.id] ?? "ADJUSTMENT"}
+                              onChange={(v) =>
+                                setCoverageModeById((prev) => ({ ...prev, [r.id]: v as "ADJUSTMENT" | "REPLACEMENT" }))
+                              }
+                              options={[
+                                { key: "ADJUSTMENT", label: "Adjustment" },
+                                { key: "REPLACEMENT", label: "Replacement" },
+                              ]}
+                            />
+                          )}
+                        </div>
                         {loadingPeriodsId === r.id ? (
                           <div className="h-12 bg-muted animate-pulse rounded-lg" />
                         ) : (periodsById[r.id]?.length ?? 0) === 0 ? (
                           <p className="text-xs text-muted-foreground italic">No teaching periods fall within this leave range.</p>
+                        ) : (coverageModeById[r.id] ?? "ADJUSTMENT") === "REPLACEMENT" ? (
+                          (() => {
+                            const replacementCandidates = intersectCandidates(periodsById[r.id]!);
+                            return (
+                              <div className="rounded-lg border p-2.5 space-y-2">
+                                <p className="text-xs text-muted-foreground">
+                                  One faculty member covers all {periodsById[r.id]!.length} affected period{periodsById[r.id]!.length === 1 ? "" : "s"} for the entire leave.
+                                </p>
+                                <Select
+                                  value={replacementFacultyById[r.id] ?? ""}
+                                  onValueChange={(v) => setReplacementFacultyById((prev) => ({ ...prev, [r.id]: v }))}
+                                >
+                                  <SelectTrigger className="w-56">
+                                    <SelectValue placeholder={replacementCandidates.length ? "Select replacement faculty" : "No one is free for every period"} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {replacementCandidates.map((c) => (
+                                      <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {replacementCandidates.length === 0 && (
+                                  <p className="text-xs text-destructive">
+                                    No single faculty is free for every affected period - switch to Adjustment to cover periods individually.
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()
                         ) : (
                           <div className="space-y-2 rounded-lg border p-2.5">
                             {periodsById[r.id]!.map((p) => {

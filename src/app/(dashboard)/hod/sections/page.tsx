@@ -324,7 +324,7 @@ export default function HODSectionsPage() {
       // A specific branch is the active filter - its own years for this
       // course, plus whatever shared year its manager contributes.
       const relevant = departments.filter((d) => d.name === deptFilter);
-      return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId);
+      return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId, departments);
     }
 
     if (viewsManagedBranchYears) {
@@ -349,7 +349,7 @@ export default function HODSectionsPage() {
     }
 
     const relevant = resolveScopeDepartments(ownDept, departments, isGroupingContainer, useCascadeFilter, groupingChildren, plainChildren);
-    return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId);
+    return yearsInScope(activeDurationYears, relevant, managedBranchYearsForActiveCourse, viewsManagedBranchYears, activeCatalogId, departments);
   }, [
     activeDurationYears, activeCatalogId, deptFilter, departments, ownDept, useCascadeFilter, groupingChildren,
     plainChildren, isGroupingContainer, viewsManagedBranchYears, subDeptFilter,

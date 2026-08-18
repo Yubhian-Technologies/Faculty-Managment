@@ -37,11 +37,14 @@ export async function requireSuperAdmin(): Promise<SessionPayload> {
 }
 
 // MANAGEMENT is a global, read-only role - routes using this must only implement GET handlers,
-// with two deliberate exceptions: src/app/api/management/emergency-budget-requests/[id]/route.ts's
-// PATCH (approve/reject/return an emergency budget request), and
-// src/app/api/management/leave-approvals/[id]/route.ts's PATCH (decide a Principal's own leave
-// request, which has no one else within the college to approve it). Don't add more write routes
-// under this role without the same justification.
+// with three deliberate exceptions: src/app/api/management/emergency-budget-requests/[id]/route.ts's
+// PATCH (approve/reject/return an emergency budget request); src/app/api/management/leave-approvals/[id]/route.ts's
+// PATCH (decide a Principal's own leave request, which has no one else within the college to
+// approve it); and src/app/api/management/colleges/[collegeId]/principal-attendance/reset/route.ts's
+// POST (reset a Principal's face registration - nobody within the college outranks a Principal to
+// do it, mirroring HOD/Principal/VP resetting each other one tier down via
+// /api/college/attendance/face-registration/reset). Don't add more write routes under this role
+// without the same justification.
 export async function requireManagement(): Promise<SessionPayload> {
   const session = await verifySession();
   if (!session || session.role !== "MANAGEMENT") {

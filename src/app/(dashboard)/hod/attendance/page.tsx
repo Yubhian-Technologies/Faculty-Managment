@@ -5,7 +5,6 @@ import { CalendarDays, Info, LogIn, LogOut, ScanFace } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -16,7 +15,8 @@ import {
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
-import { CHECK_IN_CLOSED_MESSAGE, SUNDAY_HOLIDAY_MESSAGE, isBeforeCheckInWindow, isSunday } from "@/lib/attendance/attendanceWindow";
+import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -119,8 +119,6 @@ export default function HODAttendancePage() {
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
             {isSunday(now) ? (
               <p className="text-sm text-muted-foreground">{SUNDAY_HOLIDAY_MESSAGE}</p>
-            ) : isBeforeCheckInWindow(now) ? (
-              <p className="text-sm text-muted-foreground">{CHECK_IN_CLOSED_MESSAGE}</p>
             ) : faceRegistered === false ? (
               <>
                 <p className="text-sm text-muted-foreground">
@@ -241,12 +239,7 @@ export default function HODAttendancePage() {
           <CardContent className="p-0">
             <div className="divide-y">
               {records.map((rec) => {
-                const rawDate = rec.date as unknown as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
-                const d = rawDate
-                  ? typeof rawDate.toDate === "function"
-                    ? rawDate.toDate()
-                    : new Date(((rawDate._seconds ?? rawDate.seconds) ?? 0) * 1000)
-                  : null;
+                const d = toDate(rec.date);
 
                 const dayName = d
                   ? d.toLocaleDateString("en-IN", { weekday: "short" })
@@ -264,12 +257,17 @@ export default function HODAttendancePage() {
                     </div>
 
                     {/* Status badge */}
-                    <div className="flex-1">
+                    <div className="flex-1 flex items-center gap-1.5">
                       <span
                         className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(rec.status)}`}
                       >
                         {ATTENDANCE_STATUS_LABELS[rec.status]}
                       </span>
+                      {rec.status === "PRESENT" && isLateCheckIn(rec.checkIn) && (
+                        <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
+                          Late
+                        </span>
+                      )}
                     </div>
 
                     {/* Check-in / check-out */}
