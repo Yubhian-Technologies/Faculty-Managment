@@ -48,6 +48,33 @@ export function resolveDepartmentCourseScope(
 }
 
 /**
+ * Years `department` does NOT teach itself for `catalogId`, even if its own
+ * assignedYears (flat or per-course override) says nothing about them - years
+ * some OTHER department has claimed as a feeder for this one
+ * (secondaryDepartments, resolved the same catalog-aware way - see
+ * resolveSubjectDepartment, which is what actually files a fed year's
+ * subjects under the feeder instead of `department`). A department's own
+ * assignedYears is supposed to already exclude whatever a feeder claims, but
+ * a department left unconfigured (assignedYears never set) falls back to
+ * offering every year it structurally can't own - this closes that gap.
+ * Callers building a "years this department teaches" list should always
+ * subtract this, not just trust assignedYears on its own.
+ */
+export function fedYears(
+  department: Pick<Department, "name">,
+  allDepartments: Department[],
+  catalogId: string | undefined | null
+): number[] {
+  const years = new Set<number>();
+  for (const feeder of allDepartments) {
+    const scope = resolveDepartmentCourseScope(feeder, catalogId);
+    if (!scope.secondaryDepartments.includes(department.name)) continue;
+    for (const y of scope.assignedYears) years.add(y);
+  }
+  return Array.from(years);
+}
+
+/**
  * Whether a department already acts as a shared-year structural node - split
  * into sub-departments, or already cross-listing branches for some course
  * (its flat fields, or any per-course override). Such a department adding

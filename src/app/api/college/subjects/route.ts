@@ -221,7 +221,7 @@ export async function POST(request: Request) {
         // files under the feeder instead, so every fed department reads from
         // one shared 1st-year list; other years (2nd year onward) stay filed
         // under the department actually selected (IT for IT, CS for CS, ...).
-        dept = await resolveSubjectDepartment(db, session.collegeId, requestedDept, Number(year));
+        dept = await resolveSubjectDepartment(db, session.collegeId, requestedDept, Number(year), course.catalogId);
       }
 
       // The department the subject is finally filed under (own, a
