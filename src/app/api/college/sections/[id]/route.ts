@@ -31,12 +31,19 @@ async function assertHodOwnsSection(
   collegeId: string,
   scope: Awaited<ReturnType<typeof getHodDepartmentScope>>,
   sectionDepartment: string,
-  sectionYear: number
+  sectionYear: number,
+  sectionCourseId: string | undefined
 ): Promise<boolean> {
   if (!canHodEditDepartment(scope, sectionDepartment)) return false;
-  const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
+  const [deptsSnap, courseSnap] = await Promise.all([
+    db.collection("colleges").doc(collegeId).collection("departments").get(),
+    sectionCourseId ? db.collection("colleges").doc(collegeId).collection("courses").doc(sectionCourseId).get() : Promise.resolve(null),
+  ]);
   const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
-  const owner = resolveBranchYearOwner(departments, sectionDepartment, sectionYear);
+  // A manager can run more than one course with different years, so ownership
+  // must resolve against THIS section's own course, not just its department.
+  const catalogId = courseSnap?.exists ? (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
+  const owner = resolveBranchYearOwner(departments, sectionDepartment, sectionYear, catalogId);
   return scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner);
 }
 
@@ -66,7 +73,7 @@ export async function PATCH(
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const oldSection = snap.data() as { department?: string; name?: string; year?: number };
+    const oldSection = snap.data() as { department?: string; name?: string; year?: number; courseId?: string };
     const sectionDept = oldSection.department ?? "";
     const sectionYear = oldSection.year ?? 0;
 
@@ -75,7 +82,7 @@ export async function PATCH(
     let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
     if (session.role === "HOD") {
       hodScope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!(await assertHodOwnsSection(db, session.collegeId, hodScope, sectionDept, sectionYear))) {
+      if (!(await assertHodOwnsSection(db, session.collegeId, hodScope, sectionDept, sectionYear, oldSection.courseId))) {
         return NextResponse.json({ error: "You can only edit sections in your own department" }, { status: 403 });
       }
     }
@@ -355,7 +362,7 @@ export async function DELETE(
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!(await assertHodOwnsSection(db, session.collegeId, scope, data.department ?? "", data.year ?? 0))) {
+      if (!(await assertHodOwnsSection(db, session.collegeId, scope, data.department ?? "", data.year ?? 0, data.courseId))) {
         return NextResponse.json({ error: "You can only delete sections in your own department" }, { status: 403 });
       }
     }

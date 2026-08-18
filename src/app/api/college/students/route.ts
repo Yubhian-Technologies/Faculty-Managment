@@ -133,6 +133,24 @@ export async function GET(request: Request) {
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
     ]);
 
+    // A manager can run more than one course with different years (e.g. a
+    // sub-department sharing a B.Tech's first year while also running an
+    // independent course of its own) - resolveBranchYearOwner below needs
+    // each student's own course to resolve ownership against the right one,
+    // not always the manager's flat years. StudentRecord has no courseId of
+    // its own (see the PANEL_MEMBER branch above), only the free-text
+    // `course` admission field - resolved the same way RosterFieldInputs.tsx
+    // and the roster-import path already do.
+    let allCourses: Course[] = [];
+    const deptIdByName = new Map<string, string>();
+    if (hodScope && hodDepartments.length > 0) {
+      const coursesSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").get();
+      allCourses = coursesSnap.docs.map((c) => ({ id: c.id, ...(c.data() as object) })) as Course[];
+      for (const d of hodDepartments) if (d.name) deptIdByName.set(d.name, d.id);
+    }
+    const studentCatalogId = (data: Omit<StudentRecord, "id">) =>
+      resolveCatalogId(allCourses, deptIdByName.get(data.department as string), data.course);
+
     const seenIds = new Set<string>();
     const students: (Omit<StudentRecord, "id"> & { id: string; accessLevel: "primary" | "secondary" })[] = [];
     for (const d of primarySnap.docs) {
@@ -141,7 +159,7 @@ export async function GET(request: Request) {
       // by whoever manages this branch elsewhere (e.g. a shared first year
       // routed through a common department's sub-department instead).
       if (hodScope && hodDepartments.length > 0) {
-        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number);
+        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number, studentCatalogId(data));
         if (!hodScope.ownDepartmentNames.includes(owner)) continue;
       }
       seenIds.add(d.id);
@@ -161,7 +179,7 @@ export async function GET(request: Request) {
         // that's the relationship that's year-scoped (only the years the
         // manager - this HOD, or one of their own children - actually teaches).
         if (hodScope!.managedDepartmentNames.includes(deptName) && hodDepartments.length > 0) {
-          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number);
+          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number, studentCatalogId(data));
           if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) continue;
         }
         seenIds.add(d.id);

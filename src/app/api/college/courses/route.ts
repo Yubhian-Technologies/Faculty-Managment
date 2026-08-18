@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getRelatedDepartmentIds } from "@/lib/departments/scope";
-import { isSharedYearStructuralDepartment, findUnconnectedCourseOwners, type DepartmentWithId } from "@/lib/college/academicStructure";
+import type { DepartmentWithId } from "@/lib/college/academicStructure";
 import { validateAssignedYears, validateSecondaryDepartmentNames } from "@/lib/departments/courseScopeValidation";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import type { Department } from "@/types";
@@ -129,14 +129,20 @@ export async function POST(request: Request) {
       departmentId: string;
       catalogId: string;
       // This course's own academic-structure override, set atomically with its
-      // creation rather than as a separate follow-up edit - see
-      // isSharedYearStructuralDepartment below for when it's required.
+      // creation rather than as a separate follow-up edit. Required
+      // unconditionally - a department's flat assignedYears is a legacy
+      // fallback only (no longer editable from Add/Edit Department), so every
+      // course must decide its own years right here or it would resolve to
+      // nothing.
       courseScope?: { assignedYears: number[]; secondaryDepartments: string[] };
     };
 
     const { departmentId, catalogId } = body;
     if (!departmentId || !catalogId) {
       return NextResponse.json({ error: "departmentId and catalogId are required" }, { status: 400 });
+    }
+    if (!body.courseScope || !Array.isArray(body.courseScope.assignedYears) || body.courseScope.assignedYears.length === 0) {
+      return NextResponse.json({ error: "Select at least one year this department teaches this course" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -163,63 +169,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This course is already added to the department" }, { status: 409 });
     }
 
-    const [deptSnap, allDeptsSnap, sameCatalogCoursesSnap] = await Promise.all([
+    const [deptSnap, allDeptsSnap] = await Promise.all([
       collegeRef.collection("departments").doc(departmentId).get(),
       collegeRef.collection("departments").get(),
-      collegeRef.collection("courses").where("catalogId", "==", catalogId).get(),
     ]);
     if (!deptSnap.exists) {
       return NextResponse.json({ error: "Department not found" }, { status: 400 });
     }
     const dept = { id: deptSnap.id, ...(deptSnap.data() as object) } as DepartmentWithId;
     const allDepartments = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
-    const otherDepartmentIds = Array.from(
-      new Set(sameCatalogCoursesSnap.docs.map((d) => (d.data() as { departmentId: string }).departmentId))
-    );
 
-    // A department already acting as a shared-year structural node (has
-    // sub-departments, or already cross-lists someone for some course) must
-    // deliberately decide how a NEW course relates to its branches, rather
-    // than silently inheriting whatever cross-listing already exists - that's
-    // exactly what let an M.Tech added here come out cross-listed to the same
-    // branches as an unrelated B.Tech by accident. An ordinary branch adding
-    // its own independent copy of any course is never restricted by this.
-    if (isSharedYearStructuralDepartment(dept) && otherDepartmentIds.length > 0) {
-      const unconnected = findUnconnectedCourseOwners(
-        dept, catalogId, otherDepartmentIds, allDepartments, body.courseScope?.secondaryDepartments
+    const years = Array.from(new Set(body.courseScope.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
+    const tooLong = years.filter((y) => y > catalog.durationYears);
+    if (tooLong.length > 0) {
+      return NextResponse.json(
+        { error: `Year(s) ${tooLong.join(", ")} are beyond this course's ${catalog.durationYears}-year duration` },
+        { status: 400 }
       );
-      if (unconnected.length > 0 && !body.courseScope) {
-        return NextResponse.json(
-          {
-            error: `${catalog.name} is already offered by ${unconnected.map((d) => d.name).join(", ")}, with no shared-year link to ${dept.name}. Set this course's own Years Taught / Secondary Departments when adding it here to say how the two relate.`,
-          },
-          { status: 409 }
-        );
-      }
+    }
+    const yearsError = await validateAssignedYears(db, session.collegeId, years);
+    if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
+
+    const secNames = Array.from(new Set(body.courseScope.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
+    if (secNames.length > 0) {
+      const byName = new Map(allDepartments.map((d) => [d.name, d]));
+      const secError = validateSecondaryDepartmentNames(secNames, dept.name, byName);
+      if (secError) return NextResponse.json({ error: secError }, { status: 400 });
     }
 
-    let scopeToWrite: { assignedYears: number[]; secondaryDepartments: string[] } | null = null;
-    if (body.courseScope) {
-      const years = Array.from(new Set(body.courseScope.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
-      const tooLong = years.filter((y) => y > catalog.durationYears);
-      if (tooLong.length > 0) {
-        return NextResponse.json(
-          { error: `Year(s) ${tooLong.join(", ")} are beyond this course's ${catalog.durationYears}-year duration` },
-          { status: 400 }
-        );
-      }
-      const yearsError = await validateAssignedYears(db, session.collegeId, years);
-      if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
-
-      const secNames = Array.from(new Set(body.courseScope.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
-      if (secNames.length > 0) {
-        const byName = new Map(allDepartments.map((d) => [d.name, d]));
-        const secError = validateSecondaryDepartmentNames(secNames, dept.name, byName);
-        if (secError) return NextResponse.json({ error: secError }, { status: 400 });
-      }
-
-      scopeToWrite = { assignedYears: years, secondaryDepartments: secNames };
-    }
+    const scopeToWrite: { assignedYears: number[]; secondaryDepartments: string[] } = { assignedYears: years, secondaryDepartments: secNames };
 
     const now = new Date();
     const coursesCol = collegeRef.collection("courses");
