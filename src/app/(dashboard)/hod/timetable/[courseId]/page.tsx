@@ -59,7 +59,7 @@ export default function HODTimetableYearsPage() {
     if (!course) return [];
     const dept = departments.find((d) => d.id === course.departmentId);
     if (!dept) return [];
-    return yearsInScope(course.durationYears, [dept], managedBranchYears, viewsManagedBranchYears, course.catalogId);
+    return yearsInScope(course.durationYears, [dept], managedBranchYears, viewsManagedBranchYears, course.catalogId, departments);
   })();
 
   return (
