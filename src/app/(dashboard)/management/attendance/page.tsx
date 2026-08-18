@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { ShieldCheck, CalendarDays, Download } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { toDate, exportRosterMonthlyCSV } from "@/lib/utils";
+import { toast } from "@/hooks/useToast";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
-import type { Location, College, Department, Course, AttendanceStatus, AttendanceRecord } from "@/types";
+import type { Location, College, Department, Course, AttendanceStatus, AttendanceRecord, MonthlyExportRow } from "@/types";
 
 function todayISO(): string {
   const d = new Date();
@@ -40,6 +44,11 @@ function dateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function currentMonthValue(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 interface Row {
   uid: string;
   name: string;
@@ -48,6 +57,9 @@ interface Row {
   checkOut: string | null;
   checkInVerified?: boolean;
   checkOutVerified?: boolean;
+  // The reason an HOD/Principal/VP wrote when manually marking/correcting
+  // this record, or the auto-generated explanation for a derived Absent day.
+  remarks?: string | null;
 }
 
 interface DeptRosterEntry extends Row {
@@ -55,7 +67,12 @@ interface DeptRosterEntry extends Row {
   courseIds?: string[];
 }
 
-function RosterTable({ rows }: { rows: Row[] }) {
+// monthlyViewHref is used verbatim (for single-row tables where every row is
+// the same person, e.g. Principal/VP - the college-scoped monthly page
+// doesn't need a uid). monthlyViewBasePath instead appends `/${row.uid}`
+// (for multi-row tables, e.g. HOD/Faculty). At most one is passed per call.
+function RosterTable({ rows, monthlyViewHref, monthlyViewBasePath }: { rows: Row[]; monthlyViewHref?: string; monthlyViewBasePath?: string }) {
+  const showActions = !!monthlyViewHref || !!monthlyViewBasePath;
   return (
     <div className="rounded-lg border overflow-hidden">
       <div className="overflow-x-auto">
@@ -66,10 +83,14 @@ function RosterTable({ rows }: { rows: Row[] }) {
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Status</th>
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Check In</th>
               <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Check Out</th>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Reason</th>
+              {showActions && <th className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap" />}
             </tr>
           </thead>
           <tbody className="divide-y">
-            {rows.map((row) => (
+            {rows.map((row) => {
+              const href = monthlyViewHref ?? (monthlyViewBasePath ? `${monthlyViewBasePath}/${row.uid}` : undefined);
+              return (
               <tr key={row.uid} className="bg-background">
                 <td className="px-4 py-3 whitespace-nowrap">{row.name}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
@@ -100,8 +121,23 @@ function RosterTable({ rows }: { rows: Row[] }) {
                     </span>
                   ) : "—"}
                 </td>
+                <td className="px-4 py-3 max-w-xs">
+                  {row.remarks ? <span className="text-xs text-muted-foreground italic">{row.remarks}</span> : "—"}
+                </td>
+                {showActions && (
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {href && (
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={href}>
+                          <CalendarDays className="h-3.5 w-3.5 mr-1" /> This Month
+                        </Link>
+                      </Button>
+                    )}
+                  </td>
+                )}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -147,6 +183,12 @@ export default function ManagementAttendancePage() {
 
   const [deptRoster, setDeptRoster] = useState<DeptRosterEntry[]>([]);
   const [isLoadingDeptRoster, setIsLoadingDeptRoster] = useState(false);
+
+  // Department-wide / college-wide monthly CSV export (every day of the
+  // selected month, every person in scope) - distinct from the per-date
+  // roster views above.
+  const [exportMonth, setExportMonth] = useState(currentMonthValue());
+  const [exportingScope, setExportingScope] = useState<"department" | "college" | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/locations")
@@ -198,47 +240,66 @@ export default function ManagementAttendancePage() {
   const collegesForLocation = colleges.filter((c) => c.locationId === selectedLocationId);
 
   // Principal + Vice Principal + department list, once a College is selected.
+  // Guarded against races: switching colleges again before an in-flight
+  // fetch for the *previous* college resolves must not let that stale
+  // response overwrite the newly-selected college's data (e.g. a slow
+  // response for College A landing after College B has already been picked
+  // would otherwise show College A's Vice Principal under College B).
   useEffect(() => {
+    let cancelled = false;
+    // Wrapped in an async IIFE so every setState call below is reachable
+    // only from a callback, never synchronously from the effect body
+    // (react-hooks/set-state-in-effect) - same convention used throughout
+    // this codebase's other attendance pages.
     void (async () => {
       if (!selectedCollegeId) return;
+      const collegeId = selectedCollegeId;
+
       setIsLoadingPrincipal(true);
-      fetch(`/api/management/colleges/${selectedCollegeId}/staff?role=PRINCIPAL`)
+      fetch(`/api/management/colleges/${collegeId}/staff?role=PRINCIPAL`)
         .then((r) => r.json() as Promise<{ profile: { uid?: string; name?: string } | null }>)
         .then((d) => {
+          if (cancelled) return;
           const p = d.profile?.uid ? { uid: d.profile.uid, name: d.profile.name ?? "" } : null;
           setPrincipal(p);
           setSelectedPrincipalUid(p ? p.uid : "");
         })
-        .catch(() => setPrincipal(null))
-        .finally(() => setIsLoadingPrincipal(false));
+        .catch(() => { if (!cancelled) setPrincipal(null); })
+        .finally(() => { if (!cancelled) setIsLoadingPrincipal(false); });
 
       setIsLoadingVicePrincipal(true);
-      fetch(`/api/management/colleges/${selectedCollegeId}/staff?role=VICE_PRINCIPAL`)
+      fetch(`/api/management/colleges/${collegeId}/staff?role=VICE_PRINCIPAL`)
         .then((r) => r.json() as Promise<{ profile: { uid?: string; name?: string } | null }>)
-        .then((d) => setVicePrincipal(d.profile?.uid ? { uid: d.profile.uid, name: d.profile.name ?? "" } : null))
-        .catch(() => setVicePrincipal(null))
-        .finally(() => setIsLoadingVicePrincipal(false));
+        .then((d) => { if (!cancelled) setVicePrincipal(d.profile?.uid ? { uid: d.profile.uid, name: d.profile.name ?? "" } : null); })
+        .catch(() => { if (!cancelled) setVicePrincipal(null); })
+        .finally(() => { if (!cancelled) setIsLoadingVicePrincipal(false); });
 
-      fetch(`/api/management/colleges/${selectedCollegeId}/departments`)
+      fetch(`/api/management/colleges/${collegeId}/departments`)
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
-        .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
+        .then((d) => { if (!cancelled) setDepartments((d.departments ?? []).filter((dep) => dep.isActive)); })
         .catch(() => { /* non-critical - the Department select will just stay empty */ });
     })();
+    // Marks any in-flight fetch above as stale the moment the college
+    // selection changes again, so a slow response for the *previous*
+    // college can never overwrite the newly-selected college's data (e.g. a
+    // slow response for College A landing after College B has already been
+    // picked would otherwise show College A's Vice Principal under College B).
+    return () => { cancelled = true; };
   }, [selectedCollegeId]);
 
-  // Principal's own attendance for the selected date.
+  // Principal's own attendance for the selected date. Same race guard as
+  // the effect above.
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       if (!selectedCollegeId || !selectedPrincipalUid || !principal) { setPrincipalRow(null); return; }
       const [y, m] = date.split("-").map(Number);
       fetch(`/api/management/colleges/${selectedCollegeId}/principal-attendance?year=${y}&month=${m}`)
         .then((r) => r.json() as Promise<{ records: (AttendanceRecord & { id: string })[]; registered?: boolean }>)
         .then((d) => {
+          if (cancelled) return;
           const rec = (d.records ?? []).find((r) => {
-            const raw = r.date as unknown as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
-            const rd = raw
-              ? typeof raw.toDate === "function" ? raw.toDate() : new Date(((raw._seconds ?? raw.seconds) ?? 0) * 1000)
-              : null;
+            const rd = toDate(r.date);
             return rd ? dateKey(rd) === date : false;
           });
           setPrincipalRow({
@@ -249,25 +310,26 @@ export default function ManagementAttendancePage() {
             checkOut: rec?.checkOut ?? null,
             checkInVerified: rec?.checkInVerified,
             checkOutVerified: rec?.checkOutVerified,
+            remarks: rec?.remarks ?? null,
           });
         })
-        .catch(() => setPrincipalRow(null));
+        .catch(() => { if (!cancelled) setPrincipalRow(null); });
     })();
+    return () => { cancelled = true; };
   }, [selectedCollegeId, selectedPrincipalUid, principal, date]);
 
-  // Vice Principal's own attendance for the selected date.
+  // Vice Principal's own attendance for the selected date. Same race guard.
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       if (!selectedCollegeId || !vicePrincipal) { setVicePrincipalRow(null); return; }
       const [y, m] = date.split("-").map(Number);
       fetch(`/api/management/colleges/${selectedCollegeId}/vice-principal-attendance?year=${y}&month=${m}`)
         .then((r) => r.json() as Promise<{ records: (AttendanceRecord & { id: string })[]; registered?: boolean }>)
         .then((d) => {
+          if (cancelled) return;
           const rec = (d.records ?? []).find((r) => {
-            const raw = r.date as unknown as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
-            const rd = raw
-              ? typeof raw.toDate === "function" ? raw.toDate() : new Date(((raw._seconds ?? raw.seconds) ?? 0) * 1000)
-              : null;
+            const rd = toDate(r.date);
             return rd ? dateKey(rd) === date : false;
           });
           setVicePrincipalRow({
@@ -278,37 +340,79 @@ export default function ManagementAttendancePage() {
             checkOut: rec?.checkOut ?? null,
             checkInVerified: rec?.checkInVerified,
             checkOutVerified: rec?.checkOutVerified,
+            remarks: rec?.remarks ?? null,
           });
         })
-        .catch(() => setVicePrincipalRow(null));
+        .catch(() => { if (!cancelled) setVicePrincipalRow(null); });
     })();
+    return () => { cancelled = true; };
   }, [selectedCollegeId, vicePrincipal, date]);
 
   const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId) ?? null;
   const selectedDepartmentName = selectedDepartment?.name ?? "";
 
-  // Courses, once a Department is selected.
+  async function handleExportMonth(scope: "department" | "college") {
+    if (!selectedCollegeId) return;
+    const [y, m] = exportMonth.split("-").map(Number);
+    if (!y || !m) {
+      toast({ variant: "destructive", title: "Select a month first" });
+      return;
+    }
+    const params = new URLSearchParams({ scope, year: String(y), month: String(m) });
+    if (scope === "department") {
+      if (!selectedDepartmentName) return;
+      params.set("department", selectedDepartmentName);
+    }
+    setExportingScope(scope);
+    try {
+      const res = await fetch(`/api/management/colleges/${selectedCollegeId}/monthly-export?${params.toString()}`);
+      const d = await res.json() as { rows?: MonthlyExportRow[]; department?: string; error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: d.error ?? "Failed to export" });
+        return;
+      }
+      if (!d.rows || d.rows.length === 0) {
+        toast({ title: "Nothing to export for that month" });
+        return;
+      }
+      const collegeName = colleges.find((c) => c.id === selectedCollegeId)?.name ?? "college";
+      const label = scope === "college" ? collegeName : (d.department || selectedDepartmentName);
+      exportRosterMonthlyCSV(d.rows, `attendance-${label}-${exportMonth}`);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to export" });
+    } finally {
+      setExportingScope(null);
+    }
+  }
+
+  // Courses, once a Department is selected. Same race guard.
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       if (!selectedCollegeId || !selectedDepartmentId) { setCourses([]); return; }
       fetch(`/api/management/colleges/${selectedCollegeId}/courses?departmentId=${selectedDepartmentId}`)
         .then((r) => r.json() as Promise<{ courses: Course[] }>)
-        .then((d) => setCourses((d.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name))))
+        .then((d) => { if (!cancelled) setCourses((d.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name))); })
         .catch(() => { /* non-critical - the Course select will just stay empty */ });
     })();
+    return () => { cancelled = true; };
   }, [selectedCollegeId, selectedDepartmentId]);
 
   // HOD + Faculty roster for the selected department, on the selected date.
+  // Same race guard - a stale roster for a previously selected department/
+  // date must not overwrite a newer selection.
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       if (!selectedCollegeId || !selectedDepartmentName) { setDeptRoster([]); return; }
       setIsLoadingDeptRoster(true);
       fetch(`/api/management/colleges/${selectedCollegeId}/department-attendance?department=${encodeURIComponent(selectedDepartmentName)}&date=${date}`)
         .then((r) => r.json() as Promise<{ roster: DeptRosterEntry[] }>)
-        .then((d) => setDeptRoster(d.roster ?? []))
-        .catch(() => setDeptRoster([]))
-        .finally(() => setIsLoadingDeptRoster(false));
+        .then((d) => { if (!cancelled) setDeptRoster(d.roster ?? []); })
+        .catch(() => { if (!cancelled) setDeptRoster([]); })
+        .finally(() => { if (!cancelled) setIsLoadingDeptRoster(false); });
     })();
+    return () => { cancelled = true; };
   }, [selectedCollegeId, selectedDepartmentName, date]);
 
   const selectedCourse = courses.find((c) => c.id === selectedCourseId) ?? null;
@@ -418,10 +522,41 @@ export default function ManagementAttendancePage() {
         <EmptyState title="Select a college" />
       ) : (
         <div className="space-y-6">
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/20 p-3">
+            <div className="space-y-2">
+              <Label htmlFor="export-month">Export month</Label>
+              <Input
+                id="export-month"
+                type="month"
+                value={exportMonth}
+                onChange={(e) => setExportMonth(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!selectedDepartmentName || exportingScope !== null}
+              onClick={() => void handleExportMonth("department")}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {exportingScope === "department" ? "Exporting…" : "Export Department (Month)"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exportingScope !== null}
+              onClick={() => void handleExportMonth("college")}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {exportingScope === "college" ? "Exporting…" : "Export College (Month)"}
+            </Button>
+          </div>
+
           <div className="space-y-2">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Principal</h3>
             {principalRow ? (
-              <RosterTable rows={[principalRow]} />
+              <RosterTable rows={[principalRow]} monthlyViewHref={`/management/faculty/${selectedCollegeId}/principal/attendance`} />
             ) : (
               <p className="text-sm text-muted-foreground">
                 {isLoadingPrincipal ? "Loading…" : "No Principal assigned to this college."}
@@ -432,7 +567,7 @@ export default function ManagementAttendancePage() {
           <div className="space-y-2">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vice Principal</h3>
             {vicePrincipalRow ? (
-              <RosterTable rows={[vicePrincipalRow]} />
+              <RosterTable rows={[vicePrincipalRow]} monthlyViewHref={`/management/faculty/${selectedCollegeId}/vice-principal/attendance`} />
             ) : (
               <p className="text-sm text-muted-foreground">
                 {isLoadingVicePrincipal ? "Loading…" : "No Vice Principal assigned to this college."}
@@ -450,7 +585,7 @@ export default function ManagementAttendancePage() {
                 <div className="space-y-2">
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">HOD</h3>
                   {hodRow ? (
-                    <RosterTable rows={[hodRow]} />
+                    <RosterTable rows={[hodRow]} monthlyViewBasePath={`/management/faculty-attendance/${selectedCollegeId}`} />
                   ) : (
                     <p className="text-sm text-muted-foreground">No HOD assigned for this department.</p>
                   )}
@@ -461,7 +596,7 @@ export default function ManagementAttendancePage() {
                     Faculty · {facultyRows.length}
                   </h3>
                   {facultyRows.length > 0 ? (
-                    <RosterTable rows={facultyRows} />
+                    <RosterTable rows={facultyRows} monthlyViewBasePath={`/management/faculty-attendance/${selectedCollegeId}`} />
                   ) : (
                     <EmptyState title="No faculty found" />
                   )}

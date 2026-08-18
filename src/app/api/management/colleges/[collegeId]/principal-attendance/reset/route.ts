@@ -11,6 +11,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 // only the stored embedding on their users/{uid} doc. Resolves "the"
 // Principal by role the same way GET .../principal-attendance already does,
 // since Management's session isn't scoped to any one college.
+// One of requireManagement()'s three deliberate write exceptions - see that
+// comment in src/lib/auth/verifySession.ts.
 export async function POST(_request: Request, { params }: { params: Promise<{ collegeId: string }> }) {
   try {
     await requireManagement();

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { checkCampusGeofence } from "@/lib/attendance/geofence";
-import { CHECK_IN_CLOSED_MESSAGE, SUNDAY_HOLIDAY_MESSAGE, isBeforeCheckInWindow, isSunday } from "@/lib/attendance/attendanceWindow";
+import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
 import type { College } from "@/types";
 
 function todayDocDate(): { date: Date; docSuffix: string } {
@@ -28,9 +28,6 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     if (isSunday()) {
       return NextResponse.json({ error: SUNDAY_HOLIDAY_MESSAGE }, { status: 403 });
-    }
-    if (isBeforeCheckInWindow()) {
-      return NextResponse.json({ error: CHECK_IN_CLOSED_MESSAGE }, { status: 403 });
     }
     const body = (await request.json()) as {
       latitude?: number;

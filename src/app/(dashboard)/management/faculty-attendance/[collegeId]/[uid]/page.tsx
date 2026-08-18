@@ -34,25 +34,27 @@ function statusBadgeClass(status: AttendanceStatus): string {
   }
 }
 
-// Read-only: Management's view of a college's Vice Principal's own attendance
-// history - mirrors ManagementPrincipalAttendancePage exactly, just fetched
-// via /api/management/colleges/[collegeId]/vice-principal-attendance instead
-// (Management isn't a member of any one college). No edit affordance -
-// Management never edits attendance.
-export default function ManagementVicePrincipalAttendancePage() {
-  const { collegeId } = useParams<{ collegeId: string }>();
+// Read-only: Management's monthly view of one HOD/Faculty member's
+// attendance history within a college - same attendanceRecords, same
+// Present/Late derivation (isLateCheckIn) every self-view and the HOD's/
+// Principal's PersonMonthlyAttendanceView use, just fetched via
+// /api/management/colleges/[collegeId]/faculty-attendance/[uid] instead of
+// the session-scoped /api/college/attendance (Management isn't a member of
+// any one college). No edit affordance - Management never edits attendance.
+export default function ManagementFacultyMonthlyAttendancePage() {
+  const { collegeId, uid } = useParams<{ collegeId: string; uid: string }>();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
 
   const { data, isLoading } = useQuery({
-    queryKey: ["mgmt-vice-principal-attendance", collegeId, year, month],
+    queryKey: ["mgmt-faculty-attendance", collegeId, uid, year, month],
     queryFn: () =>
-      fetch(`/api/management/colleges/${collegeId}/vice-principal-attendance?year=${year}&month=${month}`)
-        .then((r) => r.json() as Promise<{ vicePrincipalName: string | null; records: (AttendanceRecord & { id: string })[] }>),
+      fetch(`/api/management/colleges/${collegeId}/faculty-attendance/${uid}?year=${year}&month=${month}`)
+        .then((r) => r.json() as Promise<{ personName: string | null; records: (AttendanceRecord & { id: string })[] }>),
   });
 
-  const vicePrincipalName = data?.vicePrincipalName;
+  const personName = data?.personName;
   const records = data?.records ?? [];
 
   function handleExport() {
@@ -67,7 +69,7 @@ export default function ManagementVicePrincipalAttendancePage() {
         reason: rec.remarks ?? "",
       };
     });
-    exportToCSV(rows, `attendance-${vicePrincipalName ?? "vice-principal"}-${MONTH_NAMES[month - 1]}-${year}`, [
+    exportToCSV(rows, `attendance-${personName ?? "person"}-${MONTH_NAMES[month - 1]}-${year}`, [
       { key: "date", header: "Date" },
       { key: "day", header: "Day" },
       { key: "status", header: "Status" },
@@ -80,15 +82,15 @@ export default function ManagementVicePrincipalAttendancePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Vice Principal Attendance"
-        description={vicePrincipalName ? `Monthly attendance record for ${vicePrincipalName}` : "Monthly attendance record"}
+        title="Attendance"
+        description={personName ? `Monthly attendance record for ${personName}` : "Monthly attendance record"}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={handleExport} disabled={records.length === 0}>
               <Download className="h-4 w-4 mr-2" />Export CSV
             </Button>
             <Button variant="outline" asChild>
-              <Link href={`/management/faculty/${collegeId}/vice-principal`}><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
+              <Link href="/management/attendance"><ArrowLeft className="h-4 w-4 mr-2" />Back</Link>
             </Button>
           </div>
         }
@@ -120,10 +122,10 @@ export default function ManagementVicePrincipalAttendancePage() {
 
       {isLoading ? (
         <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />
-      ) : !vicePrincipalName ? (
+      ) : !personName ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <p className="text-muted-foreground">No Vice Principal is currently assigned to this college.</p>
+            <p className="text-muted-foreground">Person not found.</p>
           </CardContent>
         </Card>
       ) : records.length === 0 ? (
@@ -171,6 +173,9 @@ export default function ManagementVicePrincipalAttendancePage() {
                           {rec.checkIn ?? "—"} – {rec.checkOut ?? "—"}
                           {rec.checkInVerified && <ShieldCheck className="h-3.5 w-3.5 text-green-600" aria-label="Face + location verified" />}
                         </p>
+                      ) : null}
+                      {rec.remarks ? (
+                        <p className="text-xs text-muted-foreground italic mt-0.5">{rec.remarks}</p>
                       ) : null}
                     </div>
                   </div>
