@@ -8,8 +8,8 @@ import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
-import type { Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
+import { resolveDepartmentCourseScope, resolveCatalogId } from "@/lib/college/academicStructure";
+import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
 
 // Sections a PANEL_MEMBER (faculty) is in charge of - students are only visible/
 // editable within these. Returns [] if the faculty isn't assigned to any section.
@@ -79,11 +79,20 @@ export async function GET(request: Request) {
       // name+year) they're enrolled in - matching that exact triple is matching
       // the exact section, and therefore the exact course.
       const sectionSnaps = await Promise.all(
-        sections.slice(0, 30).map((s) =>
+        sections.slice(0, 30).flatMap((s) => [
           withCommonFilters(
             studentsColl.where("department", "==", s.department).where("section", "==", s.name).where("year", "==", s.year)
-          ).get()
-        )
+          ).get(),
+          // A shared-first-year student in this section stays filed under
+          // their common department (preserved until promotion - see
+          // students/[id] PATCH) with secondaryDepartment naming this
+          // section's real branch instead - catch them too, or a faculty
+          // member in charge of a shared-year section would see an empty
+          // roster.
+          withCommonFilters(
+            studentsColl.where("secondaryDepartment", "==", s.department).where("section", "==", s.name).where("year", "==", s.year)
+          ).get(),
+        ])
       );
       const seen = new Set<string>();
       const students: (Omit<StudentRecord, "id"> & { id: string; accessLevel: "primary" | "secondary" })[] = [];
@@ -99,9 +108,9 @@ export async function GET(request: Request) {
     } else if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       hodScope = scope;
-      if (scope.departmentName) {
-        primaryQuery = primaryQuery.where("department", "==", scope.departmentName);
-        secondaryQuery = withCommonFilters(studentsColl.where("secondaryDepartment", "==", scope.departmentName));
+      if (scope.ownDepartmentNames.length > 0) {
+        primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
+        secondaryQuery = withCommonFilters(studentsColl.where("secondaryDepartment", "in", scope.ownDepartmentNames.slice(0, 30)));
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
       }
@@ -133,7 +142,7 @@ export async function GET(request: Request) {
       // routed through a common department's sub-department instead).
       if (hodScope && hodDepartments.length > 0) {
         const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number);
-        if (owner !== hodScope.departmentName) continue;
+        if (!hodScope.ownDepartmentNames.includes(owner)) continue;
       }
       seenIds.add(d.id);
       students.push({ id: d.id, ...data, accessLevel: "primary" });
@@ -153,7 +162,7 @@ export async function GET(request: Request) {
         // manager - this HOD, or one of their own children - actually teaches).
         if (hodScope!.managedDepartmentNames.includes(deptName) && hodDepartments.length > 0) {
           const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number);
-          if (owner !== hodScope!.departmentName && !hodScope!.childDepartmentNames.includes(owner)) continue;
+          if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) continue;
         }
         seenIds.add(d.id);
         students.push({ id: d.id, ...data, accessLevel: "primary" });
@@ -259,18 +268,46 @@ export async function POST(request: Request) {
     }
 
     // An unassigned add's year must be one this department is actually
-    // assigned to teach (resolveDepartmentCourseScope - no course is chosen
-    // for an unassigned add, so this reads the department's flat years only).
-    // A student added straight into an existing section instead already
-    // inherits a year that section itself was validated against at creation
-    // (sections POST), so this only needs to apply to the unassigned path.
+    // assigned to teach for the chosen course - resolved through the same
+    // per-course override (Department.courseScopes) the Add Student form's
+    // own Year dropdown already applies via resolveCatalogId (shared with
+    // RosterFieldInputs.tsx) - reading only the flat fallback here let the
+    // server reject a year the client's own dropdown had just offered (or
+    // vice versa, for a department whose per-course override is narrower
+    // than its flat default). A student added straight into an existing
+    // section instead already inherits a year that section itself was
+    // validated against at creation (sections POST), so this only needs to
+    // apply to the unassigned path.
     if (!sectionName && dept) {
       const deptScopeSnap = await collegeRef.collection("departments").where("name", "==", dept).limit(1).get();
       if (!deptScopeSnap.empty) {
-        const deptScopeDoc = deptScopeSnap.docs[0].data() as {
+        const deptDoc = deptScopeSnap.docs[0];
+        const deptScopeDoc = deptDoc.data() as {
           assignedYears?: number[]; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>;
+          parentDepartmentId?: string;
         };
-        const assignedYears = resolveDepartmentCourseScope(deptScopeDoc, undefined).assignedYears;
+        const courseName = typeof body.course === "string" ? body.course : undefined;
+        let catalogId: string | undefined;
+        if (courseName) {
+          const coursesSnap = await collegeRef.collection("courses").where("name", "==", courseName).get();
+          const sameCourseNameDocs = coursesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Course[];
+          catalogId = resolveCatalogId(sameCourseNameDocs, deptDoc.id, courseName);
+        }
+        let assignedYears = resolveDepartmentCourseScope(deptScopeDoc, catalogId).assignedYears;
+        // A sub-department an HOD created carries no assignedYears/courseScopes
+        // of its own (Principal-only override, stripped from anything
+        // HOD-created) - it inherits its parent's instead, same fallback
+        // managerEffectiveYears (hodScope.ts) already uses for Sections/
+        // Teaching Assignments/Timetable and the client's own Year dropdown
+        // (RosterFieldInputs.tsx) - otherwise this check silently no-ops for a
+        // sub-department (empty assignedYears skips the check below entirely)
+        // instead of enforcing its real, inherited years.
+        if (assignedYears.length === 0 && deptScopeDoc.parentDepartmentId) {
+          const parentSnap = await collegeRef.collection("departments").doc(deptScopeDoc.parentDepartmentId).get();
+          if (parentSnap.exists) {
+            assignedYears = resolveDepartmentCourseScope(parentSnap.data() as typeof deptScopeDoc, catalogId).assignedYears;
+          }
+        }
         if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
           return NextResponse.json({ error: `"${dept}" is not assigned to teach Year ${body.year}` }, { status: 400 });
         }

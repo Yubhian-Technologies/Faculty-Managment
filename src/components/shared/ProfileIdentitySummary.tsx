@@ -6,7 +6,7 @@ import { ROLE_LABELS } from "@/types";
 import type { FMSUser } from "@/types";
 
 interface Props {
-  user: Pick<FMSUser, "name" | "email" | "role" | "department">;
+  user: Pick<FMSUser, "name" | "email" | "role" | "department" | "departments">;
   /** Shown instead of Department - Principal/VP carry a designation, not a department. */
   designation?: string;
   /** e.g. "Sub-department of Basic Science" - HOD's own department context. */
@@ -33,6 +33,14 @@ export function ProfileIdentitySummary({ user, designation, departmentBadge }: P
       .finally(() => setLoadingCollege(false));
   }, []);
 
+  // An HOD can now head more than one department at once (Principal-assigned,
+  // see principal/departments) - `departments` is the canonical list once
+  // present; every other role, and any HOD login predating this field, still
+  // has just the one `department` string.
+  const departmentLabel = user.departments && user.departments.length > 0
+    ? user.departments.join(", ")
+    : user.department;
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
       <div>
@@ -57,11 +65,11 @@ export function ProfileIdentitySummary({ user, designation, departmentBadge }: P
           <p className="text-sm font-medium">{designation}</p>
         </div>
       )}
-      {user.department && (
+      {departmentLabel && (
         <div>
-          <p className="text-xs text-muted-foreground">Department</p>
+          <p className="text-xs text-muted-foreground">{user.departments && user.departments.length > 1 ? "Departments" : "Department"}</p>
           <p className="text-sm font-medium flex items-center gap-1.5">
-            {user.department}
+            {departmentLabel}
             {departmentBadge && <Badge variant="secondary" className="text-xs">{departmentBadge}</Badge>}
           </p>
         </div>

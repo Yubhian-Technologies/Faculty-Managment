@@ -23,7 +23,7 @@ interface RosterEntry {
   uid: string;
   name: string;
   department: string;
-  role: "PANEL_MEMBER" | "HOD";
+  role: "PANEL_MEMBER" | "HOD" | "COLLEGE_STAFF";
   // Course id(s) this faculty has an explicit teaching assignment under —
   // only populated by the API for college-wide callers; used solely to
   // filter the Principal's report, never displayed/required in the flat
@@ -315,7 +315,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
           key: "actions",
           header: "",
           render: (row: RosterEntry) =>
-            row.role === "PANEL_MEMBER" ? (
+            row.role === "PANEL_MEMBER" || row.role === "COLLEGE_STAFF" ? (
               <div className="flex items-center gap-2">
                 {monthlyViewBasePath && (
                   <Button variant="outline" size="sm" asChild>

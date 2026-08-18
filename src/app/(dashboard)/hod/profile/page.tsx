@@ -8,24 +8,27 @@ import { Card, CardContent } from "@/components/ui/card";
 import { MyProfileModuleTiles } from "@/components/faculty/FacultyProfileHub";
 import { ProfileIdentitySummary } from "@/components/shared/ProfileIdentitySummary";
 import { useAuth } from "@/hooks/useAuth";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Department } from "@/types";
 
 export default function HodProfilePage() {
   const { user } = useAuth();
-  const [parentDeptName, setParentDeptName] = useState<string | null>(null);
+  const myDepartments = useMyDepartments();
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
-    if (!user?.department) return;
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
-      .then((d) => {
-        const departments = d.departments ?? [];
-        const own = departments.find((dept) => dept.name === user.department);
-        const parent = own?.parentDepartmentId ? departments.find((dept) => dept.id === own.parentDepartmentId) : null;
-        setParentDeptName(parent?.name ?? null);
-      })
+      .then((d) => setDepartments(d.departments ?? []))
       .catch(() => {});
-  }, [user?.department]);
+  }, []);
+
+  // The "sub-department of X" badge only makes sense for a single owned
+  // sub-department - an HOD running two or more departments just gets the
+  // plain department list from ProfileIdentitySummary instead.
+  const own = myDepartments.length === 1 ? departments.find((dept) => dept.name === myDepartments[0]) : undefined;
+  const parent = own?.parentDepartmentId ? departments.find((dept) => dept.id === own.parentDepartmentId) : undefined;
+  const parentDeptName = parent?.name ?? null;
 
   if (!user) return null;
 

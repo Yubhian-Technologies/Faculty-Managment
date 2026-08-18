@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import { useAuth } from "@/hooks/useAuth";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { Course, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
@@ -25,7 +25,7 @@ function ordinalYear(year: number) {
 
 export default function HODSubjectsPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const myDepartments = useMyDepartments();
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -265,7 +265,7 @@ export default function HODSubjectsPage() {
                             // is read-only - editing/deleting it from a department
                             // that doesn't own it would change/remove it for every
                             // other department sharing it too.
-                            const isOwnDepartment = s.department === user?.department;
+                            const isOwnDepartment = !!s.department && myDepartments.includes(s.department);
                             return (
                               <tr key={s.id}>
                                 <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>

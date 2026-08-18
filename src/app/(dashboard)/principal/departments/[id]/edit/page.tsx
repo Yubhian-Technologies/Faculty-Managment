@@ -15,7 +15,7 @@ import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { AcademicYear, Department, FMSUser } from "@/types";
+import type { AcademicYear, Course, Department, FMSUser } from "@/types";
 
 export default function EditDepartmentPage() {
   const router = useRouter();
@@ -24,6 +24,7 @@ export default function EditDepartmentPage() {
   const [department, setDepartment] = useState<Department | null>(null);
   const [allDepartments, setAllDepartments] = useState<Department[]>([]);
   const [hods, setHods] = useState<FMSUser[]>([]);
+  const [ownCourses, setOwnCourses] = useState<Course[]>([]);
   const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
   const [assignedYears, setAssignedYears] = useState<number[]>([]);
   const [hasSubDepartments, setHasSubDepartments] = useState(false);
@@ -49,10 +50,11 @@ export default function EditDepartmentPage() {
     async function load() {
       setLoading(true);
       try {
-        const [deptRes, hodRes, yearsRes] = await Promise.all([
+        const [deptRes, hodRes, yearsRes, coursesRes] = await Promise.all([
           fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
           fetch("/api/college/users?role=HOD").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
           fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>),
+          fetch(`/api/college/courses?departmentId=${encodeURIComponent(id)}`).then((r) => r.json() as Promise<{ courses: Course[] }>),
         ]);
         const dept = (deptRes.departments ?? []).find((d) => d.id === id) ?? null;
         if (!dept) {
@@ -63,6 +65,7 @@ export default function EditDepartmentPage() {
         setDepartment(dept);
         setAllDepartments(deptRes.departments ?? []);
         setHods(hodRes.users ?? []);
+        setOwnCourses(coursesRes.courses ?? []);
         setOpenYears((yearsRes.academicYears ?? []).filter((y) => y.isActive));
         setAssignedYears(dept.assignedYears ?? []);
         setHasSubDepartments(dept.hasSubDepartments ?? false);
@@ -76,6 +79,16 @@ export default function EditDepartmentPage() {
     }
     void load();
   }, [id, reset, router]);
+
+  // Bounds the "Years Taught" checklist to this department's own course(s) -
+  // otherwise it's bounded only by whichever AcademicYears are open
+  // college-wide, which can exceed this department's own program length (e.g.
+  // a straightforward 4-year-B.Tech-only department could offer Year 5/6 just
+  // because some OTHER, longer program opened that many years elsewhere).
+  // Undefined (unbounded) when the department has no course yet - nothing to
+  // bound by before one exists; the per-course override already bounds
+  // correctly the moment a course is added (see courses/new).
+  const maxYear = ownCourses.length > 0 ? Math.max(...ownCourses.map((c) => c.durationYears)) : undefined;
 
   function toggleAssignedYear(year: number, checked: boolean) {
     setAssignedYears((prev) => (checked ? [...prev, year].sort() : prev.filter((y) => y !== year)));
@@ -230,11 +243,14 @@ export default function EditDepartmentPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">- No HOD -</SelectItem>
-                    {hods.map((h) => (
-                      <SelectItem key={h.uid} value={h.uid}>
-                        {h.name} {h.department ? `(${h.department})` : ""}
-                      </SelectItem>
-                    ))}
+                    {hods.map((h) => {
+                      const hDepts = h.departments && h.departments.length > 0 ? h.departments : (h.department ? [h.department] : []);
+                      return (
+                        <SelectItem key={h.uid} value={h.uid}>
+                          {h.name} {hDepts.length > 0 ? `(${hDepts.join(", ")})` : ""}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               ) : (
@@ -242,6 +258,26 @@ export default function EditDepartmentPage() {
                   No HODs yet - create one above
                 </p>
               )}
+              {/* An HOD can now head more than one department at once - if the
+                  one selected already runs others, say so up front: picking
+                  them here ADDS this department to their portfolio, it never
+                  evicts them from the rest. */}
+              {(() => {
+                if (!hodUid) return null;
+                const selectedHod = hods.find((h) => h.uid === hodUid);
+                if (!selectedHod) return null;
+                const hDepts = selectedHod.departments && selectedHod.departments.length > 0
+                  ? selectedHod.departments
+                  : (selectedHod.department ? [selectedHod.department] : []);
+                const otherDepts = hDepts.filter((n) => n !== department?.name);
+                if (otherDepts.length === 0) return null;
+                return (
+                  <p className="text-xs text-muted-foreground rounded-md border p-2.5">
+                    {selectedHod.name} is also HOD of <strong className="text-foreground">{otherDepts.join(", ")}</strong> -
+                    saving here adds {department?.name ?? "this department"} to their portfolio without removing the rest.
+                  </p>
+                );
+              })()}
             </div>
 
             <YearsTaughtAndSecondaryFields
@@ -250,6 +286,7 @@ export default function EditDepartmentPage() {
               isAddingYear={addingYear}
               assignedYears={assignedYears}
               onToggleYear={toggleAssignedYear}
+              maxYear={maxYear}
               yearsHelperText="Which years of study this department currently teaches. HODs can only create sections for these years."
               secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId)}
               secondaryDepartments={secondaryDepartments}

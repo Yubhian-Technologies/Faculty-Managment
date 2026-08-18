@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import type { StudentListItem } from "@/types";
 
 function ordinalYear(year: number) {
@@ -17,7 +17,7 @@ function ordinalYear(year: number) {
 }
 
 export default function IncomingStudentsPage() {
-  const user = useAuthStore((s) => s.user);
+  const myDepartments = useMyDepartments();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -32,14 +32,14 @@ export default function IncomingStudentsPage() {
         // which also covers sub-department students) is what actually marks a
         // student pre-registered here while primarily enrolled elsewhere - see
         // useIncomingStudents for the full explanation.
-        setStudents((d.students ?? []).filter((s) => s.secondaryDepartment === user?.department));
+        setStudents((d.students ?? []).filter((s) => !!s.secondaryDepartment && myDepartments.includes(s.secondaryDepartment)));
       } catch {
         toast({ variant: "destructive", title: "Failed to load first year students" });
       } finally {
         setIsLoading(false);
       }
     })();
-  }, [user?.department]);
+  }, [myDepartments]);
 
   return (
     <div className="space-y-6">

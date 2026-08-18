@@ -56,6 +56,7 @@ export default function OfficeStudentsPage() {
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
+  const [courseFilter, setCourseFilter] = useState<string>("all");
 
   const [addOpen, setAddOpen] = useState(false);
   // Set when the dialog is editing an existing student rather than adding one -
@@ -131,8 +132,15 @@ export default function OfficeStudentsPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return students.filter((s) => {
-      if (deptFilter !== "all" && s.department !== deptFilter) return false;
+      // A shared-first-year student stays filed under their common department
+      // (preserved until promotion) with secondaryDepartment naming their
+      // real destination branch instead - filtering by department alone
+      // would silently drop them from a filter/bulk-delete by their real
+      // branch, which is exactly how "delete a department's students" is
+      // done on this page (select-all after filtering).
+      if (deptFilter !== "all" && s.department !== deptFilter && s.secondaryDepartment !== deptFilter) return false;
       if (yearFilter !== "all" && s.year !== Number(yearFilter)) return false;
+      if (courseFilter !== "all" && s.course !== courseFilter) return false;
       if (q && !(
         s.name.toLowerCase().includes(q)
         || (s.rollNumber ?? "").toLowerCase().includes(q)
@@ -140,7 +148,7 @@ export default function OfficeStudentsPage() {
       )) return false;
       return true;
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [students, search, deptFilter, yearFilter]);
+  }, [students, search, deptFilter, yearFilter, courseFilter]);
 
   // Filtered against the live roster (not just truthy in `selected`) so a
   // selection made before another edit/delete elsewhere reloads the list
@@ -200,7 +208,11 @@ export default function OfficeStudentsPage() {
 
     setSaving(true);
     try {
-      const payload = rosterFormToPayload(form);
+      // On Edit, a blank field must overwrite (clear) whatever the student
+      // currently has - not be silently dropped as if never provided (which
+      // previously made "clear Secondary Department" a no-op with a
+      // deceptive "updated" success toast).
+      const payload = rosterFormToPayload(form, { writeBlanksAsNull: !!editTarget });
       // Editing sends only the detail fields - name/department/year stay as
       // they are, since moving a student between departments or years is the
       // promotion/section flow's job, not a field edit.
@@ -326,6 +338,13 @@ export default function OfficeStudentsPage() {
             className="pl-9"
           />
         </div>
+        <Select value={courseFilter} onValueChange={setCourseFilter}>
+          <SelectTrigger className="sm:w-56"><SelectValue placeholder="All courses" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All courses</SelectItem>
+            {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={deptFilter} onValueChange={setDeptFilter}>
           <SelectTrigger className="sm:w-56"><SelectValue placeholder="All departments" /></SelectTrigger>
           <SelectContent>

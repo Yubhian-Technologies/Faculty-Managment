@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { useAuth } from "@/hooks/useAuth";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import type {
   Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
@@ -40,7 +40,7 @@ type Mode = "published" | "draft";
 
 export default function HODTimetableGridPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const myDepartments = useMyDepartments();
   const { courseId, year, sectionId } = useParams<{ courseId: string; year: string; sectionId: string }>();
   const searchParams = useSearchParams();
   // A lending HOD placing an allocated cross-department assignment (see
@@ -167,7 +167,7 @@ export default function HODTimetableGridPage() {
   // access to a department that isn't literally their own (e.g. a BS
   // sub-HOD who manages CSE). Either way this is someone else's timetable,
   // so "Publish" reads as "Update" - see handlePublish.
-  const isCrossDepartment = !isLoading && (!section || (!!user?.department && section.department !== user.department));
+  const isCrossDepartment = !isLoading && (!section || (myDepartments.length > 0 && !myDepartments.includes(section.department)));
   // A cross-department contributor never publishes this section themselves
   // (see handleNotify/handlePublish below and the server-side guard in
   // /api/college/timetable/publish) - so there's nothing for them to "view

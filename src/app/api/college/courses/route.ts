@@ -15,26 +15,59 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const explicitDepartmentId = searchParams.get("departmentId");
     let departmentId = explicitDepartmentId;
+    // Populated only for an HOD's own (no explicit departmentId) course list,
+    // when their scope includes real branches reached via managedDepartments
+    // (see below) - a wider set than the single `departmentId` above can express.
+    let unionDepartmentIds: string[] | null = null;
 
     const db = getAdminDb();
 
     if (session.role === "HOD") {
       const userSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
-      const deptName = (userSnap.data() as { department?: string } | undefined)?.department;
+      const userData = userSnap.data() as { department?: string; departments?: string[] } | undefined;
+      // Every department this HOD directly heads (usually one, can be more -
+      // see src/lib/departments/scope.ts) - each contributes its own course
+      // scope below, unioned together.
+      const ownDeptNames = (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
+        .filter((n): n is string => !!n);
 
       if (!explicitDepartmentId) {
-        if (deptName) {
-          const deptSnap = await db.collection("colleges").doc(session.collegeId).collection("departments")
-            .where("name", "==", deptName).limit(1).get();
-          if (deptSnap.empty) {
-            departmentId = "__none__";
-          } else {
+        if (ownDeptNames.length > 0) {
+          const allDeptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
+          const allDepartments = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
+          const byName = new Map(allDepartments.map((d) => [d.name, d]));
+
+          const courseDeptIdSet = new Set<string>();
+          for (const name of ownDeptNames) {
+            const deptDoc = byName.get(name);
+            if (!deptDoc) continue;
             // A sub-department never owns courses of its own - it shares its
             // parent's program - so a sub-HOD resolves courses against the
             // parent instead, same fallback already used for section creation.
-            const deptData = deptSnap.docs[0].data() as { parentDepartmentId?: string };
-            departmentId = deptData.parentDepartmentId ?? deptSnap.docs[0].id;
+            const courseDeptId = deptDoc.parentDepartmentId ?? deptDoc.id;
+            courseDeptIdSet.add(courseDeptId);
+            const relatedIds = await getRelatedDepartmentIds(db, session.collegeId, courseDeptId);
+            for (const id of relatedIds) courseDeptIdSet.add(id);
+
+            // Additionally union in any REAL branch this department (or, for a
+            // parent HOD, any of its sub-departments) fully manages via
+            // managedDepartments - a shared-first-year section is filed
+            // against that branch's OWN Course doc (see sections/route.ts
+            // POST), never the manager's, so without this an HOD managing
+            // branches this way could never see (or build a timetable for)
+            // their own shared-year sections. This only adds to the
+            // parent/legacy secondaryDepartments feeder resolution above,
+            // never replaces it, so that shape keeps working unchanged.
+            const scope = deriveHodScope(allDepartments, name);
+            for (const d of scope.deptOptions) courseDeptIdSet.add(d.id);
           }
+          if (courseDeptIdSet.size > 0) {
+            unionDepartmentIds = Array.from(courseDeptIdSet).slice(0, 30);
+          } else {
+            departmentId = "__none__";
+          }
+        } else {
+          departmentId = "__none__";
         }
       } else {
         // An explicitly-requested departmentId (Teaching Assignments/Sections
@@ -44,8 +77,8 @@ export async function GET(request: Request) {
         // department elsewhere in the college. Was previously unchecked.
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
-        const scope = deriveHodScope(departments, deptName);
-        if (!scope.deptOptions.some((d) => d.id === explicitDepartmentId)) {
+        const inScope = ownDeptNames.some((name) => deriveHodScope(departments, name).deptOptions.some((d) => d.id === explicitDepartmentId));
+        if (!inScope) {
           return NextResponse.json({ error: "That department is outside your scope" }, { status: 403 });
         }
       }
@@ -56,7 +89,11 @@ export async function GET(request: Request) {
       .doc(session.collegeId)
       .collection("courses") as FirebaseFirestore.Query;
 
-    if (departmentId && departmentId !== "__none__") {
+    if (unionDepartmentIds) {
+      query = unionDepartmentIds.length > 1
+        ? query.where("departmentId", "in", unionDepartmentIds)
+        : query.where("departmentId", "==", unionDepartmentIds[0]);
+    } else if (departmentId && departmentId !== "__none__") {
       // A department fed by another (e.g. IT fed by Basic Science's shared
       // 1st-year course - see resolveSubjectDepartment) never owns a course
       // of its own for that shared year, so its Course dropdown falls back to

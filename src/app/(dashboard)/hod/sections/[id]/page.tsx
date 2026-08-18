@@ -44,10 +44,17 @@ export default function SectionRosterPage() {
         await Promise.all([
           // Students API scopes by section NAME + year, not id - section names
           // aren't unique across departments, so narrow client-side (same
-          // caveat as the Principal promotions roster fetch).
+          // caveat as the Principal promotions roster fetch). A shared-first-
+          // year student stays filed under their common department until
+          // promotion (department preserved, secondaryDepartment names their
+          // real branch - see students/[id] PATCH) - the section they're
+          // actually sitting in belongs to secondaryDepartment in that case,
+          // not department, so match either.
           fetch(`/api/college/students?section=${encodeURIComponent(sec.name)}&year=${sec.year}`)
             .then((r) => r.json() as Promise<{ students: StudentRecord[] }>)
-            .then((sd) => setStudents((sd.students ?? []).filter((s) => s.department === sec.department))),
+            .then((sd) => setStudents((sd.students ?? []).filter(
+              (s) => s.department === sec.department || s.secondaryDepartment === sec.department
+            ))),
           fetch(`/api/college/teaching-assignments?sectionId=${id}`)
             .then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>)
             .then((ad) => setAssignments(ad.assignments ?? [])),

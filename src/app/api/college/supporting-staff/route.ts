@@ -44,9 +44,8 @@ export async function GET(request: Request) {
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const ownedNames = ownOnly
-        ? [scope.departmentName].filter((n): n is string => !!n)
-        : [scope.departmentName, ...scope.childDepartmentNames, ...scope.managedDepartmentNames]
-            .filter((n): n is string => !!n);
+        ? scope.ownDepartmentNames
+        : [...scope.ownDepartmentNames, ...scope.childDepartmentNames, ...scope.managedDepartmentNames];
       if (ownedNames.length > 0) {
         query = query.where("department", "in", ownedNames.slice(0, 30));
       }
@@ -135,7 +134,13 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
-      department = requested || scope.departmentName;
+      if (!requested && scope.ownDepartmentNames.length > 1) {
+        return NextResponse.json(
+          { error: "You manage more than one department - specify which department this staff member belongs to" },
+          { status: 400 },
+        );
+      }
+      department = requested || scope.ownDepartmentNames[0] || "";
       if (!department) {
         return NextResponse.json({ error: "Department is required for Technical staff" }, { status: 400 });
       }

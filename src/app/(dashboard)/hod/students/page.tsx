@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { disambiguateSectionLabels } from "@/lib/sections/sectionLabel";
@@ -38,7 +38,7 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "des
 };
 
 export default function HodStudentsPage() {
-  const myDepartment = useAuthStore((s) => s.user?.department);
+  const myDepartments = useMyDepartments();
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -105,8 +105,13 @@ export default function HodStudentsPage() {
     () => sections.filter((s) => s.accessLevel !== "secondary"),
     [sections]
   );
+  // Includes each student's secondaryDepartment too - a real branch that a
+  // shared-first-year student is pre-registered to (but hasn't been promoted
+  // into yet) would otherwise never appear as a filter option at all.
   const departmentNames = useMemo(
-    () => Array.from(new Set(students.map((s) => s.department).filter(Boolean))).sort(),
+    () => Array.from(new Set(
+      students.flatMap((s) => [s.department, s.secondaryDepartment]).filter((d): d is string => !!d)
+    )).sort(),
     [students]
   );
   // Unassigned students this HOD can actually section - excludes view-only
@@ -169,7 +174,9 @@ export default function HodStudentsPage() {
   );
 
   const filtered = useMemo(
-    () => (deptFilter === "all" ? students : students.filter((s) => s.department === deptFilter)),
+    () => (deptFilter === "all" ? students : students.filter(
+      (s) => s.department === deptFilter || s.secondaryDepartment === deptFilter
+    )),
     [students, deptFilter]
   );
 
@@ -198,8 +205,8 @@ export default function HodStudentsPage() {
   const cohortYear = structure.commonYears[0];
   const isCommonYearHod =
     structure.isCommonFirstYear &&
-    !!myDepartment &&
-    structure.commonDepartment?.name === myDepartment;
+    !!structure.commonDepartment &&
+    myDepartments.includes(structure.commonDepartment.name);
   const cohortUnassignedCount = useMemo(
     () => (cohortYear ? students.filter((s) => s.year === cohortYear && !s.section).length : 0),
     [students, cohortYear]
