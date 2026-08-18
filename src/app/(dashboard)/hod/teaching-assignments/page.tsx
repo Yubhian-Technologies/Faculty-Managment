@@ -13,6 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
 import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
+import { fedYears } from "@/lib/college/academicStructure";
 import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember, FacultyAssignmentRequest } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
@@ -173,9 +174,19 @@ export default function TeachingAssignmentsPage() {
       ? subDepartmentOptions
       : scope.ownDept ? [scope.ownDept] : [];
     const assigned = new Set<number>();
-    for (const d of relevant) for (const y of managerEffectiveYears(d, departments, course.catalogId)) assigned.add(y);
+    // A year some OTHER department already claims as a feeder FOR one of
+    // `relevant` (e.g. Basic Science owning year 1 of a shared-first-year
+    // B.Tech) is never this HOD's own to staff, even when nothing here ends
+    // up "assigned" and the fallback below would otherwise offer every year -
+    // see fedYears.
+    const excluded = new Set<number>();
+    for (const d of relevant) {
+      for (const y of managerEffectiveYears(d, departments, course.catalogId)) assigned.add(y);
+      for (const y of fedYears(d, departments, course.catalogId)) excluded.add(y);
+    }
     const courseYears = Array.from({ length: course.durationYears }, (_, i) => i + 1);
-    return assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
+    const base = assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
+    return base.filter((y) => !excluded.has(y));
   }, [course, subDepartmentOptions, scope.ownDept, departments]);
 
   // Keyed on the course ids, not just the group: if the scope-wide course fetch
