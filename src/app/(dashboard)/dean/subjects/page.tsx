@@ -216,14 +216,15 @@ export default function DeanSubjectsPage() {
 
   function selectYear(year: string) {
     setSelectedYear(year);
-    // Default the regulation filter to whatever's fixed for this year of
-    // study in Settings, but only if this course is actually allowed to use
-    // it - otherwise fall back to "All" (within this course's own allowed
-    // set), switchable right after via its own picker.
-    const yearDefault = regulationSettings?.yearRegulations?.[year];
-    const regulation = yearDefault && allowedRegulations.includes(yearDefault) ? yearDefault : "";
-    setSelectedRegulation(regulation);
-    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, selectedAcademicYear, regulation);
+    // Always starts on "All regulations" - a course can legitimately carry
+    // subjects under more than one regulation at once (e.g. R23 for
+    // continuing students alongside R26 for a fresh intake), so narrowing
+    // to whichever one regulation Settings fixes as the year's default would
+    // silently hide the rest until the Dean noticed and switched back. The
+    // dropdown is still there to narrow down deliberately, just never
+    // auto-picks a single regulation on its own.
+    setSelectedRegulation("");
+    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, selectedAcademicYear, "");
   }
 
   function selectAcademicYear(academicYear: string) {

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { ArrowLeft, History } from "lucide-react";
 import { LeaveHistoryRow, type BalanceEntry } from "./LeaveProfileView";
+import { AdjustCoverageDialog } from "./AdjustCoverageDialog";
 import { LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode, OtherLeaveCategory } from "@/types/leave";
 
@@ -48,12 +49,19 @@ interface LeaveTypeHistoryViewProps {
   // same component (every role's own "My Leave", HOD's staff view) omits
   // this, so the category never even gets fetched there, let alone shown.
   showOtherLeaveCategory?: boolean;
+  // HOD's own department, or Principal-tier, browsing someone else's
+  // history (uid set) - lets them revisit an already-APPROVED request and
+  // re-pick coverage (see AdjustCoverageDialog). Not offered on the
+  // requester's own view of their own history, nor on College Office's
+  // (server-side ADJUST_COVERAGE is HOD/Principal-tier only - see
+  // applications/[id]/route.ts).
+  canAdjustCoverage?: boolean;
 }
 
 // Filtered, single-type leave history - reached by clicking a leave type's
 // balance card (or the grouped "Leave History" section) on LeaveProfileView.
 // Same component drives every leave type across every role's "My Leave" page.
-export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCategory }: LeaveTypeHistoryViewProps) {
+export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCategory, canAdjustCoverage }: LeaveTypeHistoryViewProps) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<Record<string, OtherLeaveCategory>>({});
@@ -65,6 +73,7 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
   const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const [adjustTarget, setAdjustTarget] = useState<LeaveRequest | null>(null);
   // Earned Leave's carry-forward breakdown (e.g. "6 base + 3 carried from
   // last year = 9") - fetched only for the EL history view specifically per
   // request; every other tab (the main balance-card grid, Apply for Leave's
@@ -189,6 +198,7 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
                   // else's history (uid set) is read-only.
                   onCancel={uid ? undefined : (target) => setCancelTarget(target)}
                   cancelling={cancelling && cancelTarget?.id === r.id}
+                  onAdjustCoverage={canAdjustCoverage ? (target) => setAdjustTarget(target) : undefined}
                 />
               ))}
             </div>
@@ -222,6 +232,14 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
           />
         </div>
       </ConfirmDialog>
+
+      <AdjustCoverageDialog
+        request={adjustTarget}
+        onOpenChange={(open) => { if (!open) setAdjustTarget(null); }}
+        onUpdated={(id, periodSubstitutions) =>
+          setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, periodSubstitutions } : r)))
+        }
+      />
     </div>
   );
 }

@@ -222,9 +222,27 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    const ref = await collegeRef
-      .collection("courses")
-      .add({
+    const coursesCol = collegeRef.collection("courses");
+    // Re-checked here, transactionally, right before the write - the plain
+    // get()-then-add() duplicate check above (line ~120) has a race: two
+    // submits for the same (departmentId, catalogId) landing close together
+    // (a double-click, or two people submitting at once) could both read
+    // "not a duplicate" before either had written, and both succeed, leaving
+    // this course listed twice everywhere it's picked from. Re-validating
+    // inside the transaction that actually writes closes that window -
+    // Firestore retries whichever one loses the race once it notices the
+    // query's result set changed underneath it.
+    const ref = coursesCol.doc();
+    let duplicateError: string | null = null;
+    await db.runTransaction(async (tx) => {
+      const dupeSnap = await tx.get(
+        coursesCol.where("departmentId", "==", departmentId).where("catalogId", "==", catalogId).limit(1)
+      );
+      if (!dupeSnap.empty) {
+        duplicateError = "This course is already added to the department";
+        return;
+      }
+      tx.set(ref, {
         collegeId: session.collegeId,
         departmentId,
         catalogId,
@@ -235,6 +253,10 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       });
+    });
+    if (duplicateError) {
+      return NextResponse.json({ error: duplicateError }, { status: 409 });
+    }
 
     if (scopeToWrite) {
       await collegeRef.collection("departments").doc(departmentId).update({

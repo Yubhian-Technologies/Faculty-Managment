@@ -72,34 +72,47 @@ export async function POST(request: Request) {
     }
     const catalogCol = db.collection("colleges").doc(session.collegeId).collection("courseCatalog");
 
-    // Reject a case-insensitive duplicate of an existing name or code so the
-    // catalog itself stays clean - the whole point of the feature.
-    const existing = await catalogCol.get();
-    const nameKey = name.toLowerCase();
-    const clash = existing.docs.find((d) => {
-      const data = d.data() as { name?: string; code?: string };
-      return (data.name ?? "").trim().toLowerCase() === nameKey || (data.code ?? "").trim().toUpperCase() === code;
-    });
-    if (clash) {
-      return NextResponse.json({ error: "A course with this name or code already exists" }, { status: 409 });
-    }
-
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? session.email ?? "Unknown";
     const now = new Date();
 
-    const ref = await catalogCol.add({
-      collegeId: session.collegeId,
-      name,
-      code,
-      durationYears,
-      regulations,
-      isActive: true,
-      createdBy: session.uid,
-      createdByName: actorName,
-      createdAt: now,
-      updatedAt: now,
+    // Check-then-add wasn't atomic (a plain get() followed by a plain add())
+    // - two submits landing close together (a double-click, or two people
+    // adding the same course at once) could both read "no clash" before
+    // either had written, and both succeed, leaving two catalog entries with
+    // the same name (exactly what let "Bachelor of Technology" appear twice
+    // in every course picker downstream). A transaction makes the whole
+    // read-check-write atomic: Firestore retries whichever one loses the
+    // race once it notices the collection changed underneath it.
+    const ref = catalogCol.doc();
+    let duplicateError: string | null = null;
+    await db.runTransaction(async (tx) => {
+      const existing = await tx.get(catalogCol);
+      const nameKey = name.toLowerCase();
+      const clash = existing.docs.find((d) => {
+        const data = d.data() as { name?: string; code?: string };
+        return (data.name ?? "").trim().toLowerCase() === nameKey || (data.code ?? "").trim().toUpperCase() === code;
+      });
+      if (clash) {
+        duplicateError = "A course with this name or code already exists";
+        return;
+      }
+      tx.set(ref, {
+        collegeId: session.collegeId,
+        name,
+        code,
+        durationYears,
+        regulations,
+        isActive: true,
+        createdBy: session.uid,
+        createdByName: actorName,
+        createdAt: now,
+        updatedAt: now,
+      });
     });
+    if (duplicateError) {
+      return NextResponse.json({ error: duplicateError }, { status: 409 });
+    }
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {
