@@ -13,7 +13,7 @@ export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
 
 // Standard AICTE model-curriculum categories, used across most Indian
 // engineering colleges' L-T-P-C curriculum tables.
-export type SubjectCategory = "HSMC" | "BSC" | "ESC" | "PCC" | "PEC" | "OEC" | "MC" | "PROJ";
+export type SubjectCategory = "HSMC" | "BSC" | "ESC" | "PCC" | "PEC" | "OEC" | "MC" | "PROJ" | "OTHER";
 
 export const SUBJECT_CATEGORY_LABELS: Record<SubjectCategory, string> = {
   HSMC: "Humanities & Social Sciences (HSMC)",
@@ -24,6 +24,7 @@ export const SUBJECT_CATEGORY_LABELS: Record<SubjectCategory, string> = {
   OEC: "Open Elective (OEC)",
   MC: "Mandatory Courses (MC)",
   PROJ: "Project / Seminar / Internship (PROJ)",
+  OTHER: "Other",
 };
 
 // Two independent shapes share this collection (see api/college/subjects/route.ts):
@@ -64,6 +65,10 @@ export interface Subject {
   // Curriculum category (e.g. Professional Core, Open Elective) - see
   // SUBJECT_CATEGORY_LABELS. Course/year-scoped subjects only.
   category?: SubjectCategory;
+  // Free-text label when category is "OTHER" - the curriculum's own name for
+  // a category outside the standard AICTE list above. Unset for every other
+  // category value.
+  customCategory?: string;
   name: string;
   code: string;
   hoursPerWeek: number;

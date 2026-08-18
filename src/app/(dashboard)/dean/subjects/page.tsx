@@ -382,7 +382,7 @@ export default function DeanSubjectsPage() {
                             <tr key={s.id}>
                               <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
                               <td className="px-4 py-2.5">
-                                {s.category ? <Badge variant="outline" className="text-xs">{s.category}</Badge> : "—"}
+                                {s.category ? <Badge variant="outline" className="text-xs">{s.category === "OTHER" ? (s.customCategory || "Other") : s.category}</Badge> : "—"}
                               </td>
                               <td className="px-4 py-2.5">
                                 <div className="font-medium text-foreground">{s.name}</div>

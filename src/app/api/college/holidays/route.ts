@@ -4,9 +4,10 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { academicSessionLabel } from "@/lib/college/academicSession";
-import type { Holiday, HolidayType } from "@/types";
+import type { Holiday, HolidayAudience, HolidayType } from "@/types";
 
 const HOLIDAY_TYPES: HolidayType[] = ["NATIONAL", "REGIONAL", "COLLEGE", "RESTRICTED"];
+const HOLIDAY_AUDIENCES: HolidayAudience[] = ["STUDENTS", "BOTH"];
 
 // April cutoff, same convention as academicSession.ts's currentAcademicStartYear -
 // a Jan/Feb/Mar holiday belongs to the session that started the previous April.
@@ -50,13 +51,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE");
-    const body = (await request.json()) as { date?: string; name?: string; type?: HolidayType };
+    const body = (await request.json()) as { date?: string; name?: string; type?: HolidayType; appliesTo?: HolidayAudience };
 
     if (!body.date || !body.name?.trim() || !body.type) {
       return NextResponse.json({ error: "date, name and type are required" }, { status: 400 });
     }
     if (!HOLIDAY_TYPES.includes(body.type)) {
       return NextResponse.json({ error: "Invalid holiday type" }, { status: 400 });
+    }
+    if (body.appliesTo != null && !HOLIDAY_AUDIENCES.includes(body.appliesTo)) {
+      return NextResponse.json({ error: "Invalid audience" }, { status: 400 });
     }
     const date = new Date(body.date);
     if (Number.isNaN(date.getTime())) {
@@ -71,6 +75,7 @@ export async function POST(request: Request) {
       date,
       name: body.name.trim(),
       type: body.type,
+      appliesTo: body.appliesTo ?? "BOTH",
       academicYear: academicYearForDate(date),
       createdAt: now,
     });

@@ -231,6 +231,12 @@ export interface DateSubstitution {
   requesterName: string;
 }
 
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 // Every PeriodSubstitution active on a specific date - i.e. from an APPROVED
 // leave request whose periodSubstitutions include that exact date - across
 // the whole college. Used by timetable read surfaces (section view, class
@@ -239,28 +245,56 @@ export interface DateSubstitution {
 // a TimetableSlot only ever has one fixed weekday, a caller can key results
 // by `timetableSlotId` to override "who teaches this" and/or filter by
 // `substituteFacultyId` to find what a given faculty member is covering.
+//
+// A substitution is pinned to the timetableSlot doc that existed at the
+// moment the HOD/applicant picked it - but publish/route.ts deletes and
+// recreates every GENERATED slot with a brand-new id on each republish, even
+// when the same subject stays in the same day/period. That silently orphans
+// an already-approved substitution's stored id. So the id below is
+// re-resolved against whatever slot currently occupies this section/day/
+// period/subject, and only falls back to the originally-stored id if that
+// exact placement genuinely no longer exists (the class itself was moved or
+// dropped) - which the caller's Map lookup then simply won't match, same as
+// before this fix.
 export async function getActiveSubstitutionsForDate(
   db: Firestore,
   collegeId: string,
   dateISO: string
 ): Promise<DateSubstitution[]> {
-  const snap = await db.collection("colleges").doc(collegeId).collection("leaveRequests")
-    .where("status", "==", "APPROVED").get();
-  const out: DateSubstitution[] = [];
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const snap = await collegeRef.collection("leaveRequests").where("status", "==", "APPROVED").get();
+
+  const active: { req: LeaveRequest; sub: PeriodSubstitution }[] = [];
   for (const doc of snap.docs) {
     const r = doc.data() as LeaveRequest;
     if (!r.periodSubstitutions?.length) continue;
     for (const p of r.periodSubstitutions) {
-      if (p.date !== dateISO) continue;
-      out.push({
-        timetableSlotId: p.timetableSlotId, day: p.day, periodNumber: p.periodNumber,
-        sectionName: p.sectionName, subjectName: p.subjectName,
-        substituteFacultyId: p.substituteFacultyId, substituteFacultyName: p.substituteFacultyName,
-        requesterUid: r.uid, requesterName: r.employeeName,
-      });
+      if (p.date === dateISO) active.push({ req: r, sub: p });
     }
   }
-  return out;
+  if (active.length === 0) return [];
+
+  const sectionIds = Array.from(new Set(active.map((a) => a.sub.sectionId)));
+  const slotsSnaps = await Promise.all(
+    chunk(sectionIds, 30).map((ids) => collegeRef.collection("timetableSlots").where("sectionId", "in", ids).get())
+  );
+  const currentSlotIdByPlacement = new Map<string, string>();
+  for (const slotsSnap of slotsSnaps) {
+    for (const doc of slotsSnap.docs) {
+      const s = doc.data() as TimetableSlot;
+      currentSlotIdByPlacement.set(`${s.sectionId}|${s.day}|${s.periodNumber}|${s.subjectId}`, doc.id);
+    }
+  }
+
+  return active.map(({ req: r, sub: p }) => {
+    const currentId = currentSlotIdByPlacement.get(`${p.sectionId}|${p.day}|${p.periodNumber}|${p.subjectId}`);
+    return {
+      timetableSlotId: currentId ?? p.timetableSlotId, day: p.day, periodNumber: p.periodNumber,
+      sectionName: p.sectionName, subjectName: p.subjectName,
+      substituteFacultyId: p.substituteFacultyId, substituteFacultyName: p.substituteFacultyName,
+      requesterUid: r.uid, requesterName: r.employeeName,
+    };
+  });
 }
 
 // Notifies each assigned substitute once - called only when a leave request
