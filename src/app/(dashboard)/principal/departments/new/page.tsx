@@ -178,11 +178,14 @@ export default function NewDepartmentPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">- No HOD -</SelectItem>
-                    {hods.map((h) => (
-                      <SelectItem key={h.uid} value={h.uid}>
-                        {h.name} {h.department ? `(${h.department})` : ""}
-                      </SelectItem>
-                    ))}
+                    {hods.map((h) => {
+                      const hDepts = h.departments && h.departments.length > 0 ? h.departments : (h.department ? [h.department] : []);
+                      return (
+                        <SelectItem key={h.uid} value={h.uid}>
+                          {h.name} {hDepts.length > 0 ? `(${hDepts.join(", ")})` : ""}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               ) : (
@@ -190,6 +193,23 @@ export default function NewDepartmentPage() {
                   No HODs yet - create one above
                 </p>
               )}
+              {/* An HOD can now head more than one department at once -
+                  picking one who already runs others here ADDS this new
+                  department to their portfolio, it never evicts them. */}
+              {(() => {
+                if (!hodUid) return null;
+                const selectedHod = hods.find((h) => h.uid === hodUid);
+                const hDepts = selectedHod?.departments && selectedHod.departments.length > 0
+                  ? selectedHod.departments
+                  : (selectedHod?.department ? [selectedHod.department] : []);
+                if (!selectedHod || hDepts.length === 0) return null;
+                return (
+                  <p className="text-xs text-muted-foreground rounded-md border p-2.5">
+                    {selectedHod.name} is already HOD of <strong className="text-foreground">{hDepts.join(", ")}</strong> -
+                    saving here adds this new department to their portfolio without removing the rest.
+                  </p>
+                );
+              })()}
             </div>
 
             <YearsTaughtAndSecondaryFields

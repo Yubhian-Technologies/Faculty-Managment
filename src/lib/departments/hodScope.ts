@@ -56,6 +56,28 @@ export interface HodScope {
   viewsManagedBranchYears: boolean;
 }
 
+/**
+ * Merges each directly-owned department's own scope (deriveHodScope) into one
+ * flat set of real departments/branches for an HOD who heads MORE THAN ONE
+ * top-level department at once (assigned from the Principal's Departments
+ * page). The two-tier Sub-Department -> Branch cascade UI a single owned
+ * department can have (deriveHodScope's useCascadeFilter) is a
+ * single-root-at-a-time shape; a multi-department HOD gets this flat list
+ * instead - every owned department, plus each of their own sub-departments
+ * and managed branches, one level of chips rather than two. Callers only
+ * reach for this once they know there's more than one owned department -
+ * behaviour for a single-department HOD is untouched.
+ */
+export function mergeOwnDepartmentOptions(departments: Department[], ownDepartmentNames: string[]): Department[] {
+  const seen = new Map<string, Department>();
+  for (const name of ownDepartmentNames) {
+    const scope = deriveHodScope(departments, name);
+    if (scope.ownDept) seen.set(scope.ownDept.id, scope.ownDept);
+    for (const d of scope.deptOptions) seen.set(d.id, d);
+  }
+  return Array.from(seen.values());
+}
+
 /** Everything above, derived in one call from a departments list + who's asking. */
 export function deriveHodScope(departments: Department[], ownDepartmentName: string | undefined): HodScope {
   const ownDept = departments.find((d) => d.name === ownDepartmentName) ?? null;

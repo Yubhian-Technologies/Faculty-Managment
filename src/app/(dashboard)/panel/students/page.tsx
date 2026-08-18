@@ -29,14 +29,21 @@ export default function StudentsPage() {
 
   // The API already scopes `students` to exactly the faculty's in-charge
   // sections (department + section + year) - this is a defense-in-depth
-  // re-check, not the primary authorization boundary.
+  // re-check, not the primary authorization boundary. A shared-first-year
+  // student in one of these sections stays filed under their common
+  // department until promotion, with secondaryDepartment naming the
+  // section's real branch instead (see students/[id] PATCH) - check both.
   const inChargeKeys = new Set(sections.map((s) => `${s.department}::${s.name}::${s.year}`));
-  const authorizedStudents = students.filter((s) => inChargeKeys.has(`${s.department}::${s.section}::${s.year}`));
+  const authorizedStudents = students.filter((s) =>
+    inChargeKeys.has(`${s.department}::${s.section}::${s.year}`)
+    || inChargeKeys.has(`${s.secondaryDepartment ?? ""}::${s.section}::${s.year}`)
+  );
 
   const selectedSection = sections.find((s) => s.id === sectionFilter);
   const visibleStudents = selectedSection
     ? authorizedStudents.filter(
-        (s) => s.department === selectedSection.department && s.section === selectedSection.name && s.year === selectedSection.year
+        (s) => (s.department === selectedSection.department || s.secondaryDepartment === selectedSection.department)
+          && s.section === selectedSection.name && s.year === selectedSection.year
       )
     : authorizedStudents;
 

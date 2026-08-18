@@ -137,20 +137,20 @@ export async function POST(request: Request) {
       const section = sections[i];
       for (const student of slice) {
         const ref = collegeRef.collection("students").doc(student.id);
+        // department/secondaryDepartment are deliberately left untouched, even
+        // when routing a shared-first-year cohort through a real branch
+        // (secondaryDeptName set) - every student here was queried by
+        // department == deptName (the grouping department they're still
+        // enrolled under), so writing department here would prematurely
+        // transition them before promotion (students/promote or
+        // advance-year), same fix as the per-student PATCH and
+        // distribute-cohort.
         batch.update(ref, {
-          // Corrects department to the branch actually being sectioned into,
-          // same as the per-student PATCH does on a targeted section move -
-          // a student pre-registered under the grouping department becomes a
-          // real member of their branch the moment they land in one of its
-          // sections, not deferred to a separate promotion step. The
-          // secondary-department pointer is now redundant, so it's cleared;
-          // left untouched in the plain (no-branch) path.
-          ...(secondaryDeptName ? { department: targetDeptName, secondaryDepartment: null } : {}),
           section: section.name,
           year,
           updatedAt: now,
         });
-        const history = departmentHistoryEntry(db, session.collegeId, student.id, targetDeptName, section.name, year, now);
+        const history = departmentHistoryEntry(db, session.collegeId, student.id, deptName, section.name, year, now);
         batch.set(history.ref, history.data);
       }
       perSection.push({ section: section.name, count: slice.length });

@@ -166,8 +166,14 @@ export default function StudentPromotionsPage() {
       .then((d) => {
         // The students API scopes by section NAME + year only; narrow to this
         // exact section's department client-side since section names aren't
-        // unique across departments.
-        const filtered = (d.students ?? []).filter((s) => s.department === sourceSection.department);
+        // unique across departments. A shared-first-year student in this
+        // section stays filed under their common department until promotion,
+        // with secondaryDepartment naming this section's real branch instead
+        // (see students/[id] PATCH) - match either, or the roster for a
+        // shared-year section would come up empty.
+        const filtered = (d.students ?? []).filter(
+          (s) => s.department === sourceSection.department || s.secondaryDepartment === sourceSection.department
+        );
         setRoster(filtered);
         const initialSelected: Record<string, boolean> = {};
         for (const s of filtered) initialSelected[s.id] = s.status === "REGULAR";
@@ -381,7 +387,9 @@ export default function StudentPromotionsPage() {
       // Reload roster for this section (promoted students will now be gone)
       const refreshed = await fetch(`/api/college/students?section=${encodeURIComponent(sourceSection!.name)}&year=${sourceSection!.year}`)
         .then((r) => r.json() as Promise<{ students: StudentRecord[] }>);
-      setRoster((refreshed.students ?? []).filter((s) => s.department === sourceSection!.department));
+      setRoster((refreshed.students ?? []).filter(
+        (s) => s.department === sourceSection!.department || s.secondaryDepartment === sourceSection!.department
+      ));
     } catch {
       toast({ variant: "destructive", title: "Network error, please try again" });
     } finally {

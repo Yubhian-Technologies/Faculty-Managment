@@ -152,17 +152,27 @@ export async function POST(request: Request) {
     const relatedDepartmentNames = buildRelatedNamesResolver(departmentsSnap);
 
     const existingSnap = await db.collection("colleges").doc(collegeId).collection("students")
-      .select("rollNumber", "section", "year", "name", "department").get();
+      .select("rollNumber", "section", "year", "name", "department", "secondaryDepartment").get();
     const existingRolls = new Set<string>();
     // Office-imported students have no roll number yet, so they can't be
     // de-duped by roll - key those (the section-less ones) by name+dept+year
-    // instead, so re-running the same file doesn't create duplicates.
+    // instead, so re-running the same file doesn't create duplicates. Indexed
+    // by BOTH department and secondaryDepartment: the same real person can be
+    // represented with a given branch name in either field, depending on
+    // whether the sheet used the shared-department convention (department=
+    // common dept, secondaryDepartment=branch) or named the branch directly -
+    // matching only one field would leave the other route free to re-import
+    // the same student as a duplicate.
     const existingUnassignedNames = new Set<string>();
     for (const d of existingSnap.docs) {
-      const s = d.data() as { rollNumber?: string; section?: string; year?: number; name?: string; department?: string };
+      const s = d.data() as { rollNumber?: string; section?: string; year?: number; name?: string; department?: string; secondaryDepartment?: string };
       existingRolls.add(`${s.rollNumber ?? ""}::${s.section ?? ""}::${s.year ?? 0}`);
       if (!s.section) {
-        existingUnassignedNames.add(`${(s.name ?? "").trim().toLowerCase()}::${(s.department ?? "").toLowerCase()}::${s.year ?? 0}`);
+        const nameLower = (s.name ?? "").trim().toLowerCase();
+        existingUnassignedNames.add(`${nameLower}::${(s.department ?? "").toLowerCase()}::${s.year ?? 0}`);
+        if (s.secondaryDepartment) {
+          existingUnassignedNames.add(`${nameLower}::${s.secondaryDepartment.trim().toLowerCase()}::${s.year ?? 0}`);
+        }
       }
     }
 
@@ -209,20 +219,6 @@ export async function POST(request: Request) {
           failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `${departmentName} is not yours or one you manage` });
           continue;
         }
-        // The Office doesn't know roll numbers yet, so they're optional here.
-        // De-dupe by roll when it's present, otherwise by name+dept+year so a
-        // re-run of the same roster doesn't duplicate roll-less students.
-        const roll = row.rollNumber?.trim() ?? "";
-        const nameKey = `${row.name.trim().toLowerCase()}::${departmentName!.toLowerCase()}::${Number(row.year)}`;
-        const rollKey = `${roll}::${""}::${Number(row.year)}`;
-        if (roll && existingRolls.has(rollKey)) {
-          failed.push({ row: rowNum, rollNumber: roll, error: "An unassigned student with this Roll Number already exists for this year" });
-          continue;
-        }
-        if (!roll && existingUnassignedNames.has(nameKey)) {
-          failed.push({ row: rowNum, rollNumber: "-", error: `"${row.name.trim()}" is already an unassigned ${departmentName} Year ${row.year} student` });
-          continue;
-        }
         // Secondary Department is a column on the Office's template, and the
         // Office's rows are exactly the ones that need it: a 1st-year sitting
         // under a common department (Basic Science) while registered to the
@@ -230,7 +226,8 @@ export async function POST(request: Request) {
         // undefined here, so the only path that could set it was the placed
         // (section-named) one - which the Office template never takes, since
         // it has no Section column. That made the field unreachable for the
-        // people it exists for.
+        // people it exists for. Resolved before the duplicate check below so
+        // that check can recognize this row by either field.
         let unassignedSecondary: string | undefined;
         if (row.secondaryDepartment?.trim()) {
           unassignedSecondary = resolveDepartment(row.secondaryDepartment);
@@ -243,6 +240,26 @@ export async function POST(request: Request) {
             continue;
           }
         }
+
+        // The Office doesn't know roll numbers yet, so they're optional here.
+        // De-dupe by roll when it's present, otherwise by name+dept+year so a
+        // re-run of the same roster doesn't duplicate roll-less students -
+        // checked against both Department and Secondary Department, matching
+        // how existingUnassignedNames was indexed above.
+        const roll = row.rollNumber?.trim() ?? "";
+        const nameLower = row.name.trim().toLowerCase();
+        const year = Number(row.year);
+        const nameKey = `${nameLower}::${departmentName!.toLowerCase()}::${year}`;
+        const nameKeyViaSecondary = unassignedSecondary ? `${nameLower}::${unassignedSecondary.toLowerCase()}::${year}` : null;
+        const rollKey = `${roll}::${""}::${year}`;
+        if (roll && existingRolls.has(rollKey)) {
+          failed.push({ row: rowNum, rollNumber: roll, error: "An unassigned student with this Roll Number already exists for this year" });
+          continue;
+        }
+        if (!roll && (existingUnassignedNames.has(nameKey) || (nameKeyViaSecondary && existingUnassignedNames.has(nameKeyViaSecondary)))) {
+          failed.push({ row: rowNum, rollNumber: "-", error: `"${row.name.trim()}" is already an unassigned ${departmentName} Year ${row.year} student` });
+          continue;
+        }
         const docRef = studentsColl.doc();
         batch.set(docRef, buildStudentDoc(
           { collegeId, department: departmentName!, name: "", year: Number(row.year) },
@@ -251,7 +268,12 @@ export async function POST(request: Request) {
         ));
         const history = departmentHistoryEntry(db, collegeId, docRef.id, departmentName!, "", Number(row.year), now);
         batch.set(history.ref, history.data);
-        if (roll) existingRolls.add(rollKey); else existingUnassignedNames.add(nameKey);
+        if (roll) {
+          existingRolls.add(rollKey);
+        } else {
+          existingUnassignedNames.add(nameKey);
+          if (nameKeyViaSecondary) existingUnassignedNames.add(nameKeyViaSecondary);
+        }
         created.push(roll || row.name.trim());
         continue;
       }

@@ -33,10 +33,12 @@ export async function GET(request: Request) {
       // Firestore caps `in` at 30 values, which comfortably covers a
       // department's parent + siblings.
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const relatedNames = await getRelatedDepartmentNames(db, session.collegeId, scope.departmentName);
+      const relatedNameLists = await Promise.all(
+        scope.ownDepartmentNames.map((n) => getRelatedDepartmentNames(db, session.collegeId, n))
+      );
       // Also the grouped/managed branches - a Sub-HOD sees IT/CSE subjects they
       // manage; a main HOD rolls up its sub-HODs' branches.
-      const names = Array.from(new Set([...relatedNames, ...scope.managedDepartmentNames]));
+      const names = Array.from(new Set([...relatedNameLists.flat(), ...scope.managedDepartmentNames]));
       if (names.length === 1) {
         query = query.where("department", "==", names[0]);
       } else if (names.length > 1) {
@@ -184,7 +186,13 @@ export async function POST(request: Request) {
         // sub-department; body.department names which. A sub-HOD has no children,
         // so this collapses to their own department either way.
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-        dept = body.department?.trim() || scope.departmentName;
+        if (!body.department?.trim() && scope.ownDepartmentNames.length > 1) {
+          return NextResponse.json(
+            { error: "You manage more than one department - specify which department this subject belongs to" },
+            { status: 400 },
+          );
+        }
+        dept = body.department?.trim() || scope.ownDepartmentNames[0] || "";
         if (!canHodEditDepartment(scope, dept)) {
           return NextResponse.json(
             { error: "That department is not yours or one of your sub-departments" },
@@ -283,7 +291,13 @@ export async function POST(request: Request) {
     let department = body.department ?? "";
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      department = body.department?.trim() || scope.departmentName;
+      if (!body.department?.trim() && scope.ownDepartmentNames.length > 1) {
+        return NextResponse.json(
+          { error: "You manage more than one department - specify which department this subject belongs to" },
+          { status: 400 },
+        );
+      }
+      department = body.department?.trim() || scope.ownDepartmentNames[0] || "";
       if (!canHodEditDepartment(scope, department)) {
         return NextResponse.json(
           { error: "That department is not yours or one of your sub-departments" },
