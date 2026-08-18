@@ -1,13 +1,14 @@
 import { closeMissedCheckouts, toAttendanceDate } from "./closeMissedCheckouts";
 import { fillMissingDays } from "./fillMissingDays";
 import { resolveFaceRegisteredAt } from "./registration";
+import { unitLabelForHeadRole } from "./collegeStaffUnits";
 import type { AttendanceRecord, MonthlyExportRow } from "@/types";
 
 export interface ExportRosterMember {
   uid: string;
   name: string;
   department: string;
-  role: "HOD" | "PANEL_MEMBER" | "PRINCIPAL" | "VICE_PRINCIPAL";
+  role: "HOD" | "PANEL_MEMBER" | "PRINCIPAL" | "VICE_PRINCIPAL" | "COLLEGE_OFFICE" | "COLLEGE_STAFF" | "EXAM_CELL";
 }
 
 const ROLE_LABELS: Record<ExportRosterMember["role"], string> = {
@@ -15,6 +16,9 @@ const ROLE_LABELS: Record<ExportRosterMember["role"], string> = {
   PANEL_MEMBER: "Faculty",
   PRINCIPAL: "Principal",
   VICE_PRINCIPAL: "Vice Principal",
+  COLLEGE_OFFICE: "College Office",
+  COLLEGE_STAFF: "College Staff",
+  EXAM_CELL: "Exam Cell",
 };
 
 // Firestore `in` query cap.
@@ -57,11 +61,43 @@ export async function resolveDepartmentRoster(
   return roster;
 }
 
-// Every HOD, Faculty, Principal and Vice Principal in the college - the
-// college-wide export roster. Principal/Vice Principal have no `department`
-// field on their own users/{uid} doc (they run the whole college, see
-// FMSUser.department's doc comment), so their CSV rows are labelled by role
-// instead of a department name.
+// College Office / Exam Cell's own roster for the CSV export - the head
+// (role only, no department filter, singleton per college) plus every
+// COLLEGE_STAFF member whose `department` matches this unit's label (same
+// department-string link every other College Office/Exam Cell route uses,
+// see collegeStaffUnits.ts).
+export async function resolveCollegeStaffUnitRoster(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  headRole: "COLLEGE_OFFICE" | "EXAM_CELL"
+): Promise<ExportRosterMember[]> {
+  const unitLabel = unitLabelForHeadRole(headRole);
+  if (!unitLabel) return [];
+
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const [headSnap, staffSnap] = await Promise.all([
+    collegeRef.collection("users").where("role", "==", headRole).get(),
+    collegeRef.collection("users").where("role", "==", "COLLEGE_STAFF").where("department", "==", unitLabel).get(),
+  ]);
+
+  const roster: ExportRosterMember[] = [];
+  for (const d of headSnap.docs) {
+    const u = d.data() as { name?: string };
+    roster.push({ uid: d.id, name: u.name ?? "", department: unitLabel, role: headRole });
+  }
+  for (const d of staffSnap.docs) {
+    const u = d.data() as { name?: string; department?: string };
+    roster.push({ uid: d.id, name: u.name ?? "", department: u.department ?? unitLabel, role: "COLLEGE_STAFF" });
+  }
+  return roster;
+}
+
+// Every HOD, Faculty, Principal, Vice Principal, and College Office/Exam
+// Cell head + staff in the college - the college-wide export roster.
+// Principal/Vice Principal/College Office head have no `department` field on
+// their own users/{uid} doc (they run the whole college, see FMSUser.
+// department's doc comment), so their CSV rows are labelled by role instead
+// of a department name.
 export async function resolveCollegeRoster(
   db: FirebaseFirestore.Firestore,
   collegeId: string
@@ -69,7 +105,7 @@ export async function resolveCollegeRoster(
   const collegeRef = db.collection("colleges").doc(collegeId);
   const usersSnap = await collegeRef
     .collection("users")
-    .where("role", "in", ["PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL"])
+    .where("role", "in", ["PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL"])
     .get();
 
   return usersSnap.docs.map((d) => {

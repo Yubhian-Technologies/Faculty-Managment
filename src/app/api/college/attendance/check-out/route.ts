@@ -18,7 +18,7 @@ function currentTimeHHMM(): string {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL");
     const body = (await request.json()) as {
       latitude?: number;
       longitude?: number;

@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { resolveDepartmentRoster, resolveCollegeRoster, buildRosterMonthlyRows } from "@/lib/attendance/rosterMonthlyExport";
+import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlyRows } from "@/lib/attendance/rosterMonthlyExport";
+import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 
 // Department-wide or college-wide monthly CSV data, self-serve (session-
 // scoped collegeId) - the multi-person counterpart to /api/college/attendance
@@ -14,7 +15,7 @@ import { resolveDepartmentRoster, resolveCollegeRoster, buildRosterMonthlyRows }
 // may name any department in their own college, or ask for the whole college.
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "EXAM_CELL");
     const { searchParams } = new URL(request.url);
     const now = new Date();
     const year = parseInt(searchParams.get("year") ?? String(now.getFullYear()), 10);
@@ -30,6 +31,12 @@ export async function GET(request: Request) {
       const roster = await resolveDepartmentRoster(db, session.collegeId, departmentNames);
       const rows = await buildRosterMonthlyRows(db, session.collegeId, roster, year, month);
       return NextResponse.json({ scope: "department", department: scope.departmentName, rows });
+    }
+
+    if (session.role === "COLLEGE_OFFICE" || session.role === "EXAM_CELL") {
+      const roster = await resolveCollegeStaffUnitRoster(db, session.collegeId, session.role);
+      const rows = await buildRosterMonthlyRows(db, session.collegeId, roster, year, month);
+      return NextResponse.json({ scope: "unit", department: unitLabelForHeadRole(session.role), rows });
     }
 
     // PRINCIPAL / VICE_PRINCIPAL
@@ -48,7 +55,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ scope: "department", department: requestedDepartment, rows });
     }
 
-    return NextResponse.json({ error: "scope must be 'department' or 'college'" }, { status: 400 });
+    if (requestedScope === "unit") {
+      const requestedUnit = searchParams.get("unit");
+      if (requestedUnit !== "COLLEGE_OFFICE" && requestedUnit !== "EXAM_CELL") {
+        return NextResponse.json({ error: "unit must be 'COLLEGE_OFFICE' or 'EXAM_CELL'" }, { status: 400 });
+      }
+      const roster = await resolveCollegeStaffUnitRoster(db, session.collegeId, requestedUnit);
+      const rows = await buildRosterMonthlyRows(db, session.collegeId, roster, year, month);
+      return NextResponse.json({ scope: "unit", department: unitLabelForHeadRole(requestedUnit), rows });
+    }
+
+    return NextResponse.json({ error: "scope must be 'department', 'unit', or 'college'" }, { status: 400 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
