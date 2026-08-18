@@ -14,7 +14,7 @@ import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { toDate, exportRosterMonthlyCSV } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
-import type { Location, College, Department, Course, AttendanceStatus, AttendanceRecord, MonthlyExportRow } from "@/types";
+import type { Location, College, Department, Course, AttendanceStatus, AttendanceRecord, MonthlySummaryRow } from "@/types";
 
 function todayISO(): string {
   const d = new Date();
@@ -366,7 +366,7 @@ export default function ManagementAttendancePage() {
     setExportingScope(scope);
     try {
       const res = await fetch(`/api/management/colleges/${selectedCollegeId}/monthly-export?${params.toString()}`);
-      const d = await res.json() as { rows?: MonthlyExportRow[]; department?: string; error?: string };
+      const d = await res.json() as { rows?: MonthlySummaryRow[]; department?: string; error?: string };
       if (!res.ok) {
         toast({ variant: "destructive", title: d.error ?? "Failed to export" });
         return;

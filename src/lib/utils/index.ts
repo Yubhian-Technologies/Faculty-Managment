@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { Timestamp } from "firebase/firestore";
-import { ATTENDANCE_STATUS_LABELS, type WorkflowStatus, type CandidateStatus, type AttendanceStatus, type MonthlyExportRow } from "@/types";
+import { type WorkflowStatus, type CandidateStatus, type MonthlySummaryRow } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -123,38 +123,40 @@ export function exportToCSV<T extends Record<string, unknown>>(
 }
 
 // Shared CSV shape for the department-wide / college-wide monthly exports
-// (one row per person per day, from buildRosterMonthlyRows) - reused by
-// every "Export Month CSV" button (HOD, Principal/VP, Management) so the
-// column set and status/date formatting stay identical everywhere, matching
-// the single-person monthly export's existing Date/Day/Status/Check In/
-// Check Out/Reason shape (see PersonMonthlyAttendanceView.handleExport) with
-// Name/Role/Department columns added for the multi-person roster.
-export function exportRosterMonthlyCSV(rows: MonthlyExportRow[], filenameBase: string): void {
-  const csvRows = rows.map((r) => {
-    const d = new Date(`${r.date}T00:00:00`);
-    const valid = !Number.isNaN(d.getTime());
-    return {
-      name: r.facultyName,
-      role: r.role,
-      department: r.department,
-      date: valid ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : r.date,
-      day: valid ? d.toLocaleDateString("en-IN", { weekday: "long" }) : "",
-      status: ATTENDANCE_STATUS_LABELS[r.status as AttendanceStatus] ?? r.status,
-      checkIn: r.checkIn ?? "",
-      checkOut: r.checkOut ?? "",
-      reason: r.remarks ?? "",
-    };
-  });
+// (one row per person for the whole month, from buildRosterMonthlySummary)
+// - reused by every "Export Month CSV" button (HOD, Principal/VP,
+// Management). Deliberately one row per person, not one row per person per
+// day - at real headcounts (hundreds to thousands) a day-by-day export
+// becomes tens of thousands of rows for one month, which is both slow to
+// open and not what a roster-wide export is for. The day-by-day breakdown
+// for one person is still available from that person's own "My Attendance"
+// export (see PersonMonthlyAttendanceView.handleExport).
+export function exportRosterMonthlyCSV(rows: MonthlySummaryRow[], filenameBase: string): void {
+  const csvRows = rows.map((r) => ({
+    facultyName: r.facultyName,
+    role: r.role,
+    department: r.department,
+    totalDays: r.totalDays,
+    present: r.present,
+    absent: r.absent,
+    halfDay: r.halfDay,
+    onLeave: r.onLeave,
+    onDuty: r.onDuty,
+    holiday: r.holiday,
+    lateArrivals: r.lateArrivals,
+  }));
   exportToCSV(csvRows, filenameBase, [
-    { key: "name", header: "Name" },
+    { key: "facultyName", header: "Name" },
     { key: "role", header: "Role" },
     { key: "department", header: "Department" },
-    { key: "date", header: "Date" },
-    { key: "day", header: "Day" },
-    { key: "status", header: "Status" },
-    { key: "checkIn", header: "Check In" },
-    { key: "checkOut", header: "Check Out" },
-    { key: "reason", header: "Reason" },
+    { key: "totalDays", header: "Total Days" },
+    { key: "present", header: "Present" },
+    { key: "absent", header: "Absent" },
+    { key: "halfDay", header: "Half Day" },
+    { key: "onLeave", header: "On Leave" },
+    { key: "onDuty", header: "On Duty" },
+    { key: "holiday", header: "Holiday" },
+    { key: "lateArrivals", header: "Late Arrivals" },
   ]);
 }
 

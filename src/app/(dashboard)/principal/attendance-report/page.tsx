@@ -10,6 +10,7 @@ export default function PrincipalAttendanceReportPage() {
       groupByDepartmentAndCourse
       allowManualMark
       monthlyViewBasePath="/principal/attendance-report"
+      importHref="/principal/attendance-import"
     />
   );
 }
