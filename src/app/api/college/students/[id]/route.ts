@@ -30,16 +30,43 @@ async function loadStudentAndScope(
   // year-scoped, so "in scope" for a student depends on their year, not just
   // their department. Mirrors the students-list GET and distribute POST checks.
   let allDepts: DepartmentYearRow[] | null = null;
-  const inHodScope = (dept: string, year: number) => {
+  // `catalogId` lets a manager that runs more than one course (e.g. sharing a
+  // B.Tech's first year while also running an independent course of its own)
+  // resolve ownership against the student's own course, not always the
+  // manager's flat years - see catalogIdForStudent below.
+  const inHodScope = (dept: string, year: number, catalogId?: string) => {
     if (!scope) return true;
     if (!allDepts) return false;
-    return canHodEditDepartmentYear(scope, allDepts, dept, year);
+    return canHodEditDepartmentYear(scope, allDepts, dept, year, catalogId);
   };
   if (scope?.departmentName) {
     const deptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
     allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
   }
   return { scope, inHodScope };
+}
+
+async function catalogIdForCourseId(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  courseId: string | undefined
+): Promise<string | undefined> {
+  if (!courseId) return undefined;
+  const snap = await db.collection("colleges").doc(collegeId).collection("courses").doc(courseId).get();
+  return snap.exists ? (snap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
+}
+
+// StudentRecord has no courseId of its own (see findCurrentSectionDoc above) -
+// their course is only ever determined by the Section they're currently
+// sitting in.
+async function catalogIdForStudent(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  student: Pick<StudentRecord, "department" | "secondaryDepartment" | "section" | "year">
+): Promise<string | undefined> {
+  const sectionDoc = await findCurrentSectionDoc(db, collegeId, student);
+  const courseId = sectionDoc ? (sectionDoc.data() as { courseId?: string }).courseId : undefined;
+  return catalogIdForCourseId(db, collegeId, courseId);
 }
 
 // Finds the Section doc a student is currently sitting in. A shared-first-
@@ -115,7 +142,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       if (session.role === "HOD") {
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-        if (!inHodScope(student.department, student.year)) {
+        const catalogId = await catalogIdForStudent(db, session.collegeId, student);
+        if (!inHodScope(student.department, student.year, catalogId)) {
           return NextResponse.json({ error: "Outside your department" }, { status: 403 });
         }
       } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
@@ -150,7 +178,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       if (session.role === "HOD") {
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-        if (!inHodScope(student.department, student.year)) {
+        const catalogId = await catalogIdForStudent(db, session.collegeId, student);
+        if (!inHodScope(student.department, student.year, catalogId)) {
           return NextResponse.json({ error: "Outside your department" }, { status: 403 });
         }
       }
@@ -215,7 +244,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     if (session.role === "HOD") {
       const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
-      if (!inHodScope(student.department, student.year) || !inHodScope(targetSection.department, targetSection.year)) {
+      const [fromCatalogId, toCatalogId] = await Promise.all([
+        catalogIdForStudent(db, session.collegeId, student),
+        catalogIdForCourseId(db, session.collegeId, targetSection.courseId),
+      ]);
+      if (!inHodScope(student.department, student.year, fromCatalogId) || !inHodScope(targetSection.department, targetSection.year, toCatalogId)) {
         return NextResponse.json({ error: "Outside your department" }, { status: 403 });
       }
     }

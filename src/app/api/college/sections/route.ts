@@ -49,6 +49,7 @@ export async function GET(request: Request) {
     // when there's an actual managed-branch relationship to disambiguate.
     let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
     let hodDepartments: DepartmentYearRow[] = [];
+    const catalogIdByCourseId = new Map<string, string | undefined>();
 
     // A caller with unrestricted college-wide read access (Principal/VP/Super
     // Admin/Office already see every section regardless of department) can
@@ -97,6 +98,15 @@ export async function GET(request: Request) {
       if (scope.ownDepartmentNames.length > 0) {
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+        // A manager can run more than one course with different years (e.g. a
+        // sub-department sharing a B.Tech's first year while also running an
+        // independent course of its own) - resolveBranchYearOwner below needs
+        // each section's own course to resolve ownership against the right
+        // one, not always the manager's flat years.
+        const coursesSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").get();
+        for (const c of coursesSnap.docs) {
+          catalogIdByCourseId.set(c.id, (c.data() as { catalogId?: string }).catalogId);
+        }
       }
     } else if (session.role === "PANEL_MEMBER") {
       const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
@@ -119,7 +129,8 @@ export async function GET(request: Request) {
       // by whoever manages this branch elsewhere (e.g. a shared first year
       // routed through a common department's sub-department instead).
       if (hodScope && hodDepartments.length > 0) {
-        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number);
+        const catalogId = catalogIdByCourseId.get(data.courseId as string);
+        const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number, catalogId);
         if (!hodScope.ownDepartmentNames.includes(owner)) continue;
       }
       seenIds.add(d.id);
@@ -135,7 +146,8 @@ export async function GET(request: Request) {
         // that's the relationship that's year-scoped (only the years the
         // manager - this HOD, or one of their own children - actually teaches).
         if (hodScope!.managedDepartmentNames.includes(deptName) && hodDepartments.length > 0) {
-          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number);
+          const catalogId = catalogIdByCourseId.get(data.courseId as string);
+          const owner = resolveBranchYearOwner(hodDepartments, deptName, data.year as number, catalogId);
           if (!hodScope!.ownDepartmentNames.includes(owner) && !hodScope!.childDepartmentNames.includes(owner)) continue;
         }
         seenIds.add(d.id);
@@ -394,7 +406,7 @@ export async function POST(request: Request) {
           // otherwise this is the branch's own dedicated HOD naming their own
           // department directly, who must stay strictly within their own
           // assignedYears even though someone elsewhere also manages this branch.
-          const manager = viaManagedBranch ? findBranchManager(allDepts, dept) : null;
+          const manager = viaManagedBranch ? findBranchManager(allDepts, dept, course.catalogId) : null;
           const allowedViaManager = manager?.years.includes(Number(body.year)) ?? false;
           if (!allowedViaManager) {
             return NextResponse.json(

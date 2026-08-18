@@ -15,7 +15,7 @@ import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { AcademicYear, Department, FMSUser } from "@/types";
+import type { Department, FMSUser } from "@/types";
 
 export default function NewDepartmentPage() {
   const router = useRouter();
@@ -24,9 +24,6 @@ export default function NewDepartmentPage() {
   const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubDepartments, setHasSubDepartments] = useState(false);
-  const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
-  const [assignedYears, setAssignedYears] = useState<number[]>([]);
-  const [addingYear, setAddingYear] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/users?role=HOD")
@@ -38,34 +35,7 @@ export default function NewDepartmentPage() {
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments((d.departments ?? []).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => {});
-
-    fetch("/api/college/academic-years")
-      .then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>)
-      .then((d) => setOpenYears((d.academicYears ?? []).filter((y) => y.isActive)))
-      .catch(() => {});
   }, []);
-
-  function toggleAssignedYear(year: number, checked: boolean) {
-    setAssignedYears((prev) => (checked ? [...prev, year] : prev.filter((y) => y !== year)));
-  }
-
-  async function handleAddYear() {
-    setAddingYear(true);
-    try {
-      const res = await fetch("/api/college/academic-years", { method: "POST" });
-      const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to add year");
-
-      const yearsRes = await fetch("/api/college/academic-years");
-      const data = await yearsRes.json() as { academicYears: AcademicYear[] };
-      setOpenYears((data.academicYears ?? []).filter((y) => y.isActive));
-      toast({ variant: "success", title: "Academic year added" });
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add year" });
-    } finally {
-      setAddingYear(false);
-    }
-  }
 
   const {
     register,
@@ -107,7 +77,6 @@ export default function NewDepartmentPage() {
         hodName: selectedHod?.name ?? "",
         hasSubDepartments,
         secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
-        assignedYears: assignedYears.length > 0 ? assignedYears : undefined,
       };
       const res = await fetch("/api/college/departments", {
         method: "POST",
@@ -213,12 +182,13 @@ export default function NewDepartmentPage() {
             </div>
 
             <YearsTaughtAndSecondaryFields
-              openYears={openYears}
-              onAddYear={handleAddYear}
-              isAddingYear={addingYear}
-              assignedYears={assignedYears}
-              onToggleYear={toggleAssignedYear}
-              yearsHelperText="Which years of study this department currently teaches. HODs can only create sections for these years. A shared first-year department holds just 1st Year; each core branch holds the rest."
+              showYears={false}
+              openYears={[]}
+              onAddYear={() => {}}
+              isAddingYear={false}
+              assignedYears={[]}
+              onToggleYear={() => {}}
+              yearsHelperText=""
               secondaryDepartmentOptions={departments.filter((d) => d.name !== nameValue && !d.parentDepartmentId)}
               secondaryDepartments={secondaryDepartments}
               onToggleSecondaryDepartment={toggleSecondaryDepartment}
