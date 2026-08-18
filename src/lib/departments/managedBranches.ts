@@ -9,6 +9,9 @@
 // Shared by the create and update paths in college/departments/route.ts, which
 // each already hold a full read of the departments collection.
 
+import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import type { DepartmentCourseScope } from "@/types";
+
 export interface DepartmentClaimRow {
   id: string;
   name?: string;
@@ -56,12 +59,19 @@ export function branchClaimConflictMessage(conflicts: BranchClaimConflict[]): st
 export interface DepartmentYearRow extends DepartmentClaimRow {
   assignedYears?: number[];
   parentDepartmentId?: string;
+  // Per-course override of assignedYears (Department.courseScopes) - a
+  // manager can run more than one course with different years (e.g. Chemistry
+  // sharing a B.Tech's first year while also running an independent course of
+  // its own), so ownership must be resolved per the course actually in
+  // question (`catalogId` below), not always the manager's flat years.
+  courseScopes?: Record<string, DepartmentCourseScope>;
 }
 
 export interface BranchManager<T> {
   department: T;
-  /** Years the manager actually teaches - its own assignedYears, or, if it has
-   * none of its own (the common shape for a sub-department), its parent common
+  /** Years the manager actually teaches for the given catalogId - its own
+   * per-course override or flat assignedYears, or, if it has neither of its
+   * own (the common shape for a sub-department), its parent common
    * department's. */
   years: number[];
 }
@@ -69,26 +79,28 @@ export interface BranchManager<T> {
 /**
  * The department that manages `branchName` via `Department.managedDepartments`
  * (e.g. a sub-department like "BS-English" grouping "CIVIL" for the shared
- * first year), and the years it actually teaches. A branch is only reached
- * through its manager for THOSE years - every other year belongs to the
- * branch's own dedicated HOD (Department.assignedYears on the branch itself).
- * Mirrors resolveSubjectDepartment's rule for the older secondaryDepartments
- * mechanism, generalized to managedDepartments. Returns null when nothing
- * manages this branch.
+ * first year), and the years it actually teaches for `catalogId`. A branch is
+ * only reached through its manager for THOSE years - every other year belongs
+ * to the branch's own dedicated HOD (Department.assignedYears/courseScopes on
+ * the branch itself). Mirrors resolveSubjectDepartment's rule for the older
+ * secondaryDepartments mechanism, generalized to managedDepartments. Returns
+ * null when nothing manages this branch.
  */
 export function findBranchManager<T extends DepartmentYearRow>(
   departments: T[],
-  branchName: string
+  branchName: string,
+  catalogId?: string
 ): BranchManager<T> | null {
   const manager = departments.find((d) => (d.managedDepartments ?? []).includes(branchName));
   if (!manager) return null;
-  return { department: manager, years: managerTeachingYears(departments, manager) };
+  return { department: manager, years: managerTeachingYears(departments, manager, catalogId) };
 }
 
 /**
- * The years a managing department actually teaches: its own assignedYears, or,
- * when it has none of its own (the common shape for a sub-department, which
- * college/departments POST won't let an HOD set), its parent common
+ * The years a managing department actually teaches for `catalogId`: its own
+ * per-course override or flat assignedYears (resolveDepartmentCourseScope),
+ * or, when it has neither of its own (the common shape for a sub-department,
+ * which college/departments POST won't let an HOD set), its parent common
  * department's.
  *
  * Exported because a manager isn't always found by searching for it - the Add
@@ -99,28 +111,33 @@ export function findBranchManager<T extends DepartmentYearRow>(
  */
 export function managerTeachingYears<T extends DepartmentYearRow>(
   departments: T[],
-  manager: T
+  manager: T,
+  catalogId?: string
 ): number[] {
-  const own = manager.assignedYears ?? [];
+  const own = resolveDepartmentCourseScope(manager, catalogId).assignedYears;
   if (own.length > 0) return own;
   if (manager.parentDepartmentId) {
-    return departments.find((p) => p.id === manager.parentDepartmentId)?.assignedYears ?? [];
+    const parent = departments.find((p) => p.id === manager.parentDepartmentId);
+    return parent ? resolveDepartmentCourseScope(parent, catalogId).assignedYears : [];
   }
   return [];
 }
 
 /**
- * Whichever department actually owns (branchName, year): the manager, if one
- * manages this branch and teaches this year - otherwise the branch itself.
- * Used to decide access/visibility: a branch's own dedicated HOD should never
- * see a section for a year their manager owns instead, and vice versa.
+ * Whichever department actually owns (branchName, year) for `catalogId`: the
+ * manager, if one manages this branch and teaches this year for this course -
+ * otherwise the branch itself. Used to decide access/visibility: a branch's
+ * own dedicated HOD should never see a section for a year their manager owns
+ * instead, and vice versa. `catalogId` omitted falls back to each
+ * department's flat fields only, same as before per-course overrides existed.
  */
 export function resolveBranchYearOwner<T extends DepartmentYearRow & { name?: string }>(
   departments: T[],
   branchName: string,
-  year: number
+  year: number,
+  catalogId?: string
 ): string {
-  const manager = findBranchManager(departments, branchName);
+  const manager = findBranchManager(departments, branchName, catalogId);
   return manager && manager.years.includes(year) ? (manager.department.name ?? branchName) : branchName;
 }
 
@@ -149,13 +166,14 @@ export function canHodEditDepartmentYear<T extends DepartmentYearRow & { name?: 
   scope: { ownDepartmentNames: string[]; childDepartmentNames: string[]; managedDepartmentNames: string[] },
   departments: T[],
   departmentName: string,
-  year: number
+  year: number,
+  catalogId?: string
 ): boolean {
   if (!departmentName || scope.ownDepartmentNames.length === 0) return false;
   if (scope.childDepartmentNames.includes(departmentName)) return true;
   if (!scope.ownDepartmentNames.includes(departmentName) && !scope.managedDepartmentNames.includes(departmentName)) {
     return false;
   }
-  const owner = resolveBranchYearOwner(departments, departmentName, year);
+  const owner = resolveBranchYearOwner(departments, departmentName, year, catalogId);
   return scope.ownDepartmentNames.includes(owner) || scope.childDepartmentNames.includes(owner);
 }

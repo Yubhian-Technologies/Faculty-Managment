@@ -9,6 +9,7 @@ export default function TAndPStaffAttendancePage() {
       description="Daily self-attendance (face + location verified) for T&P staff"
       allowManualMark
       monthlyViewBasePath="/t-and-p/staff-attendance"
+      importHref="/t-and-p/attendance-import"
     />
   );
 }

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
-import { isoDateKey } from "@/lib/leave/dayCounter";
+import { todayISODate } from "@/lib/leave/dayCounter";
 
 // Self-contained read for the Class Leader dashboard AND timetable page (both
 // call this one endpoint): resolves the caller's own bound Section (never a
@@ -51,7 +51,7 @@ export async function GET() {
     // Overlay today's approved-leave substitutions - see
     // lib/leave/periodCoverage.ts and the same overlay in
     // GET college/timetable-slots.
-    const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, isoDateKey(new Date()));
+    const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, todayISODate());
     const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
     const slots = rawSlots.map((s) => {
       const sub = substitutionBySlotId.get((s as { id: string }).id);

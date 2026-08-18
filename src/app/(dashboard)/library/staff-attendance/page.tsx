@@ -9,6 +9,7 @@ export default function LibraryStaffAttendancePage() {
       description="Daily self-attendance (face + location verified) for Library staff"
       allowManualMark
       monthlyViewBasePath="/library/staff-attendance"
+      importHref="/library/attendance-import"
     />
   );
 }

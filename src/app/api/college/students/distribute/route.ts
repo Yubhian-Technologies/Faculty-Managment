@@ -66,24 +66,6 @@ export async function POST(request: Request) {
     const secondaryDeptName = body.secondaryDepartment?.trim() || "";
     const targetDeptName = secondaryDeptName || deptName;
 
-    // An HOD/Sub-HOD may only distribute within a department they own or
-    // manage, and - for a managed branch reached only via `managedDepartments`
-    // (e.g. Basic Science grouping CIVIL for its shared first year) - only for
-    // the years that grouping actually covers. CIVIL's own years (2-4) stay
-    // exclusively CIVIL's own dedicated HOD's to distribute, even though Basic
-    // Science manages CIVIL for year 1. Checked against targetDeptName (the
-    // branch actually being sectioned into), same as the section validation
-    // and student write below. Mirrors the read-side check in `college/students`
-    // GET and `college/sections` GET.
-    if (session.role === "HOD") {
-      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const deptsSnap = await collegeRef.collection("departments").get();
-      const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
-      if (!canHodEditDepartmentYear(scope, allDepts, targetDeptName, year)) {
-        return NextResponse.json({ error: "That department/year is not yours or one you manage" }, { status: 403 });
-      }
-    }
-
     // Load the chosen sections, preserving the caller's order, and validate each
     // belongs to this exact (target department, year).
     const sectionSnaps = await Promise.all(
@@ -101,6 +83,32 @@ export async function POST(request: Request) {
         );
       }
       sections.push(s);
+    }
+
+    // An HOD/Sub-HOD may only distribute within a department they own or
+    // manage, and - for a managed branch reached only via `managedDepartments`
+    // (e.g. Basic Science grouping CIVIL for its shared first year) - only for
+    // the years that grouping actually covers. CIVIL's own years (2-4) stay
+    // exclusively CIVIL's own dedicated HOD's to distribute, even though Basic
+    // Science manages CIVIL for year 1. Checked against targetDeptName (the
+    // branch actually being sectioned into), same as the section validation
+    // and student write below. Mirrors the read-side check in `college/students`
+    // GET and `college/sections` GET. `catalogId` (from the sections being
+    // distributed into, all validated above to share this department+year, so
+    // any one of them names the right course) lets a manager running more than
+    // one course resolve ownership against the right one, not always its flat
+    // years.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const [deptsSnap, courseSnap] = await Promise.all([
+        collegeRef.collection("departments").get(),
+        sections[0]?.courseId ? collegeRef.collection("courses").doc(sections[0].courseId).get() : Promise.resolve(null),
+      ]);
+      const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+      const catalogId = courseSnap?.exists ? (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
+      if (!canHodEditDepartmentYear(scope, allDepts, targetDeptName, year, catalogId)) {
+        return NextResponse.json({ error: "That department/year is not yours or one you manage" }, { status: 403 });
+      }
     }
 
     // Load the unassigned cohort for this (department, year), sorted by full name.

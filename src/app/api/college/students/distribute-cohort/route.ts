@@ -100,6 +100,17 @@ export async function POST(request: Request) {
       else sectionsByBranch.set(branch, [section]);
     }
 
+    // A manager can run more than one course with different years, so
+    // canHodEditDepartmentYear below needs each branch's own course to
+    // resolve ownership against the right one, not always the manager's flat
+    // years. Fetched once (only when actually needed - an HOD scope exists),
+    // not per-branch.
+    let catalogIdByCourseId = new Map<string, string | undefined>();
+    if (scope) {
+      const coursesSnap = await collegeRef.collection("courses").get();
+      catalogIdByCourseId = new Map(coursesSnap.docs.map((c) => [c.id, (c.data() as { catalogId?: string }).catalogId]));
+    }
+
     const now = new Date();
     const batch = new ChunkedBatch(db);
     const perBranch: {
@@ -115,19 +126,23 @@ export async function POST(request: Request) {
       const managedBy = structure.managedBranchOwner.get(branch);
       const base = { branch, ...(managedBy ? { managedBy } : {}), distributed: 0, perSection: [] };
 
+      const sections = (sectionsByBranch.get(branch) ?? []).sort((a, b) =>
+        (a.name ?? "").localeCompare(b.name ?? "")
+      );
+
       // A (sub-)HOD may only section branches they own or manage FOR THIS YEAR -
       // a branch's own dedicated HOD never owns the shared year of a branch
       // grouped elsewhere (e.g. Basic Science manages CIVIL for year 1, even
       // though CIVIL's own HOD owns CIVIL for every other year). A branch
-      // outside their scope is reported, not silently dropped.
-      if (scope && !canHodEditDepartmentYear(scope, structure.allDepartments, branch, year)) {
+      // outside their scope is reported, not silently dropped. `catalogId`
+      // (from this branch's own Year-`year` sections, all necessarily this
+      // one course) lets a manager running more than one course resolve
+      // ownership against the right one.
+      const catalogId = catalogIdByCourseId.get(sections[0]?.courseId ?? "");
+      if (scope && !canHodEditDepartmentYear(scope, structure.allDepartments, branch, year, catalogId)) {
         perBranch.push({ ...base, skippedReason: "Not yours or one you manage" });
         continue;
       }
-
-      const sections = (sectionsByBranch.get(branch) ?? []).sort((a, b) =>
-        (a.name ?? "").localeCompare(b.name ?? "")
-      );
       if (sections.length === 0) {
         perBranch.push({ ...base, skippedReason: `No Year ${year} sections created yet` });
         continue;

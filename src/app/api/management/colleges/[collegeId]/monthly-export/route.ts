@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlyRows } from "@/lib/attendance/rosterMonthlyExport";
+import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlySummary } from "@/lib/attendance/rosterMonthlyExport";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 
 // MANAGEMENT is read-only - this route only implements GET.
@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
 
     if (scope === "college") {
       const roster = await resolveCollegeRoster(db, collegeId);
-      const rows = await buildRosterMonthlyRows(db, collegeId, roster, year, month);
+      const rows = await buildRosterMonthlySummary(db, collegeId, roster, year, month);
       return NextResponse.json({ scope: "college", rows });
     }
 
@@ -36,7 +36,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         return NextResponse.json({ error: "department is required" }, { status: 400 });
       }
       const roster = await resolveDepartmentRoster(db, collegeId, [department]);
-      const rows = await buildRosterMonthlyRows(db, collegeId, roster, year, month);
+      const rows = await buildRosterMonthlySummary(db, collegeId, roster, year, month);
       return NextResponse.json({ scope: "department", department, rows });
     }
 
@@ -46,7 +46,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         return NextResponse.json({ error: `unit must be one of: ${COLLEGE_STAFF_UNIT_HEAD_ROLES.join(", ")}` }, { status: 400 });
       }
       const roster = await resolveCollegeStaffUnitRoster(db, collegeId, unit);
-      const rows = await buildRosterMonthlyRows(db, collegeId, roster, year, month);
+      const rows = await buildRosterMonthlySummary(db, collegeId, roster, year, month);
       return NextResponse.json({ scope: "unit", department: unitLabelForHeadRole(unit), rows });
     }
 

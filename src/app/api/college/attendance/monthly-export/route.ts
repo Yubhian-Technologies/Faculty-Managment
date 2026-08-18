@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlyRows } from "@/lib/attendance/rosterMonthlyExport";
+import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlySummary } from "@/lib/attendance/rosterMonthlyExport";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 
 // Department-wide or college-wide monthly CSV data, self-serve (session-
@@ -29,20 +29,20 @@ export async function GET(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const departmentNames = [scope.departmentName, ...scope.childDepartmentNames].filter(Boolean);
       const roster = await resolveDepartmentRoster(db, session.collegeId, departmentNames);
-      const rows = await buildRosterMonthlyRows(db, session.collegeId, roster, year, month);
+      const rows = await buildRosterMonthlySummary(db, session.collegeId, roster, year, month);
       return NextResponse.json({ scope: "department", department: scope.departmentName, rows });
     }
 
     if (isCollegeStaffUnitHead(session.role)) {
       const roster = await resolveCollegeStaffUnitRoster(db, session.collegeId, session.role);
-      const rows = await buildRosterMonthlyRows(db, session.collegeId, roster, year, month);
+      const rows = await buildRosterMonthlySummary(db, session.collegeId, roster, year, month);
       return NextResponse.json({ scope: "unit", department: unitLabelForHeadRole(session.role), rows });
     }
 
     // PRINCIPAL / VICE_PRINCIPAL
     if (requestedScope === "college") {
       const roster = await resolveCollegeRoster(db, session.collegeId);
-      const rows = await buildRosterMonthlyRows(db, session.collegeId, roster, year, month);
+      const rows = await buildRosterMonthlySummary(db, session.collegeId, roster, year, month);
       return NextResponse.json({ scope: "college", rows });
     }
 
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "department is required" }, { status: 400 });
       }
       const roster = await resolveDepartmentRoster(db, session.collegeId, [requestedDepartment]);
-      const rows = await buildRosterMonthlyRows(db, session.collegeId, roster, year, month);
+      const rows = await buildRosterMonthlySummary(db, session.collegeId, roster, year, month);
       return NextResponse.json({ scope: "department", department: requestedDepartment, rows });
     }
 
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: `unit must be one of: ${COLLEGE_STAFF_UNIT_HEAD_ROLES.join(", ")}` }, { status: 400 });
       }
       const roster = await resolveCollegeStaffUnitRoster(db, session.collegeId, requestedUnit);
-      const rows = await buildRosterMonthlyRows(db, session.collegeId, roster, year, month);
+      const rows = await buildRosterMonthlySummary(db, session.collegeId, roster, year, month);
       return NextResponse.json({ scope: "unit", department: unitLabelForHeadRole(requestedUnit), rows });
     }
 

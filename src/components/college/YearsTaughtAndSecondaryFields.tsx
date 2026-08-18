@@ -28,44 +28,53 @@ interface Props {
   secondaryDepartmentOptions: Department[];
   secondaryDepartments: string[];
   onToggleSecondaryDepartment: (name: string, checked: boolean) => void;
+  /**
+   * Hides the "Years Taught" block, leaving only Secondary Departments -
+   * years are now decided per-course (at course creation/edit), never on the
+   * flat Add/Edit Department forms. Defaults to true (shown) for the other
+   * two call sites, which are still per-course.
+   */
+  showYears?: boolean;
 }
 
 export function YearsTaughtAndSecondaryFields({
   openYears, onAddYear, isAddingYear, assignedYears, onToggleYear, maxYear, yearsHelperText,
-  secondaryDepartmentOptions, secondaryDepartments, onToggleSecondaryDepartment,
+  secondaryDepartmentOptions, secondaryDepartments, onToggleSecondaryDepartment, showYears = true,
 }: Props) {
   const yearOptions = maxYear != null ? openYears.filter((y) => y.yearNumber <= maxYear) : openYears;
 
   return (
     <>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Years Taught</Label>
-          <Button type="button" variant="outline" size="sm" onClick={onAddYear} loading={isAddingYear}>
-            + Add Year
-          </Button>
-        </div>
-        {yearOptions.length === 0 ? (
-          <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-            {openYears.length === 0
-              ? 'No academic years added yet for this college - use "+ Add Year" above.'
-              : "No open years within this course's duration yet."}
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-            {yearOptions.map((y) => (
-              <label key={y.yearNumber} className="flex items-center gap-1.5 text-sm">
-                <Checkbox
-                  checked={assignedYears.includes(y.yearNumber)}
-                  onCheckedChange={(checked) => onToggleYear(y.yearNumber, !!checked)}
-                />
-                {yearOrdinalLabel(y.yearNumber)}
-              </label>
-            ))}
+      {showYears && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Years Taught</Label>
+            <Button type="button" variant="outline" size="sm" onClick={onAddYear} loading={isAddingYear}>
+              + Add Year
+            </Button>
           </div>
-        )}
-        <p className="text-xs text-muted-foreground">{yearsHelperText}</p>
-      </div>
+          {yearOptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+              {openYears.length === 0
+                ? 'No academic years added yet for this college - use "+ Add Year" above.'
+                : "No open years within this course's duration yet."}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+              {yearOptions.map((y) => (
+                <label key={y.yearNumber} className="flex items-center gap-1.5 text-sm">
+                  <Checkbox
+                    checked={assignedYears.includes(y.yearNumber)}
+                    onCheckedChange={(checked) => onToggleYear(y.yearNumber, !!checked)}
+                  />
+                  {yearOrdinalLabel(y.yearNumber)}
+                </label>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">{yearsHelperText}</p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Secondary Departments</Label>

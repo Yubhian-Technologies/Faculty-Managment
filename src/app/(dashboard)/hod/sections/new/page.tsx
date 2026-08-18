@@ -209,8 +209,8 @@ export default function NewSectionPage() {
   // picked their way through the cascade (departmentName set) is in
   // managed-branch mode.
   const branchManager = useMemo(
-    () => (departmentName && activeDept ? findBranchManager(departments, activeDept.name) : null),
-    [departmentName, activeDept, departments]
+    () => (departmentName && activeDept ? findBranchManager(departments, activeDept.name, formCourse?.catalogId) : null),
+    [departmentName, activeDept, departments, formCourse]
   );
 
   // Which container the cascade actually routed through, as reported by

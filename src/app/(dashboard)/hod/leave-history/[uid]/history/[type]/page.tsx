@@ -12,5 +12,5 @@ export default function HodEmployeeLeaveTypeHistoryPage({
   const { uid, type } = use(params);
   const filter = parseLeaveHistoryFilter(type);
   if (!filter) notFound();
-  return <LeaveTypeHistoryView uid={uid} backHref={`/hod/leave-history/${uid}`} type={filter} />;
+  return <LeaveTypeHistoryView uid={uid} backHref={`/hod/leave-history/${uid}`} type={filter} canAdjustCoverage />;
 }

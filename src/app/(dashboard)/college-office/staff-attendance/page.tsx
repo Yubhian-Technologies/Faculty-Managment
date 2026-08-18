@@ -9,6 +9,7 @@ export default function CollegeOfficeStaffAttendancePage() {
       description="Daily self-attendance (face + location verified) for College Office staff"
       allowManualMark
       monthlyViewBasePath="/college-office/staff-attendance"
+      importHref="/college-office/attendance-import"
     />
   );
 }

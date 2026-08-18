@@ -1,8 +1,9 @@
 import { closeMissedCheckouts, toAttendanceDate } from "./closeMissedCheckouts";
 import { fillMissingDays } from "./fillMissingDays";
 import { resolveFaceRegisteredAt } from "./registration";
+import { isLateCheckIn } from "./lateStatus";
 import { unitLabelForHeadRole, COLLEGE_STAFF_UNIT_HEAD_ROLES, type UnitHeadRole } from "./collegeStaffUnits";
-import type { AttendanceRecord, MonthlyExportRow } from "@/types";
+import type { AttendanceRecord, MonthlySummaryRow } from "@/types";
 
 export interface ExportRosterMember {
   uid: string;
@@ -116,19 +117,21 @@ export async function resolveCollegeRoster(
   });
 }
 
-// Builds a flattened "one row per person per day" export for an entire
-// roster (a department, or a whole college) over one month. Every existing
-// monthly export in this app is single-person (fillMissingDays run once
-// per page load) - this runs that same pipeline once per roster member and
-// concatenates the results, so a department/college-wide CSV reads as one
-// natural block per person rather than interleaved by date.
-export async function buildRosterMonthlyRows(
+// Builds a "one row per person" monthly summary for an entire roster (a
+// department, unit, or a whole college) - each row tallies how many of that
+// person's days this month landed in each status, rather than listing every
+// day (a 2000-person college-wide export would otherwise be tens of
+// thousands of CSV rows for one month - the per-day breakdown for a single
+// person is already available from their own "My Attendance" export). Runs
+// the same fillMissingDays pipeline every single-person monthly view uses,
+// once per roster member, then tallies instead of flattening.
+export async function buildRosterMonthlySummary(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
   roster: ExportRosterMember[],
   year: number,
   month: number
-): Promise<MonthlyExportRow[]> {
+): Promise<MonthlySummaryRow[]> {
   if (roster.length === 0) return [];
 
   const collegeRef = db.collection("colleges").doc(collegeId);
@@ -164,7 +167,7 @@ export async function buildRosterMonthlyRows(
     )
   );
 
-  const rows: MonthlyExportRow[] = [];
+  const rows: MonthlySummaryRow[] = [];
   for (const member of roster) {
     const records = (recordsByUid.get(member.uid) ?? []).sort(
       (a, b) => (a.resolvedDate?.getTime() ?? 0) - (b.resolvedDate?.getTime() ?? 0)
@@ -177,27 +180,32 @@ export async function buildRosterMonthlyRows(
       facultyName: member.name,
       department: member.department,
     });
+
+    let present = 0, absent = 0, halfDay = 0, onLeave = 0, onDuty = 0, holiday = 0, lateArrivals = 0;
     for (const rec of filled) {
-      const d = toAttendanceDate(rec.date);
-      rows.push({
-        facultyId: member.uid,
-        facultyName: member.name,
-        role: ROLE_LABELS[member.role],
-        department: member.department,
-        date: d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : "",
-        status: rec.status,
-        checkIn: rec.checkIn ?? null,
-        checkOut: rec.checkOut ?? null,
-        remarks: rec.remarks ?? null,
-      });
+      switch (rec.status) {
+        case "PRESENT":
+          present++;
+          if (isLateCheckIn(rec.checkIn)) lateArrivals++;
+          break;
+        case "ABSENT": absent++; break;
+        case "HALF_DAY": halfDay++; break;
+        case "ON_LEAVE": onLeave++; break;
+        case "ON_DUTY": onDuty++; break;
+        case "HOLIDAY": case "WEEKEND": holiday++; break;
+      }
     }
+
+    rows.push({
+      facultyId: member.uid,
+      facultyName: member.name,
+      role: ROLE_LABELS[member.role],
+      department: member.department,
+      totalDays: filled.length,
+      present, absent, halfDay, onLeave, onDuty, holiday, lateArrivals,
+    });
   }
 
-  rows.sort(
-    (a, b) =>
-      a.department.localeCompare(b.department) ||
-      a.facultyName.localeCompare(b.facultyName) ||
-      a.date.localeCompare(b.date)
-  );
+  rows.sort((a, b) => a.department.localeCompare(b.department) || a.facultyName.localeCompare(b.facultyName));
   return rows;
 }

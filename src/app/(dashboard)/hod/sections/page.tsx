@@ -270,20 +270,12 @@ export default function HODSectionsPage() {
   const activeGroup = activeCourseKey !== "all" ? courseGroups.find((g) => g.key === activeCourseKey) ?? null : null;
   const activeCourseIds = activeGroup ? new Set(activeGroup.courseIds) : null;
 
-  // branch name -> the years its managing sub-department (or, if that has none
-  // of its own, the sub-department's parent common department) teaches - a real
-  // branch's OWN "Years Taught" never includes a shared year like the common
-  // first year on its own, so anything scoped by assignedYears must fall back
-  // to this for a managed branch, or a correctly-created shared-year section
-  // (and the year tab that reveals it) would vanish from its own HOD's list.
-  const managedBranchYears = useMemo(() => managedBranchYearsMap(departments), [departments]);
-
   // Whether THIS (sub-)HOD actually views branches through a managed
   // relationship - as the main common HOD via the cascade, or as a sub-HOD who
   // IS the grouping container. A plain HOD (e.g. CSE's own dedicated HOD) is
   // neither, even when CSE happens to be managed by some sub-department
   // elsewhere for a shared year - that shared year is never theirs to see, so
-  // managedBranchYears must never apply to their own department for them.
+  // a managed branch's years must never apply to their own department for them.
   const viewsManagedBranchYears = useCascadeFilter || isGroupingContainer;
 
   // Year filter tabs follow the department's assigned years ("Years Taught"),
@@ -313,11 +305,8 @@ export default function HODSectionsPage() {
   const yearTabOptions = useMemo(() => {
     if (!activeDurationYears) return [] as number[];
     const courseYears = Array.from({ length: activeDurationYears }, (_, i) => i + 1);
-    // Recomputed per active course rather than reusing the plain
-    // `managedBranchYears` above (which stays flat/course-blind - it also
-    // drives which SECTIONS are visible at all, a decision that must stay
-    // right even before any course tab is picked). Cheap enough (a college's
-    // department count is small) to compute inline rather than its own memo.
+    // Recomputed per active course - cheap enough (a college's department
+    // count is small) to compute inline rather than its own memo.
     const managedBranchYearsForActiveCourse = managedBranchYearsMap(departments, activeCatalogId);
 
     if (deptFilter !== "all") {
@@ -355,29 +344,44 @@ export default function HODSectionsPage() {
     plainChildren, isGroupingContainer, viewsManagedBranchYears, subDeptFilter,
   ]);
 
-  // Each section is scoped to the years its OWN department is assigned to teach
-  // ("Years Taught"). A section whose year the department no longer teaches
-  // (e.g. a 2nd-year section after the department was narrowed to 3rd year only)
-  // drops out of the view, so the list tracks the Principal's year selection.
-  // Departments with no assigned years yet are left unrestricted. A managed
-  // branch (see managedBranchYears above) also stays visible for any year its
-  // managing sub-department teaches, even though the branch's own Years Taught
-  // doesn't include it - but only for a viewer who actually reaches it that way
-  // (viewsManagedBranchYears); the branch's own dedicated HOD stays strictly
-  // within its own assignedYears.
-  const assignedYearsByDept = useMemo(() => {
-    const m = new Map<string, number[]>();
-    for (const d of departments) m.set(d.name, d.assignedYears ?? []);
+  // courseId -> catalogId, so each section (which only stores courseId) can be
+  // resolved against its OWN course's per-course scope - a department's years
+  // are decided per course (Department.courseScopes), so a section's
+  // visibility must follow its own course's catalogId, not a single flat
+  // per-department value (that was the bug: an M.Tech section in a department
+  // whose OTHER course, e.g. B.Tech, has different years would be wrongly
+  // hidden/shown based on the wrong course's years).
+  const catalogIdByCourseId = useMemo(() => {
+    const m = new Map<string, string | undefined>();
+    for (const c of courses) m.set(c.id, c.catalogId);
+    return m;
+  }, [courses]);
+
+  const deptByName = useMemo(() => {
+    const m = new Map<string, Department>();
+    for (const d of departments) m.set(d.name, d);
     return m;
   }, [departments]);
 
-  // The year-scoped universe of sections this (sub-)HOD manages - the basis for
-  // both the summary totals and the filtered grid, so counts and cards agree.
+  // Each section is scoped to the years its OWN department teaches THAT
+  // section's own course (managerEffectiveYears - per-course override, falling
+  // back to the department's legacy flat fields/parent chain). A section whose
+  // year that course no longer covers (e.g. narrowed after the section was
+  // created) drops out of the view, so the list tracks the Principal's year
+  // selection. A department/course with nothing resolved yet is left
+  // unrestricted. A managed branch also stays visible for any year its
+  // managing sub-department teaches for that course, even though the branch's
+  // own years don't include it - but only for a viewer who actually reaches it
+  // that way (viewsManagedBranchYears); the branch's own dedicated HOD stays
+  // strictly within its own resolved years.
   const yearScopedSections = useMemo(() => sections.filter((s) => {
-    const assigned = assignedYearsByDept.get(s.department);
-    if (!assigned || assigned.length === 0 || assigned.includes(s.year)) return true;
-    return viewsManagedBranchYears && (managedBranchYears.get(s.department) ?? []).includes(s.year);
-  }), [sections, assignedYearsByDept, managedBranchYears, viewsManagedBranchYears]);
+    const dept = deptByName.get(s.department);
+    const catalogId = catalogIdByCourseId.get(s.courseId);
+    const assigned = dept ? managerEffectiveYears(dept, departments, catalogId) : [];
+    if (assigned.length === 0 || assigned.includes(s.year)) return true;
+    const branchYears = managedBranchYearsMap(departments, catalogId).get(s.department) ?? [];
+    return viewsManagedBranchYears && branchYears.includes(s.year);
+  }), [sections, deptByName, catalogIdByCourseId, departments, viewsManagedBranchYears]);
 
   // The course + owned-department scoped universe, BEFORE the branch filter
   // itself narrows it further - what the "Branches" row's own counts (and its

@@ -65,11 +65,24 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
   // The college's declared regulation codes (Settings > Academic Regulations,
   // see RegulationSettingsCard) - each catalog entry picks the subset that's
   // actually valid for that course. A course with none picked here blocks the
-  // Dean from adding subjects to it until the Principal sets this.
+  // Dean from adding subjects to it until the Principal sets this, AND a
+  // regulation left out here is invisible to the Dean even if it's declared
+  // college-wide and even if RegulationSettingsCard's own per-year mapping
+  // points at it (that mapping only fixes ONE default regulation per year,
+  // for browsing convenience - see currentRegulation in dean/subjects/page.tsx
+  // - it was never meant to be an exhaustive list of what a course may use;
+  // a course can legitimately run more than one regulation at once, e.g. R23
+  // for continuing students alongside R26 for a fresh intake in the same
+  // year). So the default here is simply every declared regulation, not a
+  // narrower guess derived from any one year's fixed value.
   const [declaredRegulations, setDeclaredRegulations] = useState<string[]>([]);
 
   const [newDraft, setNewDraft] = useState<Draft>(EMPTY_DRAFT);
   const [isAdding, setIsAdding] = useState(false);
+  // False the moment the Principal manually toggles a chip on the add form -
+  // once they've made an explicit choice, the auto-fill below must never
+  // overwrite it again for this draft.
+  const [regulationsAutoFilled, setRegulationsAutoFilled] = useState(true);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -94,6 +107,13 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
       .then((d) => setDeclaredRegulations(d.settings.regulations ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
   }, [readOnly]);
+
+  // Derived, not effect-synced state: as long as the Principal hasn't
+  // touched a chip by hand for this draft, the effective selection just
+  // tracks declaredRegulations live (nothing to keep in sync). The moment
+  // they toggle one manually (toggleNewDraftRegulation), newDraft.regulations
+  // itself takes over.
+  const effectiveNewRegulations = regulationsAutoFilled ? declaredRegulations : newDraft.regulations;
 
   function toggleRegulation(draft: Draft, setDraft: (d: Draft) => void, code: string) {
     const isRemoving = draft.regulations.includes(code);
@@ -120,6 +140,15 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
     setDraft({ ...draft, regulationYears });
   }
 
+  function toggleNewDraftRegulation(code: string) {
+    const base = effectiveNewRegulations;
+    setRegulationsAutoFilled(false);
+    setNewDraft((d) => ({
+      ...d,
+      regulations: base.includes(code) ? base.filter((r) => r !== code) : [...base, code],
+    }));
+  }
+
   function validate(d: Draft): string | null {
     if (!d.name.trim()) return "Course name is required";
     if (!d.code.trim()) return "Short code is required";
@@ -140,7 +169,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
           name: newDraft.name.trim(),
           code: newDraft.code.trim(),
           durationYears: Number(newDraft.durationYears),
-          regulations: newDraft.regulations,
+          regulations: effectiveNewRegulations,
           regulationYears: newDraft.regulationYears,
         }),
       });
@@ -149,6 +178,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
         throw new Error(j.error ?? "Failed to add course");
       }
       setNewDraft(EMPTY_DRAFT);
+      setRegulationsAutoFilled(true);
       toast({ variant: "success", title: "Course added to catalog" });
       load();
     } catch (e) {
@@ -161,8 +191,15 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
   function startEdit(item: CourseCatalogItem) {
     setEditingId(item.id);
     setEditDraft({
-      name: item.name, code: item.code, durationYears: String(item.durationYears),
-      regulations: item.regulations ?? [], regulationYears: item.regulationYears ?? {},
+      name: item.name,
+      code: item.code,
+      durationYears: String(item.durationYears),
+      // A course stuck with none picked starts from every declared
+      // regulation instead of blank, so opening Edit gives the Principal
+      // something to just confirm (or narrow down) rather than an empty
+      // click-fest. A course that already has regulations keeps them as-is.
+      regulations: item.regulations?.length ? item.regulations : declaredRegulations,
+      regulationYears: item.regulationYears ?? {},
     });
   }
 
@@ -208,6 +245,35 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
       load();
     } catch {
       toast({ variant: "destructive", title: "Failed to update status" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // One click straight from the "No regulations assigned yet" warning - no
+  // need to open Edit, notice the chips came pre-filled, and remember to
+  // hit Save. Assigns every declared regulation, same default startEdit
+  // pre-fills with - otherwise there's nothing to auto-assign (nothing
+  // declared yet) and Edit is still the only way in, same as before this
+  // existed.
+  async function quickAssignRegulations(item: CourseCatalogItem) {
+    const regulations = declaredRegulations;
+    if (regulations.length === 0) return;
+    setBusyId(item.id);
+    try {
+      const res = await fetch(`/api/college/course-catalog/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regulations }),
+      });
+      if (!res.ok) {
+        const j = await res.json() as { error?: string };
+        throw new Error(j.error ?? "Failed to assign regulations");
+      }
+      toast({ variant: "success", title: `Assigned ${regulations.join(", ")}` });
+      load();
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to assign regulations" });
     } finally {
       setBusyId(null);
     }
@@ -289,13 +355,13 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {declaredRegulations.map((r) => {
-                    const active = newDraft.regulations.includes(r);
+                    const active = effectiveNewRegulations.includes(r);
                     return (
                       <Badge
                         key={r}
                         variant={active ? "secondary" : "outline"}
                         className="cursor-pointer text-xs"
-                        onClick={() => toggleRegulation(newDraft, setNewDraft, r)}
+                        onClick={() => toggleNewDraftRegulation(r)}
                       >
                         {active && <Check className="h-3 w-3 mr-1" />}{r}
                       </Badge>
@@ -303,12 +369,17 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                   })}
                 </div>
               )}
-              {newDraft.regulations.length > 0 && (
+              {effectiveNewRegulations.length > 0 && (
                 <div className="space-y-1 pt-1">
-                  {newDraft.regulations.map((code) => (
+                  {effectiveNewRegulations.map((code) => (
                     <RegulationYearsRow key={code} draft={newDraft} setDraft={setNewDraft} code={code} onToggleYear={toggleRegulationYear} />
                   ))}
                 </div>
+              )}
+              {regulationsAutoFilled && effectiveNewRegulations.length > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Pre-filled with every declared regulation - click a badge to narrow it down.
+                </p>
               )}
             </div>
           </div>
@@ -419,9 +490,23 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                       )}
                     </>
                   ) : (item.regulations ?? []).length === 0 ? (
-                    <p className="flex items-center gap-1 text-xs text-amber-600">
-                      <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you assign at least one.
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="flex items-center gap-1 text-xs text-amber-600">
+                        <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you assign at least one.
+                      </p>
+                      {!readOnly && declaredRegulations.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-xs"
+                          disabled={busy}
+                          loading={busy}
+                          onClick={() => quickAssignRegulations(item)}
+                        >
+                          Assign {declaredRegulations.join(", ")}
+                        </Button>
+                      )}
+                    </div>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {(item.regulations ?? []).map((r) => {
