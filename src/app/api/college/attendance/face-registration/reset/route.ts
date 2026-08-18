@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
+import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 
 // Sends someone back to "not registered" for facial attendance so their next
 // visit to My Attendance shows the exact same Register prompt/capture flow as
@@ -27,14 +27,14 @@ import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 // /api/management/colleges/[collegeId]/principal-attendance/reset.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "EXAM_CELL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    if (session.role === "COLLEGE_OFFICE" || session.role === "EXAM_CELL") {
-      // College Office / Exam Cell - resets a COLLEGE_STAFF member belonging
-      // to their own unit (same department-string link as manual/route.ts
-      // and attendance/route.ts).
+    if (isCollegeStaffUnitHead(session.role)) {
+      // Unit head - resets a COLLEGE_STAFF member belonging to their own
+      // unit (same department-string link as manual/route.ts and
+      // attendance/route.ts).
       const body = (await request.json()) as { uid?: string };
       const uid = body.uid;
       if (!uid) {
@@ -72,8 +72,8 @@ export async function POST(request: Request) {
       // manual/route.ts's identical PRINCIPAL/VICE_PRINCIPAL treatment there.
       const validTargetRoles =
         session.role === "PRINCIPAL"
-          ? ["HOD", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "EXAM_CELL"]
-          : ["HOD", "PRINCIPAL", "COLLEGE_OFFICE", "EXAM_CELL"];
+          ? ["HOD", "VICE_PRINCIPAL", ...COLLEGE_STAFF_UNIT_HEAD_ROLES]
+          : ["HOD", "PRINCIPAL", ...COLLEGE_STAFF_UNIT_HEAD_ROLES];
       if (!target.role || !validTargetRoles.includes(target.role)) {
         return NextResponse.json(
           { error: "You can only reset face registration for an HOD, a unit head, or the Principal/Vice Principal" },

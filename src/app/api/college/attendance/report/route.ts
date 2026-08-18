@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
 import { isSunday } from "@/lib/attendance/attendanceWindow";
-import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
+import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import type { AttendanceRecord } from "@/types";
 
 interface RosterEntry {
@@ -62,20 +62,21 @@ function parseDateParam(dateParam: string | null): { start: Date; end: Date; doc
 // show up as "NOT_MARKED" instead of silently disappearing.
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "EXAM_CELL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const { searchParams } = new URL(request.url);
     const { start, end, docSuffix } = parseDateParam(searchParams.get("date"));
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
-    // College Office / Exam Cell: a separate, simpler roster - their own
-    // COLLEGE_STAFF (linked by the `department` field matching the unit's
-    // label, see collegeStaffUnits.ts), no department-tree scoping and no
-    // course grouping (neither concept applies to these units) - handled
-    // entirely here and returned early rather than folded into the
-    // PANEL_MEMBER/HOD logic below.
-    if (session.role === "COLLEGE_OFFICE" || session.role === "EXAM_CELL") {
+    // A unit head (College Office / Exam Cell / Library / T&P / ...): a
+    // separate, simpler roster - their own COLLEGE_STAFF (linked by the
+    // `department` field matching the unit's label, see
+    // collegeStaffUnits.ts), no department-tree scoping and no course
+    // grouping (neither concept applies to these units) - handled entirely
+    // here and returned early rather than folded into the PANEL_MEMBER/HOD
+    // logic below.
+    if (isCollegeStaffUnitHead(session.role)) {
       const unitLabel = unitLabelForHeadRole(session.role)!;
       const usersSnap = await collegeRef
         .collection("users")
