@@ -4,9 +4,15 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import type { BreakConfig, CourseYearTiming, PeriodTiming } from "@/types";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
 
 export async function GET(request: Request) {
   try {
@@ -65,6 +71,32 @@ export async function POST(request: Request) {
     const docId = `${courseId}_year${year}`;
     const ref = db.collection("colleges").doc(session.collegeId).collection("courseYearTimings").doc(docId);
     const existing = await ref.get();
+    const existingData = existing.data() as CourseYearTiming | undefined;
+
+    const nextNumberOfPeriods = Number(numberOfPeriods);
+    const nextPeriodDurationMinutes = Number(periodDurationMinutes);
+    const nextLunchBreak = lunchBreak ?? null;
+    const nextShortBreaks = shortBreaks ?? [];
+
+    // The HOD's own period-by-period breakdown (`periods`, see PATCH below)
+    // stores explicit clock times, independent of this formula - so if it
+    // already exists and the Principal then changes the day's shape here
+    // (a break moved/grew, period count/length changed, or the day's outer
+    // bounds shifted), those stored times silently stop lining up with the
+    // new breaks instead of shifting to match. Regenerate from the plain
+    // formula whenever a shape-relevant field actually changes, so the grid
+    // never shows a period's old clock time next to a break that's since
+    // moved - matches defaultPeriodTimings' own note that it's "a reasonable
+    // guess", now kept current instead of only seeded once.
+    const shapeChanged = !existingData || (
+      existingData.collegeStartTime !== collegeStartTime ||
+      existingData.collegeEndTime !== collegeEndTime ||
+      existingData.numberOfPeriods !== nextNumberOfPeriods ||
+      existingData.periodDurationMinutes !== nextPeriodDurationMinutes ||
+      JSON.stringify(existingData.lunchBreak ?? null) !== JSON.stringify(nextLunchBreak) ||
+      JSON.stringify(existingData.shortBreaks ?? []) !== JSON.stringify(nextShortBreaks)
+    );
+    const hadPeriods = Boolean(existingData?.periods?.length);
 
     await ref.set({
       collegeId: session.collegeId,
@@ -73,12 +105,23 @@ export async function POST(request: Request) {
       year: Number(year),
       collegeStartTime,
       collegeEndTime,
-      numberOfPeriods: Number(numberOfPeriods),
-      periodDurationMinutes: Number(periodDurationMinutes),
-      lunchBreak: lunchBreak ?? null,
-      shortBreaks: shortBreaks ?? [],
+      numberOfPeriods: nextNumberOfPeriods,
+      periodDurationMinutes: nextPeriodDurationMinutes,
+      lunchBreak: nextLunchBreak,
+      shortBreaks: nextShortBreaks,
       updatedAt: now,
       ...(existing.exists ? {} : { createdAt: now }),
+      ...(shapeChanged && hadPeriods
+        ? {
+            periods: defaultPeriodTimings({
+              collegeStartTime,
+              numberOfPeriods: nextNumberOfPeriods,
+              periodDurationMinutes: nextPeriodDurationMinutes,
+              lunchBreak: nextLunchBreak,
+              shortBreaks: nextShortBreaks,
+            }),
+          }
+        : {}),
     }, { merge: true });
 
     return NextResponse.json({ id: docId }, { status: 201 });
@@ -154,6 +197,27 @@ export async function PATCH(request: Request) {
       }
       if (i > 0 && p.startTime < periods[i - 1].endTime) {
         return NextResponse.json({ error: `Period ${p.period} overlaps period ${periods[i - 1].period}` }, { status: 400 });
+      }
+    }
+
+    // Consecutive periods aren't required to be back-to-back (checked above,
+    // that's just "no overlap") - but wherever the Principal placed a break,
+    // this breakdown must actually leave room for it, otherwise the grid ends
+    // up interleaving a "Lunch Break" row between two periods with no gap
+    // between their clock times at all.
+    const breaks = [
+      ...(existing.lunchBreak ? [existing.lunchBreak] : []),
+      ...(existing.shortBreaks ?? []),
+    ];
+    for (const brk of breaks) {
+      const before = periods.find((p) => p.period === brk.afterPeriod);
+      const after = periods.find((p) => p.period === brk.afterPeriod + 1);
+      if (!before || !after) continue;
+      if (toMinutes(after.startTime) < toMinutes(before.endTime) + brk.durationMinutes) {
+        return NextResponse.json(
+          { error: `Period ${after.period} must start at least ${brk.durationMinutes} min after period ${before.period} ends, to leave room for the break` },
+          { status: 400 },
+        );
       }
     }
 
