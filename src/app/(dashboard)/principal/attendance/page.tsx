@@ -10,7 +10,7 @@ import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDial
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
-import { CHECK_IN_CLOSED_MESSAGE, SUNDAY_HOLIDAY_MESSAGE, isBeforeCheckInWindow, isSunday } from "@/lib/attendance/attendanceWindow";
+import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -111,8 +111,6 @@ export default function PrincipalAttendancePage() {
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
             {isSunday(now) ? (
               <p className="text-sm text-muted-foreground">{SUNDAY_HOLIDAY_MESSAGE}</p>
-            ) : isBeforeCheckInWindow(now) ? (
-              <p className="text-sm text-muted-foreground">{CHECK_IN_CLOSED_MESSAGE}</p>
             ) : faceRegistered === false ? (
               <>
                 <p className="text-sm text-muted-foreground">
@@ -228,12 +226,7 @@ export default function PrincipalAttendancePage() {
           <CardContent className="p-0">
             <div className="divide-y">
               {records.map((rec) => {
-                const rawDate = rec.date as unknown as { toDate?: () => Date; seconds?: number; _seconds?: number } | null;
-                const d = rawDate
-                  ? typeof rawDate.toDate === "function"
-                    ? rawDate.toDate()
-                    : new Date(((rawDate._seconds ?? rawDate.seconds) ?? 0) * 1000)
-                  : null;
+                const d = toDate(rec.date);
 
                 const dayName = d
                   ? d.toLocaleDateString("en-IN", { weekday: "short" })

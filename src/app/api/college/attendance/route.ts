@@ -114,6 +114,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       personName,
+      registered: !!registeredAt,
       summary,
       records: filledRecords,
     });
