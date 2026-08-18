@@ -25,7 +25,7 @@ function currentTimeHHMM(): string {
 // distance) and records the client's reported face-match result.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL");
     if (isSunday()) {
       return NextResponse.json({ error: SUNDAY_HOLIDAY_MESSAGE }, { status: 403 });
     }

@@ -16,7 +16,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 // no separate FacultyMember record, so their photo lives on users/{uid}.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 

@@ -7,6 +7,7 @@ import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMi
 import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
 import { resolveFaceRegisteredAt } from "@/lib/attendance/registration";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 import type { AttendanceRecord, AttendanceSummary } from "@/types";
 
 export async function GET(request: Request) {
@@ -17,6 +18,9 @@ export async function GET(request: Request) {
       "SUPER_ADMIN",
       "PANEL_MEMBER",
       "VICE_PRINCIPAL",
+      "COLLEGE_OFFICE",
+      "COLLEGE_STAFF",
+      "EXAM_CELL",
     );
 
     const { searchParams } = new URL(request.url);
@@ -39,7 +43,13 @@ export async function GET(request: Request) {
     let personName: string | null = null;
 
     if (requestedFacultyId && requestedFacultyId !== session.uid) {
-      if (session.role !== "HOD" && session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
+      if (
+        session.role !== "HOD" &&
+        session.role !== "PRINCIPAL" &&
+        session.role !== "VICE_PRINCIPAL" &&
+        session.role !== "COLLEGE_OFFICE" &&
+        session.role !== "EXAM_CELL"
+      ) {
         return NextResponse.json({ error: "You can only view your own attendance" }, { status: 403 });
       }
       const targetSnap = await collegeRef.collection("users").doc(requestedFacultyId).get();
@@ -55,8 +65,15 @@ export async function GET(request: Request) {
         if (!canHodEditDepartment(scope, target.department ?? "")) {
           return NextResponse.json({ error: "You can only view attendance for faculty in your department" }, { status: 403 });
         }
-      } else if (target.role !== "HOD") {
-        return NextResponse.json({ error: "You can only view attendance for an HOD" }, { status: 403 });
+      } else if (session.role === "COLLEGE_OFFICE" || session.role === "EXAM_CELL") {
+        // College Office / Exam Cell: view a COLLEGE_STAFF member belonging
+        // to their own unit - same department-string link the roster/report
+        // and manual-mark routes use (see collegeStaffUnits.ts).
+        if (target.role !== "COLLEGE_STAFF" || target.department !== unitLabelForHeadRole(session.role)) {
+          return NextResponse.json({ error: "You can only view attendance for staff in your unit" }, { status: 403 });
+        }
+      } else if (target.role !== "HOD" && target.role !== "COLLEGE_OFFICE" && target.role !== "EXAM_CELL") {
+        return NextResponse.json({ error: "You can only view attendance for an HOD or unit head" }, { status: 403 });
       }
       facultyId = requestedFacultyId;
       facultyRole = target.role ?? "";

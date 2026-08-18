@@ -5,8 +5,21 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
+import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 import { notify } from "@/lib/notify";
 import type { AttendanceRecord } from "@/types";
+
+// Where a person's own "My Attendance" page lives, by role - used to build
+// the notification link when someone else marks their attendance for them.
+function attendancePathForRole(role: string | undefined): string {
+  switch (role) {
+    case "HOD": return "/hod/attendance";
+    case "COLLEGE_OFFICE": return "/college-office/attendance";
+    case "EXAM_CELL": return "/exam-cell/attendance";
+    case "COLLEGE_STAFF": return "/college-staff/attendance";
+    default: return "/panel/attendance";
+  }
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -31,7 +44,7 @@ function parseDocDate(dateStr: string): { date: Date; docSuffix: string } {
 // whose attendance was marked.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "EXAM_CELL");
     const body = (await request.json()) as {
       facultyId?: string;
       date?: string;
@@ -89,10 +102,16 @@ export async function POST(request: Request) {
           { status: 403 }
         );
       }
+    } else if (session.role === "COLLEGE_OFFICE" || session.role === "EXAM_CELL") {
+      // College Office / Exam Cell - marks a COLLEGE_STAFF member belonging
+      // to their own unit (same department-string link as attendance/route.ts).
+      if (target.role !== "COLLEGE_STAFF" || target.department !== unitLabelForHeadRole(session.role)) {
+        return NextResponse.json({ error: "You can only mark attendance for staff in your unit" }, { status: 403 });
+      }
     } else {
-      // PRINCIPAL / VICE_PRINCIPAL - one tier up, marks an HOD in the same college.
-      if (target.role !== "HOD") {
-        return NextResponse.json({ error: "You can only mark attendance for an HOD" }, { status: 403 });
+      // PRINCIPAL / VICE_PRINCIPAL - one tier up, marks an HOD or a unit head in the same college.
+      if (target.role !== "HOD" && target.role !== "COLLEGE_OFFICE" && target.role !== "EXAM_CELL") {
+        return NextResponse.json({ error: "You can only mark attendance for an HOD or unit head" }, { status: 403 });
       }
     }
 
@@ -148,12 +167,16 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    const markerLabel = session.role === "HOD" ? "Your HOD" : session.role === "PRINCIPAL" ? "Your Principal" : "Your Vice Principal";
+    const markerLabel =
+      session.role === "HOD" ? "Your HOD"
+      : session.role === "PRINCIPAL" ? "Your Principal"
+      : session.role === "VICE_PRINCIPAL" ? "Your Vice Principal"
+      : `Your ${unitLabelForHeadRole(session.role) ?? "unit head"}`;
     await notify(
       db, session.collegeId, facultyId,
       "ATTENDANCE_MANUALLY_MARKED", "Attendance Updated",
       `${markerLabel} manually ${existing ? "corrected" : "marked"} your attendance for ${docSuffix}: ${reason}`,
-      target.role === "HOD" ? "/hod/attendance" : "/panel/attendance"
+      attendancePathForRole(target.role)
     );
 
     const updatedSnap = await recordRef.get();

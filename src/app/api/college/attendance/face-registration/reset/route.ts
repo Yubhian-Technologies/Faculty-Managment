@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 
 // Sends someone back to "not registered" for facial attendance so their next
 // visit to My Attendance shows the exact same Register prompt/capture flow as
@@ -26,9 +27,33 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 // /api/management/colleges/[collegeId]/principal-attendance/reset.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "EXAM_CELL");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    if (session.role === "COLLEGE_OFFICE" || session.role === "EXAM_CELL") {
+      // College Office / Exam Cell - resets a COLLEGE_STAFF member belonging
+      // to their own unit (same department-string link as manual/route.ts
+      // and attendance/route.ts).
+      const body = (await request.json()) as { uid?: string };
+      const uid = body.uid;
+      if (!uid) {
+        return NextResponse.json({ error: "Staff member is required" }, { status: 400 });
+      }
+      const targetSnap = await collegeRef.collection("users").doc(uid).get();
+      if (!targetSnap.exists) {
+        return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
+      }
+      const target = targetSnap.data() as { role?: string; department?: string };
+      if (target.role !== "COLLEGE_STAFF" || target.department !== unitLabelForHeadRole(session.role)) {
+        return NextResponse.json({ error: "You can only reset face registration for staff in your unit" }, { status: 403 });
+      }
+      await targetSnap.ref.update({
+        faceEmbedding: FieldValue.delete(),
+        faceRegisteredAt: FieldValue.delete(),
+      });
+      return NextResponse.json({ ok: true });
+    }
 
     if (session.role !== "HOD") {
       const body = (await request.json()) as { uid?: string };
@@ -43,12 +68,15 @@ export async function POST(request: Request) {
       }
       const target = targetSnap.data() as { role?: string };
       // Principal and Vice Principal reset each other symmetrically (equal
-      // authority), plus either can reset an HOD - mirrors manual/route.ts's
-      // identical PRINCIPAL/VICE_PRINCIPAL treatment there.
-      const validTargetRoles = session.role === "PRINCIPAL" ? ["HOD", "VICE_PRINCIPAL"] : ["HOD", "PRINCIPAL"];
+      // authority), plus either can reset an HOD or a unit head - mirrors
+      // manual/route.ts's identical PRINCIPAL/VICE_PRINCIPAL treatment there.
+      const validTargetRoles =
+        session.role === "PRINCIPAL"
+          ? ["HOD", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "EXAM_CELL"]
+          : ["HOD", "PRINCIPAL", "COLLEGE_OFFICE", "EXAM_CELL"];
       if (!target.role || !validTargetRoles.includes(target.role)) {
         return NextResponse.json(
-          { error: "You can only reset face registration for an HOD or the Principal/Vice Principal" },
+          { error: "You can only reset face registration for an HOD, a unit head, or the Principal/Vice Principal" },
           { status: 403 }
         );
       }

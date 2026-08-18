@@ -11,7 +11,7 @@ import type { College } from "@/types";
 // returns and that only Super Admin/Administration/Finance-type roles can reach.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL");
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).get();
     const college = snap.data() as College | undefined;

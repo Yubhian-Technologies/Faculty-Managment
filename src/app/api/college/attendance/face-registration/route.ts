@@ -31,7 +31,7 @@ async function resolveOwnDocRef(
 // resulting match distance/boolean is ever sent back to the server).
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL");
     const db = getAdminDb();
     const ref = await resolveOwnDocRef(db, session.collegeId, session.uid);
     const snap = await ref.get();
@@ -54,7 +54,7 @@ export async function GET() {
 // off match confidence) by simply registering again.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL");
     const body = (await request.json()) as { embedding?: number[] };
     const embedding = body.embedding;
 

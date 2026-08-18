@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { resolveDepartmentRoster, resolveCollegeRoster, buildRosterMonthlyRows } from "@/lib/attendance/rosterMonthlyExport";
+import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlyRows } from "@/lib/attendance/rosterMonthlyExport";
+import { unitLabelForHeadRole } from "@/lib/attendance/collegeStaffUnits";
 
 // MANAGEMENT is read-only - this route only implements GET.
 // Department-wide or college-wide monthly CSV data for any college, mirroring
@@ -39,7 +40,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
       return NextResponse.json({ scope: "department", department, rows });
     }
 
-    return NextResponse.json({ error: "scope must be 'department' or 'college'" }, { status: 400 });
+    if (scope === "unit") {
+      const unit = searchParams.get("unit");
+      if (unit !== "COLLEGE_OFFICE" && unit !== "EXAM_CELL") {
+        return NextResponse.json({ error: "unit must be 'COLLEGE_OFFICE' or 'EXAM_CELL'" }, { status: 400 });
+      }
+      const roster = await resolveCollegeStaffUnitRoster(db, collegeId, unit);
+      const rows = await buildRosterMonthlyRows(db, collegeId, roster, year, month);
+      return NextResponse.json({ scope: "unit", department: unitLabelForHeadRole(unit), rows });
+    }
+
+    return NextResponse.json({ error: "scope must be 'department', 'unit', or 'college'" }, { status: 400 });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
