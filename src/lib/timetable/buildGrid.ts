@@ -15,7 +15,9 @@ function toHHMM(totalMinutes: number): string {
 // numberOfPeriods/periodDurationMinutes formula from collegeStartTime,
 // inserting lunch/short break gaps, so an HOD breaking down a course-year for
 // the first time starts from a reasonable guess instead of a blank list.
-export function defaultPeriodTimings(timing: CourseYearTiming): PeriodTiming[] {
+export function defaultPeriodTimings(
+  timing: Pick<CourseYearTiming, "collegeStartTime" | "numberOfPeriods" | "periodDurationMinutes" | "lunchBreak" | "shortBreaks">,
+): PeriodTiming[] {
   const periods: PeriodTiming[] = [];
   let cursor = toMinutes(timing.collegeStartTime);
   for (let p = 1; p <= timing.numberOfPeriods; p++) {

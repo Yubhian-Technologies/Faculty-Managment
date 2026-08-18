@@ -11,11 +11,13 @@ import { Label } from "@/components/ui/label";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { KeyRound, UserPlus, Clock, PlayCircle, CheckCircle2, Dices } from "lucide-react";
+import { KeyRound, UserPlus, Clock, CheckCircle2, Dices, Link2 } from "lucide-react";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
 import type { FacultyAccountRequest, FacultyAccountRequestStatus } from "@/types";
 
 type RequestRow = FacultyAccountRequest & { id: string };
+
+type ExistingUser = { uid: string; name?: string; email?: string; phone?: string; role?: string };
 
 const STATUS_BADGE: Record<FacultyAccountRequestStatus, string> = {
   SUBMITTED: "text-amber-700 border-amber-300 bg-amber-50",
@@ -38,6 +40,11 @@ export default function WebmasterCredentialRequestsPage() {
   const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string; employeeId?: string; email?: string } | null>(null);
   const [passwordDialogRequest, setPasswordDialogRequest] = useState<RequestRow | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
+  const [linkDialogRequest, setLinkDialogRequest] = useState<RequestRow | null>(null);
+  const [linkUsers, setLinkUsers] = useState<ExistingUser[]>([]);
+  const [linkUsersLoading, setLinkUsersLoading] = useState(false);
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkSelectedUid, setLinkSelectedUid] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -69,19 +76,25 @@ export default function WebmasterCredentialRequestsPage() {
     };
   }, []);
 
-  async function transition(request: RequestRow, action: "START_REVIEW" | "CREATE_CREDENTIALS" | "COMPLETE", password?: string) {
+  async function transition(
+    request: RequestRow,
+    action: "START_REVIEW" | "CREATE_CREDENTIALS" | "LINK_EXISTING_ACCOUNT" | "COMPLETE",
+    extra?: { password?: string; existingUid?: string }
+  ) {
     setBusyId(request.id);
     try {
       const res = await fetch(`/api/college/faculty-account-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...(password ? { password } : {}) }),
+        body: JSON.stringify({ action, ...extra }),
       });
       const data = await res.json() as { ok?: boolean; employeeId?: string; generatedPassword?: string; assignedEmail?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
       if (data.generatedPassword) {
         toast({ variant: "success", title: "Account created", description: `Employee ID: ${data.employeeId ?? ""}` });
         setRevealedPassword({ name: request.candidateName, password: data.generatedPassword, employeeId: data.employeeId, email: data.assignedEmail });
+      } else if (action === "LINK_EXISTING_ACCOUNT") {
+        toast({ variant: "success", title: "Existing account linked", description: data.assignedEmail ? `Login: ${data.assignedEmail}` : undefined });
       } else if (action === "COMPLETE") {
         toast({ variant: "success", title: "Request completed", description: "Office has been notified." });
       } else {
@@ -109,8 +122,36 @@ export default function WebmasterCredentialRequestsPage() {
     const request = passwordDialogRequest;
     const password = passwordInput;
     setPasswordDialogRequest(null);
-    await transition(request, "CREATE_CREDENTIALS", password);
+    await transition(request, "CREATE_CREDENTIALS", { password });
   }
+
+  // Existing-account linking: lets Webmaster attach this request to a person's
+  // already-existing login (re-hire, or someone who already holds another
+  // staff account here) instead of always provisioning a brand-new one.
+  function openLinkDialog(request: RequestRow) {
+    setLinkDialogRequest(request);
+    setLinkSearch("");
+    setLinkSelectedUid(null);
+    setLinkUsersLoading(true);
+    fetch("/api/college/users?allDepts=true&includeAll=true")
+      .then((r) => r.json() as Promise<{ users?: ExistingUser[] }>)
+      .then((d) => setLinkUsers(d.users ?? []))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load accounts" }))
+      .finally(() => setLinkUsersLoading(false));
+  }
+
+  async function submitLinkExisting() {
+    if (!linkDialogRequest || !linkSelectedUid) return;
+    const request = linkDialogRequest;
+    setLinkDialogRequest(null);
+    await transition(request, "LINK_EXISTING_ACCOUNT", { existingUid: linkSelectedUid });
+  }
+
+  const filteredLinkUsers = linkUsers.filter((u) => {
+    const q = linkSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (u.name ?? "").toLowerCase().includes(q) || (u.email ?? "").toLowerCase().includes(q);
+  });
 
   const activeRequests = requests.filter((r) => r.status !== "COMPLETED");
 
@@ -161,17 +202,17 @@ export default function WebmasterCredentialRequestsPage() {
                     </p>
                   ))}
                 </div>
-                {request.status === "SUBMITTED" && (
-                  <Button size="sm" loading={busyId === request.id} onClick={() => void transition(request, "START_REVIEW")}>
-                    <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
-                    Start Review
-                  </Button>
-                )}
-                {request.status === "IN_PROGRESS" && (
-                  <Button size="sm" loading={busyId === request.id} onClick={() => openPasswordDialog(request)}>
-                    <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                    Create Credentials
-                  </Button>
+                {(request.status === "SUBMITTED" || request.status === "IN_PROGRESS") && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" loading={busyId === request.id} onClick={() => openPasswordDialog(request)}>
+                      <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                      Create Credentials
+                    </Button>
+                    <Button size="sm" variant="outline" loading={busyId === request.id} onClick={() => openLinkDialog(request)}>
+                      <Link2 className="h-3.5 w-3.5 mr-1.5" />
+                      Link Existing Account
+                    </Button>
+                  </div>
                 )}
                 {request.status === "CREDENTIALS_CREATED" && (
                   <Button size="sm" loading={busyId === request.id} onClick={() => void transition(request, "COMPLETE")}>
@@ -211,6 +252,51 @@ export default function WebmasterCredentialRequestsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPasswordDialogRequest(null)} disabled={busyId === passwordDialogRequest?.id}>Cancel</Button>
             <Button onClick={() => void submitCreateCredentials()} loading={busyId === passwordDialogRequest?.id}>Create Credentials</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!linkDialogRequest} onOpenChange={(o) => { if (!o) setLinkDialogRequest(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Link Existing Account</DialogTitle>
+            <DialogDescription>
+              Attach <strong>{linkDialogRequest?.candidateName}</strong>&rsquo;s faculty record to a login they already
+              have (e.g. a re-hire, or an account from another role) instead of creating a new one. No new password is
+              created — they&rsquo;ll keep signing in the way they already do.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Input
+              value={linkSearch}
+              onChange={(e) => setLinkSearch(e.target.value)}
+              placeholder="Search by name or email..."
+            />
+            <div className="max-h-64 overflow-y-auto rounded-lg border divide-y">
+              {linkUsersLoading ? (
+                <p className="text-sm text-muted-foreground p-3">Loading accounts...</p>
+              ) : filteredLinkUsers.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-3">No matching accounts found.</p>
+              ) : (
+                filteredLinkUsers.map((u) => (
+                  <button
+                    key={u.uid}
+                    type="button"
+                    onClick={() => setLinkSelectedUid(u.uid)}
+                    className={`w-full text-left p-3 text-sm hover:bg-muted/50 transition-colors ${linkSelectedUid === u.uid ? "bg-primary/10" : ""}`}
+                  >
+                    <p className="font-medium">{u.name ?? "Unnamed"} {u.role ? <span className="text-xs text-muted-foreground font-normal">· {u.role}</span> : null}</p>
+                    <p className="text-xs text-muted-foreground">{u.email}{u.phone ? ` · ${u.phone}` : ""}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkDialogRequest(null)} disabled={busyId === linkDialogRequest?.id}>Cancel</Button>
+            <Button onClick={() => void submitLinkExisting()} disabled={!linkSelectedUid} loading={busyId === linkDialogRequest?.id}>
+              Link This Account
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

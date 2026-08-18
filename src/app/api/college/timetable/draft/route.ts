@@ -6,8 +6,42 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTimetableContext, pinnedCells, type TimetableContext } from "@/lib/timetable/loadContext";
 import { isContiguousBlockAvailable } from "@/lib/timetable/buildGrid";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames, type HodDepartmentScope } from "@/lib/departments/scope";
 import type { DayOfWeek, DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
+
+// A lending HOD (see api/college/faculty-assignment-requests) doesn't own
+// this section's department, but legitimately needs to place/move/remove
+// periods for the one TeachingAssignment they were allocated - the section's
+// own HOD publishes, they only "Notify" (see the timetable grid page).
+// Scoped to ALLOCATED requests only (never PENDING/DECLINED), and - when
+// `assignmentId` is given - to that exact assignment, so a lending HOD can
+// never touch another department's other subjects via this exception.
+async function findAllocatedRequestsForSection(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  sectionId: string,
+): Promise<{ targetDepartmentName?: string; teachingAssignmentId?: string }[]> {
+  const snap = await db.collection("colleges").doc(collegeId).collection("facultyAssignmentRequests")
+    .where("sectionId", "==", sectionId)
+    .where("status", "==", "ALLOCATED")
+    .get();
+  return snap.docs.map((d) => d.data() as { targetDepartmentName?: string; teachingAssignmentId?: string });
+}
+
+async function isCrossDepartmentLender(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  scope: HodDepartmentScope,
+  sectionId: string,
+  assignmentId?: string,
+): Promise<boolean> {
+  const myNames = ownDepartmentNames(scope);
+  if (myNames.length === 0) return false;
+  const allocated = await findAllocatedRequestsForSection(db, collegeId, sectionId);
+  return allocated.some(
+    (r) => myNames.includes(r.targetDepartmentName ?? "") && (!assignmentId || r.teachingAssignmentId === assignmentId),
+  );
+}
 
 // Read, hand-build, hand-edit, or discard the draft for one section.
 //
@@ -146,7 +180,7 @@ export async function GET(request: Request) {
       if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
       const section = sectionSnap.data() as { department: string };
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, section.department)) {
+      if (!canHodEditDepartment(scope, section.department) && !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId))) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
       }
     }
@@ -195,7 +229,7 @@ export async function POST(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, ctx.section.department)) {
+      if (!canHodEditDepartment(scope, ctx.section.department) && !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId))) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
       }
     }
@@ -287,7 +321,10 @@ export async function PATCH(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, ctx.section.department)) {
+      if (
+        !canHodEditDepartment(scope, ctx.section.department) &&
+        !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId, assignmentId))
+      ) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
       }
     }

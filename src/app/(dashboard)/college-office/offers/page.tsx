@@ -14,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
+import { resolveOfferContactBlock } from "@/lib/offerLetterContactBlock";
 import { Plus, FileText, CheckCircle2, XCircle, Send, ChevronDown, ChevronUp, KeyRound, Clock, Download, PenLine, Copy } from "lucide-react";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
 import type { OfferLetter, FacultyAccountRequest } from "@/types";
@@ -102,9 +103,17 @@ export default function CollegeOfficeOffersPage() {
   // Candidate address and interview date aren't stored on the OfferLetter row itself -
   // fetch them from the candidate/batch docs at generation time (both the download and
   // email flows need the same extras for the letter body).
-  async function fetchLetterExtras(letter: OfferRow): Promise<{ candidateAddress?: string; candidateEmail?: string; interviewDate?: string }> {
+  async function fetchLetterExtras(letter: OfferRow): Promise<{
+    candidateAddress?: string;
+    candidateEmail?: string;
+    interviewDate?: string;
+    coordinatorUid?: string;
+    coordinatorName?: string;
+    hodUid?: string;
+    hodName?: string;
+  }> {
     type CandRes = { candidate?: { email?: string; permanentAddress?: string; residenceAddress?: string } };
-    type BatchRes = { batch?: { interviewDate?: Parameters<typeof formatDate>[0] } };
+    type BatchRes = { batch?: { interviewDate?: Parameters<typeof formatDate>[0]; coordinatorUid?: string; coordinatorName?: string; hodUid?: string; hodName?: string } };
     const [candData, batchData] = await Promise.all([
       fetch(`/api/college/candidates/${letter.candidateId}`).then((r) => r.json() as Promise<CandRes>).catch((): CandRes => ({})),
       fetch(`/api/college/hiring-batches/${letter.batchId}`).then((r) => r.json() as Promise<BatchRes>).catch((): BatchRes => ({})),
@@ -114,6 +123,10 @@ export default function CollegeOfficeOffersPage() {
       candidateAddress: candidate?.permanentAddress || candidate?.residenceAddress,
       candidateEmail: candidate?.email,
       interviewDate: batchData.batch?.interviewDate ? formatDate(batchData.batch.interviewDate) : undefined,
+      coordinatorUid: batchData.batch?.coordinatorUid,
+      coordinatorName: batchData.batch?.coordinatorName,
+      hodUid: batchData.batch?.hodUid,
+      hodName: batchData.batch?.hodName,
     };
   }
 
@@ -149,7 +162,7 @@ export default function CollegeOfficeOffersPage() {
   async function composeEmail(letter: OfferRow) {
     setDownloadingId(letter.id);
     try {
-      const [{ candidateAddress, candidateEmail, interviewDate }, ccRes] = await Promise.all([
+      const [{ candidateAddress, candidateEmail, interviewDate, coordinatorUid, coordinatorName, hodUid, hodName }, ccRes] = await Promise.all([
         fetchLetterExtras(letter),
         // Recomputed live, not read off `letter` - covers letters sent before
         // ccEmails was persisted, and stays correct if the roster changed since.
@@ -159,6 +172,7 @@ export default function CollegeOfficeOffersPage() {
         toast({ variant: "destructive", title: "Candidate has no email on file" });
         return;
       }
+      const coordinatorBlock = await resolveOfferContactBlock({ coordinatorUid, coordinatorName, hodUid, hodName });
 
       await downloadOfferLetterPdf(
         {
@@ -185,7 +199,7 @@ Greetings from ${institution}.
 We are pleased to offer you the position of ${letter.designation} in the ${letter.department} department, effective from ${formatDate(letter.joiningDate as Parameters<typeof formatDate>[0])}.
 
 The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
-
+${coordinatorBlock}
 Please review the Terms & Conditions and confirm your acceptance and date of joining here:
 ${acceptanceUrl}
 
