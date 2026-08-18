@@ -7,7 +7,7 @@ import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
-import { isoDateKey } from "@/lib/leave/dayCounter";
+import { todayISODate } from "@/lib/leave/dayCounter";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
       // else today (their own facultyId won't otherwise appear on that
       // slot). See lib/leave/periodCoverage.ts and the same overlay in
       // GET college/timetable-slots / college/class-leader/timetable.
-      const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, isoDateKey(new Date()));
+      const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, todayISODate());
       const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
       timetableSlots = ownSlots.map((s) => {
         const sub = substitutionBySlotId.get(s.id);

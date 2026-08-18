@@ -12,5 +12,5 @@ export default function PrincipalEmployeeLeaveTypeHistoryPage({
   const { deptId, uid, type } = use(params);
   const filter = parseLeaveHistoryFilter(type);
   if (!filter) notFound();
-  return <LeaveTypeHistoryView uid={uid} backHref={`/principal/leave-history/${deptId}/${uid}`} type={filter} showOtherLeaveCategory />;
+  return <LeaveTypeHistoryView uid={uid} backHref={`/principal/leave-history/${deptId}/${uid}`} type={filter} showOtherLeaveCategory canAdjustCoverage />;
 }

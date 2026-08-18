@@ -26,15 +26,30 @@ export function countWorkingDays(from: Date, to: Date, holidayDates: Set<string>
   return count;
 }
 
-// Today as a local YYYY-MM-DD string - matches what a <input type="date">
-// shows and what the API compares fromDate/toDate against, so leave can't be
-// backdated.
+// Today's date in the college's own calendar (India, Asia/Kolkata) as a
+// YYYY-MM-DD string - matches what a <input type="date"> shows and what the
+// API compares fromDate/toDate against, so leave can't be backdated.
+// Deliberately NOT `new Date().getFullYear()/getMonth()/getDate()` - those
+// read "now" through the CALLER's own local timezone, which for a
+// server-side call means whatever timezone the deployment host happens to
+// run in (commonly UTC), not India's. UTC sits behind IST by 5:30h, so for
+// the first ~5.5 hours of every India calendar day, a UTC-local read of
+// "now" still reports the PREVIOUS day - e.g. a substitute picked for
+// today's approved leave would silently fail to show up on the timetable
+// (see getActiveSubstitutionsForDate in periodCoverage.ts, which keys off
+// this same "what day is it" concept) because the server's idea of "today"
+// disagreed with India's. Explicitly anchoring to Asia/Kolkata makes this
+// correct regardless of the host's own timezone - and is also correct for a
+// browser call (LeaveApplyForm.tsx): the college's calendar day is what
+// matters here, not wherever the viewer's device happens to be set.
 export function todayISODate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  // formatToParts, not the locale's default punctuation - "en-CA" reliably
+  // orders year/month/day but isn't a spec-guaranteed hyphen separator.
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 // Every calendar date between `from` and `to` (inclusive) that counts as a

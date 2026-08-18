@@ -156,31 +156,17 @@ export default function TeachingLoadPage() {
               </tr>
             </thead>
             <tbody>
-              {periods.map((period) => {
-                // Shown once beside the period number, not per cell - picks
-                // the first slot THIS row actually has (across any day) to
-                // resolve a representative time. Different course-years can
-                // technically run a period at different clock times, but a
-                // faculty member's own week rarely straddles that for the
-                // same period number, so one time per row reads far better
-                // than repeating it in every cell.
-                const rowTime = DAYS
-                  .map((d) => timetableSlots.find((s) => s.day === d && s.periodNumber === period))
-                  .map((s) => s && periodTimeFor(s.courseId, s.year, s.periodNumber))
-                  .find(Boolean);
-                return (
+              {periods.map((period) => (
                 <tr key={period} className="border-b last:border-b-0">
-                  <td className="p-2.5 font-medium text-muted-foreground">
-                    {period}
-                    {rowTime && (
-                      <p className="text-[10px] font-normal whitespace-nowrap">
-                        {formatTime12h(rowTime.startTime)}&ndash;{formatTime12h(rowTime.endTime)}
-                      </p>
-                    )}
-                  </td>
+                  <td className="p-2.5 font-medium text-muted-foreground">{period}</td>
                   {DAYS.map((d) => {
                     const slot = timetableSlots.find((s) => s.day === d && s.periodNumber === period);
                     const assignment = slot ? assignmentById.get(slot.assignmentId) : undefined;
+                    // Resolved from this slot's OWN course+year, not a shared
+                    // row-level time - a period "3" in a 1st Year section can
+                    // run a different clock time than period "3" in a 3rd
+                    // Year one, so this must vary cell by cell, not row by row.
+                    const time = slot ? periodTimeFor(slot.courseId, slot.year, slot.periodNumber) : undefined;
                     const subline = [
                       assignment?.courseName,
                       assignment?.year ? ordinalYear(assignment.year) : null,
@@ -190,6 +176,11 @@ export default function TeachingLoadPage() {
                       <td key={d} className="p-2 align-top">
                         {slot ? (
                           <div className={`rounded-md border p-2 ${slot.substituteFacultyName || slot.substituteForName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
+                            {time && (
+                              <p className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
+                                {formatTime12h(time.startTime)}&ndash;{formatTime12h(time.endTime)}
+                              </p>
+                            )}
                             <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
                             {slot.substituteFacultyName ? (
                               <p className="text-[11px] font-medium text-amber-700 mt-0.5">Covered by {slot.substituteFacultyName} today</p>
@@ -207,8 +198,7 @@ export default function TeachingLoadPage() {
                     );
                   })}
                 </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
         </div>
