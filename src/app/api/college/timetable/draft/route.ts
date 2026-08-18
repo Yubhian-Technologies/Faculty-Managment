@@ -7,7 +7,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTimetableContext, pinnedCells, type TimetableContext } from "@/lib/timetable/loadContext";
 import { isContiguousBlockAvailable } from "@/lib/timetable/buildGrid";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import type { DayOfWeek, DraftSlot, TimetableDraft } from "@/types";
+import type { DayOfWeek, DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
 
 // Read, hand-build, hand-edit, or discard the draft for one section.
 //
@@ -162,7 +162,19 @@ export async function GET(request: Request) {
   }
 }
 
-/** Starts an empty draft so a timetable can be built entirely by hand. */
+/**
+ * Starts a draft for hand editing. Normally reached only when no draft exists
+ * yet (see hasDraft in the grid page - a draft persists as status PUBLISHED
+ * after publish, so its own PATCH/Edit toggle covers the common re-edit case).
+ * That still leaves a real gap when a section already has a live, published
+ * timetable but its draft doc is gone (e.g. discarded after publishing) - a
+ * blank draft would silently drop every previously generated period from
+ * view the moment editing starts. So: seed from this section's current
+ * GENERATED slots when there are any, instead of starting empty. MANUAL/pinned
+ * slots are deliberately left out - they already show up on the grid via
+ * ctx.pinnedSlots regardless of draft content, and publish never touches them
+ * either (see publish/route.ts).
+ */
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
@@ -171,6 +183,7 @@ export async function POST(request: Request) {
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
 
     const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
     const ctx = await loadTimetableContext(db, session.collegeId, sectionId);
     if (!ctx) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     if (!ctx.timing) {
@@ -187,6 +200,37 @@ export async function POST(request: Request) {
       }
     }
 
+    const publishedSnap = await collegeRef.collection("timetableSlots")
+      .where("sectionId", "==", sectionId).where("source", "==", "GENERATED").get();
+    const published = publishedSnap.docs.map((d) => d.data() as TimetableSlot);
+
+    // A block's 2nd..Nth period is the only thing that needs recomputing -
+    // everything else on TimetableSlot maps straight onto DraftSlot.
+    const continuationKeys = new Set<string>();
+    const byAssignmentDay = new Map<string, Set<number>>();
+    for (const s of published) {
+      const key = `${s.assignmentId}|${s.day}`;
+      const periods = byAssignmentDay.get(key) ?? new Set<number>();
+      periods.add(s.periodNumber);
+      byAssignmentDay.set(key, periods);
+    }
+    for (const s of published) {
+      const periods = byAssignmentDay.get(`${s.assignmentId}|${s.day}`)!;
+      if (periods.has(s.periodNumber - 1)) continuationKeys.add(`${s.assignmentId}|${s.day}|${s.periodNumber}`);
+    }
+
+    const seededSlots: DraftSlot[] = published.map((s) => ({
+      assignmentId: s.assignmentId,
+      facultyId: s.facultyId,
+      facultyName: s.facultyName,
+      subjectId: s.subjectId,
+      subjectName: s.subjectName,
+      subjectType: ctx.subjectsById.get(s.subjectId)?.type ?? "THEORY",
+      day: s.day,
+      periodNumber: s.periodNumber,
+      isBlockContinuation: continuationKeys.has(`${s.assignmentId}|${s.day}|${s.periodNumber}`),
+    }));
+
     const draft = {
       collegeId: session.collegeId,
       department: ctx.section.department,
@@ -195,8 +239,10 @@ export async function POST(request: Request) {
       sectionId,
       sectionName: ctx.section.name,
       status: "DRAFT" as const,
-      slots: [] as DraftSlot[],
-      diagnostics: ["Started as a blank timetable - add subjects by clicking a period."],
+      slots: seededSlots,
+      diagnostics: seededSlots.length > 0
+        ? ["Started from the currently published timetable - edit and republish when ready."]
+        : ["Started as a blank timetable - add subjects by clicking a period."],
       generatedAt: FieldValue.serverTimestamp(),
       generatedByName: session.email,
     };
