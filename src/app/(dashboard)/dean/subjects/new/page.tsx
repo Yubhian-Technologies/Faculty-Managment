@@ -12,6 +12,7 @@ import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
 import type { CourseCatalogItem, SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS, SUBJECT_TYPE_LABELS } from "@/types";
+import { regulationsForYear } from "@/lib/college/academicStructure";
 
 type SubjectForm = {
   serialNumber: string;
@@ -72,21 +73,24 @@ export default function NewDeanSubjectPage() {
   useEffect(() => {
     fetch("/api/college/course-catalog")
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
-      .then((d) => setRegulations((d.items ?? []).find((c) => c.id === catalogId)?.regulations ?? []))
+      .then((d) => {
+        const catalogItem = (d.items ?? []).find((c) => c.id === catalogId);
+        setRegulations(regulationsForYear(catalogItem, Number(year)));
+      })
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }))
       .finally(() => setLoadedCatalog(true));
-  }, [catalogId]);
+  }, [catalogId, year]);
 
   if (!courseId || !year) return null;
 
   if (loadedCatalog && regulations.length === 0) {
     return (
       <div className="max-w-xl">
-        <PageHeader title="Add Subject" description="This course has no regulations assigned yet" />
+        <PageHeader title="Add Subject" description={`No regulations available for Year ${year}`} />
         <Card>
           <CardContent className="pt-6 space-y-4">
             <p className="text-sm text-muted-foreground">
-              Ask the Principal to assign at least one regulation to this course under Settings &gt; Course Catalog before adding subjects to it.
+              Ask the Principal to assign a regulation covering this year to this course under Settings &gt; Course Catalog before adding subjects to it.
             </p>
             <Button variant="outline" onClick={() => router.push(backHref)}>Back</Button>
           </CardContent>

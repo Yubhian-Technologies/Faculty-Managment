@@ -89,7 +89,7 @@ function parseHandicappedType(v: string | undefined): "H" | "V" | "O" | undefine
 }
 
 export function buildStudentDoc(
-  section: Pick<Section, "collegeId" | "department" | "name" | "year">,
+  section: Pick<Section, "collegeId" | "department" | "name" | "year" | "regulation">,
   row: StudentImportRow,
   now: Date
 ): Record<string, unknown> {
@@ -98,6 +98,13 @@ export function buildStudentDoc(
     department: section.department,
     section: section.name,
     year: section.year,
+    // One-time snapshot of the section's CURRENT regulation, taken because
+    // this row is being placed directly into a real section - see
+    // Section.regulation's doc-comment. Absent for the unassigned-student
+    // creation path (a synthetic section with no regulation of its own is
+    // passed there), left for a later distribute/distribute-cohort call to
+    // fill in once an actual section is picked.
+    ...(section.regulation ? { regulation: section.regulation } : {}),
     rollNumber: row.rollNumber.trim(),
     name: row.name.trim(),
     status: parseStudentStatus(row.status),

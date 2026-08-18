@@ -520,6 +520,14 @@ export interface CourseCatalogItem {
   // subjects to any Course created from this catalog entry (see
   // api/college/subjects POST) until it's set.
   regulations?: string[];
+  // Which years (within 1..durationYears) each of the above `regulations` is
+  // currently offered for - e.g. during a transition, R20 -> [3, 4] (existing
+  // senior batches) while R23 -> [1, 2] (new intakes), both active for this
+  // course at once. A regulation present in `regulations` but absent (or with
+  // an empty array) here is unrestricted - offered for every year - which is
+  // also the default for every course until a Principal opts into narrowing
+  // it, so nothing already relying on the old flat `regulations` list breaks.
+  regulationYears?: Record<string, number[]>;
   isActive: boolean;
   createdBy?: string;
   createdByName?: string;
@@ -1199,6 +1207,20 @@ export interface Section {
   // inherits it as StudentRecord.secondaryDepartment (their promotion target).
   // Stored plural for legacy shape, but a section commits to a single branch.
   secondaryDepartments?: string[];
+  // The curriculum regulation (e.g. "R20", "R23") the batch CURRENTLY
+  // occupying this year-slot follows - one of the owning course's
+  // CourseCatalogItem.regulations (narrowed by regulationYears for this
+  // section's own `year`, same validation as Subject.regulation). Like
+  // `batch` above, this is edited by the HOD whenever a new cohort starts
+  // occupying the slot (e.g. a fresh intake reaching this year, or a
+  // transition-year correction) and is left untouched by promotion/
+  // advance-year - those only ever move students, never edit Section docs.
+  // A student's OWN regulation (StudentRecord.regulation) is a one-time
+  // snapshot of this value taken the moment they're first placed into a
+  // section, and stays fixed for that student regardless of what this field
+  // is later edited to for a different batch passing through the same slot.
+  // Optional/lenient like Subject.regulation - absent means unrestricted.
+  regulation?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -1237,6 +1259,15 @@ export interface StudentRecord {
   // department (see students/promote/route.ts), at which point it becomes
   // their primary `department` instead.
   secondaryDepartment?: string;
+  // The curriculum regulation this student follows - a one-time snapshot of
+  // Section.regulation, copied in the moment this student is FIRST placed
+  // into a real section (students/distribute, distribute-cohort,
+  // import-excel), then never touched again by promotion/advance-year or by
+  // later edits to that section's own `regulation` (which just reflects
+  // whichever batch currently occupies the slot). Fixed for this student's
+  // entire academic run, per Section.regulation's own doc-comment. Optional/
+  // lenient - absent when the section they were placed into had none set.
+  regulation?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, all set only via the College Office bulk import (see
   // src/lib/students/importRow.ts) - there is no per-student edit form for

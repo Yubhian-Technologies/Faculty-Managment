@@ -13,8 +13,8 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { AcademicRegulationSettings, Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { academicSessionLabel, currentAcademicStartYear } from "@/lib/college/academicSession";
+import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
 
 const ALL_REGULATIONS = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
@@ -101,14 +101,15 @@ export default function DeanSubjectsPage() {
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
   }, [selectedCourse, selectedDepartment]);
   const currentRegulation = selectedYear ? regulationSettings?.yearRegulations?.[selectedYear] : undefined;
-  // This course's own assigned regulations (Course Catalog > Regulations) -
-  // the actual set a subject for it may use, narrower than the college's
-  // full declared list. Empty means the Principal hasn't assigned any yet,
-  // which blocks adding subjects to this course entirely (see subjects POST).
+  // This course's own assigned regulations (Course Catalog > Regulations),
+  // narrowed to whichever are actually offered for the selected year
+  // (regulationYears) - the set a subject for this year may use. Empty means
+  // nothing's assigned for this year yet, which blocks adding subjects here
+  // (see subjects POST).
   const allowedRegulations = useMemo(() => {
     const catalogItem = selectedCourse?.catalogId ? catalogItems.find((c) => c.id === selectedCourse.catalogId) : null;
-    return catalogItem?.regulations ?? [];
-  }, [selectedCourse, catalogItems]);
+    return selectedYear ? regulationsForYear(catalogItem, Number(selectedYear)) : (catalogItem?.regulations ?? []);
+  }, [selectedCourse, catalogItems, selectedYear]);
 
   // Curriculum-table order: by S.No. when set (matches a printed curriculum
   // sheet), falling back to name for legacy subjects that predate the field.
@@ -142,12 +143,18 @@ export default function DeanSubjectsPage() {
     }
   }, []);
 
-  const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string, academicYear: string, regulation: string) => {
+  // Deliberately NOT filtered by academic session (academicYear) - a
+  // regulation's year-N curriculum is the same subject list no matter which
+  // session you're browsing under, so a batch's juniors see exactly what
+  // their seniors saw. academicYear is still stamped on each subject at
+  // creation time (shown as a badge) purely as a record of when it was
+  // entered, never as a visibility gate.
+  const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string, regulation: string) => {
     if (!departmentName || !courseId || !year) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
     try {
       const res = await fetch(
-        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}&academicYear=${encodeURIComponent(academicYear)}${regulation ? `&regulation=${encodeURIComponent(regulation)}` : ""}`
+        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}${regulation ? `&regulation=${encodeURIComponent(regulation)}` : ""}`
       );
       const data = await res.json() as { subjects: Subject[] };
       // The API also returns a feeder's shared subjects for a fed department
@@ -190,7 +197,7 @@ export default function DeanSubjectsPage() {
         setSelectedCourseId(courseId);
         if (year) {
           setSelectedYear(year);
-          await loadSubjects(dept.name, courseId, year, academicYear, regulation);
+          await loadSubjects(dept.name, courseId, year, regulation);
         }
       }
     })();
@@ -223,18 +230,13 @@ export default function DeanSubjectsPage() {
     const yearDefault = regulationSettings?.yearRegulations?.[year];
     const regulation = yearDefault && allowedRegulations.includes(yearDefault) ? yearDefault : "";
     setSelectedRegulation(regulation);
-    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, selectedAcademicYear, regulation);
-  }
-
-  function selectAcademicYear(academicYear: string) {
-    setSelectedAcademicYear(academicYear);
-    if (selectedDepartment && selectedYear) void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, academicYear, selectedRegulation);
+    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, regulation);
   }
 
   function selectRegulation(regulation: string) {
     const value = regulation === ALL_REGULATIONS ? "" : regulation;
     setSelectedRegulation(value);
-    if (selectedDepartment && selectedYear) void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedAcademicYear, value);
+    if (selectedDepartment && selectedYear) void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, value);
   }
 
   async function handleDelete() {
@@ -244,7 +246,7 @@ export default function DeanSubjectsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to delete subject");
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
-      await loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedAcademicYear, selectedRegulation);
+      await loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedRegulation);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
     } finally {
@@ -268,7 +270,7 @@ export default function DeanSubjectsPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label>Department</Label>
                 <Select value={selectedDepartmentId} onValueChange={selectDepartment}>
@@ -306,15 +308,6 @@ export default function DeanSubjectsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Academic Year</Label>
-                <Select value={selectedAcademicYear} onValueChange={selectAcademicYear}>
-                  <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
-                  <SelectContent>
-                    {recentAcademicSessions().map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
             </CardContent>
           </Card>
 
@@ -324,13 +317,13 @@ export default function DeanSubjectsPage() {
             </p>
           )}
 
-          {selectedCourse && selectedYear && selectedDepartment && selectedAcademicYear && (
+          {selectedCourse && selectedYear && selectedDepartment && (
             <Card>
               <CardContent className="p-4 space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h2 className="font-semibold text-sm flex items-center gap-2">
                     <BookOpen className="h-4 w-4" />
-                    {selectedDepartment.name} · {selectedCourse.name} · {ordinalYear(Number(selectedYear))} · {selectedAcademicYear}
+                    {selectedDepartment.name} · {selectedCourse.name} · {ordinalYear(Number(selectedYear))}
                     {/* Fixed by the Principal under Settings for this year of study - see RegulationSettingsCard. */}
                     {currentRegulation ? (
                       <Badge variant="secondary" className="text-xs font-normal">Regulation {currentRegulation}</Badge>

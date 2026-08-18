@@ -151,6 +151,8 @@ export async function POST(request: Request) {
           batch.update(collegeRef.collection("students").doc(student.id), {
             section: section.name,
             year,
+            // One-time snapshot - see distribute/route.ts's own comment.
+            regulation: section.regulation ?? null,
             updatedAt: now,
           });
           const history = departmentHistoryEntry(

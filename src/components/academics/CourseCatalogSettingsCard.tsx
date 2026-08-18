@@ -12,8 +12,44 @@ import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
 import type { AcademicRegulationSettings, CourseCatalogItem } from "@/types";
 
-type Draft = { name: string; code: string; durationYears: string; regulations: string[] };
-const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [] };
+type Draft = { name: string; code: string; durationYears: string; regulations: string[]; regulationYears: Record<string, number[]> };
+const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [], regulationYears: {} };
+
+function yearsForDuration(durationYears: string) {
+  const n = Number(durationYears) || 0;
+  return Array.from({ length: Math.min(Math.max(n, 0), 10) }, (_, i) => i + 1);
+}
+
+// Inline "which years is this regulation offered for" row, shown under each
+// active regulation badge - unchecked/empty means unrestricted (every year),
+// so nothing needs configuring here until a Principal wants to narrow one
+// down (e.g. an outgoing regulation kept only for its remaining senior years).
+function RegulationYearsRow({
+  draft, setDraft, code, onToggleYear,
+}: { draft: Draft; setDraft: (d: Draft) => void; code: string; onToggleYear: (draft: Draft, setDraft: (d: Draft) => void, code: string, year: number) => void }) {
+  const years = yearsForDuration(draft.durationYears);
+  const active = draft.regulationYears[code] ?? [];
+  if (years.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pl-1">
+      <span className="text-[11px] text-muted-foreground">{code} years:</span>
+      {years.map((y) => {
+        const on = active.includes(y);
+        return (
+          <button
+            key={y}
+            type="button"
+            onClick={() => onToggleYear(draft, setDraft, code, y)}
+            className={`h-5 min-w-5 rounded px-1 text-[11px] border ${on ? "bg-secondary border-secondary-foreground/20" : "border-input text-muted-foreground"}`}
+          >
+            {y}
+          </button>
+        );
+      })}
+      <span className="text-[11px] text-muted-foreground">{active.length === 0 ? "(all years)" : ""}</span>
+    </div>
+  );
+}
 
 interface CourseCatalogSettingsCardProps {
   // Dean's dashboard reads the same catalog off the Principal's own GET
@@ -60,12 +96,28 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
   }, [readOnly]);
 
   function toggleRegulation(draft: Draft, setDraft: (d: Draft) => void, code: string) {
+    const isRemoving = draft.regulations.includes(code);
+    const regulationYears = { ...draft.regulationYears };
+    // Removing a regulation drops its year-scoping too - re-adding it later
+    // starts fresh (unrestricted) rather than resurrecting a stale mapping.
+    if (isRemoving) delete regulationYears[code];
     setDraft({
       ...draft,
-      regulations: draft.regulations.includes(code)
+      regulations: isRemoving
         ? draft.regulations.filter((r) => r !== code)
         : [...draft.regulations, code],
+      regulationYears,
     });
+  }
+
+  // Which years (within the draft's own duration) a regulation is offered
+  // for - empty means unrestricted (every year), the default until narrowed.
+  function toggleRegulationYear(draft: Draft, setDraft: (d: Draft) => void, code: string, year: number) {
+    const current = draft.regulationYears[code] ?? [];
+    const next = current.includes(year) ? current.filter((y) => y !== year) : [...current, year].sort((a, b) => a - b);
+    const regulationYears = { ...draft.regulationYears };
+    if (next.length === 0) delete regulationYears[code]; else regulationYears[code] = next;
+    setDraft({ ...draft, regulationYears });
   }
 
   function validate(d: Draft): string | null {
@@ -89,6 +141,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
           code: newDraft.code.trim(),
           durationYears: Number(newDraft.durationYears),
           regulations: newDraft.regulations,
+          regulationYears: newDraft.regulationYears,
         }),
       });
       if (!res.ok) {
@@ -107,7 +160,10 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
 
   function startEdit(item: CourseCatalogItem) {
     setEditingId(item.id);
-    setEditDraft({ name: item.name, code: item.code, durationYears: String(item.durationYears), regulations: item.regulations ?? [] });
+    setEditDraft({
+      name: item.name, code: item.code, durationYears: String(item.durationYears),
+      regulations: item.regulations ?? [], regulationYears: item.regulationYears ?? {},
+    });
   }
 
   async function saveEdit(id: string) {
@@ -123,6 +179,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
           code: editDraft.code.trim(),
           durationYears: Number(editDraft.durationYears),
           regulations: editDraft.regulations,
+          regulationYears: editDraft.regulationYears,
         }),
       });
       if (!res.ok) {
@@ -246,6 +303,13 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                   })}
                 </div>
               )}
+              {newDraft.regulations.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  {newDraft.regulations.map((code) => (
+                    <RegulationYearsRow key={code} draft={newDraft} setDraft={setNewDraft} code={code} onToggleYear={toggleRegulationYear} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -326,32 +390,48 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                   </div>
 
                   {isEditing ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {declaredRegulations.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No regulations declared yet.</p>
-                      ) : (
-                        declaredRegulations.map((r) => {
-                          const active = editDraft.regulations.includes(r);
-                          return (
-                            <Badge
-                              key={r}
-                              variant={active ? "secondary" : "outline"}
-                              className="cursor-pointer text-xs"
-                              onClick={() => toggleRegulation(editDraft, setEditDraft, r)}
-                            >
-                              {active && <Check className="h-3 w-3 mr-1" />}{r}
-                            </Badge>
-                          );
-                        })
+                    <>
+                      <div className="flex flex-wrap gap-1.5">
+                        {declaredRegulations.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No regulations declared yet.</p>
+                        ) : (
+                          declaredRegulations.map((r) => {
+                            const active = editDraft.regulations.includes(r);
+                            return (
+                              <Badge
+                                key={r}
+                                variant={active ? "secondary" : "outline"}
+                                className="cursor-pointer text-xs"
+                                onClick={() => toggleRegulation(editDraft, setEditDraft, r)}
+                              >
+                                {active && <Check className="h-3 w-3 mr-1" />}{r}
+                              </Badge>
+                            );
+                          })
+                        )}
+                      </div>
+                      {editDraft.regulations.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          {editDraft.regulations.map((code) => (
+                            <RegulationYearsRow key={code} draft={editDraft} setDraft={setEditDraft} code={code} onToggleYear={toggleRegulationYear} />
+                          ))}
+                        </div>
                       )}
-                    </div>
+                    </>
                   ) : (item.regulations ?? []).length === 0 ? (
                     <p className="flex items-center gap-1 text-xs text-amber-600">
                       <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you assign at least one.
                     </p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
-                      {(item.regulations ?? []).map((r) => <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>)}
+                      {(item.regulations ?? []).map((r) => {
+                        const years = item.regulationYears?.[r];
+                        return (
+                          <Badge key={r} variant="secondary" className="text-xs">
+                            {r}{years && years.length > 0 ? ` (Y${years.join(",")})` : ""}
+                          </Badge>
+                        );
+                      })}
                     </div>
                   )}
                 </li>
