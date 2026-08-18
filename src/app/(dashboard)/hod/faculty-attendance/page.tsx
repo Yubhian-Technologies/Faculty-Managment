@@ -9,6 +9,7 @@ export default function HodFacultyAttendancePage() {
       description="Daily self-attendance (face + location verified) for your department"
       allowManualMark
       monthlyViewBasePath="/hod/faculty-attendance"
+      importHref="/hod/attendance-import"
     />
   );
 }

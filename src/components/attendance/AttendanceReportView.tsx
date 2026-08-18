@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ShieldCheck, Search, Download, Pencil, CalendarDays } from "lucide-react";
+import { CheckCircle2, ShieldCheck, Search, Download, Upload, Pencil, CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -17,13 +17,13 @@ import { toast } from "@/hooks/useToast";
 import { exportToCSV, exportRosterMonthlyCSV } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
-import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, type Department, type Course, type MonthlyExportRow } from "@/types";
+import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, type Department, type Course, type MonthlySummaryRow } from "@/types";
 
 interface RosterEntry {
   uid: string;
   name: string;
   department: string;
-  role: "PANEL_MEMBER" | "HOD";
+  role: "PANEL_MEMBER" | "HOD" | "COLLEGE_STAFF";
   // Course id(s) this faculty has an explicit teaching assignment under —
   // only populated by the API for college-wide callers; used solely to
   // filter the Principal's report, never displayed/required in the flat
@@ -187,9 +187,15 @@ interface AttendanceReportViewProps {
   // allowManualMark; pass the caller's own base route (e.g.
   // "/hod/faculty-attendance" or "/principal/attendance-report").
   monthlyViewBasePath?: string;
+  // Adds an "Import CSV" button right next to "Export Department (Month)",
+  // linking to that role's bulk attendance-history import page (see
+  // AttendanceImportPage) - kept beside Export rather than only in the
+  // sidebar nav, since that's where someone reviewing a month is already
+  // looking when they notice a gap worth backfilling.
+  importHref?: string;
 }
 
-export function AttendanceReportView({ title, description, groupByDepartmentAndCourse, allowManualMark, monthlyViewBasePath }: AttendanceReportViewProps) {
+export function AttendanceReportView({ title, description, groupByDepartmentAndCourse, allowManualMark, monthlyViewBasePath, importHref }: AttendanceReportViewProps) {
   const [date, setDate] = useState(todayISO());
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -315,7 +321,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
           key: "actions",
           header: "",
           render: (row: RosterEntry) =>
-            row.role === "PANEL_MEMBER" ? (
+            row.role === "PANEL_MEMBER" || row.role === "COLLEGE_STAFF" ? (
               <div className="flex items-center gap-2">
                 {monthlyViewBasePath && (
                   <Button variant="outline" size="sm" asChild>
@@ -375,7 +381,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     setExportingScope(scope);
     try {
       const res = await fetch(`/api/college/attendance/monthly-export?${params.toString()}`);
-      const d = await res.json() as { rows?: MonthlyExportRow[]; department?: string; error?: string };
+      const d = await res.json() as { rows?: MonthlySummaryRow[]; department?: string; error?: string };
       if (!res.ok) {
         toast({ variant: "destructive", title: d.error ?? "Failed to export" });
         return;
@@ -480,6 +486,14 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
               <Download className="h-4 w-4 mr-1" />
               {exportingScope === "college" ? "Exporting…" : "Export College (Month)"}
             </Button>
+            {importHref && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={importHref}>
+                  <Upload className="h-4 w-4 mr-1" />
+                  Import CSV
+                </Link>
+              </Button>
+            )}
           </div>
 
           {!selectedDepartment ? (
@@ -555,6 +569,14 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
               <Download className="h-4 w-4 mr-1" />
               {exportingScope === "department" ? "Exporting…" : "Export Department (Month)"}
             </Button>
+            {importHref && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={importHref}>
+                  <Upload className="h-4 w-4 mr-1" />
+                  Import CSV
+                </Link>
+              </Button>
+            )}
           </div>
           <DataTable
             data={roster}

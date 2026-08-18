@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import type { College } from "@/types";
 
 // Read-only: lets faculty/HOD/Principal/Vice Principal see the geofence they
@@ -11,7 +12,7 @@ import type { College } from "@/types";
 // returns and that only Super Admin/Administration/Finance-type roles can reach.
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).get();
     const college = snap.data() as College | undefined;

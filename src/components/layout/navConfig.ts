@@ -84,8 +84,11 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Library
   { label: "Dashboard", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
+  { label: "Staff Attendance", href: "/library/staff-attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
+  { label: "Import Attendance", href: "/library/attendance-import", iconName: "Upload", roles: ["LIBRARY"] },
   { label: "My Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"], section: "Personal" },
   { label: "My Leave", href: "/library/leave", iconName: "CalendarClock", roles: ["LIBRARY"] },
+  { label: "My Attendance", href: "/library/attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"], section: "My Work" },
 
   // College Accounts
   { label: "Dashboard", href: "/college-accounts", iconName: "LayoutDashboard", roles: ["COLLEGE_ACCOUNTS"] },
@@ -97,8 +100,11 @@ export const NAV_ITEMS: NavItem[] = [
   // Exam Cell
   { label: "Dashboard", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
   { label: "Exam Configuration", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
+  { label: "Staff Attendance", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
+  { label: "Import Attendance", href: "/exam-cell/attendance-import", iconName: "Upload", roles: ["EXAM_CELL"] },
   { label: "My Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"], section: "Personal" },
   { label: "My Leave", href: "/exam-cell/leave", iconName: "CalendarClock", roles: ["EXAM_CELL"] },
+  { label: "My Attendance", href: "/exam-cell/attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], section: "My Work" },
 
   // Location Dept Head
   { label: "Dashboard", href: "/location-dept-head", iconName: "LayoutDashboard", roles: ["LOCATION_DEPT_HEAD"] },
@@ -133,6 +139,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Attendance Report", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Import Attendance", href: "/principal/attendance-import", iconName: "Upload", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget" },
   { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -162,6 +169,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
   { label: "Faculty Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
+  { label: "Import Attendance", href: "/hod/attendance-import", iconName: "Upload", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"] },
@@ -192,13 +200,17 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave History", href: "/college-office/leave-history", iconName: "History", roles: ["COLLEGE_OFFICE"], section: "Leave & Attendance" },
   { label: "Leave Profiles", href: "/college-office/leave/profiles", iconName: "ClipboardList", roles: ["COLLEGE_OFFICE"] },
   { label: "Holidays", href: "/college-office/holidays", iconName: "CalendarDays", roles: ["COLLEGE_OFFICE"] },
+  { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
+  { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   { label: "My Profile", href: "/college-office/profile", iconName: "UserCircle", roles: ["COLLEGE_OFFICE"], section: "Personal" },
   { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"] },
+  { label: "My Attendance", href: "/college-office/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"], section: "My Work" },
 
   // College Staff (generic fallback for titles that don't warrant their own role)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
   { label: "My Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"], section: "Personal" },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"] },
+  { label: "My Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"], section: "My Work" },
 
   // Dean
   { label: "Dashboard", href: "/dean", iconName: "LayoutDashboard", roles: ["DEAN"] },
@@ -213,8 +225,11 @@ export const NAV_ITEMS: NavItem[] = [
 
   // T&P
   { label: "Dashboard", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
+  { label: "Staff Attendance", href: "/t-and-p/staff-attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"] },
+  { label: "Import Attendance", href: "/t-and-p/attendance-import", iconName: "Upload", roles: ["T_AND_P"] },
   { label: "My Profile", href: "/t-and-p/profile", iconName: "UserCircle", roles: ["T_AND_P"], section: "Personal" },
   { label: "My Leave", href: "/t-and-p/leave", iconName: "CalendarClock", roles: ["T_AND_P"] },
+  { label: "My Attendance", href: "/t-and-p/attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"], section: "My Work" },
 
   // R&D
   { label: "Dashboard", href: "/r-and-d", iconName: "LayoutDashboard", roles: ["R_AND_D"] },
@@ -432,6 +447,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   LIBRARY: [
     { label: "Home", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
+    { label: "Attendance", href: "/library/attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
+    { label: "Staff", href: "/library/staff-attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"] },
     { label: "Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"] },
   ],
   COLLEGE_ACCOUNTS: [
@@ -443,6 +460,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   EXAM_CELL: [
     { label: "Home", href: "/exam-cell", iconName: "LayoutDashboard", roles: ["EXAM_CELL"] },
     { label: "Configure", href: "/exam-cell/configure", iconName: "ClipboardList", roles: ["EXAM_CELL"] },
+    { label: "Attendance", href: "/exam-cell/attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
+    { label: "Staff", href: "/exam-cell/staff-attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"] },
     { label: "Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"] },
   ],
   LOCATION_DEPT_HEAD: [
@@ -478,10 +497,13 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "HOD / Principal", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
     { label: "Hiring Pipeline", href: "/college-office/pipeline", iconName: "GitBranch", roles: ["COLLEGE_OFFICE"] },
     { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
+    { label: "Attendance", href: "/college-office/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
+    { label: "Staff Attendance", href: "/college-office/staff-attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"] },
     { label: "Profile", href: "/college-office/profile", iconName: "UserCircle", roles: ["COLLEGE_OFFICE"] },
   ],
   COLLEGE_STAFF: [
     { label: "Home", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
+    { label: "Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"] },
     { label: "Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"] },
   ],
   DEAN: [
@@ -495,6 +517,8 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   T_AND_P: [
     { label: "Home", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
+    { label: "Attendance", href: "/t-and-p/attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"] },
+    { label: "Staff", href: "/t-and-p/staff-attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"] },
     { label: "Profile", href: "/t-and-p/profile", iconName: "UserCircle", roles: ["T_AND_P"] },
   ],
   R_AND_D: [

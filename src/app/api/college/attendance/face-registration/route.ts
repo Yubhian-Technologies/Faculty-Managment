@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 
 // face-api.js's faceRecognitionNet always produces a 128-dimensional
 // descriptor — used to sanity-check what a client posts before it's trusted.
@@ -31,7 +32,7 @@ async function resolveOwnDocRef(
 // resulting match distance/boolean is ever sent back to the server).
 export async function GET() {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const db = getAdminDb();
     const ref = await resolveOwnDocRef(db, session.collegeId, session.uid);
     const snap = await ref.get();
@@ -54,7 +55,7 @@ export async function GET() {
 // off match confidence) by simply registering again.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL");
+    const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const body = (await request.json()) as { embedding?: number[] };
     const embedding = body.embedding;
 

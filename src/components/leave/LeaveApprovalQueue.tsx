@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { cn, formatDate } from "@/lib/utils";
-import { CalendarClock, Check, X, ChevronDown, ChevronUp, Users } from "lucide-react";
+import { CalendarClock, Check, X, ChevronDown, ChevronUp } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
 
@@ -96,18 +96,31 @@ export function LeaveApprovalQueue() {
   useEffect(() => {
     if (!expandedId) return;
     const r = requests.find((req) => req.id === expandedId);
-    const isHodOtherDecision = !!r && r.status === "PENDING_HOD" && !!r.isOtherRequest;
-    if (!isHodOtherDecision || periodsById[expandedId]) return;
+    // Both standard types (CL/SL/...) and "Other" requests reach here now -
+    // a standard type already has the requester's own picks from
+    // submission (mode: "FULL" in applications/route.ts POST), which get
+    // seeded into substitutionsById below so the HOD only has to touch
+    // what actually needs changing instead of re-picking from scratch.
+    const isPendingHod = !!r && r.status === "PENDING_HOD";
+    if (!isPendingHod || periodsById[expandedId]) return;
     setLoadingPeriodsId(expandedId);
     fetch(`/api/leave/period-coverage?requestId=${expandedId}`)
       .then((res) => res.json() as Promise<{ periods?: PeriodCoverageEntry[] }>)
-      .then((data) => setPeriodsById((prev) => ({ ...prev, [expandedId]: data.periods ?? [] })))
+      .then((data) => {
+        setPeriodsById((prev) => ({ ...prev, [expandedId]: data.periods ?? [] }));
+        if (r!.periodSubstitutions?.length) {
+          const seeded: Record<string, string> = {};
+          for (const p of r!.periodSubstitutions) seeded[`${p.date}|${p.timetableSlotId}`] = p.substituteFacultyId;
+          setSubstitutionsById((prev) => ({ ...prev, [expandedId]: { ...seeded, ...(prev[expandedId] ?? {}) } }));
+        }
+      })
       .catch(() => setPeriodsById((prev) => ({ ...prev, [expandedId]: [] })))
       .finally(() => setLoadingPeriodsId((prev) => (prev === expandedId ? null : prev)));
   }, [expandedId, requests, periodsById]);
 
   async function act(r: LeaveRequest, action: "APPROVE" | "REJECT") {
-    const isHodOtherDecision = r.status === "PENDING_HOD" && !!r.isOtherRequest;
+    const isPendingHod = r.status === "PENDING_HOD";
+    const isHodOtherDecision = isPendingHod && !!r.isOtherRequest;
     const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && !!r.isOtherRequest;
     // Normally an HOD already tagged paid/unpaid before forwarding here. A
     // Vice Principal's own Other leave skips the HOD stage entirely though,
@@ -128,8 +141,14 @@ export function LeaveApprovalQueue() {
       const periods = periodsById[r.id] ?? [];
       const picks = substitutionsById[r.id] ?? {};
       const replacementFacultyId = replacementFacultyById[r.id];
+      // Sent for ANY PENDING_HOD decision now, not just "Other" - a standard
+      // type's picks are pre-filled from the requester's own submission (see
+      // the periods-fetch effect above), so approving without touching
+      // anything still resubmits them unchanged; the server-side merge in
+      // applications/[id]/route.ts only overrides the periods actually
+      // included here, same as an explicit HOD adjustment.
       const periodSubstitutions =
-        action !== "APPROVE" || !isHodOtherDecision
+        action !== "APPROVE" || !isPendingHod
           ? undefined
           : mode === "REPLACEMENT"
             ? replacementFacultyId && periods.length > 0
@@ -195,7 +214,8 @@ export function LeaveApprovalQueue() {
         <div className="space-y-2.5">
           {visibleRequests.map((r) => {
             const isOtherRequest = !!r.isOtherRequest;
-            const isHodOtherDecision = r.status === "PENDING_HOD" && isOtherRequest;
+            const isPendingHod = r.status === "PENDING_HOD";
+            const isHodOtherDecision = isPendingHod && isOtherRequest;
             const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && isOtherRequest;
             const needsPaidLeaveDecision = isOtherRequest && r.isPaidLeave === undefined && (isHodOtherDecision || isPrincipalOtherDecision);
             const isExpanded = expandedId === r.id;
@@ -267,27 +287,12 @@ export function LeaveApprovalQueue() {
                       </div>
                     )}
 
-                    {!isOtherRequest && r.status === "PENDING_HOD" && !!r.periodSubstitutions?.length && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                          <label className="text-xs text-muted-foreground">Coverage arranged by {r.employeeName}</label>
-                        </div>
-                        <div className="rounded-lg border p-2.5 space-y-1">
-                          {r.periodSubstitutions.map((p) => (
-                            <p key={`${p.date}|${p.timetableSlotId}`} className="text-sm">
-                              {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""} · {formatDate(new Date(p.date))} P{p.periodNumber}
-                              <span className="text-muted-foreground"> — covered by {p.substituteFacultyName}</span>
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {isHodOtherDecision && (
+                    {isPendingHod && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between gap-3 flex-wrap">
-                          <label className="text-xs text-muted-foreground">Adjust / replace periods (optional)</label>
+                          <label className="text-xs text-muted-foreground">
+                            {isOtherRequest ? "Adjust / replace periods (optional)" : `Coverage - arranged by ${r.employeeName}, adjustable`}
+                          </label>
                           {(periodsById[r.id]?.length ?? 0) > 0 && (
                             <SegmentedTabs
                               value={coverageModeById[r.id] ?? "ADJUSTMENT"}

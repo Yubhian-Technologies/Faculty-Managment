@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
-import { isoDateKey } from "@/lib/leave/dayCounter";
+import { todayISODate } from "@/lib/leave/dayCounter";
 import type { DayOfWeek } from "@/types";
 
 export async function GET(request: Request) {
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     // taking a period today instead of the regular weekly assignment (see
     // lib/leave/periodCoverage.ts). Never changes the underlying record,
     // just what this read returns.
-    const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, isoDateKey(new Date()));
+    const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, todayISODate());
     const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
     const slots = rawSlots.map((s) => {
       const sub = substitutionBySlotId.get((s as { id: string }).id);

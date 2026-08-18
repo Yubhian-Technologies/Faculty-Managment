@@ -31,7 +31,7 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
   checkIn?: string;             // "HH:MM" 24h (from biometric or manual)
   checkOut?: string;            // "HH:MM" 24h
-  source: "MANUAL" | "BIOMETRIC" | "SYSTEM";
+  source: "MANUAL" | "BIOMETRIC" | "SYSTEM" | "IMPORTED";
   markedBy?: string;            // uid of staff who marked manually
   // Self-check-in/out verification metadata (source === "BIOMETRIC" only).
   // Face matching runs entirely in the faculty's browser — no photo is ever
@@ -51,20 +51,29 @@ export interface AttendanceRecord {
 }
 
 // ─── Roster monthly export (department-wide / college-wide CSV) ───────────────
-// One row per person per day - flattened output of running fillMissingDays
-// once per roster member and concatenating the results, sorted by
-// department, then name, then date (see buildRosterMonthlyRows).
+// One row per person for the whole month - counts derived from running
+// fillMissingDays once per roster member and tallying each real/synthesized
+// day's status, sorted by department then name (see
+// buildRosterMonthlySummary). Deliberately not one row per person per day -
+// at real headcounts (hundreds to thousands of people) that produces tens of
+// thousands of CSV rows for one month, which is both slow to open and not
+// what anyone actually wants from a monthly export (the day-by-day breakdown
+// for one person is still available from that person's own "My Attendance"/
+// PersonMonthlyAttendanceView export).
 
-export interface MonthlyExportRow {
+export interface MonthlySummaryRow {
   facultyId: string;
   facultyName: string;
-  role: string;          // human-readable label: "HOD" | "Faculty" | "Principal" | "Vice Principal"
+  role: string;          // human-readable label: "HOD" | "Faculty" | "Principal" | "Vice Principal" | ...
   department: string;
-  date: string;           // yyyy-mm-dd
-  status: AttendanceStatus | string; // real status, or a synthetic one from fillMissingDays (HOLIDAY/ABSENT)
-  checkIn: string | null;
-  checkOut: string | null;
-  remarks: string | null;
+  totalDays: number;      // days actually counted - excludes future days and any day before face registration
+  present: number;
+  absent: number;
+  halfDay: number;
+  onLeave: number;
+  onDuty: number;
+  holiday: number;
+  lateArrivals: number;   // of the `present` days, how many had a check-in after the 9:05 cutoff
 }
 
 // ─── Monthly Attendance Summary ───────────────────────────────────────────────
