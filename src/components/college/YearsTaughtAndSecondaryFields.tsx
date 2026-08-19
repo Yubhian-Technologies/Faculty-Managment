@@ -87,19 +87,29 @@ export function YearsTaughtAndSecondaryFields({
           <Label>Secondary Departments</Label>
           {secondaryDepartmentOptions.length > 0 ? (
             <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-              {secondaryDepartmentOptions.map((d) => (
-                <label key={d.id} className="flex items-center gap-1.5 text-sm">
-                  <Checkbox
-                    checked={secondaryDepartments.includes(d.name)}
-                    onCheckedChange={(checked) => onToggleSecondaryDepartment(d.name, !!checked)}
-                  />
-                  {d.name}
-                </label>
-              ))}
+              {secondaryDepartmentOptions.map((d) => {
+                // A sub-department is a valid target (e.g. feeding "ECE-VLSI"
+                // specifically, for students admitted straight into that
+                // specialization) - the parent's name is shown alongside so
+                // it reads as a specific branch, not a plain department.
+                const parent = d.parentDepartmentId
+                  ? secondaryDepartmentOptions.find((p) => p.id === d.parentDepartmentId)
+                  : undefined;
+                return (
+                  <label key={d.id} className="flex items-center gap-1.5 text-sm">
+                    <Checkbox
+                      checked={secondaryDepartments.includes(d.name)}
+                      onCheckedChange={(checked) => onToggleSecondaryDepartment(d.name, !!checked)}
+                    />
+                    {d.name}
+                    {parent && <span className="text-muted-foreground">(sub-dept. of {parent.name})</span>}
+                  </label>
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-              No other top-level departments yet
+              No other departments yet
             </p>
           )}
           <p className="text-xs text-muted-foreground">

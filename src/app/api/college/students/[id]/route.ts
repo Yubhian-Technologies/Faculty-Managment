@@ -7,7 +7,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
-import { isConfiguredSecondaryDepartment } from "@/lib/departments/codeOrNameResolver";
+import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { getAcademicStructure } from "@/lib/college/academicStructure";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
@@ -231,7 +231,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const deptData = deptSnap.docs[0]?.data() as
           | { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }> }
           | undefined;
-        if (!deptData || !isConfiguredSecondaryDepartment(deptData, secondaryDept)) {
+        // `secondaryDept` may itself be a sub-department of one of the
+        // owner's configured branches (e.g. "ECE-VLSI" under "Electronics and
+        // Communication Engineering") - the branch being configured is
+        // enough, its own sub-departments don't need to be separately,
+        // individually configured too (isConfiguredSecondaryDepartmentOrChild's
+        // doc-comment).
+        const secondaryDeptSnap = await collegeRef.collection("departments").where("name", "==", secondaryDept).limit(1).get();
+        let secondaryParentName: string | undefined;
+        if (!secondaryDeptSnap.empty) {
+          const secondaryParentId = (secondaryDeptSnap.docs[0].data() as { parentDepartmentId?: string }).parentDepartmentId;
+          if (secondaryParentId) {
+            const parentSnap = await collegeRef.collection("departments").doc(secondaryParentId).get();
+            secondaryParentName = (parentSnap.data() as { name?: string } | undefined)?.name;
+          }
+        }
+        if (!deptData || !isConfiguredSecondaryDepartmentOrChild(deptData, secondaryDept, secondaryParentName)) {
           return NextResponse.json({ error: `"${student.department}" does not cross-list to "${secondaryDept}"` }, { status: 400 });
         }
       }

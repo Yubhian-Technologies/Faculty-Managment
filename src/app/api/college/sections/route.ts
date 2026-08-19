@@ -8,6 +8,7 @@ import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } fro
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
 import { deriveHodScope } from "@/lib/departments/hodScope";
+import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { Department, DepartmentCourseScope } from "@/types";
 
 export async function GET(request: Request) {
@@ -459,7 +460,16 @@ export async function POST(request: Request) {
         const chosen = body.secondaryDepartment?.trim()
           || (availableSecondaryDepts.length === 1 ? availableSecondaryDepts[0] : "");
         if (chosen) {
-          if (!availableSecondaryDepts.includes(chosen)) {
+          // `chosen` may itself be a sub-department of one of the available
+          // branches (e.g. "ECE-VLSI" under "Electronics and Communication
+          // Engineering") - the branch being configured is enough, its own
+          // sub-departments don't need to be separately, individually
+          // configured too (see isNameOrChildAmong's doc-comment).
+          const chosenDoc = allDepts.find((d) => d.name === chosen);
+          const chosenParentName = chosenDoc?.parentDepartmentId
+            ? allDepts.find((d) => d.id === chosenDoc.parentDepartmentId)?.name
+            : undefined;
+          if (!isNameOrChildAmong(availableSecondaryDepts, chosen, chosenParentName)) {
             return NextResponse.json(
               { error: `"${chosen}" is not one of this department's configured secondary departments` },
               { status: 400 }
