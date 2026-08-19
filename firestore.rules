@@ -231,6 +231,11 @@ service cloud.firestore {
         allow create, update, delete: if isHODorAbove(collegeId);
       }
 
+      match /timetableIncharges/{docId} {
+        allow read: if isStaff(collegeId);
+        allow create, update, delete: if isHODorAbove(collegeId);
+      }
+
       match /students/{studentId} {
         allow read: if isStaff(collegeId);
         allow create, update: if isHODorAbove(collegeId) || isPanelMember(collegeId);

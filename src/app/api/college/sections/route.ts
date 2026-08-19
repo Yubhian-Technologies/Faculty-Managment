@@ -9,11 +9,12 @@ import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/f
 import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
+import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { Department, DepartmentCourseScope } from "@/types";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF", "COLLEGE_OFFICE");
     const { searchParams } = new URL(request.url);
     const yearFilter = searchParams.get("year");
     const courseFilter = searchParams.get("courseId");
@@ -110,9 +111,22 @@ export async function GET(request: Request) {
           catalogIdByCourseId.set(c.id, (c.data() as { catalogId?: string }).catalogId);
         }
       }
-    } else if (session.role === "PANEL_MEMBER") {
-      const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
-      primaryQuery = primaryQuery.where("facultyInchargeUid", "in", candidateIds);
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      // A Timetable Incharge (see TimetableIncharge in src/types/core.ts)
+      // fetching every section for their own delegated course-year - NOT
+      // scoped to the unrelated "Class Coordinator" facultyInchargeUid field
+      // below (a section's own student-facing coordinator, a different
+      // feature entirely). Falls through to the Class Coordinator scoping
+      // when the caller isn't the Incharge for this exact course-year (or
+      // this isn't a single course-year lookup at all).
+      let scopedAsIncharge = false;
+      if (courseFilter && yearFilter) {
+        scopedAsIncharge = await isTimetableIncharge(db, session.collegeId, session.uid, courseFilter, Number(yearFilter));
+      }
+      if (!scopedAsIncharge) {
+        const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
+        primaryQuery = primaryQuery.where("facultyInchargeUid", "in", candidateIds);
+      }
     }
 
     primaryQuery = withCommonFilters(primaryQuery);
