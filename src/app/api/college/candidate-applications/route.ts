@@ -70,9 +70,11 @@ export async function POST(request: Request) {
       preferredSubjectIds?: string[];
       preferredSubjectNames?: string[];
       interviewMode?: string;
+      meetingPlatform?: string;
+      meetingLink?: string;
     };
 
-    const { candidateId, vacancyRequestId, courseId, courseName, year, preferredSubjectIds, preferredSubjectNames, interviewMode } = body;
+    const { candidateId, vacancyRequestId, courseId, courseName, year, preferredSubjectIds, preferredSubjectNames, interviewMode, meetingPlatform, meetingLink } = body;
     if (!candidateId || !vacancyRequestId) {
       return NextResponse.json({ error: "candidateId, vacancyRequestId required" }, { status: 400 });
     }
@@ -91,9 +93,15 @@ export async function POST(request: Request) {
     if (!vacancySnap.exists) {
       return NextResponse.json({ error: "Hiring request not found" }, { status: 404 });
     }
-    const vacancy = vacancySnap.data() as { status?: string; department?: string; position?: string };
+    const vacancy = vacancySnap.data() as { status?: string; department?: string; position?: string; hiringMode?: string };
     if (vacancy.status !== "APPROVED") {
       return NextResponse.json({ error: "Hiring request is not approved" }, { status: 400 });
+    }
+    // An online vacancy's meeting details are collected once, at batch
+    // creation - only an individually-online candidate on an otherwise
+    // offline vacancy needs its own link captured here.
+    if (interviewMode === "ONLINE" && vacancy.hiringMode !== "ONLINE" && (!meetingPlatform || !meetingLink)) {
+      return NextResponse.json({ error: "meetingPlatform and meetingLink required for an online candidate" }, { status: 400 });
     }
 
     // An HOD may only attach candidates to their own department's hiring
@@ -137,6 +145,9 @@ export async function POST(request: Request) {
       ...(year ? { year: Number(year) } : {}),
       ...(preferredSubjectIds?.length ? { preferredSubjectIds, preferredSubjectNames: preferredSubjectNames ?? [] } : {}),
       interviewMode: interviewMode ?? "OFFLINE",
+      ...(interviewMode === "ONLINE" && vacancy.hiringMode !== "ONLINE"
+        ? { meetingPlatform, meetingLink }
+        : {}),
       currentStage: "DEMO",
       status: "PENDING",
       isShortlisted: false,

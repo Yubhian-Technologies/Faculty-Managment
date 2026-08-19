@@ -161,6 +161,10 @@ export default function CollegeOfficeOffersPage() {
   // the browser's downloads - office just drags it into the draft before sending.
   async function composeEmail(letter: OfferRow) {
     setDownloadingId(letter.id);
+    // Opened synchronously, before any await - the PDF render below takes long
+    // enough that opening the Gmail tab afterward gets silently blocked as a
+    // popup (browsers drop the "triggered by a click" trust after an async gap).
+    const mailWindow = window.open("", "_blank");
     try {
       const [{ candidateAddress, candidateEmail, interviewDate, coordinatorUid, coordinatorName, hodUid, hodName }, ccRes] = await Promise.all([
         fetchLetterExtras(letter),
@@ -170,6 +174,7 @@ export default function CollegeOfficeOffersPage() {
       ]);
       if (!candidateEmail) {
         toast({ variant: "destructive", title: "Candidate has no email on file" });
+        mailWindow?.close();
         return;
       }
       const coordinatorBlock = await resolveOfferContactBlock({ coordinatorUid, coordinatorName, hodUid, hodName });
@@ -209,8 +214,10 @@ Warm regards,
 ${institution}`;
       const cc = (ccRes.ccEmails ?? []).join(",");
       const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidateEmail)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.open(gmailUrl, "_blank");
+      if (mailWindow) mailWindow.location.href = gmailUrl;
+      else window.open(gmailUrl, "_blank");
     } catch (err) {
+      mailWindow?.close();
       toast({ variant: "destructive", title: "Failed to prepare email", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloadingId(null);

@@ -7,7 +7,7 @@ import { provisionFacultyFromOffer, linkFacultyToExistingAccount, generatePasswo
 import { notify, notifyRole } from "@/lib/notify";
 import type { FacultyAccountRequestStatus } from "@/types";
 
-type Action = "START_REVIEW" | "CREATE_CREDENTIALS" | "LINK_EXISTING_ACCOUNT" | "COMPLETE" | "REVEAL_CREDENTIALS";
+type Action = "START_REVIEW" | "CREATE_CREDENTIALS" | "LINK_EXISTING_ACCOUNT" | "REVEAL_CREDENTIALS";
 
 // Explicit allowed-transitions map - a request can only move to the state
 // immediately after its current one, mirroring the Indent/Budget modules'
@@ -16,13 +16,14 @@ type Action = "START_REVIEW" | "CREATE_CREDENTIALS" | "LINK_EXISTING_ACCOUNT" | 
 // CREATE_CREDENTIALS/LINK_EXISTING_ACCOUNT accept either SUBMITTED or
 // IN_PROGRESS as their starting state - Webmaster can act directly on a fresh
 // SUBMITTED request in one click, without a separate Start Review step first.
-// The IN_PROGRESS review history entry is still recorded (see below) so the
-// audit trail is unaffected either way.
+// Skipping it does not add an IN_PROGRESS entry to history - only actions
+// Webmaster actually took are recorded. Both land straight on COMPLETED -
+// once the login exists, the request needs no further Webmaster action, so
+// there's no separate "mark completed" step for Office to wait on.
 const TRANSITIONS: Record<Exclude<Action, "REVEAL_CREDENTIALS">, { from: FacultyAccountRequestStatus[]; to: FacultyAccountRequestStatus }> = {
   START_REVIEW: { from: ["SUBMITTED"], to: "IN_PROGRESS" },
-  CREATE_CREDENTIALS: { from: ["SUBMITTED", "IN_PROGRESS"], to: "CREDENTIALS_CREATED" },
-  LINK_EXISTING_ACCOUNT: { from: ["SUBMITTED", "IN_PROGRESS"], to: "CREDENTIALS_CREATED" },
-  COMPLETE: { from: ["CREDENTIALS_CREATED"], to: "COMPLETED" },
+  CREATE_CREDENTIALS: { from: ["SUBMITTED", "IN_PROGRESS"], to: "COMPLETED" },
+  LINK_EXISTING_ACCOUNT: { from: ["SUBMITTED", "IN_PROGRESS"], to: "COMPLETED" },
 };
 
 const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
@@ -118,13 +119,7 @@ export async function PATCH(
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     const now = new Date();
 
-    // Skipping straight from SUBMITTED to CREATE_CREDENTIALS still records the
-    // IN_PROGRESS review step in history, so the audit trail reads the same as
-    // if Webmaster had clicked Start Review separately first.
     const newHistoryEntries = [
-      ...((action === "CREATE_CREDENTIALS" || action === "LINK_EXISTING_ACCOUNT") && reqData.status === "SUBMITTED"
-        ? [{ action: "IN_PROGRESS" as const, byUid: session.uid, byName: actorName, byRole: session.role, at: now }]
-        : []),
       {
         action: transition.to,
         byUid: session.uid,
@@ -137,7 +132,7 @@ export async function PATCH(
 
     // CREATE_CREDENTIALS actually provisions the Firebase Auth account + faculty
     // record before the status flips, so a failed provision never leaves the
-    // request stuck at "IN_PROGRESS -> CREDENTIALS_CREATED" with no faculty behind it.
+    // request stuck at "IN_PROGRESS -> COMPLETED" with no faculty behind it.
     let generatedPassword: string | undefined;
     let facultyId: string | undefined;
     let employeeId: string | undefined;
@@ -207,11 +202,10 @@ export async function PATCH(
     });
 
     // Notify Office as soon as the login actually exists (CREATE_CREDENTIALS or
-    // LINK_EXISTING_ACCOUNT), not only once Webmaster later remembers to click
-    // "Mark Completed" - that used to be the only trigger, leaving Office with
-    // no signal that the credentials were ready to reveal. A linked account has
-    // no new password to reveal, so its message points Office at the existing
-    // login instead.
+    // LINK_EXISTING_ACCOUNT) - the request is already COMPLETED by this point,
+    // so this is the only signal Office gets that credentials are ready to
+    // reveal. A linked account has no new password to reveal, so its message
+    // points Office at the existing login instead.
     if ((action === "CREATE_CREDENTIALS" || action === "LINK_EXISTING_ACCOUNT") && reqData.requestedBy) {
       await collegeRef.collection("notifications").add({
         collegeId: session.collegeId,
@@ -254,7 +248,6 @@ export async function PATCH(
       START_REVIEW: "FACULTY_ACCOUNT_REQUEST_IN_PROGRESS",
       CREATE_CREDENTIALS: "FACULTY_ACCOUNT_REQUEST_CREDENTIALS_CREATED",
       LINK_EXISTING_ACCOUNT: "FACULTY_ACCOUNT_REQUEST_LINKED_EXISTING_ACCOUNT",
-      COMPLETE: "FACULTY_ACCOUNT_REQUEST_COMPLETED",
     };
     await collegeRef.collection("auditLogs").add({
       collegeId: session.collegeId,

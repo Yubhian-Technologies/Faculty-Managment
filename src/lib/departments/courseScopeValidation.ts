@@ -5,9 +5,14 @@
 // place so a rule change (e.g. what counts as a valid secondary department)
 // can't drift between the two.
 
+import { ensureAcademicYear } from "@/lib/college/academicYears";
+
 // Years a department/course teaches must be a subset of the years this
 // college has actually opened (Principal's Academic Years toggle). Mirrors
 // the same check done for Section creation in college/sections/route.ts.
+// Still used for the flat (legacy, no-longer-UI-settable) Department.assignedYears
+// field - see ensureAssignedYearsOpen below for the per-course path, which no
+// longer rejects.
 export async function validateAssignedYears(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
@@ -26,6 +31,25 @@ export async function validateAssignedYears(
   );
   const invalid = assignedYears.filter((y) => !openYears.has(Number(y)));
   return invalid.length > 0 ? `Year(s) ${invalid.join(", ")} are not open for this college` : null;
+}
+
+// Per-course Years Taught (college/courses POST, college/departments PATCH's
+// `courseScope`) no longer requires the Principal to have pre-opened the
+// college's Academic Years one at a time via a "+ Add Year" button before a
+// longer course's later years become assignable - picking a year for a
+// course now just opens it (idempotent - a year already open is untouched).
+// The college-wide `academicYears` collection still exists and still gates
+// the legacy flat `Department.assignedYears` field above and Section
+// creation, so this keeps that collection correctly populated rather than
+// bypassing it.
+export async function ensureAssignedYearsOpen(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  assignedYears: number[]
+): Promise<void> {
+  for (const year of assignedYears) {
+    await ensureAcademicYear(db, collegeId, Number(year));
+  }
 }
 
 // A named secondary department must exist, be a top-level department (never

@@ -89,6 +89,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
   const myUid = useAuthStore((s) => s.user?.uid);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
+  const [application, setApplication] = useState<CandidateApplication | null>(null);
   const [person, setPerson] = useState<PersonView | null>(null);
   const [myFeedback, setMyFeedback] = useState<MyFeedback | null>(null);
   const [panelForm, setPanelForm] = useState<PanelForm>(defaultPanelForm());
@@ -118,6 +119,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
         setMyFeedback(mine);
         const application = applications.find((a) => a.candidateId === candidateId);
         const candidate = candidates.find((c) => c.id === candidateId);
+        setApplication(application ?? null);
         if (application || candidate) {
           setPerson({ name: candidate?.name ?? "Unknown", email: candidate?.email ?? "" });
         }
@@ -203,24 +205,33 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
         description={`${batch.position} - ${batch.department}`}
       />
 
-      {batch.hiringMode === "ONLINE" && batch.meetingLink && (
-        <Card className="border-blue-200 bg-blue-50/40">
-          <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 text-sm text-blue-800">
-              <Video className="h-4 w-4 shrink-0" />
-              {batch.meetingPlatform ? MEETING_PLATFORM_LABELS[batch.meetingPlatform] : "Meeting"} — join to interview {person?.name ?? "the candidate"} before scoring.
-            </div>
-            <a
-              href={batch.meetingLink}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm font-medium text-primary underline break-all"
-            >
-              {batch.meetingLink}
-            </a>
-          </CardContent>
-        </Card>
-      )}
+      {(() => {
+        // A candidate can be individually online on an otherwise offline
+        // batch - prefer their own meeting details, fall back to the
+        // batch's (the all-online case).
+        const isOnline = batch.hiringMode === "ONLINE" || application?.interviewMode === "ONLINE";
+        const meetingLink = application?.meetingLink || batch.meetingLink;
+        const meetingPlatform = application?.meetingPlatform || batch.meetingPlatform;
+        if (!isOnline || !meetingLink) return null;
+        return (
+          <Card className="border-blue-200 bg-blue-50/40">
+            <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 text-sm text-blue-800">
+                <Video className="h-4 w-4 shrink-0" />
+                {meetingPlatform ? MEETING_PLATFORM_LABELS[meetingPlatform] : "Meeting"} — join to interview {person?.name ?? "the candidate"} before scoring.
+              </div>
+              <a
+                href={meetingLink}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-medium text-primary underline break-all"
+              >
+                {meetingLink}
+              </a>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {!canScore ? (
         <Card className="border-dashed">
