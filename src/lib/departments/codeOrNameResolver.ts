@@ -90,3 +90,51 @@ export function isConfiguredSecondaryDepartment(
   }
   return false;
 }
+
+/**
+ * Same as isConfiguredSecondaryDepartment, but also accepts `candidate` when
+ * it's a SUB-department of an entry that IS configured - e.g. configuring
+ * plain "Electronics and Communication Engineering" as a Secondary Department
+ * implicitly authorizes any of its sub-departments too ("ECE-VLSI"), for
+ * students admitted straight into that specialization rather than the plain
+ * branch (see hod/sections/new's "Specialization" picker, which offers
+ * exactly this without needing the sub-department separately, individually
+ * configured). `candidateParentName` is the CANDIDATE's own
+ * parentDepartmentId's name (not `department`'s) - callers already have the
+ * full department list loaded wherever this matters, so it's resolved there
+ * rather than here (this file stays pure - no DB access).
+ */
+export function isConfiguredSecondaryDepartmentOrChild(
+  department: { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }> },
+  candidate: string,
+  candidateParentName?: string
+): boolean {
+  if (isConfiguredSecondaryDepartment(department, candidate)) return true;
+  if (candidateParentName) return isConfiguredSecondaryDepartment(department, candidateParentName);
+  return false;
+}
+
+/**
+ * Array-based counterpart of isConfiguredSecondaryDepartmentOrChild, for a
+ * caller that's already resolved its own already-merged list of allowed
+ * names (college/sections POST/PATCH's `availableSecondaryDepts`/`available`,
+ * which fold together a department's own configured branches with whatever
+ * it inherits from a parent) rather than holding a single Department object
+ * to check against. Same semantics: `candidate` is allowed either directly,
+ * or as a sub-department of an allowed entry.
+ */
+export function isNameOrChildAmong(
+  allowedNames: string[],
+  candidate: string,
+  candidateParentName?: string
+): boolean {
+  const target = candidate.trim().toLowerCase();
+  if (!target) return false;
+  const matches = (name: string) => name.trim().toLowerCase() === target;
+  if (allowedNames.some(matches)) return true;
+  if (candidateParentName) {
+    const parentTarget = candidateParentName.trim().toLowerCase();
+    return allowedNames.some((n) => n.trim().toLowerCase() === parentTarget);
+  }
+  return false;
+}

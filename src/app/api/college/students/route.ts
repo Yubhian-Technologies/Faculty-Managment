@@ -7,7 +7,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
-import { isConfiguredSecondaryDepartment } from "@/lib/departments/codeOrNameResolver";
+import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, resolveCatalogId } from "@/lib/college/academicStructure";
 import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
@@ -116,7 +116,17 @@ export async function GET(request: Request) {
       hodScope = scope;
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
-        secondaryQuery = withCommonFilters(studentsColl.where("secondaryDepartment", "in", scope.ownDepartmentNames.slice(0, 30)));
+        // A shared-first-year student can be pre-registered straight toward a
+        // specialization sub-department (e.g. "Cyber Security" under CSE,
+        // college/departments secondaryDepartments can now name one directly -
+        // see validateSecondaryDepartmentNames's doc-comment), not just the
+        // plain parent department - so childDepartmentNames must be included
+        // here too, or such a student stays invisible (not even view-only) to
+        // the parent HOD who actually governs that sub-department. Still
+        // "secondary"/view-only below, same as any other cross-listed match -
+        // this only widens WHICH names can match, not the access level.
+        const secondaryTargets = Array.from(new Set([...scope.ownDepartmentNames, ...scope.childDepartmentNames])).slice(0, 30);
+        secondaryQuery = withCommonFilters(studentsColl.where("secondaryDepartment", "in", secondaryTargets));
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
       }
@@ -361,7 +371,22 @@ export async function POST(request: Request) {
           if (secondaryDept === dept) {
             return NextResponse.json({ error: "Secondary Department must differ from Department" }, { status: 400 });
           }
-          if (!isConfiguredSecondaryDepartment(deptScopeDoc, secondaryDept)) {
+          // `secondaryDept` may itself be a sub-department of one of `dept`'s
+          // configured branches (e.g. "ECE-VLSI" under "Electronics and
+          // Communication Engineering") - the branch being configured is
+          // enough, its own sub-departments don't need to be separately,
+          // individually configured too (isConfiguredSecondaryDepartmentOrChild's
+          // doc-comment).
+          const secondaryDeptSnap = await collegeRef.collection("departments").where("name", "==", secondaryDept).limit(1).get();
+          let secondaryParentName: string | undefined;
+          if (!secondaryDeptSnap.empty) {
+            const secondaryParentId = (secondaryDeptSnap.docs[0].data() as { parentDepartmentId?: string }).parentDepartmentId;
+            if (secondaryParentId) {
+              const parentSnap = await collegeRef.collection("departments").doc(secondaryParentId).get();
+              secondaryParentName = (parentSnap.data() as { name?: string } | undefined)?.name;
+            }
+          }
+          if (!isConfiguredSecondaryDepartmentOrChild(deptScopeDoc, secondaryDept, secondaryParentName)) {
             return NextResponse.json({ error: `"${dept}" does not cross-list to "${secondaryDept}"` }, { status: 400 });
           }
         }

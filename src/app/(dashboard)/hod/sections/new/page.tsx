@@ -75,6 +75,13 @@ export default function NewSectionPage() {
   // name; `letter` is the section letter (A, B) so one branch can have several
   // sections. The stored section name is derived as `${branchCode}-${letter}`.
   const [branch, setBranch] = useState("");
+  // Once `branch` (a top-level department, e.g. "Electronics and
+  // Communication Engineering") is picked, its own sub-departments (e.g.
+  // "ECE-VLSI") become an optional further narrowing - for students admitted
+  // straight into that specialization rather than the plain branch. Reset
+  // whenever `branch` itself changes (see the Select below), since a
+  // different branch has a different set of sub-departments.
+  const [branchSubDept, setBranchSubDept] = useState("");
   const [letter, setLetter] = useState("");
 
   useEffect(() => {
@@ -279,14 +286,30 @@ export default function NewSectionPage() {
   const isBranchMode = branchOptions.length > 0;
   const branchCodeOf = (name: string) =>
     departments.find((d) => d.name === name)?.code?.trim() || name;
+  // The picked branch's own sub-departments (e.g. ECE -> ECE-VLSI) - offered
+  // as an optional further narrowing once a branch with any is picked, for
+  // students admitted straight into that specialization. Configuring the
+  // parent as a Secondary Department (Edit Department page) is enough; a
+  // sub-department never needs to be separately, individually configured
+  // there for this to work (see isConfiguredSecondaryDepartmentOrChild's own
+  // doc-comment - the section/student write paths accept it either way).
+  const branchDept = useMemo(() => departments.find((d) => d.name === branch) ?? null, [departments, branch]);
+  const branchSubDeptOptions = useMemo(
+    () => (branchDept ? departments.filter((d) => d.parentDepartmentId === branchDept.id) : []),
+    [departments, branchDept]
+  );
+  // What the section actually feeds and gets submitted as - the narrowed
+  // sub-department when one was picked, otherwise the plain branch.
+  const effectiveBranch = branchSubDept || branch;
   // Derived section name in legacy branch mode: primary department code + branch
-  // code + letter, e.g. Basic Science → CSE → "BS-CSE-A". The primary prefix
-  // makes the section self-describing (which shared department owns it and
-  // which branch it feeds) everywhere it appears - lists, rosters, promotion
-  // dropdowns.
+  // code + letter, e.g. Basic Science → CSE → "BS-CSE-A" (or, narrowed to a
+  // sub-department, Chemistry → ECE-VLSI → "CHEMISTRY-ECEVLSI-A"). The primary
+  // prefix makes the section self-describing (which shared department owns it
+  // and which branch it feeds) everywhere it appears - lists, rosters,
+  // promotion dropdowns.
   const ownerCode = activeDept?.code?.trim() || "";
   const derivedName = branch && letter
-    ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(branch)}-${letter.trim().toUpperCase()}`
+    ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(effectiveBranch)}-${letter.trim().toUpperCase()}`
     : "";
   // Plain mode: this department's own code + letter, e.g. CSE's own dedicated
   // HOD creating a 2nd-year section gets "CSE-A" - no shared-structure prefix,
@@ -324,7 +347,7 @@ export default function NewSectionPage() {
           batch: form.batch,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
-          ...(isBranchMode && !isManagedBranchMode ? { secondaryDepartment: branch } : {}),
+          ...(isBranchMode && !isManagedBranchMode ? { secondaryDepartment: effectiveBranch } : {}),
           // Omitted only when this HOD has exactly one department and picked
           // no sub-department - the API then falls back to that one
           // department, as before. Otherwise always sent: a parent HOD's
@@ -454,7 +477,10 @@ export default function NewSectionPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Secondary Department *</Label>
-                    <Select value={branch} onValueChange={setBranch}>
+                    <Select
+                      value={branch}
+                      onValueChange={(v) => { setBranch(v); setBranchSubDept(""); }}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select secondary department" /></SelectTrigger>
                       <SelectContent>
                         {branchOptions.map((b) => (
@@ -480,6 +506,33 @@ export default function NewSectionPage() {
                     </p>
                   </div>
                 </div>
+                {/* Only shown once a branch with its own sub-departments is
+                    picked (e.g. ECE -> ECE-VLSI) - optional, defaults to the
+                    plain branch. Configuring the branch itself as a Secondary
+                    Department is enough for its sub-departments to show up
+                    here; nothing extra needs to be configured per
+                    specialization. */}
+                {branchSubDeptOptions.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Specialization (optional)</Label>
+                    <Select
+                      value={branchSubDept || "none"}
+                      onValueChange={(v) => setBranchSubDept(v === "none" ? "" : v)}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select specialization" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{branch} itself</SelectItem>
+                        {branchSubDeptOptions.map((d) => (
+                          <SelectItem key={d.id} value={d.name}>{d.name} ({d.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Students admitted straight into a specific specialization under {branch} - leave as
+                      &quot;{branch} itself&quot; for a plain {branchCodeOf(branch)} section.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Year *</Label>
                   <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
