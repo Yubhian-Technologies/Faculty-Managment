@@ -294,7 +294,21 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       try {
         const res = await fetch(`/api/college/courses?departmentId=${selectedDepartmentId}`);
         const d = await res.json() as { courses: Course[] };
-        setCourses((d.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name)));
+        // Same collapse the Dean's subject picker applies: the courses API also
+        // returns a feeder's courses (a department cross-listing this one via
+        // secondaryDepartments), so one catalog course the Principal added once
+        // would otherwise appear twice here, once per owning department. Keep
+        // this department's own doc when both exist.
+        const active = (d.courses ?? []).filter((c) => c.isActive);
+        const byCatalogCourse = new Map<string, Course>();
+        for (const c of active) {
+          const key = c.catalogId ?? `name:${c.name.trim().toLowerCase()}`;
+          const kept = byCatalogCourse.get(key);
+          if (!kept || (c.departmentId === selectedDepartmentId && kept.departmentId !== selectedDepartmentId)) {
+            byCatalogCourse.set(key, c);
+          }
+        }
+        setCourses(Array.from(byCatalogCourse.values()).sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
         toast({ variant: "destructive", title: "Failed to load courses" });
       } finally {

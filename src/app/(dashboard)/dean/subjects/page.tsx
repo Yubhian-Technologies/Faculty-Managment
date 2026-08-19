@@ -131,7 +131,27 @@ export default function DeanSubjectsPage() {
     try {
       const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(departmentId)}`);
       const data = await res.json() as { courses: Course[] };
-      const list = (data.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name));
+      // The courses API also merges in a feeder's courses - a department that
+      // cross-lists this one via secondaryDepartments (e.g. Basic Science
+      // feeding CSE for the shared first year) - so a single catalog course the
+      // Principal added once came back twice, once per owning department, and
+      // rendered as two identical "Bachelor of Technology" options here.
+      //
+      // Collapsed to one entry per catalog course (falling back to the
+      // normalized name for legacy courses created before the catalog), keeping
+      // THIS department's own doc when both exist so subjects file against the
+      // department the Dean actually picked. A feeder's copy is still kept when
+      // the department owns none, which is the case that merge exists for.
+      const active = (data.courses ?? []).filter((c) => c.isActive);
+      const byCatalogCourse = new Map<string, Course>();
+      for (const c of active) {
+        const key = c.catalogId ?? `name:${c.name.trim().toLowerCase()}`;
+        const kept = byCatalogCourse.get(key);
+        if (!kept || (c.departmentId === departmentId && kept.departmentId !== departmentId)) {
+          byCatalogCourse.set(key, c);
+        }
+      }
+      const list = Array.from(byCatalogCourse.values()).sort((a, b) => a.name.localeCompare(b.name));
       setCourses(list);
       return list;
     } catch {
