@@ -6,18 +6,16 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { checkCampusGeofence } from "@/lib/attendance/geofence";
 import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { istMidnightUTC, istDateKey, istTimeHHMM } from "@/lib/attendance/istTime";
 import type { College } from "@/types";
 
 function todayDocDate(): { date: Date; docSuffix: string } {
   const now = new Date();
-  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const docSuffix = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  return { date, docSuffix };
+  return { date: istMidnightUTC(now), docSuffix: istDateKey(now) };
 }
 
 function currentTimeHHMM(): string {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return istTimeHHMM(new Date());
 }
 
 // Self-attendance check-in — geolocation and face-match verification both

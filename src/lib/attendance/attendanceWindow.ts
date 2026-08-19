@@ -1,11 +1,14 @@
-// A hardcoded weekly rule (getDay() === 0), independent of the office-managed
-// Holidays calendar (colleges/{id}/holidays) - that calendar plus approved
-// leave still aren't cross-referenced here yet (deliberately deferred, see
-// the NOT_REGISTERED/NOT_MARKED split in the attendance report routes).
+import { getISTParts, istDayOfWeek } from "./istTime";
+
+// A hardcoded weekly rule (day-of-week in IST, not the host process's local
+// day), independent of the office-managed Holidays calendar
+// (colleges/{id}/holidays) - that calendar plus approved leave still aren't
+// cross-referenced here yet (deliberately deferred, see the
+// NOT_REGISTERED/NOT_MARKED split in the attendance report routes).
 export const SUNDAY_HOLIDAY_MESSAGE = "Today is Sunday — a holiday. No attendance required.";
 
 export function isSunday(now: Date = new Date()): boolean {
-  return now.getDay() === 0;
+  return istDayOfWeek(now) === 0;
 }
 
 // HOD/Principal/VP can only correct attendance (POST /api/college/attendance/
@@ -19,9 +22,11 @@ export const MANUAL_EDIT_WINDOW_CLOSED_MESSAGE =
   "Attendance can only be corrected for the current month, up to the 25th. This month is now view-only.";
 
 export function isManualEditWindowOpen(recordDate: Date, now: Date = new Date()): boolean {
+  const record = getISTParts(recordDate);
+  const today = getISTParts(now);
   return (
-    recordDate.getFullYear() === now.getFullYear() &&
-    recordDate.getMonth() === now.getMonth() &&
-    now.getDate() <= 25
+    record.year === today.year &&
+    record.month === today.month &&
+    today.day <= 25
   );
 }

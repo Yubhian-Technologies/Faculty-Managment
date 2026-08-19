@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
 import { ROLE_DASHBOARD_PATHS } from "@/types/core";
 import { notify } from "@/lib/notify";
 import type { AttendanceRecord } from "@/types";
@@ -34,7 +35,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function parseDocDate(dateStr: string): { date: Date; docSuffix: string } {
   const [y, m, d] = dateStr.split("-").map(Number);
-  return { date: new Date(y, m - 1, d), docSuffix: dateStr };
+  return { date: istDateFromParts(y, m, d), docSuffix: dateStr };
 }
 
 // Lets someone mark or correct check-in/check-out for a person one tier
@@ -81,8 +82,7 @@ export async function POST(request: Request) {
     }
 
     const { date: docDate, docSuffix } = parseDocDate(date);
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = istMidnightUTC(new Date());
     if (docDate > todayStart) {
       return NextResponse.json({ error: "Cannot mark attendance for a future date" }, { status: 400 });
     }

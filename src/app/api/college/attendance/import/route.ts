@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { isCollegeStaffUnitHead, unitLabelForHeadRole, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 import type { AttendanceStatus, UserRole } from "@/types";
 
@@ -110,8 +111,7 @@ export async function POST(request: Request) {
       byEmployeeId.set(u.employeeId.trim().toLowerCase(), { uid: doc.id, name: u.name ?? "", department: u.department ?? "" });
     }
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = istMidnightUTC(new Date());
 
     const failed: { row: number; employeeId: string; error: string }[] = [];
     const validRows: ValidRow[] = [];
@@ -137,11 +137,15 @@ export async function POST(request: Request) {
         continue;
       }
       const [y, m, d] = dateStr.split("-").map(Number);
-      const date = new Date(y, m - 1, d);
-      if (Number.isNaN(date.getTime()) || date.getMonth() !== m - 1) {
+      // Overflow check only (e.g. rejects Feb 30) - a plain local Date is
+      // fine here since we only inspect whether the components round-trip,
+      // not which calendar day it represents.
+      const overflowCheck = new Date(y, m - 1, d);
+      if (Number.isNaN(overflowCheck.getTime()) || overflowCheck.getMonth() !== m - 1) {
         failed.push({ row: rowNum, employeeId, error: `"${dateStr}" is not a valid date` });
         continue;
       }
+      const date = istDateFromParts(y, m, d);
       if (date >= todayStart) {
         failed.push({ row: rowNum, employeeId, error: "Date must be in the past - today or future dates aren't allowed via import" });
         continue;
