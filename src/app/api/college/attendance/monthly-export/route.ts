@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlySummary } from "@/lib/attendance/rosterMonthlyExport";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { getISTParts } from "@/lib/attendance/istTime";
 
 // Department-wide or college-wide monthly CSV data, self-serve (session-
 // scoped collegeId) - the multi-person counterpart to /api/college/attendance
@@ -17,9 +18,9 @@ export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const year = parseInt(searchParams.get("year") ?? String(now.getFullYear()), 10);
-    const month = parseInt(searchParams.get("month") ?? String(now.getMonth() + 1), 10);
+    const nowIST = getISTParts();
+    const year = parseInt(searchParams.get("year") ?? String(nowIST.year), 10);
+    const month = parseInt(searchParams.get("month") ?? String(nowIST.month), 10);
     const requestedScope = searchParams.get("scope");
     const requestedDepartment = searchParams.get("department")?.trim();
 

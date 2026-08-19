@@ -5,6 +5,7 @@ import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveDepartmentRoster, resolveCollegeRoster, resolveCollegeStaffUnitRoster, buildRosterMonthlySummary } from "@/lib/attendance/rosterMonthlyExport";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { getISTParts } from "@/lib/attendance/istTime";
 
 // MANAGEMENT is read-only - this route only implements GET.
 // Department-wide or college-wide monthly CSV data for any college, mirroring
@@ -17,9 +18,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
     await requireManagement();
     const { collegeId } = await params;
     const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const year = parseInt(searchParams.get("year") ?? String(now.getFullYear()), 10);
-    const month = parseInt(searchParams.get("month") ?? String(now.getMonth() + 1), 10);
+    const nowIST = getISTParts();
+    const year = parseInt(searchParams.get("year") ?? String(nowIST.year), 10);
+    const month = parseInt(searchParams.get("month") ?? String(nowIST.month), 10);
     const scope = searchParams.get("scope");
     const department = searchParams.get("department")?.trim();
 
