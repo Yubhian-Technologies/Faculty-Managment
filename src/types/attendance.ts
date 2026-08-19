@@ -1,4 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
+import type { UserRole } from "./core";
 
 // ─── Attendance Record (one per faculty per working day) ──────────────────────
 
@@ -167,5 +168,57 @@ export interface Holiday {
   // everywhere it's read (holidaysCount.ts), matching their prior behavior.
   appliesTo?: HolidayAudience;
   academicYear: string;       // "2025-26"
+  createdAt: Timestamp;
+}
+
+// ─── Summer Holidays (one continuous break period per academic year) ──────────
+// Distinct from the single-date Holiday above - College Office sets a single
+// from/to range per academic year (doc id = academicYear, so there's only
+// ever one). Surfaced as an informational banner in the dashboard shell
+// (components/layout/SummerHolidayBanner.tsx, rendered from
+// (dashboard)/layout.tsx - every role, every page) starting the day before
+// `fromDate` and staying up through `toDate` - never enforced server-side
+// against leave applications, purely informational.
+export interface SummerHoliday {
+  id: string;              // == academicYear
+  collegeId: string;
+  academicYear: string;    // "2025-26"
+  fromDate: Timestamp;
+  toDate: Timestamp;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── Working Day Override ──────────────────────────────────────────────────
+// Flips a normally-off Sunday into a working day for specific roles - e.g.
+// the Principal alone, or a subset of faculty, coming in for an inspection or
+// event. Maintained in the same Office/Principal/VP-only Settings screen as
+// Holidays (see college-office/holidays/page.tsx) but kept as its own
+// collection since it targets specific roles rather than everyone, and
+// exempts nobody by default - only the listed roles are affected; anyone else
+// still gets the day off as usual. See lib/attendance/workingDays.ts for how
+// this overrides the hardcoded Sunday rule (isSunday in attendanceWindow.ts)
+// on a per-date, per-role basis for both self-attendance check-in and leave
+// day counting (dayCounter.ts's countWorkingDays).
+export interface WorkingDayOverride {
+  id: string;
+  collegeId: string;
+  date: Timestamp;
+  reason: string;
+  roles: UserRole[];           // which roles are required to work this day
+  // Whether the named roles are only required for half the day - e.g. a
+  // forenoon-only inspection. Absent/false means the full day, same
+  // convention as LeaveRequest.isHalfDay. Purely informational for
+  // self-attendance check-in (still a single check-in/check-out for the
+  // day), but a half day only draws down HALF a leave day if the requester
+  // takes leave on it instead of coming in - see countWorkingDays'
+  // workingDayWeights param in dayCounter.ts.
+  isHalfDay?: boolean;
+  // Which half - only meaningful when isHalfDay is true. Same convention as
+  // LeaveRequest.halfDaySession.
+  halfDaySession?: "FN" | "AN";
+  academicYear: string;        // "2025-26"
   createdAt: Timestamp;
 }

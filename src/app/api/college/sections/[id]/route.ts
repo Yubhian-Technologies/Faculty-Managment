@@ -9,6 +9,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { DepartmentCourseScope } from "@/types";
 
 // A parent department's HOD has full (not just view-only) access to their own
@@ -252,7 +253,21 @@ export async function PATCH(
             .collection("departments").doc(ownerData.parentDepartmentId).get();
           available = (parentSnap.data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments ?? [];
         }
-        if (!available.includes(chosen)) {
+        // `chosen` may itself be a sub-department of one of the available
+        // branches (e.g. "ECE-VLSI" under "Electronics and Communication
+        // Engineering") - the branch being configured is enough, its own
+        // sub-departments don't need to be separately, individually
+        // configured too (see isNameOrChildAmong's doc-comment).
+        const chosenSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("departments").where("name", "==", chosen).limit(1).get();
+        const chosenParentId = chosenSnap.empty
+          ? undefined
+          : (chosenSnap.docs[0].data() as { parentDepartmentId?: string }).parentDepartmentId;
+        const chosenParentName = chosenParentId
+          ? (await db.collection("colleges").doc(session.collegeId).collection("departments").doc(chosenParentId).get())
+              .data()?.name as string | undefined
+          : undefined;
+        if (!isNameOrChildAmong(available, chosen, chosenParentName)) {
           return NextResponse.json(
             { error: `"${chosen}" is not one of this department's configured secondary departments` },
             { status: 400 }

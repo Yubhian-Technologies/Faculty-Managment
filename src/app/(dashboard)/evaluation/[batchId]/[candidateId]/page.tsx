@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { CheckCircle2, Clock, ShieldOff, Video } from "lucide-react";
 import { MEETING_PLATFORM_LABELS } from "@/types";
-import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
+import type { HiringBatch, Candidate } from "@/types";
 
 type PersonView = { name: string; email: string };
 
@@ -89,7 +89,6 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
   const myUid = useAuthStore((s) => s.user?.uid);
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
-  const [application, setApplication] = useState<CandidateApplication | null>(null);
   const [person, setPerson] = useState<PersonView | null>(null);
   const [myFeedback, setMyFeedback] = useState<MyFeedback | null>(null);
   const [panelForm, setPanelForm] = useState<PanelForm>(defaultPanelForm());
@@ -102,9 +101,6 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       fetch(`/api/college/hiring-batches/${batchId}`)
         .then((r) => r.json() as Promise<{ batch: HiringBatch }>)
         .then((d) => d.batch),
-      fetch(`/api/college/candidate-applications?batchId=${batchId}`)
-        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
-        .then((d) => d.applications ?? []),
       fetch(`/api/college/candidates`)
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
@@ -114,14 +110,12 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
         // HOD (and other roles who can also be panelists) need this client-side filter too.
         .then((d) => (d.feedback ?? []).find((f) => f.panelUid === myUid) ?? null),
     ])
-      .then(([b, applications, candidates, mine]) => {
+      .then(([b, candidates, mine]) => {
         setBatch(b);
         setMyFeedback(mine);
-        const application = applications.find((a) => a.candidateId === candidateId);
         const candidate = candidates.find((c) => c.id === candidateId);
-        setApplication(application ?? null);
-        if (application || candidate) {
-          setPerson({ name: candidate?.name ?? "Unknown", email: candidate?.email ?? "" });
+        if (candidate) {
+          setPerson({ name: candidate.name ?? "Unknown", email: candidate.email ?? "" });
         }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load evaluation" }))
@@ -206,12 +200,9 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       />
 
       {(() => {
-        // A candidate can be individually online on an otherwise offline
-        // batch - prefer their own meeting details, fall back to the
-        // batch's (the all-online case).
-        const isOnline = batch.hiringMode === "ONLINE" || application?.interviewMode === "ONLINE";
-        const meetingLink = application?.meetingLink || batch.meetingLink;
-        const meetingPlatform = application?.meetingPlatform || batch.meetingPlatform;
+        const isOnline = batch.hiringMode === "ONLINE";
+        const meetingLink = batch.meetingLink;
+        const meetingPlatform = batch.meetingPlatform;
         if (!isOnline || !meetingLink) return null;
         return (
           <Card className="border-blue-200 bg-blue-50/40">

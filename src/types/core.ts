@@ -570,6 +570,17 @@ export interface PeriodTiming {
   endTime: string; // "HH:MM" 24h
 }
 
+// One semester's calendar span (not to be confused with the daily
+// collegeStartTime/collegeEndTime above, which bound a single DAY, not a
+// date range). `semester` is a free-standing number, not fixed at 2 -
+// Office/Principal decides how many semesters a given course-year has and
+// adds/removes entries accordingly (see CourseYearTimingForm.tsx).
+export interface SemesterDuration {
+  semester: number; // 1, 2, 3, ...
+  startDate: Timestamp;
+  endDate: Timestamp;
+}
+
 export interface CourseYearTiming {
   id: string; // `${courseId}_year${year}`
   collegeId: string;
@@ -591,6 +602,13 @@ export interface CourseYearTiming {
   // down yet, so nothing already relying on it (isContiguousBlockAvailable,
   // the timetable solver, ...) has to change.
   periods?: PeriodTiming[];
+  // This academic year's semester date ranges - however many Office/
+  // Principal has configured, sorted by `semester`. Which one is "current"
+  // for a given date resolves via lib/college/semester.ts's
+  // resolveCurrentSemester. Absent/empty means this year has no semester
+  // concept yet - the timetable behaves as one continuous whole-year
+  // timetable until at least one semester is added.
+  semesters?: SemesterDuration[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }

@@ -436,7 +436,7 @@ export default function DepartmentDetailPage() {
               onToggleYear={toggleStructureYear}
               maxYear={structureTarget?.durationYears}
               yearsHelperText={`Which years of this ${structureTarget?.durationYears ?? ""}-year course ${department?.name ?? "this department"} teaches. HODs can only create sections for these years.`}
-              secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId)}
+              secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && d.parentDepartmentId !== department?.id)}
               secondaryDepartments={department?.secondaryDepartments ?? []}
               onToggleSecondaryDepartment={() => {}}
               showSecondaryDepartments={false}

@@ -5,6 +5,8 @@ import { requireManagement } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
 import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
+import { istMonthBounds, getISTParts } from "@/lib/attendance/istTime";
+import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import type { AttendanceRecord, AttendanceSummary } from "@/types";
 
 // MANAGEMENT is read-only - this route only implements GET.
@@ -16,9 +18,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
     await requireManagement();
     const { collegeId } = await params;
     const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const year = parseInt(searchParams.get("year") ?? String(now.getFullYear()), 10);
-    const month = parseInt(searchParams.get("month") ?? String(now.getMonth() + 1), 10);
+    const nowIST = getISTParts();
+    const year = parseInt(searchParams.get("year") ?? String(nowIST.year), 10);
+    const month = parseInt(searchParams.get("month") ?? String(nowIST.month), 10);
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(collegeId);
@@ -42,8 +44,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
 
     const recordsSnap = await collegeRef.collection("attendanceRecords").where("facultyId", "==", vpUid).get();
 
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month, 1); // exclusive
+    const { monthStart, monthEnd } = istMonthBounds(year, month);
 
     const records: (AttendanceRecord & { id: string; ref: FirebaseFirestore.DocumentReference; resolvedDate: Date | null })[] = recordsSnap.docs
       .map((d) => {
@@ -55,11 +56,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
 
     await closeMissedCheckouts(db, records);
 
+    const workingDayDates = new Set(
+      (await getWorkingDayWeightsForRole(db, collegeId, monthStart, monthEnd, "VICE_PRINCIPAL")).keys()
+    );
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the real records
     const realRecords = records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec);
     const filledRecords = fillMissingDays(realRecords, monthStart, monthEnd, registeredAt, {
       collegeId, facultyId: vpUid, facultyName: vicePrincipalName, department: vpData.department ?? "",
-    });
+    }, new Date(), workingDayDates);
 
     return NextResponse.json({
       vicePrincipalName,

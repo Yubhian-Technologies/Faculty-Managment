@@ -284,7 +284,20 @@ export function DepartmentScopeSelect({
         onChange={(e) => {
           const name = e.target.value;
           const match = options.find((d) => d.name === name);
-          onChange(name, match?.id ?? "", own.id);
+          // A managed/grouped branch (reached via this department's own
+          // managedDepartments, e.g. Basic Science -> CIVIL) is routed
+          // THROUGH `own` - own is a container feeding it, so the caller adds
+          // own's prefix to the section name (BS-CIVIL-A). A genuine child
+          // sub-department (parentDepartmentId === own.id, e.g. ECE ->
+          // ECE-VLSI) IS the target itself, not a container feeding one - it
+          // must route through itself (viaDepartmentId === its own id), same
+          // as `own` being picked directly, or the caller's "routed through
+          // itself, no prefix" check (viaDept.id === activeDept.id) never
+          // fires and a plain sub-department wrongly gets treated as a
+          // managed branch (double-prefixed section name, e.g.
+          // "ECE-ECEVLSI-A" instead of "ECEVLSI-A").
+          const viaId = managedNames.has(name) ? own.id : (match?.id ?? own.id);
+          onChange(name, match?.id ?? "", viaId);
         }}
       >
         {options.map((d) => (

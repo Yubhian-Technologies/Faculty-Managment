@@ -28,7 +28,7 @@ import type { DayOfWeek } from "./teaching";
 //              colleges/{id}/leaveBalances, colleges/{id}/leaveRequests
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LeaveTypeCode = "CL" | "SL" | "SCL" | "EL" | "OD";
+export type LeaveTypeCode = "CL" | "SL" | "SCL" | "EL" | "OD" | "SH";
 
 export const LEAVE_TYPE_LABELS: Record<LeaveTypeCode, string> = {
   CL: "Casual Leave",
@@ -36,6 +36,7 @@ export const LEAVE_TYPE_LABELS: Record<LeaveTypeCode, string> = {
   SCL: "Special Casual Leave",
   EL: "Earned Leave",
   OD: "On Duty",
+  SH: "Summer Holidays",
 };
 
 export type StaffCategory = "vacation" | "non-vacation";

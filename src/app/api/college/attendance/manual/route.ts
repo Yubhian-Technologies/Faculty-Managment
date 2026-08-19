@@ -9,7 +9,7 @@ import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_R
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
-import { nowInIndia } from "@/lib/leave/dayCounter";
+import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
 import { ROLE_DASHBOARD_PATHS } from "@/types/core";
 import { notify } from "@/lib/notify";
 import type { AttendanceRecord } from "@/types";
@@ -38,7 +38,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function parseDocDate(dateStr: string): { date: Date; docSuffix: string } {
   const [y, m, d] = dateStr.split("-").map(Number);
-  return { date: new Date(y, m - 1, d), docSuffix: dateStr };
+  return { date: istDateFromParts(y, m, d), docSuffix: dateStr };
 }
 
 // Lets someone mark or correct check-in/check-out for a person one tier
@@ -85,9 +85,9 @@ export async function POST(request: Request) {
     }
 
     const { date: docDate, docSuffix } = parseDocDate(date);
-    // India's own calendar day, not the server host's ambient timezone - see
-    // nowInIndia's doc-comment.
-    const todayStart = nowInIndia().date;
+    // India's own calendar day - a fixed IST-midnight instant regardless of
+    // which host timezone runs this comparison.
+    const todayStart = istMidnightUTC(new Date());
     if (docDate > todayStart) {
       return NextResponse.json({ error: "Cannot mark attendance for a future date" }, { status: 400 });
     }

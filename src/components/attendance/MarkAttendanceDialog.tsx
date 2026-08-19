@@ -60,14 +60,28 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
   function stopCamera() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
   }
 
   function fail(message: string) {
+    // Every other failure point below (bad blink/tilt read, no face found,
+    // mismatch, still waiting on location...) happens well before the two
+    // success-path stopCamera() calls near the final submit - without this,
+    // the stream from startCamera() keeps running (and the OS/browser camera
+    // indicator stays lit) the whole time the dialog sits on the error
+    // screen, and "Try Again" would leak it entirely by requesting a second
+    // stream on top of it. The error screen never renders the <video>
+    // preview anyway, so there's nothing to keep the camera alive for here.
+    stopCamera();
     setErrorMsg(message);
     setStage("error");
   }
 
   async function startCamera() {
+    // Defensive: guards against ever running two live getUserMedia streams
+    // at once (e.g. a caller invoking this again before the previous one
+    // was released) - stopCamera() is a no-op if nothing's running.
+    stopCamera();
     setStage("init");
     setErrorMsg("");
     setUserCoords(null);

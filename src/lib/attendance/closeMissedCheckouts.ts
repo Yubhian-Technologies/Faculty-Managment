@@ -7,6 +7,8 @@
 // out gets corrected to Absent and persisted right there, so the fix sticks
 // in Firestore and every subsequent viewer sees it immediately without
 // redoing the check.
+import { istMidnightUTC } from "./istTime";
+
 export const MISSED_CHECKOUT_REMARK = "Attendance portal closed — checked in but not checked out, so marked absent";
 
 // Firestore Timestamp (has .toDate) or a plain ISO/date string, depending on
@@ -39,7 +41,7 @@ export async function closeMissedCheckouts<T extends Correctable>(
   records: T[]
 ): Promise<void> {
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = istMidnightUTC(now);
 
   const toFix = records.filter(
     (r) => r.status === "PRESENT" && !!r.checkIn && !r.checkOut && r.resolvedDate !== null && r.resolvedDate < todayStart

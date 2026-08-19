@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MapPin, Monitor, TrendingUp, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import type { VacancyRequest } from "@/types";
 
@@ -74,6 +75,19 @@ export default function ApproveVacancyPage() {
           <p className="text-sm text-muted-foreground">
             Approving <strong>{vacancy?.position}</strong> ({vacancy?.requiredCount} position{(vacancy?.requiredCount ?? 1) > 1 ? "s" : ""}) for <strong>{vacancy?.department}</strong>.
           </p>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Mode of Interview</Label>
+            <div className={`flex items-center gap-2 rounded-lg border-2 p-3 ${
+              vacancy?.hiringMode === "ONLINE" ? "border-primary bg-primary/5 text-primary" : "border-muted text-muted-foreground"
+            }`}>
+              {vacancy?.hiringMode === "ONLINE" ? <Monitor className="h-5 w-5 shrink-0" /> : <MapPin className="h-5 w-5 shrink-0" />}
+              <div>
+                <p className="text-sm font-medium">{vacancy?.hiringMode === "ONLINE" ? "Online" : "Offline"}</p>
+                <p className="text-xs opacity-70">Set by the HOD when this request was raised.</p>
+              </div>
+            </div>
+          </div>
 
           {vacancy?.justification && (
             <div className="rounded-lg border bg-muted/30 p-3 space-y-1">

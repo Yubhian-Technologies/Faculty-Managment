@@ -5,10 +5,12 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
 import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
+import { istMonthBounds, getISTParts } from "@/lib/attendance/istTime";
 import { resolveFaceRegisteredAt } from "@/lib/attendance/registration";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
-import type { AttendanceRecord, AttendanceSummary } from "@/types";
+import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
+import type { AttendanceRecord, AttendanceSummary, UserRole } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -23,9 +25,9 @@ export async function GET(request: Request) {
     );
 
     const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const year = parseInt(searchParams.get("year") ?? String(now.getFullYear()), 10);
-    const month = parseInt(searchParams.get("month") ?? String(now.getMonth() + 1), 10);
+    const nowIST = getISTParts();
+    const year = parseInt(searchParams.get("year") ?? String(nowIST.year), 10);
+    const month = parseInt(searchParams.get("month") ?? String(nowIST.month), 10);
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -104,8 +106,7 @@ export async function GET(request: Request) {
       .get();
 
     // Filter in-memory to the requested year + month
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month, 1); // exclusive
+    const { monthStart, monthEnd } = istMonthBounds(year, month);
 
     const records: (AttendanceRecord & { id: string; ref: FirebaseFirestore.DocumentReference; resolvedDate: Date | null })[] = recordsSnap.docs
       .map((d) => {
@@ -118,6 +119,13 @@ export async function GET(request: Request) {
     await closeMissedCheckouts(db, records);
 
     const registeredAt = await resolveFaceRegisteredAt(db, session.collegeId, facultyId, facultyRole);
+    // Working Day overrides (see college-office/holidays/page.tsx) naming
+    // this person's own role - a Sunday they were required to work on
+    // synthesizes as Absent (not an excused Holiday) if they never checked
+    // in, same per-role override live check-in already enforces.
+    const workingDayDates = new Set(
+      (await getWorkingDayWeightsForRole(db, session.collegeId, monthStart, monthEnd, facultyRole as UserRole)).keys()
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the real records
     const realRecords = records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec);
@@ -126,7 +134,7 @@ export async function GET(request: Request) {
       facultyId,
       facultyName,
       department,
-    });
+    }, new Date(), workingDayDates);
 
     return NextResponse.json({
       personName,

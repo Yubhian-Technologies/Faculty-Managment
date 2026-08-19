@@ -11,11 +11,13 @@ import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
 import { countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
+import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
 import type { LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
+import type { UserRole } from "@/types/core";
 
 // Sorts newest-first in memory instead of chaining .orderBy() onto a
 // .where() on a different field - that combination needs a Firestore
@@ -164,17 +166,22 @@ export async function POST(request: Request) {
     // and the requester's history shows the link. Only ever points at one of
     // their own APPROVED requests - never someone else's, and never a
     // still-pending or rejected one (nothing to "extend" there). Sick Leave
-    // only - every other type has a planned return date decided up front, so
-    // there's nothing to extend (the client already only offers the button
-    // for SL - see LeaveProfileView.tsx - this is the server-side guard).
+    // (no planned return date up front) and Summer Holidays (may only have
+    // taken part of the declared range) only - every other type has a
+    // planned return date decided up front, so there's nothing to extend
+    // (the client already only offers the button for these two - see
+    // LeaveProfileView.tsx - this is the server-side guard). A Summer
+    // Holidays extension is still bounded by the declared range - see the
+    // leaveTypeCode === "SH" check further below, which applies the same way
+    // whether this is a fresh request or an extension.
     if (body.extendsRequestId) {
       const source = existingSnap.docs.find((d) => d.id === body.extendsRequestId);
       const sourceData = source?.data() as LeaveRequest | undefined;
       if (!source || sourceData?.status !== "APPROVED") {
         return NextResponse.json({ error: "The leave request you're trying to extend was not found" }, { status: 400 });
       }
-      if (sourceData.leaveTypeCode !== "SL") {
-        return NextResponse.json({ error: "Only Sick Leave can be extended" }, { status: 400 });
+      if (sourceData.leaveTypeCode !== "SL" && sourceData.leaveTypeCode !== "SH") {
+        return NextResponse.json({ error: "Only Sick Leave and Summer Holidays can be extended" }, { status: 400 });
       }
     }
 
@@ -200,7 +207,29 @@ export async function POST(request: Request) {
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || toDate < fromDate) {
       return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
     }
-    if (body.fromDate < todayISODate() || body.toDate < todayISODate()) {
+    // Summer Holidays is bounded by whatever range(s) College Office has
+    // declared (see the Holidays page's "Summer Holidays" section) rather
+    // than the usual "not before today" rule - an already-started declared
+    // range is expected, not backdating, but the requester's chosen From/To
+    // must still fall entirely within a real declared range (the client
+    // clamps the date pickers to this too - see LeaveApplyForm.tsx - this is
+    // the actual guard against someone bypassing that and posting arbitrary
+    // dates under leaveTypeCode "SH").
+    if (body.leaveTypeCode === "SH") {
+      const summerSnap = await db.collection("colleges").doc(session.collegeId).collection("summerHolidays").get();
+      const withinDeclaredRange = summerSnap.docs.some((d) => {
+        const s = d.data() as { fromDate?: FirebaseFirestore.Timestamp; toDate?: FirebaseFirestore.Timestamp };
+        const rangeFrom = s.fromDate?.toDate();
+        const rangeTo = s.toDate?.toDate();
+        return !!rangeFrom && !!rangeTo && fromDate >= rangeFrom && toDate <= rangeTo;
+      });
+      if (!withinDeclaredRange) {
+        return NextResponse.json(
+          { error: "Summer Holidays dates must fall within a range declared by College Office" },
+          { status: 400 }
+        );
+      }
+    } else if (body.fromDate < todayISODate() || body.toDate < todayISODate()) {
       return NextResponse.json({ error: "Leave cannot be applied for a date before today" }, { status: 400 });
     }
     // hasPendingRequest above already blocks a second submission while one is
@@ -223,8 +252,16 @@ export async function POST(request: Request) {
     }
     // Sundays and declared holidays within the range were never working days
     // to begin with, so they don't draw down balance - see countWorkingDays.
-    const holidayDates = await getHolidayDateKeys(db, session.collegeId, fromDate, toDate);
-    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay);
+    // workingDayWeights is the inverse exception: a Sunday this requester's
+    // own role is specifically required to work on (see Working Days in
+    // college-office/holidays/page.tsx) still draws down balance like any
+    // other working day - at full weight, or half if that override is itself
+    // a half day.
+    const [holidayDates, workingDayWeights] = await Promise.all([
+      getHolidayDateKeys(db, session.collegeId, fromDate, toDate),
+      getWorkingDayWeightsForRole(db, session.collegeId, fromDate, toDate, session.role as UserRole),
+    ]);
+    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay, workingDayWeights);
 
     // Insufficient balance never blocks submission - days beyond what's
     // remaining are accepted and split into Loss of Pay at approval time
