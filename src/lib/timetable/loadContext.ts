@@ -33,6 +33,16 @@ export async function loadTimetableContext(
   db: Firestore,
   collegeId: string,
   sectionId: string,
+  // Overrides the date-resolved "current" semester for THIS section's own
+  // course-year - the Timetable editor's own semester picker, letting an HOD
+  // deliberately build/edit a semester other than whichever one today's date
+  // falls in (see draft/route.ts). Every OTHER course-year (another
+  // section's busyFaculty/pinnedSlots below) still resolves its own semester
+  // naturally from today's date regardless - only the section actually being
+  // edited is affected. `undefined` (the default) keeps the previous
+  // date-only resolution; pass `null` explicitly for "no override, but I
+  // considered it" call sites if that's ever needed.
+  requestedSemester?: number | null,
 ): Promise<TimetableContext | null> {
   const collegeRef = db.collection("colleges").doc(collegeId);
 
@@ -73,6 +83,14 @@ export async function loadTimetableContext(
   const currentSemesterByCourseYear = new Map<string, number | null>(
     allTimings.map((t) => [`${t.courseId}_${t.year}`, resolveCurrentSemester(t, now)])
   );
+  // The override, if given, replaces THIS section's own course-year entry in
+  // the map too - so pinnedSlots/busyFaculty below (which check every slot
+  // against its own course-year's entry) treat the section being edited as
+  // belonging to the requested semester, not today's, while every other
+  // section/course-year is unaffected.
+  if (requestedSemester !== undefined) {
+    currentSemesterByCourseYear.set(`${section.courseId}_${section.year}`, requestedSemester);
+  }
   const currentSemester = currentSemesterByCourseYear.get(`${section.courseId}_${section.year}`) ?? null;
 
   const rules: TimetableRules = rulesSnap.exists

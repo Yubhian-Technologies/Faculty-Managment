@@ -123,7 +123,21 @@ export default function DeanSubjectsPage() {
     try {
       const res = await fetch(`/api/college/courses?departmentId=${encodeURIComponent(departmentId)}`);
       const data = await res.json() as { courses: Course[] };
-      const list = (data.courses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name));
+      // The API also includes a feeder department's own course row when the
+      // selected department is fed by it (e.g. Basic Science's shared B.Tech
+      // row shows up under CSE too) - legitimate for the roles/pages that
+      // need to browse a fed department's shared-year courses inline, but
+      // here it just produces a same-named duplicate with no way to tell
+      // which is which, and picking it doesn't work anyway (Year options
+      // below are scoped to the DEPARTMENT picked above, not to whichever
+      // duplicate course row was picked, so the feeder's own reserved
+      // year(s) never become selectable). Drop anything not actually owned
+      // by the picked department - to add subjects for the feeder itself
+      // (e.g. Basic Science's 1st Year), pick it directly in the Department
+      // dropdown above instead, which already works correctly.
+      const list = (data.courses ?? [])
+        .filter((c) => c.isActive && c.departmentId === departmentId)
+        .sort((a, b) => a.name.localeCompare(b.name));
       setCourses(list);
       return list;
     } catch {

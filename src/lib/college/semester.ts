@@ -88,3 +88,40 @@ export async function resolveSectionCurrentSemester(
   if (!snap.exists) return null;
   return resolveCurrentSemester(snap.data() as CourseYearTiming, now);
 }
+
+// Shared resolution for any route that lets its caller deliberately pick a
+// semester instead of always acting on whatever's live today - Teaching
+// Assignments' semester picker (stamping a new assignment, filtering the
+// list), the Timetable editor's semester picker (which draft/published slots
+// to read or write), and Timetable History (browsing a semester other than
+// the current one). Every one of these agrees on the same validation here
+// rather than each re-deriving it slightly differently: a requested semester
+// must be one this course-year's CourseYearTiming.semesters actually lists -
+// never a client-supplied number silently accepted deep inside a write.
+// Omitting `requested` falls back to resolveCurrentSemester exactly as
+// before this override existed (today's date against the configured
+// ranges), so every caller that hasn't been updated to offer a picker keeps
+// working unchanged.
+export async function resolveRequestedSemester(
+  db: Firestore,
+  collegeId: string,
+  courseId: string,
+  year: number,
+  requested: number | null | undefined,
+  now: Date = new Date()
+): Promise<{ ok: true; semester: number | null } | { ok: false; error: string }> {
+  const snap = await db
+    .collection("colleges").doc(collegeId)
+    .collection("courseYearTimings").doc(`${courseId}_year${year}`)
+    .get();
+  const timing = snap.exists ? (snap.data() as CourseYearTiming) : null;
+
+  if (requested == null) {
+    return { ok: true, semester: resolveCurrentSemester(timing, now) };
+  }
+  const configured = (timing?.semesters ?? []).map((s) => s.semester);
+  if (!configured.includes(requested)) {
+    return { ok: false, error: "That semester isn't configured for this course-year" };
+  }
+  return { ok: true, semester: requested };
+}

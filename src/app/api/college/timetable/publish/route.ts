@@ -5,7 +5,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { draftDocId, matchesCurrentSemester, resolveCurrentSemester } from "@/lib/college/semester";
+import { draftDocId, matchesCurrentSemester, resolveCurrentSemester, resolveRequestedSemester } from "@/lib/college/semester";
+import { currentTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import type { CourseYearTiming, TimetableDraft, TimetableSlot } from "@/types";
 
 // Materialises a draft into `timetableSlots` - the moment it becomes visible to
@@ -18,7 +19,7 @@ import type { CourseYearTiming, TimetableDraft, TimetableSlot } from "@/types";
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { sectionId?: string };
+    const body = (await request.json()) as { sectionId?: string; semester?: number };
     const sectionId = body.sectionId;
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
 
@@ -39,7 +40,23 @@ export async function POST(request: Request) {
     const currentSemesterByCourseYear = new Map<string, number | null>(
       allTimings.map((t) => [`${t.courseId}_${t.year}`, resolveCurrentSemester(t)])
     );
-    const currentSemester = currentSemesterByCourseYear.get(`${section.courseId}_${section.year}`) ?? null;
+    // Which semester to publish - explicitly whichever one the Timetable
+    // editor was actually working in (see draft/route.ts's own override),
+    // not re-derived from today's date independently. Re-deriving here was a
+    // real bug risk: if the HOD had deliberately opened a semester other than
+    // whichever one today's date resolves to, publish would silently act on
+    // a DIFFERENT semester's draft (or find none at all) instead of the one
+    // just edited. Omitted body.semester falls back to today's date exactly
+    // as before this override existed.
+    let currentSemester = currentSemesterByCourseYear.get(`${section.courseId}_${section.year}`) ?? null;
+    if (body.semester != null) {
+      const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, body.semester);
+      if (!semesterResult.ok) {
+        return NextResponse.json({ error: semesterResult.error }, { status: 400 });
+      }
+      currentSemester = semesterResult.semester;
+      currentSemesterByCourseYear.set(`${section.courseId}_${section.year}`, currentSemester);
+    }
 
     const draftRef = collegeRef.collection("timetableDrafts").doc(draftDocId(sectionId, currentSemester));
     const draftSnap = await draftRef.get();
@@ -66,17 +83,28 @@ export async function POST(request: Request) {
       }
     }
 
+    // This session - the same Section doc is reused by a new cohort every
+    // academic year (see Section.batch's own doc-comment), so every read and
+    // write below has to agree on which session it's operating in, or a new
+    // cohort's publish would silently delete or conflict against the
+    // PREVIOUS cohort's own slots for the exact same sectionId/courseId/year.
+    const currentAcademicYear = currentTimetableAcademicYear();
+
     // Re-check faculty double-booking against live data: another section may have
     // published since this draft was generated, so the draft's view of who is
     // free can be stale. A slot from a DIFFERENT semester of its own
-    // course-year is history, not a live conflict - excluded up front the
-    // same way loadContext.ts scopes busyFaculty for the solver, so a
-    // faculty free again once their prior-semester class ended isn't
-    // wrongly blocked from a new placement at the same day/period.
+    // course-year, OR a DIFFERENT academic session entirely (a past cohort's
+    // now-finished class), is history, not a live conflict - excluded up
+    // front the same way loadContext.ts scopes busyFaculty for the solver, so
+    // a faculty free again once their prior-semester/prior-session class
+    // ended isn't wrongly blocked from a new placement at the same day/period.
     const allSlotsSnap = await collegeRef.collection("timetableSlots").get();
     const allSlots = allSlotsSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot)
-      .filter((s) => matchesCurrentSemester(s.semester, currentSemesterByCourseYear.get(`${s.courseId}_${s.year}`) ?? null));
+      .filter((s) =>
+        matchesCurrentSemester(s.semester, currentSemesterByCourseYear.get(`${s.courseId}_${s.year}`) ?? null) &&
+        matchesCurrentAcademicYear(s.academicYear, currentAcademicYear)
+      );
 
     const conflicts: string[] = [];
     for (const s of draft.slots) {
@@ -101,12 +129,16 @@ export async function POST(request: Request) {
     }
 
     // This section's own stale GENERATED slots - already narrowed to
-    // "current semester or untagged/legacy" by the allSlots filter above
-    // (this section's own course-year resolves to the same `currentSemester`
-    // in currentSemesterByCourseYear by construction), so this ALSO sweeps
-    // up any legacy/untagged slots the first time a section publishes under
-    // a newly-configured semester regime, while never touching a genuinely
-    // PRIOR semester's own tagged slots (those stay as history).
+    // "current semester and current session, or untagged/legacy" by the
+    // allSlots filter above (this section's own course-year resolves to the
+    // same `currentSemester`/`currentAcademicYear` by construction), so this
+    // ALSO sweeps up any legacy/untagged slots the first time a section
+    // publishes under a newly-configured semester regime or before this
+    // field existed, while never touching a genuinely PRIOR semester's or
+    // PRIOR session's own tagged slots (those stay as history - see
+    // Timetable History). This is what stops a new cohort's first publish
+    // from deleting the previous cohort's own timetable for this same
+    // section - it couldn't tell them apart before academicYear existed.
     const staleGenerated = allSlots.filter((s) => s.sectionId === sectionId && s.source === "GENERATED");
     const now = FieldValue.serverTimestamp();
 
@@ -144,6 +176,7 @@ export async function POST(request: Request) {
         source: "GENERATED",
         isPinned: false,
         semester: currentSemester,
+        academicYear: currentAcademicYear,
         createdAt: now,
         updatedAt: now,
       });
@@ -153,6 +186,7 @@ export async function POST(request: Request) {
     batch.update(draftRef, {
       status: "PUBLISHED",
       semester: currentSemester,
+      academicYear: currentAcademicYear,
       publishedAt: now,
       publishedByName: session.email,
     });

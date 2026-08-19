@@ -19,6 +19,7 @@ type TimingForm = {
   periodDurationMinutes: string;
   lunchBreak: BreakConfig;
   shortBreaks: BreakConfig[];
+  numberOfSemesters: string;
   semesters: SemesterRangeForm[];
 };
 
@@ -29,8 +30,24 @@ const EMPTY_TIMING_FORM: TimingForm = {
   periodDurationMinutes: "50",
   lunchBreak: { afterPeriod: 4, durationMinutes: 40 },
   shortBreaks: [],
+  numberOfSemesters: "0",
   semesters: [],
 };
+
+// Rebuilds the semesters array to exactly `count` rows, numbered 1..count in
+// order - the row count is now the single source of truth for how many
+// semesters this course-year has (Office picks the count first), so a
+// semester's own number is no longer freely typed and can't end up
+// duplicated or out of sequence. Existing rows keep whatever dates they
+// already had (by position); growing the count appends blank new rows,
+// shrinking it drops from the end.
+function resizeSemesters(current: SemesterRangeForm[], count: number): SemesterRangeForm[] {
+  const next = current.slice(0, count).map((s, i) => ({ ...s, semester: i + 1 }));
+  for (let i = next.length; i < count; i++) {
+    next.push({ semester: i + 1, startDate: "", endDate: "" });
+  }
+  return next;
+}
 
 interface CourseYearTimingFormProps {
   departmentId: string;
@@ -71,6 +88,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
                 periodDurationMinutes: String(existing.periodDurationMinutes),
                 lunchBreak: existing.lunchBreak,
                 shortBreaks: existing.shortBreaks ?? [],
+                numberOfSemesters: String((existing.semesters ?? []).length),
                 semesters: (existing.semesters ?? [])
                   .slice()
                   .sort((a, b) => a.semester - b.semester)
@@ -105,11 +123,9 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
     setTimingForm((f) => ({ ...f, shortBreaks: f.shortBreaks.filter((_, i) => i !== idx) }));
   }
 
-  function addSemester() {
-    setTimingForm((f) => ({
-      ...f,
-      semesters: [...f.semesters, { semester: f.semesters.length + 1, startDate: "", endDate: "" }],
-    }));
+  function setNumberOfSemesters(value: string) {
+    const count = Math.max(0, Number(value) || 0);
+    setTimingForm((f) => ({ ...f, numberOfSemesters: String(count), semesters: resizeSemesters(f.semesters, count) }));
   }
   function updateSemester(idx: number, patch: Partial<SemesterRangeForm>) {
     setTimingForm((f) => {
@@ -117,9 +133,6 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
       next[idx] = { ...next[idx], ...patch };
       return { ...f, semesters: next };
     });
-  }
-  function removeSemester(idx: number) {
-    setTimingForm((f) => ({ ...f, semesters: f.semesters.filter((_, i) => i !== idx) }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -130,6 +143,10 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
     }
     if (timingForm.semesters.some((s) => !s.startDate || !s.endDate)) {
       toast({ variant: "destructive", title: "Every semester needs both a start and end date" });
+      return;
+    }
+    if (timingForm.semesters.some((s) => s.startDate > s.endDate)) {
+      toast({ variant: "destructive", title: "A semester's end date can't be before its start date" });
       return;
     }
     setIsSaving(true);
@@ -278,40 +295,33 @@ export function CourseYearTimingForm({ departmentId, courseId, year, onSaved, on
           </div>
 
           <div className="space-y-3 border-t pt-4">
-            <div className="flex items-center justify-between">
-              <Label className="flex items-center gap-1.5">
-                <CalendarRange className="h-3.5 w-3.5" />
-                Semester Durations
-              </Label>
-              <Button type="button" variant="outline" size="sm" onClick={addSemester}>
-                <Plus className="h-3.5 w-3.5 mr-1" />Add Semester
-              </Button>
-            </div>
+            <Label className="flex items-center gap-1.5">
+              <CalendarRange className="h-3.5 w-3.5" />
+              Semester Durations
+            </Label>
             <p className="text-xs text-muted-foreground">
-              This year&rsquo;s semester date ranges - as many as this course actually runs. Which one is
-              &ldquo;current&rdquo; for the timetable follows whichever semester today&rsquo;s date falls within.
+              Distinct from the college-day timings above - this is the academic calendar: which months make up each
+              semester. Which one is &ldquo;current&rdquo; for the timetable follows whichever semester today&rsquo;s
+              date falls within.
             </p>
+            <div className="space-y-1 max-w-[10rem]">
+              <p className="text-xs text-muted-foreground">Number of Semesters</p>
+              <Input
+                type="number"
+                min={0}
+                value={timingForm.numberOfSemesters}
+                onChange={(e) => setNumberOfSemesters(stripLeadingZeros(e.target.value))}
+              />
+            </div>
             {timingForm.semesters.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                No semesters added yet - this year runs as one continuous timetable until at least one is added.
+                0 semesters - this year runs as one continuous timetable until a count is set above.
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {timingForm.semesters.map((s, idx) => (
                   <div key={idx} className="space-y-1.5 rounded-md border p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs">Semester #</Label>
-                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeSemester(idx)}>
-                        <X className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    </div>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={s.semester}
-                      onChange={(e) => updateSemester(idx, { semester: Number(e.target.value) })}
-                      className="w-20"
-                    />
+                    <Label className="text-xs">Semester {s.semester}</Label>
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <div className="space-y-1">
                         <p className="text-[11px] text-muted-foreground">Start</p>

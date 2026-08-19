@@ -7,7 +7,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTimetableContext, pinnedCells, type TimetableContext } from "@/lib/timetable/loadContext";
 import { isContiguousBlockAvailable } from "@/lib/timetable/buildGrid";
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames, type HodDepartmentScope } from "@/lib/departments/scope";
-import { resolveSectionCurrentSemester, matchesCurrentSemester, draftDocId } from "@/lib/college/semester";
+import { resolveRequestedSemester, matchesCurrentSemester, draftDocId } from "@/lib/college/semester";
 import type { DayOfWeek, DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
 
 // A lending HOD (see api/college/faculty-assignment-requests) doesn't own
@@ -168,6 +168,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    // Optional - the Timetable editor's own semester picker. Omitted keeps
+    // the previous "whatever today's date resolves to" default.
+    const semesterParam = searchParams.get("semester");
+    const requestedSemester = semesterParam != null ? Number(semesterParam) : null;
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -190,8 +194,11 @@ export async function GET(request: Request) {
       }
     }
 
-    const semester = await resolveSectionCurrentSemester(db, session.collegeId, section.courseId, section.year);
-    const draft = await loadDraft(db, session.collegeId, sectionId, semester);
+    const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, requestedSemester);
+    if (!semesterResult.ok) {
+      return NextResponse.json({ error: semesterResult.error }, { status: 400 });
+    }
+    const draft = await loadDraft(db, session.collegeId, sectionId, semesterResult.semester);
     return NextResponse.json({ draft });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -218,13 +225,29 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { sectionId?: string };
+    const body = (await request.json()) as { sectionId?: string; semester?: number };
     const sectionId = body.sectionId;
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const ctx = await loadTimetableContext(db, session.collegeId, sectionId);
+
+    // Validated up front (needs courseId/year, which a full loadTimetableContext
+    // call would also fetch, but only after doing the heavier college-wide
+    // reads below) - the Timetable editor's own semester picker letting the
+    // HOD deliberately start a specific semester's draft rather than always
+    // whichever one today's date resolves to.
+    let requestedSemester: number | null | undefined;
+    if (body.semester != null) {
+      const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
+      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      const section = sectionSnap.data() as { courseId: string; year: number };
+      const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, body.semester);
+      if (!semesterResult.ok) return NextResponse.json({ error: semesterResult.error }, { status: 400 });
+      requestedSemester = semesterResult.semester;
+    }
+
+    const ctx = await loadTimetableContext(db, session.collegeId, sectionId, requestedSemester);
     if (!ctx) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     if (!ctx.timing) {
       return NextResponse.json(
@@ -317,6 +340,7 @@ export async function PATCH(request: Request) {
       fromPeriod?: number;
       toDay?: string;
       toPeriod?: number;
+      semester?: number;
     };
 
     const { sectionId, assignmentId } = body;
@@ -326,7 +350,20 @@ export async function PATCH(request: Request) {
     }
 
     const db = getAdminDb();
-    const ctx = await loadTimetableContext(db, session.collegeId, sectionId);
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    // Same override as POST above - which semester's draft this edit applies to.
+    let requestedSemester: number | null | undefined;
+    if (body.semester != null) {
+      const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
+      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      const section = sectionSnap.data() as { courseId: string; year: number };
+      const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, body.semester);
+      if (!semesterResult.ok) return NextResponse.json({ error: semesterResult.error }, { status: 400 });
+      requestedSemester = semesterResult.semester;
+    }
+
+    const ctx = await loadTimetableContext(db, session.collegeId, sectionId, requestedSemester);
     if (!ctx || !ctx.timing) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     const draft = await loadDraft(db, session.collegeId, sectionId, ctx.currentSemester);
     if (!draft) return NextResponse.json({ error: "No draft to edit" }, { status: 404 });
@@ -446,14 +483,21 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    // Optional - the Timetable editor's own semester picker. Omitted keeps
+    // the previous "whatever today's date resolves to" default.
+    const semesterParam = searchParams.get("semester");
+    const requestedSemester = semesterParam != null ? Number(semesterParam) : null;
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
     if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
     const section = sectionSnap.data() as { courseId: string; year: number };
-    const semester = await resolveSectionCurrentSemester(db, session.collegeId, section.courseId, section.year);
-    const ref = draftRef(db, session.collegeId, sectionId, semester);
+    const semesterResult = await resolveRequestedSemester(db, session.collegeId, section.courseId, section.year, requestedSemester);
+    if (!semesterResult.ok) {
+      return NextResponse.json({ error: semesterResult.error }, { status: 400 });
+    }
+    const ref = draftRef(db, session.collegeId, sectionId, semesterResult.semester);
 
     // An HOD could otherwise wipe another department's in-progress,
     // unpublished timetable outright - checked against the draft's own
