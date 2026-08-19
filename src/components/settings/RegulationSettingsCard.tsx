@@ -10,6 +10,7 @@ import { Plus, X, Pencil, Info } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import type { AcademicRegulationSettings } from "@/types";
+import { currentAcademicStartYear } from "@/lib/college/academicSession";
 
 interface RegulationSettingsCardProps {
   // Dean's dashboard shows the same settings live off the Principal's own
@@ -23,6 +24,21 @@ interface RegulationSettingsCardProps {
   // regulationsRefreshKey prop), since that's a sibling card that fetched
   // them once on mount and has no other way to notice this save.
   onSaved?: () => void;
+}
+
+// Intake batches offered by the picker: next year's admissions back through
+// the five previous intakes, which covers every cohort that can still be on
+// campus. Labelled with a 4-year span because only the START year carries any
+// meaning (see parseBatchStartYear / regulationsForCourseYearByBatch) - the
+// end year is descriptive, matching the wording of the hint under this field.
+// Any value already saved is kept in the list even if it falls outside that
+// window, so opening Edit on an older regulation never silently drops it.
+function batchOptions(current: string | undefined): string[] {
+  const start = currentAcademicStartYear();
+  const years = [start + 1, start, start - 1, start - 2, start - 3, start - 4, start - 5];
+  const options = years.map((y) => `${y}-${y + 4}`);
+  const kept = (current ?? "").trim();
+  return kept && !options.includes(kept) ? [kept, ...options] : options;
 }
 
 export function RegulationSettingsCard({ readOnly = false, onSaved }: RegulationSettingsCardProps) {
@@ -141,12 +157,23 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
                   {regulations.map((r) => (
                     <div key={r} className="flex items-center gap-2">
                       <Badge variant="secondary" className="text-xs shrink-0 w-16 justify-center">{r}</Badge>
-                      <Input
+                      {/* A dropdown rather than free text: only the batch's
+                          START year is ever read (parseBatchStartYear matches
+                          /^(\d{4})/), so a typo, a different separator, or a
+                          second batch appended after a comma is either ignored
+                          or silently changes which year the regulation lands
+                          on. One well-formed batch per regulation is also what
+                          the model documents. */}
+                      <select
                         value={batches[r] ?? ""}
                         onChange={(e) => setBatches((b) => ({ ...b, [r]: e.target.value }))}
-                        placeholder="Batch, e.g. 2024-2028"
-                        className="text-sm max-w-xs"
-                      />
+                        className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none"
+                      >
+                        <option value="">Select batch…</option>
+                        {batchOptions(batches[r]).map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
                       <button
                         type="button"
                         onClick={() => removeRegulation(r)}
