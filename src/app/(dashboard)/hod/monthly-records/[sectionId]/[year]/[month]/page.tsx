@@ -76,7 +76,7 @@ export default function HodAttendanceReportPage() {
 
   // The calendar can be browsed to adjacent months independently of the
   // year/month chosen on the previous step - that step only seeds where it
-  // starts and which date is pre-selected.
+  // starts.
   const [displayYear, setDisplayYear] = useState(Number(year));
   const [displayMonth, setDisplayMonth] = useState(Number(month)); // 1-12
 
@@ -90,27 +90,6 @@ export default function HodAttendanceReportPage() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [classwork, setClasswork] = useState<ClassworkEntry[]>([]);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
-
-  // Same "land on the most recent date with a record" default this page
-  // always had - just no longer gates whether the calendar itself shows.
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/college/section-attendance-report?sectionId=${encodeURIComponent(sectionId)}&year=${year}&month=${month}`
-        );
-        if (!res.ok) return;
-        const json = (await res.json()) as { dates?: string[] };
-        if (json.dates?.[0]) {
-          setSelectedDate(json.dates[0]);
-          setIsCalendarOpen(false);
-        }
-      } catch {
-        // non-fatal - the calendar still works without a pre-selected date
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionId, year, month]);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -244,7 +223,7 @@ export default function HodAttendanceReportPage() {
       ) : !selectedDate ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            Pick a date on the calendar to view its attendance report.
+            Select a date to view attendance records.
           </CardContent>
         </Card>
       ) : subjects.length === 0 || students.length === 0 ? (

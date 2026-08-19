@@ -35,7 +35,14 @@ interface CurrentPeriodInfo {
 }
 
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)!.value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 /** "2026-08-18" -> "18-08-2026" - display only. */
