@@ -7,6 +7,7 @@ import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMi
 import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
 import { resolveFaceRegisteredAt } from "@/lib/attendance/registration";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
+import { istMonthBounds, getISTParts } from "@/lib/attendance/istTime";
 import type { AttendanceRecord, AttendanceSummary, UserRole } from "@/types";
 
 // MANAGEMENT is read-only - this route only implements GET.
