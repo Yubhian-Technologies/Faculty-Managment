@@ -33,12 +33,21 @@ interface RegulationSettingsCardProps {
 // end year is descriptive, matching the wording of the hint under this field.
 // Any value already saved is kept in the list even if it falls outside that
 // window, so opening Edit on an older regulation never silently drops it.
-function batchOptions(current: string | undefined): string[] {
+function batchOptions(): string[] {
   const start = currentAcademicStartYear();
   const years = [start + 1, start, start - 1, start - 2, start - 3, start - 4, start - 5];
-  const options = years.map((y) => `${y}-${y + 4}`);
-  const kept = (current ?? "").trim();
-  return kept && !options.includes(kept) ? [kept, ...options] : options;
+  return years.map((y) => `${y}-${y + 4}`);
+}
+
+// The field holds a comma-separated list - one regulation commonly runs for
+// several consecutive intakes (R23 governing both the 2024 and 2025
+// admissions). Stored as text rather than an array to stay compatible with
+// what's already saved; parseBatchStartYears reads it the same way.
+function splitBatches(value: string | undefined): string[] {
+  return (value ?? "").split(",").map((b) => b.trim()).filter(Boolean);
+}
+function joinBatches(list: string[]): string {
+  return list.join(",");
 }
 
 export function RegulationSettingsCard({ readOnly = false, onSaved }: RegulationSettingsCardProps) {
@@ -164,16 +173,39 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
                           or silently changes which year the regulation lands
                           on. One well-formed batch per regulation is also what
                           the model documents. */}
-                      <select
-                        value={batches[r] ?? ""}
-                        onChange={(e) => setBatches((b) => ({ ...b, [r]: e.target.value }))}
-                        className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                      >
-                        <option value="">Select batch…</option>
-                        {batchOptions(batches[r]).map((b) => (
-                          <option key={b} value={b}>{b}</option>
+                      <div className="flex flex-wrap items-center gap-1.5 max-w-md">
+                        {splitBatches(batches[r]).map((b) => (
+                          <span key={b} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
+                            {b}
+                            <button
+                              type="button"
+                              onClick={() => setBatches((prev) => ({ ...prev, [r]: joinBatches(splitBatches(prev[r]).filter((x) => x !== b)) }))}
+                              className="rounded-full hover:bg-muted-foreground/20"
+                              title={`Remove ${b}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
                         ))}
-                      </select>
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const picked = e.target.value;
+                            if (!picked) return;
+                            setBatches((prev) => {
+                              const existing = splitBatches(prev[r]);
+                              if (existing.includes(picked)) return prev;
+                              return { ...prev, [r]: joinBatches([...existing, picked]) };
+                            });
+                          }}
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs focus:border-primary focus:outline-none"
+                        >
+                          <option value="">+ Add batch…</option>
+                          {batchOptions().filter((b) => !splitBatches(batches[r]).includes(b)).map((b) => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                        </select>
+                      </div>
                       <button
                         type="button"
                         onClick={() => removeRegulation(r)}
