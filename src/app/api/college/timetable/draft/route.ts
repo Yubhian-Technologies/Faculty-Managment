@@ -7,6 +7,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTimetableContext, pinnedCells, type TimetableContext } from "@/lib/timetable/loadContext";
 import { isContiguousBlockAvailable } from "@/lib/timetable/buildGrid";
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames, type HodDepartmentScope } from "@/lib/departments/scope";
+import { resolveSectionCurrentSemester, matchesCurrentSemester, draftDocId } from "@/lib/college/semester";
 import type { DayOfWeek, DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
 
 // A lending HOD (see api/college/faculty-assignment-requests) doesn't own
@@ -55,17 +56,17 @@ async function isCrossDepartmentLender(
 // to produce. POST creates an empty draft, which is how a fully manual
 // timetable starts (no generation required).
 
-async function loadDraft(db: FirebaseFirestore.Firestore, collegeId: string, sectionId: string) {
+async function loadDraft(db: FirebaseFirestore.Firestore, collegeId: string, sectionId: string, semester: number | null) {
   const snap = await db
     .collection("colleges").doc(collegeId)
-    .collection("timetableDrafts").doc(sectionId)
+    .collection("timetableDrafts").doc(draftDocId(sectionId, semester))
     .get();
   return snap.exists ? ({ id: snap.id, ...snap.data() } as TimetableDraft) : null;
 }
 
-function draftRef(db: FirebaseFirestore.Firestore, collegeId: string, sectionId: string) {
+function draftRef(db: FirebaseFirestore.Firestore, collegeId: string, sectionId: string, semester: number | null) {
   return db.collection("colleges").doc(collegeId)
-    .collection("timetableDrafts").doc(sectionId);
+    .collection("timetableDrafts").doc(draftDocId(sectionId, semester));
 }
 
 const cellKey = (day: string, period: number) => `${day}:${period}`;
@@ -169,6 +170,13 @@ export async function GET(request: Request) {
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
 
     const db = getAdminDb();
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    // Needed regardless of role, to resolve which semester's draft this is
+    // (see draftDocId) - not just for the HOD scope check below.
+    const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    const section = sectionSnap.data() as { department: string; courseId: string; year: number };
 
     // A draft is an in-progress, unpublished timetable - unlike the published
     // slots (visible college-wide by design), only the section's own
@@ -176,16 +184,14 @@ export async function GET(request: Request) {
     // against the SECTION's department, not just an existing draft's, so this
     // also protects a section that has no draft yet.
     if (session.role === "HOD") {
-      const sectionSnap = await db.collection("colleges").doc(session.collegeId).collection("sections").doc(sectionId).get();
-      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
-      const section = sectionSnap.data() as { department: string };
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!canHodEditDepartment(scope, section.department) && !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId))) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
       }
     }
 
-    const draft = await loadDraft(db, session.collegeId, sectionId);
+    const semester = await resolveSectionCurrentSemester(db, session.collegeId, section.courseId, section.year);
+    const draft = await loadDraft(db, session.collegeId, sectionId, semester);
     return NextResponse.json({ draft });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -236,7 +242,13 @@ export async function POST(request: Request) {
 
     const publishedSnap = await collegeRef.collection("timetableSlots")
       .where("sectionId", "==", sectionId).where("source", "==", "GENERATED").get();
-    const published = publishedSnap.docs.map((d) => d.data() as TimetableSlot);
+    // Only this section's CURRENT semester's own published slots (plus any
+    // legacy ones with no semester tag at all) seed the new draft - a prior
+    // semester's published GENERATED slots stay as history, not something
+    // building "now" should silently resurrect.
+    const published = publishedSnap.docs
+      .map((d) => d.data() as TimetableSlot)
+      .filter((s) => matchesCurrentSemester(s.semester, ctx.currentSemester));
 
     // A block's 2nd..Nth period is the only thing that needs recomputing -
     // everything else on TimetableSlot maps straight onto DraftSlot.
@@ -272,6 +284,7 @@ export async function POST(request: Request) {
       year: Number(ctx.section.year),
       sectionId,
       sectionName: ctx.section.name,
+      semester: ctx.currentSemester,
       status: "DRAFT" as const,
       slots: seededSlots,
       diagnostics: seededSlots.length > 0
@@ -281,8 +294,9 @@ export async function POST(request: Request) {
       generatedByName: session.email,
     };
 
-    await draftRef(db, session.collegeId, sectionId).set(draft);
-    return NextResponse.json({ draft: { ...draft, id: sectionId, generatedAt: null } });
+    const id = draftDocId(sectionId, ctx.currentSemester);
+    await draftRef(db, session.collegeId, sectionId, ctx.currentSemester).set(draft);
+    return NextResponse.json({ draft: { ...draft, id, generatedAt: null } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -312,11 +326,9 @@ export async function PATCH(request: Request) {
     }
 
     const db = getAdminDb();
-    const [ctx, draft] = await Promise.all([
-      loadTimetableContext(db, session.collegeId, sectionId),
-      loadDraft(db, session.collegeId, sectionId),
-    ]);
+    const ctx = await loadTimetableContext(db, session.collegeId, sectionId);
     if (!ctx || !ctx.timing) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    const draft = await loadDraft(db, session.collegeId, sectionId, ctx.currentSemester);
     if (!draft) return NextResponse.json({ error: "No draft to edit" }, { status: 404 });
 
     if (session.role === "HOD") {
@@ -415,7 +427,7 @@ export async function PATCH(request: Request) {
     }
 
     // Any hand edit returns the timetable to draft state until republished.
-    await draftRef(db, session.collegeId, sectionId)
+    await draftRef(db, session.collegeId, sectionId, ctx.currentSemester)
       .set({ slots: sortSlots(slots), status: "DRAFT" }, { merge: true });
 
     return NextResponse.json({ slots: sortSlots(slots) });
@@ -436,7 +448,12 @@ export async function DELETE(request: Request) {
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
 
     const db = getAdminDb();
-    const ref = draftRef(db, session.collegeId, sectionId);
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    const section = sectionSnap.data() as { courseId: string; year: number };
+    const semester = await resolveSectionCurrentSemester(db, session.collegeId, section.courseId, section.year);
+    const ref = draftRef(db, session.collegeId, sectionId, semester);
 
     // An HOD could otherwise wipe another department's in-progress,
     // unpublished timetable outright - checked against the draft's own

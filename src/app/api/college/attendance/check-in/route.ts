@@ -6,13 +6,14 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { checkCampusGeofence } from "@/lib/attendance/geofence";
 import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { isWorkingDayForRole } from "@/lib/attendance/workingDays";
 import { getHolidayNameForDate } from "@/lib/leave/holidaysCount";
 import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
 import { nowInIndia } from "@/lib/leave/dayCounter";
-import type { College } from "@/types";
+import type { College, UserRole } from "@/types";
 
 // Self-attendance check-in — geolocation and face-match verification both
 // happen client-side (see src/lib/attendance/faceMatch.ts); this route only
@@ -27,12 +28,15 @@ export async function POST(request: Request) {
     // check-in actually happened, which permission doc to look up) has to
     // agree with what the person doing this literally just experienced.
     const { date, dateISO: docSuffix, timeHHMM: checkIn } = nowInIndia();
-    if (isSunday(date)) {
+    const db = getAdminDb();
+    const today = date;
+    // A Working Day override (see college-office/holidays/page.tsx) naming
+    // this caller's own role flips today from a Sunday off to a working day
+    // for them specifically - everyone else still gets the day off.
+    if (isSunday(date) && !(await isWorkingDayForRole(db, session.collegeId, today, session.role as UserRole))) {
       return NextResponse.json({ error: SUNDAY_HOLIDAY_MESSAGE }, { status: 403 });
     }
 
-    const db = getAdminDb();
-    const today = date;
     const holidayName = await getHolidayNameForDate(db, session.collegeId, today);
     if (holidayName) {
       return NextResponse.json({ error: `Today is a holiday — ${holidayName}. No attendance required.` }, { status: 403 });

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Users, UserCog } from "lucide-react";
+import { ArrowLeft, Users, UserCog, BookOpen } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
-import type { SectionListItem, StudentRecord, TeachingAssignment } from "@/types";
+import type { SectionListItem, StudentRecord, Subject, TeachingAssignment } from "@/types";
+import { SUBJECT_TYPE_LABELS } from "@/types";
 
 type SectionRow = SectionListItem;
 type AssignmentRow = TeachingAssignment & { id: string };
@@ -21,11 +22,23 @@ function ordinalYear(year: number) {
   return `${year}${suffix} Year`;
 }
 
+// Curriculum-table order: by S.No. when set, falling back to name for legacy
+// subjects that predate the field - same sort as dean/subjects/page.tsx.
+function sortSubjects(subjects: Subject[]) {
+  return [...subjects].sort((a, b) => {
+    if (a.serialNumber != null && b.serialNumber != null) return a.serialNumber - b.serialNumber;
+    if (a.serialNumber != null) return -1;
+    if (b.serialNumber != null) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export default function SectionRosterPage() {
   const { id } = useParams<{ id: string }>();
   const [section, setSection] = useState<SectionRow | null>(null);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -58,6 +71,18 @@ export default function SectionRosterPage() {
           fetch(`/api/college/teaching-assignments?sectionId=${id}`)
             .then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>)
             .then((ad) => setAssignments(ad.assignments ?? [])),
+          // Every subject on file for this section's course + year, regardless
+          // of whether anyone's been assigned to teach it yet - unlike the
+          // teaching-assignments fetch above, which only reports subjects that
+          // already have an assignment. Narrowed to this section's own
+          // regulation client-side below (lenient both ways, same as
+          // Teaching Assignments' own filter - see availableSubjectsForAssign
+          // in hod/teaching-assignments/page.tsx).
+          sec.courseId
+            ? fetch(`/api/college/subjects?department=${encodeURIComponent(sec.department)}&courseId=${encodeURIComponent(sec.courseId)}&year=${sec.year}`)
+                .then((r) => r.json() as Promise<{ subjects: Subject[] }>)
+                .then((sd) => setSubjects(sd.subjects ?? []))
+            : Promise.resolve(),
         ]);
       } catch {
         toast({ variant: "destructive", title: "Failed to load section" });
@@ -66,6 +91,21 @@ export default function SectionRosterPage() {
       }
     })();
   }, [id]);
+
+  // Narrowed to this section's own curriculum regulation, if it has one set -
+  // lenient both ways (a subject with no regulation still matches, and a
+  // section with no regulation shows every subject), same filter Teaching
+  // Assignments applies to its own subject picker.
+  const sectionSubjects = useMemo(
+    () => sortSubjects(
+      subjects.filter((s) => !section?.regulation || !s.regulation || s.regulation === section.regulation)
+    ),
+    [subjects, section]
+  );
+  const assignmentBySubjectId = useMemo(
+    () => new Map(assignments.map((a) => [a.subjectId, a])),
+    [assignments]
+  );
 
   if (isLoading) {
     return (
@@ -110,16 +150,55 @@ export default function SectionRosterPage() {
         )}
       </div>
 
-      {assignments.length > 0 && (
+      {section.courseId && (
         <div className="space-y-2">
-          <p className="text-sm font-medium flex items-center gap-1.5"><UserCog className="h-4 w-4" />Assigned Faculty</p>
-          <div className="flex flex-wrap gap-2">
-            {assignments.map((a) => (
-              <Badge key={a.id} variant="outline" className="text-xs font-normal">
-                {a.subjectName} - {a.facultyName || "Unassigned"}
-              </Badge>
-            ))}
-          </div>
+          <p className="text-sm font-medium flex items-center gap-1.5">
+            <BookOpen className="h-4 w-4" />Subjects
+            {section.regulation && <Badge variant="secondary" className="text-xs">{section.regulation}</Badge>}
+          </p>
+          {sectionSubjects.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No subjects added yet for {section.courseName ?? "this course"} · {ordinalYear(section.year)}
+              {section.regulation ? ` · ${section.regulation}` : ""}.
+            </p>
+          ) : (
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2.5">S.No.</th>
+                      <th className="px-4 py-2.5">Subject</th>
+                      <th className="px-4 py-2.5">Faculty</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {sectionSubjects.map((s) => {
+                      const assignment = assignmentBySubjectId.get(s.id);
+                      return (
+                        <tr key={s.id}>
+                          <td className="px-4 py-2.5">{s.serialNumber ?? "—"}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="font-medium text-foreground">{s.name}</div>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <Badge variant="secondary" className="text-xs font-mono">{s.code}</Badge>
+                              <Badge variant="outline" className="text-xs">{SUBJECT_TYPE_LABELS[s.type]}</Badge>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="flex items-center gap-1.5">
+                              <UserCog className="h-3.5 w-3.5 text-muted-foreground" />
+                              {assignment?.facultyName || <span className="text-muted-foreground">Unassigned</span>}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 

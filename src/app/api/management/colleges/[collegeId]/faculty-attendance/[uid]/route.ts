@@ -6,7 +6,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
 import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
 import { resolveFaceRegisteredAt } from "@/lib/attendance/registration";
-import type { AttendanceRecord, AttendanceSummary } from "@/types";
+import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
+import type { AttendanceRecord, AttendanceSummary, UserRole } from "@/types";
 
 // MANAGEMENT is read-only - this route only implements GET.
 // Same attendanceRecords/attendanceSummaries collections and month-window
@@ -61,11 +62,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
 
     await closeMissedCheckouts(db, records);
 
+    const workingDayDates = new Set(
+      (await getWorkingDayWeightsForRole(db, collegeId, monthStart, monthEnd, user.role as UserRole)).keys()
+    );
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the real records
     const realRecords = records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec);
     const filledRecords = fillMissingDays(realRecords, monthStart, monthEnd, registeredAt, {
       collegeId, facultyId: uid, facultyName: personName, department,
-    });
+    }, new Date(), workingDayDates);
 
     return NextResponse.json({
       personName,

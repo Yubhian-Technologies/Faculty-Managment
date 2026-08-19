@@ -44,7 +44,10 @@ export async function GET(request: Request) {
 // Upsert - one doc per (courseId, year)
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    // COLLEGE_OFFICE sets these day-shape bounds too (see college-office/
+    // timings/page.tsx) - the finer-grained HOD period-by-period breakdown
+    // below (PATCH) stays HOD/Principal-only, a separate privilege.
+    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
     const body = (await request.json()) as {
       departmentId: string;
       courseId: string;
@@ -55,6 +58,10 @@ export async function POST(request: Request) {
       periodDurationMinutes: number;
       lunchBreak: BreakConfig;
       shortBreaks: BreakConfig[];
+      // As many entries as this course-year actually runs (Office/Principal
+      // decides the count, not fixed at 2) - "YYYY-MM-DD" strings, converted
+      // to Dates below before storage.
+      semesters?: { semester?: number; startDate?: string; endDate?: string }[];
     };
 
     const {
@@ -64,6 +71,38 @@ export async function POST(request: Request) {
 
     if (!departmentId || !courseId || !year || !collegeStartTime || !collegeEndTime || !numberOfPeriods || !periodDurationMinutes) {
       return NextResponse.json({ error: "Missing required timing fields" }, { status: 400 });
+    }
+
+    let semesters: { semester: number; startDate: Date; endDate: Date }[] = [];
+    try {
+      semesters = (body.semesters ?? []).map((s) => {
+        if (!s.semester || s.semester < 1) throw new Error("Each semester needs a valid number (1, 2, 3, …)");
+        if (!s.startDate || !s.endDate) throw new Error(`Semester ${s.semester}: both a start and end date are required`);
+        const start = new Date(s.startDate);
+        const end = new Date(s.endDate);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) throw new Error(`Semester ${s.semester}: invalid date`);
+        if (end < start) throw new Error(`Semester ${s.semester}: end date must be after the start date`);
+        return { semester: s.semester, startDate: start, endDate: end };
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid semester dates" }, { status: 400 });
+    }
+    semesters.sort((a, b) => a.semester - b.semester);
+    const semesterNumbers = semesters.map((s) => s.semester);
+    if (new Set(semesterNumbers).size !== semesterNumbers.length) {
+      return NextResponse.json({ error: "Each semester number must be unique" }, { status: 400 });
+    }
+    // Ranges must not overlap, in semester-number order - resolveCurrentSemester
+    // (lib/college/semester.ts) walks them assuming non-overlapping ranges, and
+    // an overlap would make "which semester is it" genuinely ambiguous for the
+    // timetable to key off of.
+    for (let i = 1; i < semesters.length; i++) {
+      if (semesters[i].startDate < semesters[i - 1].endDate) {
+        return NextResponse.json(
+          { error: `Semester ${semesters[i].semester} must start on or after Semester ${semesters[i - 1].semester} ends` },
+          { status: 400 },
+        );
+      }
     }
 
     const db = getAdminDb();
@@ -109,6 +148,10 @@ export async function POST(request: Request) {
       periodDurationMinutes: nextPeriodDurationMinutes,
       lunchBreak: nextLunchBreak,
       shortBreaks: nextShortBreaks,
+      // Always overwritten with the full submitted list (never merged
+      // per-entry) so removing a semester in the form actually removes it
+      // here too, instead of surviving because only the others were sent.
+      semesters,
       updatedAt: now,
       ...(existing.exists ? {} : { createdAt: now }),
       ...(shapeChanged && hadPeriods

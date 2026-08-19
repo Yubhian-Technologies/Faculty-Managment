@@ -11,11 +11,13 @@ import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
 import { countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
+import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
 import type { LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
+import type { UserRole } from "@/types/core";
 
 // Sorts newest-first in memory instead of chaining .orderBy() onto a
 // .where() on a different field - that combination needs a Firestore
@@ -250,8 +252,16 @@ export async function POST(request: Request) {
     }
     // Sundays and declared holidays within the range were never working days
     // to begin with, so they don't draw down balance - see countWorkingDays.
-    const holidayDates = await getHolidayDateKeys(db, session.collegeId, fromDate, toDate);
-    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay);
+    // workingDayWeights is the inverse exception: a Sunday this requester's
+    // own role is specifically required to work on (see Working Days in
+    // college-office/holidays/page.tsx) still draws down balance like any
+    // other working day - at full weight, or half if that override is itself
+    // a half day.
+    const [holidayDates, workingDayWeights] = await Promise.all([
+      getHolidayDateKeys(db, session.collegeId, fromDate, toDate),
+      getWorkingDayWeightsForRole(db, session.collegeId, fromDate, toDate, session.role as UserRole),
+    ]);
+    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay, workingDayWeights);
 
     // Insufficient balance never blocks submission - days beyond what's
     // remaining are accepted and split into Loss of Pay at approval time

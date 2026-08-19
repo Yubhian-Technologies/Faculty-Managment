@@ -15,9 +15,10 @@ import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
 import { countWorkingDays, dateKey, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { toDate as toJsDate, formatDate } from "@/lib/utils";
+import { useAuthStore } from "@/store/authStore";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
-import type { Holiday, SummerHoliday } from "@/types";
+import type { Holiday, SummerHoliday, WorkingDayOverride } from "@/types";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -60,6 +61,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
+  const [workingDayWeights, setWorkingDayWeights] = useState<Map<string, number>>(new Map());
+  const ownRole = useAuthStore((s) => s.user?.role);
   const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
   const [substituteByPeriod, setSubstituteByPeriod] = useState<Record<string, string>>({});
@@ -178,6 +181,30 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     })();
   }, [extendId, leaveTypeCode, summerHoliday, toDate]);
 
+  // Working Day overrides (see college-office/holidays/page.tsx) that name
+  // this requester's own role - the inverse of holidayDates above: a Sunday
+  // they're specifically required to work on still counts toward the
+  // preview, same as the server (applications/route.ts) does via
+  // getWorkingDayWeightsForRole - at full weight, or half if that override
+  // is itself a half day.
+  useEffect(() => {
+    if (!ownRole) return;
+    fetch("/api/college/working-days")
+      .then((r) => r.json() as Promise<{ workingDays: WorkingDayOverride[] }>)
+      .then((d) => {
+        const weights = new Map<string, number>();
+        for (const w of d.workingDays ?? []) {
+          if (!w.roles.includes(ownRole)) continue;
+          const date = toJsDate(w.date);
+          if (date) weights.set(dateKey(date), w.isHalfDay ? 0.5 : 1);
+        }
+        setWorkingDayWeights(weights);
+      })
+      .catch(() => {
+        // Non-fatal - same fallback as holidayDates above.
+      });
+  }, [ownRole]);
+
   // Live preview only - the server never blocks on this (see applications/route.ts),
   // it just warns the requester before they submit that some days will exceed
   // their balance and be treated as Loss of Pay (final split happens at approval).
@@ -185,7 +212,9 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // holidays within the range don't count, same rule the server enforces.
   const selectedType = types.find((t) => t.code === leaveTypeCode);
   const previewTotalDays =
-    fromDate && toDate && toDate >= fromDate ? countWorkingDays(new Date(fromDate), new Date(toDate), holidayDates, isHalfDay) : 0;
+    fromDate && toDate && toDate >= fromDate
+      ? countWorkingDays(new Date(fromDate), new Date(toDate), holidayDates, isHalfDay, workingDayWeights)
+      : 0;
   const lopPreviewDays =
     selectedType && !selectedType.unlimited && selectedType.remaining !== undefined && previewTotalDays > selectedType.remaining
       ? previewTotalDays - selectedType.remaining
