@@ -7,6 +7,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { isConfiguredSecondaryDepartment } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, resolveCatalogId } from "@/lib/college/academicStructure";
 import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
@@ -73,26 +74,31 @@ export async function GET(request: Request) {
       // single `where("section", "in", names)` would silently pull in every other
       // year's/department's same-named section too. Match each in-charge section
       // by its exact (department, name, year) triple instead, one query per
-      // section, then merge. This is also what implicitly pins the student to the
-      // right *course*: StudentRecord has no courseId of its own, so a student's
-      // course is only ever determined by which Section (department+courseId+
-      // name+year) they're enrolled in - matching that exact triple is matching
-      // the exact section, and therefore the exact course.
+      // section, then merge. A department can also run the exact same
+      // (department, name, year) triple under two different courses (e.g. a
+      // B.Tech "PHYSICS-IT-A" and an independent M.Tech "PHYSICS-IT-A" -
+      // StudentRecord.courseId's doc-comment), so the section's own courseId
+      // is included too whenever it has one - otherwise a panel member in
+      // charge of one would see the other course's students mixed into their
+      // roster.
       const sectionSnaps = await Promise.all(
-        sections.slice(0, 30).flatMap((s) => [
-          withCommonFilters(
-            studentsColl.where("department", "==", s.department).where("section", "==", s.name).where("year", "==", s.year)
-          ).get(),
-          // A shared-first-year student in this section stays filed under
-          // their common department (preserved until promotion - see
-          // students/[id] PATCH) with secondaryDepartment naming this
-          // section's real branch instead - catch them too, or a faculty
-          // member in charge of a shared-year section would see an empty
-          // roster.
-          withCommonFilters(
-            studentsColl.where("secondaryDepartment", "==", s.department).where("section", "==", s.name).where("year", "==", s.year)
-          ).get(),
-        ])
+        sections.slice(0, 30).flatMap((s) => {
+          const withCourseId = (q: FirebaseFirestore.Query) => (s.courseId ? q.where("courseId", "==", s.courseId) : q);
+          return [
+            withCommonFilters(
+              withCourseId(studentsColl.where("department", "==", s.department).where("section", "==", s.name).where("year", "==", s.year))
+            ).get(),
+            // A shared-first-year student in this section stays filed under
+            // their common department (preserved until promotion - see
+            // students/[id] PATCH) with secondaryDepartment naming this
+            // section's real branch instead - catch them too, or a faculty
+            // member in charge of a shared-year section would see an empty
+            // roster.
+            withCommonFilters(
+              withCourseId(studentsColl.where("secondaryDepartment", "==", s.department).where("section", "==", s.name).where("year", "==", s.year))
+            ).get(),
+          ];
+        })
       );
       const seen = new Set<string>();
       const students: (Omit<StudentRecord, "id"> & { id: string; accessLevel: "primary" | "secondary" })[] = [];
@@ -245,9 +251,14 @@ export async function POST(request: Request) {
     const now = new Date();
 
     // Resolve the target department + section. `dept` is always the student's
-    // owning department; `sectionName` is "" for an unassigned add.
+    // owning department; `sectionName` is "" for an unassigned add. `courseId`
+    // is the real reference StudentRecord.courseId needs (see its own
+    // doc-comment) - a section name is only unique within one department's
+    // one course, so a placed add always takes it from the section actually
+    // resolved, never re-derived from the free-text `course` field.
     let dept = "";
     let sectionName = "";
+    let courseId: string | undefined;
 
     if (body.section?.trim()) {
       const sectionsSnap = await collegeRef
@@ -262,6 +273,7 @@ export async function POST(request: Request) {
       const sectionDoc = sectionsSnap.docs[0].data() as Section;
       dept = sectionDoc.department;
       sectionName = sectionDoc.name;
+      courseId = sectionDoc.courseId;
     } else {
       // Unassigned add - resolve the department by id or name.
       if (body.departmentId) {
@@ -310,6 +322,12 @@ export async function POST(request: Request) {
           const coursesSnap = await collegeRef.collection("courses").where("name", "==", courseName).get();
           const sameCourseNameDocs = coursesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Course[];
           catalogId = resolveCatalogId(sameCourseNameDocs, deptDoc.id, courseName);
+          // The department's OWN Course doc for this name (not just any
+          // department's, which resolveCatalogId above is happy to fall back
+          // to) - StudentRecord.courseId must always point at a course this
+          // exact department offers, or a later same-named section under a
+          // different course could still be picked up ambiguously.
+          courseId = sameCourseNameDocs.find((c) => c.departmentId === deptDoc.id)?.id;
         }
         let assignedYears = resolveDepartmentCourseScope(deptScopeDoc, catalogId).assignedYears;
         // A sub-department an HOD created carries no assignedYears/courseScopes
@@ -329,6 +347,24 @@ export async function POST(request: Request) {
         if (assignedYears.length > 0 && !assignedYears.includes(Number(body.year))) {
           return NextResponse.json({ error: `"${dept}" is not assigned to teach Year ${body.year}` }, { status: 400 });
         }
+
+        // Secondary Department, when given, must actually be one this
+        // department cross-lists to - not just any real, differently-named
+        // department. Same rule the bulk importer's unassigned rows enforce
+        // (college/students/import-excel) and for the same reason: without
+        // it, a student can be saved cross-listed to a branch the department
+        // never configured, which then surfaces as a bogus option wherever
+        // Secondary Department values get read back (e.g. the Distribute
+        // Unassigned dialog's branch picker).
+        const secondaryDept = typeof body.secondaryDepartment === "string" ? body.secondaryDepartment.trim() : "";
+        if (secondaryDept) {
+          if (secondaryDept === dept) {
+            return NextResponse.json({ error: "Secondary Department must differ from Department" }, { status: 400 });
+          }
+          if (!isConfiguredSecondaryDepartment(deptScopeDoc, secondaryDept)) {
+            return NextResponse.json({ error: `"${dept}" does not cross-list to "${secondaryDept}"` }, { status: 400 });
+          }
+        }
       }
     }
 
@@ -342,6 +378,7 @@ export async function POST(request: Request) {
       collegeId: session.collegeId,
       department: dept,
       section: sectionName,
+      ...(courseId ? { courseId } : {}),
       year: Number(body.year),
       name: body.name.trim(),
       status: (body.status as StudentStatus | undefined) ?? "REGULAR",

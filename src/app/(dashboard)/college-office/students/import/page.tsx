@@ -1,16 +1,22 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 import { toCSV, parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { ROSTER_FIELDS } from "@/lib/students/rosterFields";
+import { ROSTER_FIELDS, EDITABLE_ROSTER_FIELDS, rosterFormToPayload } from "@/lib/students/rosterFields";
+import { RosterFormFields } from "@/components/students/RosterFieldInputs";
+import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode } from "@/lib/departments/codeOrNameResolver";
+import type { Department, Course, AcademicYear } from "@/types";
 
 // When arriving from a section card's "Add Students" button, the section is
 // already known - those 3 columns are fixed for the whole file instead of
@@ -34,11 +40,12 @@ const LOCKED_KEYS = ["department", "section", "year"];
 // "Branch" is still accepted as an alternate header for Department. "Course"
 // is NOT: the admission sheet carries both columns (programme in one, branch
 // in the other), so treating them as the same field would map a row's B.Tech
-// onto its department and make the file unimportable. It is recorded verbatim
-// on the student instead - free text, not resolved against the college's
-// `courses` collection, and nothing keys off it. A sheet that only has a
-// Course column and no Department will now fail the required-column check
-// rather than quietly reading its programme as a branch.
+// onto its department and make the file unimportable. When given, Course is
+// resolved (full name or short Code, same as Department) against the courses
+// the row's own Department actually offers, and the row is rejected if it
+// doesn't match one - never stored as unvalidated free text. A sheet that
+// only has a Course column and no Department will now fail the
+// required-column check rather than quietly reading its programme as a branch.
 //
 // Photo is not collected via this import at all - there is no bulk-upload path
 // for an image asset; it would need its own per-student feature.
@@ -57,7 +64,7 @@ const HINTS = [
   "Only the basic details you know at admission are needed - Name, Department (branch) and Academic Year are required; everything else is optional.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then. Roll No, if you already have a provisional one, is accepted but not checked for uniqueness until the department assigns the real one.",
   "Department accepts either the full name (e.g. \"Information Technology\") or the short Code (e.g. \"IT\") - a \"Branch\" column in your sheet is read the same way.",
-  "Course is the programme (e.g. B.Tech) and is optional - it's stored on the student as written. It is separate from Department: put the branch in Department, not here.",
+  "Course is the programme (e.g. \"Bachelor of Technology\" or its short Code \"BTECH\") and is optional - but if given, it must be a course the row's Department actually offers, or the row is skipped. It is separate from Department: put the branch in Department, not here.",
   "A single file may mix multiple departments and years",
   "Gender: Male, Female, Other. Scholarship / Hosteller / Physically Handicapped: Yes or No.",
   "If Yes (Handicapped) accepts H (Hearing), V (Visual) or O (Other).",
@@ -66,6 +73,12 @@ const HINTS = [
 
 type ParsedRow = Record<string, string>;
 type ImportResult = { created: number; failed: { row: number; rollNumber: string; error: string }[] };
+// A skipped row plus its own original field values (snapshotted from `rows`
+// before it's cleared on partial success - see handleImport) and the row's
+// live status: "failed" until fixed and retried, then "fixed" (kept in the
+// list, struck through, rather than vanishing) so the office can see what was
+// recovered without losing count of the original failure list.
+type FailedRow = { row: number; rollNumber: string; error: string; data: ParsedRow; status: "failed" | "fixed" };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -85,6 +98,86 @@ export default function OfficeStudentImportPage() {
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
+
+  // Loaded once for the "fix this row" dialog below: pre-resolving a failed
+  // row's raw Department/Course/Secondary Department text (which may be a
+  // short code, or simply wrong) into real values before seeding the form,
+  // and supplying RosterFormFields the same option lists the main Students
+  // page's Add/Edit dialog already uses.
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [courseNames, setCourseNames] = useState<string[]>([]);
+  const [years, setYears] = useState<number[]>([1, 2, 3, 4]);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>).catch(() => ({ departments: [] })),
+      fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
+      fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears?: AcademicYear[] }>).catch(() => ({ academicYears: [] })),
+    ]).then(([deptsRes, coursesRes, yearsRes]) => {
+      setDepartments(deptsRes.departments ?? []);
+      const loadedCourses = coursesRes.courses ?? [];
+      setCourses(loadedCourses);
+      setCourseNames(
+        Array.from(new Set(loadedCourses.map((c) => c.name?.trim()).filter(Boolean) as string[]))
+          .sort((a, b) => a.localeCompare(b))
+      );
+      const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean).sort((a, b) => a - b);
+      if (configured.length > 0) setYears(configured);
+    }).catch(() => { /* non-critical - the fix dialog just falls back to fewer/no options */ });
+  }, []);
+
+  // The failed-row "fix and retry" dialog - null when closed. Reuses the same
+  // form body (RosterFormFields) and create endpoint the main Students page's
+  // Add dialog uses, so a corrected row is created identically to a manual add.
+  const [fixTarget, setFixTarget] = useState<{ row: number; form: ParsedRow } | null>(null);
+  const [fixSaving, setFixSaving] = useState(false);
+  const [fixError, setFixError] = useState("");
+
+  function openFix(f: FailedRow) {
+    const form: ParsedRow = Object.fromEntries(EDITABLE_ROSTER_FIELDS.map((field) => [field.key, f.data[field.key] ?? ""]));
+    // Best-effort pre-resolve: a short code (or a genuinely wrong value)
+    // won't match any real name, in which case the Select is simply left
+    // blank for the office to pick correctly - same as a fresh Add.
+    if (form.department) form.department = resolveDepartmentByNameOrCode(departments, form.department) ?? "";
+    const departmentId = departments.find((d) => d.name === form.department)?.id ?? "";
+    if (form.course) form.course = (departmentId && resolveCourseByNameOrCode(courses, departmentId, form.course)) || "";
+    if (form.secondaryDepartment) form.secondaryDepartment = resolveDepartmentByNameOrCode(departments, form.secondaryDepartment) ?? "";
+    setFixError("");
+    setFixTarget({ row: f.row, form });
+  }
+
+  function setFixField(key: string, value: string) {
+    setFixTarget((prev) => (prev ? { ...prev, form: { ...prev.form, [key]: value } } : prev));
+  }
+
+  async function handleFixSave() {
+    if (!fixTarget) return;
+    const form = fixTarget.form;
+    if (!form.name?.trim()) { setFixError("Name is required"); return; }
+    if (!form.department) { setFixError("Department is required"); return; }
+    if (!form.year) { setFixError("Academic Year is required"); return; }
+    setFixSaving(true);
+    setFixError("");
+    try {
+      const payload = rosterFormToPayload(form);
+      const res = await fetch("/api/college/students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json() as { id?: string; error?: string };
+      if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
+      toast({ variant: "success", title: `${form.name.trim()} imported` });
+      setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
+      setFixTarget(null);
+    } catch {
+      setFixError("Network error - please try again");
+    } finally {
+      setFixSaving(false);
+    }
+  }
 
   function downloadTemplate() {
     const headers = columns.map((c) => c.label);
@@ -105,6 +198,7 @@ export default function OfficeStudentImportPage() {
     setParseError("");
     setRows([]);
     setResult(null);
+    setFailedRows([]);
 
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
@@ -160,6 +254,7 @@ export default function OfficeStudentImportPage() {
     if (rows.length === 0) return;
     setIsImporting(true);
     setResult(null);
+    setFailedRows([]);
     try {
       const records = rows.map((r) => ({
         ...r,
@@ -174,6 +269,10 @@ export default function OfficeStudentImportPage() {
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
       setResult(json);
+      // Snapshot each failed row's own original values before `rows` is
+      // cleared below (on any partial success) - the "fix and retry" dialog
+      // needs them, and this is the only place they still exist.
+      setFailedRows(json.failed.map((f) => ({ ...f, data: rows[f.row - 2] ?? {}, status: "failed" as const })));
       if (json.created > 0) {
         toast({ variant: "success", title: `${json.created} students imported successfully` });
         setRows([]);
@@ -327,42 +426,101 @@ export default function OfficeStudentImportPage() {
         </Card>
       )}
 
-      {result && (
-        <Card className={result.created > 0 ? "border-green-200" : "border-red-200"}>
-          <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              {result.created > 0
-                ? <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
-                : <XCircle className="h-6 w-6 text-red-600 shrink-0" />
-              }
-              <div>
-                <p className="font-semibold">{result.created} record{result.created !== 1 ? "s" : ""} imported successfully</p>
-                {result.failed.length > 0 && (
-                  <p className="text-sm text-muted-foreground">{result.failed.length} row{result.failed.length !== 1 ? "s" : ""} skipped</p>
-                )}
-              </div>
-            </div>
-            {result.failed.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Skipped rows</p>
-                <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
-                  {result.failed.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span className="text-muted-foreground">Row {f.row} · {f.rollNumber}</span>
-                      <span className="text-red-600 text-xs">{f.error}</span>
-                    </div>
-                  ))}
+      {result && (() => {
+        const stillFailed = failedRows.filter((f) => f.status === "failed");
+        const fixed = failedRows.filter((f) => f.status === "fixed");
+        return (
+          <Card className={result.created > 0 || fixed.length > 0 ? "border-green-200" : "border-red-200"}>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                {result.created > 0
+                  ? <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
+                  : <XCircle className="h-6 w-6 text-red-600 shrink-0" />
+                }
+                <div>
+                  <p className="font-semibold">{result.created} record{result.created !== 1 ? "s" : ""} imported successfully</p>
+                  {failedRows.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {stillFailed.length} row{stillFailed.length !== 1 ? "s" : ""} skipped
+                      {fixed.length > 0 ? ` · ${fixed.length} fixed just now` : ""}
+                    </p>
+                  )}
                 </div>
               </div>
-            )}
-            {result.created > 0 && (
-              <Button asChild variant="outline" size="sm">
-                <Link href={backHref}>Back to Dashboard</Link>
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
+              {failedRows.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Skipped rows</p>
+                  <p className="text-xs text-muted-foreground">
+                    Click <Pencil className="h-3 w-3 inline" /> on a row to correct it and import it on its own, without re-uploading the file.
+                  </p>
+                  <div className="rounded-lg border divide-y max-h-64 overflow-y-auto">
+                    {failedRows.map((f) => (
+                      <div key={f.row} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm ${f.status === "fixed" ? "opacity-50" : ""}`}>
+                        <div className="min-w-0">
+                          <span className="text-muted-foreground">Row {f.row} · {f.data.name || f.rollNumber}</span>
+                          {f.status === "fixed" ? (
+                            <span className="ml-2 text-green-600 text-xs">Fixed and imported</span>
+                          ) : (
+                            <span className="block text-red-600 text-xs">{f.error}</span>
+                          )}
+                        </div>
+                        {f.status === "failed" && (
+                          <button
+                            onClick={() => openFix(f)}
+                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                            title="Edit and retry this row"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(result.created > 0 || fixed.length > 0) && (
+                <Button asChild variant="outline" size="sm">
+                  <Link href={backHref}>Back to Dashboard</Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      <Dialog open={!!fixTarget} onOpenChange={(o) => !o && setFixTarget(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fix Row {fixTarget?.row}</DialogTitle>
+            <DialogDescription>
+              Correct the field(s) that failed and save - this imports just this one student, the same as adding one manually.
+            </DialogDescription>
+          </DialogHeader>
+
+          {fixTarget && (
+            <RosterFormFields
+              values={fixTarget.form}
+              onChange={setFixField}
+              departments={departments.filter((d) => d.isActive)}
+              courseNames={courseNames}
+              courses={courses}
+              years={years}
+            />
+          )}
+
+          {fixError && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              {fixError}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFixTarget(null)}>Cancel</Button>
+            <Button onClick={() => void handleFixSave()} loading={fixSaving}>Save &amp; Import</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

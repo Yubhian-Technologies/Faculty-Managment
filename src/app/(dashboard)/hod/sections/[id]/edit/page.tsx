@@ -498,9 +498,9 @@ export default function EditSectionPage() {
 
             {isBranchMode && (
               <div className="space-y-2">
-                <Label>Branch (feeds into) *</Label>
+                <Label>Secondary Department *</Label>
                 <Select value={branch} onValueChange={setBranch}>
-                  <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select secondary department" /></SelectTrigger>
                   <SelectContent>
                     {branchOptions.map((b) => (
                       <SelectItem key={b} value={b}>{b}</SelectItem>
@@ -508,7 +508,7 @@ export default function EditSectionPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Students in this section are promoted into this branch next year.
+                  Students in this section are promoted into this secondary department next year.
                 </p>
               </div>
             )}

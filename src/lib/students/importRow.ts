@@ -22,7 +22,11 @@ export interface StudentImportRow {
   // All optional; see the matching fields on StudentRecord (src/types/core.ts)
   // for what each one means. "Branch" in the source sheet is still an alias of
   // the department column; "Course" is its own column now (the roster template
-  // carries both) and is recorded verbatim. Photo is not collected via CSV.
+  // carries both). By the time a row reaches buildStudentDoc, `course` has
+  // already been resolved (by import-excel/route.ts, same name-or-code
+  // matching as Department) to the canonical name of one of the row's
+  // department's own courses - never raw/unvalidated text. Photo is not
+  // collected via CSV.
   course?: string;
   semester?: string;
   dateOfAdmission?: string;
@@ -89,7 +93,13 @@ function parseHandicappedType(v: string | undefined): "H" | "V" | "O" | undefine
 }
 
 export function buildStudentDoc(
-  section: Pick<Section, "collegeId" | "department" | "name" | "year" | "regulation">,
+  // `courseId` is optional here (unlike Section's own, required field) - a
+  // synthetic "unassigned" placeholder (no real Section doc yet) may not have
+  // one to give (course wasn't specified on the row). A real Section always
+  // has one, and callers passing one through should always include it - see
+  // StudentRecord.courseId's doc-comment for why this can no longer be
+  // treated as optional busywork once a student is genuinely placed.
+  section: Pick<Section, "collegeId" | "department" | "name" | "year" | "regulation"> & { courseId?: string },
   row: StudentImportRow,
   now: Date
 ): Record<string, unknown> {
@@ -105,6 +115,7 @@ export function buildStudentDoc(
     // passed there), left for a later distribute/distribute-cohort call to
     // fill in once an actual section is picked.
     ...(section.regulation ? { regulation: section.regulation } : {}),
+    ...(section.courseId ? { courseId: section.courseId } : {}),
     rollNumber: row.rollNumber.trim(),
     name: row.name.trim(),
     status: parseStudentStatus(row.status),
