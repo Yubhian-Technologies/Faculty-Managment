@@ -28,6 +28,11 @@ export default function PrincipalSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Bumped whenever RegulationSettingsCard saves - tells the sibling
+  // CourseCatalogSettingsCard above it to refetch its own copy of the
+  // declared regulations, which it otherwise only fetches once on mount.
+  const [regulationsRefreshKey, setRegulationsRefreshKey] = useState(0);
+
   const [studentFacultyRatio, setStudentFacultyRatio] = useState("15");
   const [teachingHoursPerWeek, setTeachingHoursPerWeek] = useState("16");
   const [defaultMinFacultyPerDept, setDefaultMinFacultyPerDept] = useState("3");
@@ -131,13 +136,13 @@ export default function PrincipalSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Sits ahead of the course catalog: a course's academic year defaults
-          from this, so it reads in the order it's set up. */}
+      {/* First of the academic cards: the college-wide session everything else
+          sits inside - a course's academic year defaults from it. */}
       <AcademicYearSettingsCard />
 
-      <CourseCatalogSettingsCard />
+      <RegulationSettingsCard onSaved={() => setRegulationsRefreshKey((k) => k + 1)} />
 
-      <RegulationSettingsCard />
+      <CourseCatalogSettingsCard regulationsRefreshKey={regulationsRefreshKey} />
 
       <Card>
         <CardHeader>

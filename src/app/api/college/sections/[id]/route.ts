@@ -8,7 +8,7 @@ import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/department
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
 import type { DepartmentCourseScope } from "@/types";
 
 // A parent department's HOD has full (not just view-only) access to their own
@@ -66,6 +66,7 @@ export async function PATCH(
       facultyInchargeName?: string;
       departmentId?: string;
       secondaryDepartment?: string | null;
+      regulation?: string | null;
     };
 
     const db = getAdminDb();
@@ -154,6 +155,37 @@ export async function PATCH(
         updates.courseId = courseId;
         updates.courseName = course.name;
       }
+    }
+
+    // The batch currently occupying this year-slot's curriculum regulation -
+    // same validation as create (sections/route.ts POST): must be offered
+    // (per the course's catalog entry, narrowed to the section's own year)
+    // for the year this section actually ends up at. "" / null clears it.
+    if (body.regulation !== undefined) {
+      const regulation = body.regulation?.trim() || null;
+      if (regulation) {
+        if (!course) {
+          const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId ?? "").get();
+          if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+          course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
+        }
+        if (!course.catalogId) {
+          return NextResponse.json(
+            { error: "This course isn't linked to a Course Catalog entry, so it has no regulations to choose from." },
+            { status: 400 },
+          );
+        }
+        const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
+        const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulations?: string[]; regulationYears?: Record<string, number[]> }) : null;
+        const allowed = regulationsForYear(catalogItem, targetYear ?? sectionYear);
+        if (!allowed.includes(regulation)) {
+          return NextResponse.json(
+            { error: `"${regulation}" isn't offered for Year ${targetYear ?? sectionYear} of ${course.name}. Check Settings > Course Catalog.` },
+            { status: 400 },
+          );
+        }
+      }
+      updates.regulation = regulation;
     }
 
     // Reassigning an existing section to a different (sub-)department - e.g.

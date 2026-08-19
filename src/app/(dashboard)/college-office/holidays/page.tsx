@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,14 +13,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
-import { formatDate } from "@/lib/utils";
-import { HOLIDAY_TYPE_LABELS } from "@/types";
-import type { Holiday, HolidayType } from "@/types";
+import { formatDate, toDate } from "@/lib/utils";
+import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
+import { HOLIDAY_TYPE_LABELS, HOLIDAY_AUDIENCE_LABELS } from "@/types";
+import type { Holiday, HolidayAudience, HolidayType } from "@/types";
 
 const HOLIDAY_TYPES: HolidayType[] = ["NATIONAL", "REGIONAL", "COLLEGE", "RESTRICTED"];
+const HOLIDAY_AUDIENCES: HolidayAudience[] = ["BOTH", "STUDENTS"];
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const ALL_SENTINEL = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
 function emptyForm() {
-  return { date: "", name: "", type: "COLLEGE" as HolidayType };
+  return { date: "", name: "", type: "COLLEGE" as HolidayType, appliesTo: "BOTH" as HolidayAudience };
+}
+
+// Session start year out of a "YYYY-YY" label, for sorting newest-first -
+// plain string sort would put "2029-30" before "2024-25" but also before
+// "2030-31" wrongly once double-digit-suffix years show up.
+function sessionStartYear(label: string): number {
+  return Number(label.slice(0, 4)) || 0;
 }
 
 // Academic Calendar Holidays - maintained by Office, feeds the "Holidays"
@@ -34,6 +48,31 @@ export default function CollegeOfficeHolidaysPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Holiday | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // Defaults to the current session so Office lands on "this year" - the
+  // year picker below still reaches back to any earlier session that has
+  // holidays, and "All Years" shows the full history at once.
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
+  const [selectedMonth, setSelectedMonth] = useState(""); // "" = all months
+
+  // recentAcademicSessions() only covers ~4 sessions around now - merge in
+  // whatever years actually show up in the data (older imported holidays,
+  // say) so the picker never hides real history.
+  const academicYearOptions = useMemo(() => {
+    const years = new Set([...recentAcademicSessions(), ...holidays.map((h) => h.academicYear)]);
+    return Array.from(years).sort((a, b) => sessionStartYear(b) - sessionStartYear(a));
+  }, [holidays]);
+
+  const filteredHolidays = useMemo(
+    () => holidays.filter((h) => {
+      if (selectedAcademicYear !== ALL_SENTINEL && h.academicYear !== selectedAcademicYear) return false;
+      if (selectedMonth) {
+        const d = toDate(h.date);
+        if (!d || d.getMonth() + 1 !== Number(selectedMonth)) return false;
+      }
+      return true;
+    }),
+    [holidays, selectedAcademicYear, selectedMonth]
+  );
 
   function load() {
     setIsLoading(true);
@@ -60,7 +99,7 @@ export default function CollegeOfficeHolidaysPage() {
       const res = await fetch("/api/college/holidays", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: form.date, name: form.name.trim(), type: form.type }),
+        body: JSON.stringify({ date: form.date, name: form.name.trim(), type: form.type, appliesTo: form.appliesTo }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to add holiday");
@@ -104,6 +143,33 @@ export default function CollegeOfficeHolidaysPage() {
       />
 
       <Card>
+        <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label>Academic Year</Label>
+            <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_SENTINEL}>All Years</SelectItem>
+                {academicYearOptions.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Month</Label>
+            <Select value={selectedMonth || ALL_SENTINEL} onValueChange={(v) => setSelectedMonth(v === ALL_SENTINEL ? "" : v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_SENTINEL}>All Months</SelectItem>
+                {MONTH_NAMES.map((name, idx) => (
+                  <SelectItem key={idx + 1} value={String(idx + 1)}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="space-y-2 p-4">
@@ -111,35 +177,52 @@ export default function CollegeOfficeHolidaysPage() {
                 <div key={i} className="h-10 bg-muted animate-pulse rounded-lg" />
               ))}
             </div>
-          ) : holidays.length === 0 ? (
+          ) : filteredHolidays.length === 0 ? (
             <div className="p-4">
               <EmptyState
                 icon={<CalendarDays className="h-6 w-6" />}
-                title="No holidays added yet"
-                description="Add the academic year's holidays so they count toward the Leave History Report."
+                title={holidays.length === 0 ? "No holidays added yet" : "No holidays for this filter"}
+                description={
+                  holidays.length === 0
+                    ? "Add the academic year's holidays so they count toward the Leave History Report."
+                    : "Try a different academic year or month."
+                }
               />
             </div>
           ) : (
-            <div className="divide-y">
-              {holidays.map((h) => (
-                <div key={h.id} className="flex items-center justify-between gap-3 p-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <CalendarDays className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{h.name}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(h.date)} &middot; {h.academicYear}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="secondary">{HOLIDAY_TYPE_LABELS[h.type]}</Badge>
-                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget(h)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Name</th>
+                    <th className="px-4 py-3">Academic Year</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Applies To</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {filteredHolidays.map((h) => (
+                    <tr key={h.id}>
+                      <td className="px-4 py-2.5 whitespace-nowrap">{formatDate(h.date)}</td>
+                      <td className="px-4 py-2.5 font-medium text-foreground">{h.name}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{h.academicYear}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant="secondary" className="text-xs">{HOLIDAY_TYPE_LABELS[h.type]}</Badge>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant="outline" className="text-xs">{HOLIDAY_AUDIENCE_LABELS[h.appliesTo ?? "BOTH"]}</Badge>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget(h)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
@@ -170,6 +253,20 @@ export default function CollegeOfficeHolidaysPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Applies To</Label>
+              <Select value={form.appliesTo} onValueChange={(v) => setForm((f) => ({ ...f, appliesTo: v as HolidayAudience }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {HOLIDAY_AUDIENCES.map((a) => (
+                    <SelectItem key={a} value={a}>{HOLIDAY_AUDIENCE_LABELS[a]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.appliesTo === "STUDENTS" && (
+                <p className="text-xs text-muted-foreground">Faculty leave-day counting will not exclude this date.</p>
+              )}
             </div>
           </div>
           <DialogFooter>
