@@ -198,6 +198,8 @@ export async function POST(request: Request) {
           batch.update(collegeRef.collection("students").doc(student.id), {
             section: section.name,
             year,
+            // One-time snapshot - see distribute/route.ts's own comment.
+            regulation: section.regulation ?? null,
             courseId: section.courseId,
             course: section.courseName ?? null,
             updatedAt: now,

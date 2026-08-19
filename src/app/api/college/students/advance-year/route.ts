@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getAcademicStructure } from "@/lib/college/academicStructure";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { resolveCurrentAcademicYear } from "@/lib/college/academicSession";
 import { evenSplit } from "@/lib/students/evenSplit";
 import type { Firestore } from "firebase-admin/firestore";
 import type { Section, StudentRecord } from "@/types";
@@ -248,6 +249,65 @@ export async function POST(request: Request) {
 
     await batch.commit();
 
+    // ─── Academic year roll-over ──────────────────────────────────────────
+    // The destination course-years are now running the college's current
+    // session, so their CourseAcademicYear label follows the cohort up instead
+    // of having to be retyped per course.
+    //
+    // Written directly rather than through course-academic-years POST on
+    // purpose: that route treats a label change on an existing doc as an
+    // "advance" and credits every assigned faculty member with +1 experience
+    // year. That is not idempotent, so it must stay on the Principal's
+    // explicit Advance button and never fire from a bulk student move.
+    const advancedCourseYears: string[] = [];
+    try {
+      const sessionsSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+      const currentLabel = resolveCurrentAcademicYear(
+        sessionsSnap.empty ? undefined : (sessionsSnap.docs[0].data() as { label?: string }).label
+      );
+
+      // Only the destination sections that actually took students.
+      const courseIds = new Set<string>();
+      for (const [key, group] of groups) {
+        if (group.students.length === 0) continue;
+        const courseId = targetByKey.get(key)?.courseId;
+        if (courseId) courseIds.add(courseId);
+      }
+      for (const placement of sharedPlacements) {
+        for (const section of placement.sections) {
+          if (section.courseId) courseIds.add(section.courseId);
+        }
+      }
+
+      if (courseIds.size > 0) {
+        const yearBatch = db.batch();
+        let writes = 0;
+        for (const courseId of courseIds) {
+          const ref = collegeRef.collection("courseAcademicYears").doc(`${courseId}_year${toYear}`);
+          const snap = await ref.get();
+          const existingLabel = snap.exists ? (snap.data() as { label?: string }).label : undefined;
+          if (existingLabel === currentLabel) continue;
+          const courseDoc = await collegeRef.collection("courses").doc(courseId).get();
+          const departmentId = (courseDoc.data() as { departmentId?: string } | undefined)?.departmentId ?? "";
+          yearBatch.set(ref, {
+            collegeId: session.collegeId,
+            departmentId,
+            courseId,
+            year: toYear,
+            label: currentLabel,
+            ...(snap.exists ? { updatedAt: now } : { createdAt: now, updatedAt: now }),
+          }, { merge: true });
+          writes++;
+          advancedCourseYears.push(courseId);
+        }
+        if (writes > 0) await yearBatch.commit();
+      }
+    } catch (err) {
+      // Non-fatal: the cohort has already moved, and the label can still be set
+      // by hand. Swallowing it here beats failing a committed promotion.
+      console.error("[college/students/advance-year academic-year roll-over]", err);
+    }
+
     const performedByName = await getUserName(db, session.collegeId, session.uid);
     await collegeRef.collection("auditLogs").add({
       collegeId: session.collegeId,
@@ -260,11 +320,12 @@ export async function POST(request: Request) {
         toYear,
         count: cohort.length,
         groups: preview.groups,
+        academicYearsRolled: advancedCourseYears.length,
       },
       timestamp: now,
     });
 
-    return NextResponse.json({ ok: true, ...preview, advanced: cohort.length });
+    return NextResponse.json({ ok: true, ...preview, advanced: cohort.length, academicYearsRolled: advancedCourseYears.length });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

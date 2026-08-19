@@ -17,6 +17,7 @@ import { SUBJECT_CATEGORY_LABELS, SUBJECT_TYPE_LABELS } from "@/types";
 type SubjectForm = {
   serialNumber: string;
   category: SubjectCategory | "";
+  customCategory: string;
   name: string;
   code: string;
   type: SubjectType;
@@ -29,7 +30,7 @@ type SubjectForm = {
 };
 
 const EMPTY_SUBJECT_FORM: SubjectForm = {
-  serialNumber: "", category: "", name: "", code: "", type: "THEORY",
+  serialNumber: "", category: "", customCategory: "", name: "", code: "", type: "THEORY",
   lectureHours: "", tutorialHours: "", practicalHours: "",
   hoursPerWeek: "", totalHoursPerSemester: "", credits: "",
 };
@@ -72,6 +73,7 @@ export default function EditDeanSubjectPage() {
         setForm({
           serialNumber: s.serialNumber != null ? String(s.serialNumber) : "",
           category: s.category ?? "",
+          customCategory: s.customCategory ?? "",
           name: s.name,
           code: s.code,
           type: s.type,
@@ -106,6 +108,10 @@ export default function EditDeanSubjectPage() {
       toast({ variant: "destructive", title: "Select a category" });
       return;
     }
+    if (form.category === "OTHER" && !form.customCategory.trim()) {
+      toast({ variant: "destructive", title: "Enter a name for the custom category" });
+      return;
+    }
     if (form.lectureHours === "" || form.tutorialHours === "" || form.practicalHours === "") {
       toast({ variant: "destructive", title: "L, T and P are required" });
       return;
@@ -118,6 +124,7 @@ export default function EditDeanSubjectPage() {
         body: JSON.stringify({
           serialNumber: Number(form.serialNumber),
           category: form.category,
+          customCategory: form.category === "OTHER" ? form.customCategory.trim() : undefined,
           name: form.name.trim(),
           code: form.code.trim(),
           type: form.type,
@@ -183,6 +190,13 @@ export default function EditDeanSubjectPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {form.category === "OTHER" && (
+                  <Input
+                    value={form.customCategory}
+                    onChange={(e) => setF({ customCategory: e.target.value })}
+                    placeholder="Enter category name"
+                  />
+                )}
               </div>
             </div>
 

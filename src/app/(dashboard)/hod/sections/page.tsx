@@ -375,6 +375,14 @@ export default function HODSectionsPage() {
   // that way (viewsManagedBranchYears); the branch's own dedicated HOD stays
   // strictly within its own resolved years.
   const yearScopedSections = useMemo(() => sections.filter((s) => {
+    // A read-only section is one sections GET has already decided belongs to
+    // this department while being owned by its shared-year manager. The year
+    // scoping here exists to hide a department's own stale years, not to
+    // second-guess that - without this the section would be fetched and then
+    // immediately filtered away, which is the whole bug: CSE's HOD could not
+    // see the 1st year CSE sections Basic Science runs for them, because
+    // CSE's own assigned years are 2-4.
+    if (s.accessLevel === "secondary") return true;
     const dept = deptByName.get(s.department);
     const catalogId = catalogIdByCourseId.get(s.courseId);
     const assigned = dept ? managerEffectiveYears(dept, departments, catalogId) : [];
@@ -395,6 +403,19 @@ export default function HODSectionsPage() {
     }),
     [yearScopedSections, activeOwnedScope, activeCourseIds]
   );
+
+  // The year tabs the scope resolves, unioned with any year a read-only
+  // section actually occupies. Those years are by definition outside this
+  // department's own assigned ones (that is why the manager owns them), so
+  // without the union such a section would be reachable under "All" and have
+  // no year tab of its own - present but unfindable.
+  const visibleYearTabs = useMemo(() => {
+    const set = new Set<number>(yearTabOptions);
+    for (const sec of courseAndOwnedScopedSections) {
+      if (sec.accessLevel === "secondary") set.add(sec.year);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [yearTabOptions, courseAndOwnedScopedSections]);
   // Every real branch a section in view feeds into (Section.secondaryDepartments,
   // 0 or 1 entries per section - see sectionLabel.ts), with a live count each -
   // e.g. Physics cross-listing straight to IT/ME with no sub-department layer,
@@ -726,7 +747,7 @@ export default function HODSectionsPage() {
       {/* Year filter tabs (only when a specific course is selected) */}
       {activeGroup && (
         <div className="flex gap-2 flex-wrap">
-          {(["all", ...yearTabOptions] as (number | "all")[]).map((y) => (
+          {(["all", ...visibleYearTabs] as (number | "all")[]).map((y) => (
             <button
               key={y}
               onClick={() => setActiveYear(y)}

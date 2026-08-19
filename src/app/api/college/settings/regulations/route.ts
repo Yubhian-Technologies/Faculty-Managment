@@ -6,12 +6,11 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { academicRegulationsRef, loadAcademicRegulations } from "@/lib/firestore/academicRegulations";
 import type { AcademicRegulationSettings } from "@/types/core";
 
-const YEARS = ["1", "2", "3", "4"];
-
-// colleges/{collegeId}/settings/academicRegulations - the curriculum
-// regulation(s) (e.g. R20, R23) the Principal maintains and fixes one of
-// per year of study (1st-4th). Super Admin can view/edit any college via
-// ?collegeId=, matching /api/college/settings/general.
+// colleges/{collegeId}/settings/academicRegulations - the college-wide
+// curriculum regulation codes (e.g. R20, R23) the Principal maintains. Which
+// ones apply to a given course, and to which of its years, is set per-course
+// instead (see api/college/course-catalog). Super Admin can view/edit any
+// college via ?collegeId=, matching /api/college/settings/general.
 function resolveCollegeId(request: Request, role: string, sessionCollegeId: string): string | null {
   if (role === "SUPER_ADMIN") {
     return new URL(request.url).searchParams.get("collegeId");
@@ -56,20 +55,9 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Add at least one regulation" }, { status: 400 });
     }
 
-    const yearRegulations: Record<string, string> = {};
-    for (const year of YEARS) {
-      const value = body.yearRegulations?.[year];
-      if (!value) continue;
-      if (!regulations.includes(value)) {
-        return NextResponse.json({ error: `Year ${year}'s regulation isn't in the list above` }, { status: 400 });
-      }
-      yearRegulations[year] = value;
-    }
-
     const db = getAdminDb();
     const settings: AcademicRegulationSettings = {
       regulations,
-      yearRegulations,
       updatedAt: new Date() as unknown as AcademicRegulationSettings["updatedAt"],
       updatedByName: session.email || "Unknown",
     };
@@ -81,7 +69,7 @@ export async function PUT(request: Request) {
       action: "ACADEMIC_REGULATIONS_UPDATED",
       performedBy: session.uid,
       performedByName: settings.updatedByName,
-      details: { regulations, yearRegulations },
+      details: { regulations },
       timestamp: new Date(),
     });
 

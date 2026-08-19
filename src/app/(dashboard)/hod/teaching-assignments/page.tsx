@@ -349,12 +349,18 @@ export default function TeachingAssignmentsPage() {
 
   // Subjects already staffed for the section picked in the assign-faculty form shouldn't be
   // offered again there - pick a different subject or remove the existing assignment first.
-  // Same for one with a pending lend-request out - see pendingRequestKeys above.
+  // Same for one with a pending lend-request out - see pendingRequestKeys above. Also narrowed
+  // to the picked section's own curriculum regulation, if it has one set - lenient both ways,
+  // same as TeachingAssignmentsEditor's own filter and api/college/subjects GET.
   const availableSubjectsForAssign = assignForm.sectionId
-    ? subjects.filter((s) =>
-        !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id) &&
-        !pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)
-      )
+    ? (() => {
+        const selectedSection = sections.find((s) => s.id === assignForm.sectionId);
+        return subjects.filter((s) =>
+          (!selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation) &&
+          !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id) &&
+          !pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)
+        );
+      })()
     : subjects;
 
   // Faculty offered here are always this HOD's own/managed department's -

@@ -431,7 +431,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
               <EmptyState
                 icon={<History className="h-6 w-6" />}
                 title={
-                  !data || data.rows.length === 0
+                  !data?.rows?.length
                     ? (emptyTitle ?? "No faculty with a login here yet")
                     : categoryRows.length === 0
                     ? `No ${EFFECTIVE_CATEGORY_LABELS[category]} found`

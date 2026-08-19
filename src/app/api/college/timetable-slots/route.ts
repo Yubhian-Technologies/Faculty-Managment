@@ -4,8 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
-import { todayISODate } from "@/lib/leave/dayCounter";
+import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import type { DayOfWeek } from "@/types";
 
 export async function GET(request: Request) {
@@ -23,11 +22,12 @@ export async function GET(request: Request) {
       .get();
     const rawSlots = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    // Overlay today's approved-leave substitutions, if any - who's actually
-    // taking a period today instead of the regular weekly assignment (see
-    // lib/leave/periodCoverage.ts). Never changes the underlying record,
-    // just what this read returns.
-    const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, todayISODate());
+    // Overlay this week's approved-leave substitutions, if any - who's
+    // actually taking a period on a given day instead of the regular weekly
+    // assignment (see lib/leave/periodCoverage.ts). Covers every day of the
+    // currently-displayed week, not just today - see currentWeekDateKeys.
+    // Never changes the underlying record, just what this read returns.
+    const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys());
     const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
     const slots = rawSlots.map((s) => {
       const sub = substitutionBySlotId.get((s as { id: string }).id);

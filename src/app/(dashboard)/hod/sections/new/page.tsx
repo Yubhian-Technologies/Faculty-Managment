@@ -13,8 +13,8 @@ import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
-import type { Course, Department } from "@/types";
+import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import type { Course, CourseCatalogItem, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
 // `userUid` is the faculty member's actual Firebase Auth uid (set once HOD
@@ -31,6 +31,7 @@ type SectionForm = {
   courseId: string;
   year: string;
   batch: string;
+  regulation: string;
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
@@ -48,9 +49,14 @@ export default function NewSectionPage() {
     courseId: prefilledCourseId,
     year: "",
     batch: "",
+    regulation: "",
     facultyInchargeUid: "",
     facultyInchargeName: "",
   });
+  // This course's own assigned regulations (Course Catalog > Regulations),
+  // narrowed to whichever are actually offered for the picked year - same
+  // set the Dean's Add Subject page offers. Empty until a year is picked.
+  const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [saving, setSaving] = useState(false);
   // Which of this HOD's own departments the section is being created under -
   // only shown/choosable when they head more than one (see useMyDepartments).
@@ -98,6 +104,11 @@ export default function NewSectionPage() {
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
       .catch(() => { /* non-critical - falls back to the full course span */ });
+
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
+      .then((d) => setCatalogItems(d.items ?? []))
+      .catch(() => { /* non-critical - regulation picker just stays empty */ });
   }, []);
 
   const topDepartmentId = useMemo(
@@ -146,6 +157,20 @@ export default function NewSectionPage() {
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
 
+  // This course's own assigned regulations, narrowed to whichever are
+  // actually offered for the picked year (regulationYears) - same set the
+  // Dean's Add Subject page offers, so a section can only ever be tagged
+  // with a regulation its own course/year combination could actually use.
+  const regulationOptions = useMemo(() => {
+    if (!formCourse?.catalogId || !form.year) return [];
+    const catalogItem = catalogItems.find((c) => c.id === formCourse.catalogId);
+    return regulationsForYear(catalogItem, Number(form.year));
+  }, [formCourse, catalogItems, form.year]);
+
+  function selectYear(year: string) {
+    setF({ year, regulation: "" });
+  }
+
   // The department this section is being created under: the sub-department a
   // parent HOD explicitly targeted, otherwise the chosen top-level department
   // (topDepartment - their only department, unless they head several). Its
@@ -167,12 +192,12 @@ export default function NewSectionPage() {
   );
   function selectCourseGroup(groupKey: string) {
     const group = courseGroups.find((g) => g.key === groupKey);
-    if (!group) { setF({ courseId: "", year: "" }); return; }
+    if (!group) { setF({ courseId: "", year: "", regulation: "" }); return; }
     // Prefer the course doc owned by the department this section is actually
     // being created under, so the stored courseId lines up with it rather than
     // a feeder's - same preference the Sections list uses when jumping here.
     const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === (departmentId || activeDept?.id));
-    setF({ courseId: own ?? group.courseIds[0], year: "" });
+    setF({ courseId: own ?? group.courseIds[0], year: "", regulation: "" });
   }
 
   // Managed-branch mode: activeDept is a real branch (e.g. IT) reached through
@@ -345,6 +370,7 @@ export default function NewSectionPage() {
           name: sectionName,
           year: Number(form.year),
           batch: form.batch,
+          regulation: form.regulation || undefined,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
           ...(isBranchMode && !isManagedBranchMode ? { secondaryDepartment: effectiveBranch } : {}),
@@ -458,7 +484,7 @@ export default function NewSectionPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Year *</Label>
-                    <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                    <Select value={form.year} onValueChange={selectYear} disabled={!formCourse}>
                       <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                       <SelectContent>
                         {formYearOptions.map((y) => (
@@ -535,7 +561,7 @@ export default function NewSectionPage() {
                 )}
                 <div className="space-y-2">
                   <Label>Year *</Label>
-                  <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                  <Select value={form.year} onValueChange={selectYear} disabled={!formCourse}>
                     <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                     <SelectContent>
                       {formYearOptions.map((y) => (
@@ -565,7 +591,7 @@ export default function NewSectionPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Year *</Label>
-                  <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                  <Select value={form.year} onValueChange={selectYear} disabled={!formCourse}>
                     <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                     <SelectContent>
                       {formYearOptions.map((y) => (
@@ -577,14 +603,32 @@ export default function NewSectionPage() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>Batch *</Label>
-              <Input
-                value={form.batch}
-                onChange={(e) => setF({ batch: e.target.value })}
-                placeholder="e.g. 2023-2027"
-              />
-              <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Batch *</Label>
+                <Input
+                  value={form.batch}
+                  onChange={(e) => setF({ batch: e.target.value })}
+                  placeholder="e.g. 2023-2027"
+                />
+                <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Regulation</Label>
+                <Select
+                  value={form.regulation}
+                  onValueChange={(v) => setF({ regulation: v })}
+                  disabled={!form.year || regulationOptions.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={form.year ? (regulationOptions.length ? "Select regulation" : "None assigned for this year") : "Pick a year first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Which curriculum this batch follows for its whole run through this class.</p>
+              </div>
             </div>
 
             <div className="space-y-2">

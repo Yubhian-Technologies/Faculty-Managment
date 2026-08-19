@@ -117,6 +117,7 @@ export async function POST(request: Request) {
       regulation?: string;
       serialNumber?: number;
       category?: SubjectCategory;
+      customCategory?: string;
       lectureHours?: number;
       tutorialHours?: number;
       practicalHours?: number;
@@ -175,6 +176,9 @@ export async function POST(request: Request) {
       }
       if (!body.category || !(body.category in SUBJECT_CATEGORY_LABELS)) {
         return NextResponse.json({ error: "A valid category is required" }, { status: 400 });
+      }
+      if (body.category === "OTHER" && !body.customCategory?.trim()) {
+        return NextResponse.json({ error: "Enter a name for the custom category" }, { status: 400 });
       }
       if (body.lectureHours == null || body.tutorialHours == null || body.practicalHours == null) {
         return NextResponse.json({ error: "L, T and P are required" }, { status: 400 });
@@ -265,6 +269,7 @@ export async function POST(request: Request) {
           year: Number(year),
           serialNumber: Number(body.serialNumber),
           category: body.category,
+          ...(body.category === "OTHER" ? { customCategory: body.customCategory!.trim() } : {}),
           name: body.name.trim(),
           code: body.code.toUpperCase().trim(),
           hoursPerWeek: body.hoursPerWeek != null ? Number(body.hoursPerWeek) : 0,

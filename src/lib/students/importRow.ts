@@ -99,7 +99,7 @@ export function buildStudentDoc(
   // has one, and callers passing one through should always include it - see
   // StudentRecord.courseId's doc-comment for why this can no longer be
   // treated as optional busywork once a student is genuinely placed.
-  section: Pick<Section, "collegeId" | "department" | "name" | "year"> & { courseId?: string },
+  section: Pick<Section, "collegeId" | "department" | "name" | "year" | "regulation"> & { courseId?: string },
   row: StudentImportRow,
   now: Date
 ): Record<string, unknown> {
@@ -108,6 +108,13 @@ export function buildStudentDoc(
     department: section.department,
     section: section.name,
     year: section.year,
+    // One-time snapshot of the section's CURRENT regulation, taken because
+    // this row is being placed directly into a real section - see
+    // Section.regulation's doc-comment. Absent for the unassigned-student
+    // creation path (a synthetic section with no regulation of its own is
+    // passed there), left for a later distribute/distribute-cohort call to
+    // fill in once an actual section is picked.
+    ...(section.regulation ? { regulation: section.regulation } : {}),
     ...(section.courseId ? { courseId: section.courseId } : {}),
     rollNumber: row.rollNumber.trim(),
     name: row.name.trim(),

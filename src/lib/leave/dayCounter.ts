@@ -36,8 +36,9 @@ export function countWorkingDays(from: Date, to: Date, holidayDates: Set<string>
 // the first ~5.5 hours of every India calendar day, a UTC-local read of
 // "now" still reports the PREVIOUS day - e.g. a substitute picked for
 // today's approved leave would silently fail to show up on the timetable
-// (see getActiveSubstitutionsForDate in periodCoverage.ts, which keys off
-// this same "what day is it" concept) because the server's idea of "today"
+// (see getActiveSubstitutionsForDates and currentWeekDateKeys in
+// periodCoverage.ts, which key off this same "what day is it" concept)
+// because the server's idea of "today"
 // disagreed with India's. Explicitly anchoring to Asia/Kolkata makes this
 // correct regardless of the host's own timezone - and is also correct for a
 // browser call (LeaveApplyForm.tsx): the college's calendar day is what
@@ -50,6 +51,35 @@ export function todayISODate(): string {
   }).formatToParts(new Date());
   const get = (type: string) => parts.find((p) => p.type === type)!.value;
   return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+// The time-bearing counterpart to todayISODate() above, for a server route
+// that needs "what time is it right now" - not just "what day is it" - e.g.
+// recording a self-check-in's actual clock time (see
+// api/college/attendance/check-in/route.ts). Same rationale: reading
+// `new Date().getHours()/getMinutes()` on the server reflects the
+// deployment host's own ambient timezone, not India's - a UTC-run server
+// would record a check-in that felt like "9:15 AM" to the person doing it
+// as "03:45", silently breaking every time-of-day comparison downstream
+// (the 09:05 late cutoff included).
+export function nowInIndia(): { dateISO: string; timeHHMM: string; date: Date } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  const year = Number(get("year"));
+  const month = Number(get("month"));
+  const day = Number(get("day"));
+  // Some ICU builds format midnight as hour "24" under hour12:false -
+  // normalize back to 0.
+  const hour = Number(get("hour")) % 24;
+  const minute = Number(get("minute"));
+  return {
+    dateISO: `${get("year")}-${get("month")}-${get("day")}`,
+    timeHHMM: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+    date: new Date(year, month - 1, day),
+  };
 }
 
 // Every calendar date between `from` and `to` (inclusive) that counts as a
