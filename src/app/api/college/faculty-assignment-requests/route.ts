@@ -5,18 +5,58 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
+import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 
 // Lets an HOD ask an unrelated department (one they have no direct
 // own/managed/feeder access to - see college/faculty/route.ts) to lend a
 // faculty member for a subject on one of their own sections, instead of
-// leaving it permanently unstaffed. The target department's HOD fulfills or
-// declines it via PATCH /[id].
+// leaving it permanently unstaffed. The target department's HOD, or a
+// Timetable Incharge for any course-year in that department, fulfills or
+// declines it via PATCH /[id] (see isTimetableInchargeForDepartment there).
+//
+// A Timetable Incharge (see TimetableIncharge in src/types/core.ts) can send
+// these too, for their own delegated course-year.
 
 export async function GET() {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "DEAN");
+    const session = await requireCollegeMember(
+      "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "DEAN", "PANEL_MEMBER", "COLLEGE_STAFF",
+    );
     const db = getAdminDb();
     const coll = db.collection("colleges").doc(session.collegeId).collection("facultyAssignmentRequests");
+
+    if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      // Every department this uid is Timetable Incharge for (any course-year)
+      // - fulfilling an incoming request isn't tied to one specific
+      // course-year, so this is broader than isTimetableIncharge's own
+      // single-course-year check (see isTimetableInchargeForDepartment).
+      const inchargeSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("timetableIncharges").where("uid", "==", session.uid).get();
+      const myDeptNames = Array.from(new Set(
+        inchargeSnap.docs.map((d) => (d.data() as { departmentName?: string }).departmentName).filter((n): n is string => !!n)
+      ));
+
+      const [outgoingSnap, incomingSnap] = await Promise.all([
+        coll.where("requestedBy", "==", session.uid).get(),
+        myDeptNames.length > 0 ? coll.where("targetDepartmentName", "in", myDeptNames.slice(0, 30)).get() : Promise.resolve(null),
+      ]);
+      const seen = new Set<string>();
+      const requests: { id: string; [key: string]: unknown }[] = [];
+      for (const d of outgoingSnap.docs) { seen.add(d.id); requests.push({ id: d.id, ...d.data() }); }
+      if (incomingSnap) {
+        for (const d of incomingSnap.docs) {
+          if (seen.has(d.id)) continue;
+          seen.add(d.id);
+          requests.push({ id: d.id, ...d.data() });
+        }
+      }
+      requests.sort((a, b) => {
+        const ta = (a.createdAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0;
+        const tb = (b.createdAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0;
+        return tb - ta;
+      });
+      return NextResponse.json({ requests });
+    }
 
     if (session.role !== "HOD") {
       // Oversight roles see everything for the college.
@@ -68,7 +108,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD");
+    const session = await requireCollegeMember("HOD", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await request.json()) as {
       courseId?: string;
       sectionId?: string;
@@ -99,9 +139,16 @@ export async function POST(request: Request) {
     const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
     const targetDept = targetDeptSnap.data() as { name: string; hodUid?: string };
 
-    const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    if (!canHodEditDepartment(scope, section.department)) {
-      return NextResponse.json({ error: "Section is not in your department or one of your sub-departments" }, { status: 403 });
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodEditDepartment(scope, section.department)) {
+        return NextResponse.json({ error: "Section is not in your department or one of your sub-departments" }, { status: 403 });
+      }
+    } else {
+      const ok = await isTimetableIncharge(db, session.collegeId, session.uid, courseId, section.year);
+      if (!ok) {
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+      }
     }
     if (targetDept.name === section.department) {
       return NextResponse.json({ error: "Pick a different department - this one already owns the section" }, { status: 400 });

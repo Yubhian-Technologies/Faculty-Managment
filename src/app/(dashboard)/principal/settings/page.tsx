@@ -140,9 +140,9 @@ export default function PrincipalSettingsPage() {
           sits inside - a course's academic year defaults from it. */}
       <AcademicYearSettingsCard />
 
-      <RegulationSettingsCard onSaved={() => setRegulationsRefreshKey((k) => k + 1)} />
-
       <CourseCatalogSettingsCard regulationsRefreshKey={regulationsRefreshKey} />
+
+      <RegulationSettingsCard onSaved={() => setRegulationsRefreshKey((k) => k + 1)} />
 
       <Card>
         <CardHeader>

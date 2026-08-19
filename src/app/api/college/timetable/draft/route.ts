@@ -5,17 +5,18 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTimetableContext, pinnedCells, type TimetableContext } from "@/lib/timetable/loadContext";
-import { isContiguousBlockAvailable } from "@/lib/timetable/buildGrid";
-import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames, type HodDepartmentScope } from "@/lib/departments/scope";
+import { isContiguousBlockAvailable, periodsFollowedByBreak } from "@/lib/timetable/buildGrid";
+import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
+import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { resolveRequestedSemester, matchesCurrentSemester, draftDocId } from "@/lib/college/semester";
 import type { DayOfWeek, DraftSlot, TimetableDraft, TimetableSlot } from "@/types";
 
-// A lending HOD (see api/college/faculty-assignment-requests) doesn't own
-// this section's department, but legitimately needs to place/move/remove
+// A lending HOD or Timetable Incharge (see api/college/faculty-assignment-requests)
+// doesn't own this section's department, but legitimately needs to place/move/remove
 // periods for the one TeachingAssignment they were allocated - the section's
 // own HOD publishes, they only "Notify" (see the timetable grid page).
 // Scoped to ALLOCATED requests only (never PENDING/DECLINED), and - when
-// `assignmentId` is given - to that exact assignment, so a lending HOD can
+// `assignmentId` is given - to that exact assignment, so a lender can
 // never touch another department's other subjects via this exception.
 async function findAllocatedRequestsForSection(
   db: FirebaseFirestore.Firestore,
@@ -29,14 +30,18 @@ async function findAllocatedRequestsForSection(
   return snap.docs.map((d) => d.data() as { targetDepartmentName?: string; teachingAssignmentId?: string });
 }
 
+// `myNames` is either an HOD's own department scope (ownDepartmentNames) or
+// - for a Timetable Incharge fulfilling on behalf of their department - just
+// the single department name they're Incharge for. Either way this only
+// grants access to a section that ISN'T theirs when their own department was
+// the one allocated to lend a faculty member for it.
 async function isCrossDepartmentLender(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
-  scope: HodDepartmentScope,
+  myNames: string[],
   sectionId: string,
   assignmentId?: string,
 ): Promise<boolean> {
-  const myNames = ownDepartmentNames(scope);
   if (myNames.length === 0) return false;
   const allocated = await findAllocatedRequestsForSection(db, collegeId, sectionId);
   return allocated.some(
@@ -86,15 +91,21 @@ function validatePlacement(
     startPeriod: number;
     blockSize: number;
     ignore: Set<string>;
+    // Overrides rules.allowLabAcrossBreaks for this one check - used by the
+    // "add"/"move" retry below, which re-validates the SAME requested
+    // periods with breaks allowed once the plain check rejects them for
+    // that reason alone. Omitted uses the college's own configured rule.
+    allowAcrossBreaks?: boolean;
   },
 ): string | null {
   const { timing, rules } = ctx;
   if (!timing) return "No period timing is configured for this course year.";
   const { facultyId, facultyName, day, startPeriod, blockSize, ignore } = opts;
+  const allowAcrossBreaks = opts.allowAcrossBreaks ?? rules.allowLabAcrossBreaks;
 
   if (!rules.workingDays.includes(day as DayOfWeek)) return `${day} is not a working day.`;
 
-  if (!isContiguousBlockAvailable(timing, startPeriod, blockSize, rules.allowLabAcrossBreaks)) {
+  if (!isContiguousBlockAvailable(timing, startPeriod, blockSize, allowAcrossBreaks)) {
     return blockSize > 1
       ? `This lab needs ${blockSize} continuous periods; they do not fit at period ${startPeriod} without crossing a break.`
       : `Period ${startPeriod} is outside the ${timing.numberOfPeriods}-period day.`;
@@ -160,10 +171,76 @@ function blockAt(draft: TimetableDraft, assignmentId: string, day: string, perio
 const sortSlots = (slots: DraftSlot[]) =>
   [...slots].sort((a, b) => (a.day === b.day ? a.periodNumber - b.periodNumber : a.day.localeCompare(b.day)));
 
+// A Timetable Incharge (PANEL_MEMBER/COLLEGE_STAFF) always has exactly one
+// home department (the assignment POST validates the person's own
+// department matches the delegated course's), unlike an HOD's own
+// scope/ownDepartmentNames which can span more than one - so this is just
+// their login's own `department` field, wrapped as a one-item list for
+// isCrossDepartmentLender's shared shape.
+async function inchargeOwnDepartmentNames(
+  db: FirebaseFirestore.Firestore,
+  collegeId: string,
+  uid: string,
+): Promise<string[]> {
+  const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
+  const department = (snap.data() as { department?: string } | undefined)?.department;
+  return department ? [department] : [];
+}
+
+/**
+ * When a multi-period lab placement fails specifically because a break falls
+ * INSIDE it - not because of a day-boundary, an occupied cell, a faculty
+ * conflict, or the daily cap - retries the EXACT SAME requested periods with
+ * that break allowed, instead of rejecting outright. A 3-period lab clicked
+ * starting where a short break/lunch falls between two of its periods (e.g.
+ * periods 1-2, then a break, then period 3) is a completely normal way to
+ * run a lab in practice - the break is just a natural pause partway through,
+ * not a reason to bounce the whole block to a different time. Never touches
+ * a same-day placement failure for any OTHER reason (those still reject as
+ * before), and never relocates the block - it always lands on exactly the
+ * periods that were clicked/dragged to.
+ *
+ * Returns `{ ok: true }` when the break-crossing placement is fine, or
+ * `{ ok: false, problem }` where `problem` is the ORIGINAL (break-crossing)
+ * error when there was no break involved at all, but the RETRY's own error
+ * (e.g. "already teaching another section at period 3") when the block still
+ * can't go there for some other reason even with the break allowed - so the
+ * message the caller ever sees always names the real blocker, never a stale
+ * "crossing a break" message once the break itself was never the problem.
+ */
+function checkPlacementAcrossBreak(
+  ctx: TimetableContext,
+  draft: TimetableDraft,
+  opts: {
+    facultyId: string;
+    facultyName: string;
+    day: string;
+    startPeriod: number;
+    blockSize: number;
+    ignore: Set<string>;
+  },
+  originalProblem: string,
+): { ok: true } | { ok: false; problem: string } {
+  const { timing, rules } = ctx;
+  if (!timing || rules.allowLabAcrossBreaks || opts.blockSize <= 1) {
+    return { ok: false, problem: originalProblem };
+  }
+  const breaks = periodsFollowedByBreak(timing);
+  const hasInteriorBreak = Array.from(
+    { length: opts.blockSize - 1 },
+    (_, i) => opts.startPeriod + i,
+  ).some((p) => breaks.has(p));
+  // The failure wasn't about a break at all (occupied/busy/day-boundary/cap) -
+  // nothing to override, the original error already names the real reason.
+  if (!hasInteriorBreak) return { ok: false, problem: originalProblem };
+  const retryProblem = validatePlacement(ctx, draft, { ...opts, allowAcrossBreaks: true });
+  return retryProblem ? { ok: false, problem: retryProblem } : { ok: true };
+}
+
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
-      "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "SUPER_ADMIN",
+      "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF",
     );
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
@@ -189,8 +266,20 @@ export async function GET(request: Request) {
     // also protects a section that has no draft yet.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, section.department) && !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId))) {
+      if (
+        !canHodEditDepartment(scope, section.department) &&
+        !(await isCrossDepartmentLender(db, session.collegeId, ownDepartmentNames(scope), sectionId))
+      ) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      }
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      const ok = await isTimetableIncharge(db, session.collegeId, session.uid, section.courseId, section.year);
+      if (!ok) {
+        const myNames = await inchargeOwnDepartmentNames(db, session.collegeId, session.uid);
+        const lending = await isCrossDepartmentLender(db, session.collegeId, myNames, sectionId);
+        if (!lending) {
+          return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+        }
       }
     }
 
@@ -224,7 +313,7 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await request.json()) as { sectionId?: string; semester?: number };
     const sectionId = body.sectionId;
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -258,8 +347,20 @@ export async function POST(request: Request) {
 
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, ctx.section.department) && !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId))) {
+      if (
+        !canHodEditDepartment(scope, ctx.section.department) &&
+        !(await isCrossDepartmentLender(db, session.collegeId, ownDepartmentNames(scope), sectionId))
+      ) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      }
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      const ok = await isTimetableIncharge(db, session.collegeId, session.uid, ctx.section.courseId, ctx.section.year);
+      if (!ok) {
+        const myNames = await inchargeOwnDepartmentNames(db, session.collegeId, session.uid);
+        const lending = await isCrossDepartmentLender(db, session.collegeId, myNames, sectionId);
+        if (!lending) {
+          return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+        }
       }
     }
 
@@ -331,7 +432,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await request.json()) as {
       sectionId?: string;
       action?: "move" | "add" | "remove";
@@ -372,13 +473,26 @@ export async function PATCH(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (
         !canHodEditDepartment(scope, ctx.section.department) &&
-        !(await isCrossDepartmentLender(db, session.collegeId, scope, sectionId, assignmentId))
+        !(await isCrossDepartmentLender(db, session.collegeId, ownDepartmentNames(scope), sectionId, assignmentId))
       ) {
         return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+      }
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      const ok = await isTimetableIncharge(db, session.collegeId, session.uid, ctx.section.courseId, ctx.section.year);
+      if (!ok) {
+        const myNames = await inchargeOwnDepartmentNames(db, session.collegeId, session.uid);
+        const lending = await isCrossDepartmentLender(db, session.collegeId, myNames, sectionId, assignmentId);
+        if (!lending) {
+          return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+        }
       }
     }
 
     let slots: DraftSlot[];
+    // Set only when canPlaceAcrossBreak actually let a lab block span a
+    // break - surfaced to the client as a heads-up, not a warning (the
+    // block still landed exactly where clicked/dragged).
+    let adjustedNote: string | null = null;
 
     if (action === "remove") {
       const { fromDay, fromPeriod } = body;
@@ -405,15 +519,23 @@ export async function PATCH(request: Request) {
       const subjectType = subject?.type ?? "THEORY";
       const blockSize = subjectType === "PRACTICAL" ? Math.max(1, ctx.rules.labBlockSize) : 1;
 
-      const problem = validatePlacement(ctx, draft, {
+      const placeAt = Number(toPeriod);
+      const placementOpts = {
         facultyId: assignment.facultyId,
         facultyName: assignment.facultyName,
         day: toDay,
-        startPeriod: Number(toPeriod),
+        startPeriod: placeAt,
         blockSize,
-        ignore: new Set(),
-      });
-      if (problem) return NextResponse.json({ error: problem }, { status: 409 });
+        ignore: new Set<string>(),
+      };
+      const problem = validatePlacement(ctx, draft, placementOpts);
+      if (problem) {
+        const acrossBreak = checkPlacementAcrossBreak(ctx, draft, placementOpts, problem);
+        if (!acrossBreak.ok) {
+          return NextResponse.json({ error: acrossBreak.problem }, { status: 409 });
+        }
+        adjustedNote = `This lab spans a break between periods ${placeAt} and ${placeAt + blockSize - 1} - placed as requested.`;
+      }
 
       const added: DraftSlot[] = Array.from({ length: blockSize }, (_, i) => ({
         assignmentId,
@@ -423,7 +545,7 @@ export async function PATCH(request: Request) {
         subjectName: assignment.subjectName || subject?.name || "",
         subjectType,
         day: toDay as DayOfWeek,
-        periodNumber: Number(toPeriod) + i,
+        periodNumber: placeAt + i,
         isBlockContinuation: i > 0,
       }));
       slots = [...draft.slots, ...added];
@@ -441,15 +563,23 @@ export async function PATCH(request: Request) {
       }
       const moving = new Set(block.map((s) => cellKey(s.day, s.periodNumber)));
 
-      const problem = validatePlacement(ctx, draft, {
+      const placeAt = Number(toPeriod);
+      const placementOpts = {
         facultyId: block[0].facultyId,
         facultyName: block[0].facultyName,
         day: toDay,
-        startPeriod: Number(toPeriod),
+        startPeriod: placeAt,
         blockSize: block.length,
         ignore: moving,
-      });
-      if (problem) return NextResponse.json({ error: problem }, { status: 409 });
+      };
+      const problem = validatePlacement(ctx, draft, placementOpts);
+      if (problem) {
+        const acrossBreak = checkPlacementAcrossBreak(ctx, draft, placementOpts, problem);
+        if (!acrossBreak.ok) {
+          return NextResponse.json({ error: acrossBreak.problem }, { status: 409 });
+        }
+        adjustedNote = `This lab spans a break between periods ${placeAt} and ${placeAt + block.length - 1} - placed as requested.`;
+      }
 
       slots = draft.slots
         .filter((s) => !moving.has(cellKey(s.day, s.periodNumber)))
@@ -457,7 +587,7 @@ export async function PATCH(request: Request) {
           block.map((s, i) => ({
             ...s,
             day: toDay as DayOfWeek,
-            periodNumber: Number(toPeriod) + i,
+            periodNumber: placeAt + i,
             isBlockContinuation: i > 0,
           })),
         );
@@ -467,7 +597,7 @@ export async function PATCH(request: Request) {
     await draftRef(db, session.collegeId, sectionId, ctx.currentSemester)
       .set({ slots: sortSlots(slots), status: "DRAFT" }, { merge: true });
 
-    return NextResponse.json({ slots: sortSlots(slots) });
+    return NextResponse.json({ slots: sortSlots(slots), adjustedNote });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -479,7 +609,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -511,6 +641,11 @@ export async function DELETE(request: Request) {
         if (!department || !canHodEditDepartment(scope, department)) {
           return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
         }
+      }
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      const ok = await isTimetableIncharge(db, session.collegeId, session.uid, section.courseId, section.year);
+      if (!ok) {
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
     }
 

@@ -7,6 +7,7 @@ import type { AcademicRegulationSettings } from "@/types/core";
 // Catalog entry instead (see types/core.ts's AcademicRegulationSettings).
 export const DEFAULT_ACADEMIC_REGULATIONS: Omit<AcademicRegulationSettings, "updatedAt" | "updatedByName"> = {
   regulations: [],
+  regulationBatches: {},
 };
 
 export function academicRegulationsRef(db: Firestore, collegeId: string) {

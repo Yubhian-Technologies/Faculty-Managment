@@ -211,6 +211,13 @@ export const NAV_ITEMS: NavItem[] = [
 
   // College Staff (generic fallback for titles that don't warrant their own role)
   { label: "Dashboard", href: "/college-staff", iconName: "LayoutDashboard", roles: ["COLLEGE_STAFF"] },
+  // Shown to every COLLEGE_STAFF regardless of whether an HOD has actually
+  // delegated anything to them yet - mirrors panel/timetable-incharge's own
+  // entry above; only Technical-category staff are ever eligible (see
+  // TimetableIncharge in src/types/core.ts), but the page itself shows an
+  // empty state for anyone else, same convention as Leave/Attendance.
+  { label: "Timetable Incharge", href: "/college-staff/timetable-incharge", iconName: "UserCog", roles: ["COLLEGE_STAFF"] },
+  { label: "Assignment Requests", href: "/college-staff/assignment-requests", iconName: "Send", roles: ["COLLEGE_STAFF"] },
   { label: "My Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"], section: "Personal" },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"] },
   { label: "My Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"], section: "My Work" },
@@ -245,6 +252,16 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/panel", iconName: "LayoutDashboard", roles: ["PANEL_MEMBER"] },
   { label: "Teaching Load", href: "/panel/teaching", iconName: "BookOpen", roles: ["PANEL_MEMBER"], section: "My Work" },
+  // Shown to every PANEL_MEMBER regardless of whether an HOD has actually
+  // delegated anything to them yet - the page itself shows an empty state
+  // when it's empty, same convention as Leave/Attendance always showing even
+  // before someone has any requests/records (see TimetableIncharge in
+  // src/types/core.ts).
+  { label: "Timetable Incharge", href: "/panel/timetable-incharge", iconName: "UserCog", roles: ["PANEL_MEMBER"] },
+  // Only meaningful once this uid is Timetable Incharge for at least one
+  // department (see isTimetableInchargeForDepartment) - shown unconditionally
+  // like the entry above, same empty-state convention.
+  { label: "Assignment Requests", href: "/panel/assignment-requests", iconName: "Send", roles: ["PANEL_MEMBER"] },
   { label: "Internal Exam", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"] },
   { label: "Student Attendance", href: "/panel/mark-attendance", iconName: "CalendarCheck", roles: ["PANEL_MEMBER"] },
   { label: "Attendance Report", href: "/panel/monthly-records", iconName: "CalendarRange", roles: ["PANEL_MEMBER"] },
