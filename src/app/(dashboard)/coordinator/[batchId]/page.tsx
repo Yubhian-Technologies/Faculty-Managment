@@ -11,21 +11,18 @@ import { formatDate } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor } from "lucide-react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useAuthStore } from "@/store/authStore";
-import type { HiringBatch, Candidate, CandidateApplication, InterviewMode, MeetingPlatform } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
 
 // Joined view: person fields from Candidate, per-cycle fields (arrival,
-// interview mode, bio-data submission) from CandidateApplication. `id` is
-// the applicationId; `candidateId` is the real Candidate id, used for the
-// student-feedback QR link since StudentFeedback still keys by candidateId.
+// bio-data submission) from CandidateApplication. `id` is the applicationId;
+// `candidateId` is the real Candidate id, used for the student-feedback QR
+// link since StudentFeedback still keys by candidateId.
 type CoordinatorCandidateView = {
   id: string;
   candidateId: string;
   name: string;
   email: string;
   bioDataSubmitted?: boolean;
-  interviewMode?: InterviewMode;
-  meetingLink?: string;
-  meetingPlatform?: MeetingPlatform;
 };
 
 export default function CoordinatorQRPage({ params }: { params: Promise<{ batchId: string }> }) {
@@ -65,9 +62,6 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
             name: person?.name ?? "Unknown",
             email: person?.email ?? "",
             bioDataSubmitted: person?.bioDataSubmitted,
-            interviewMode: a.interviewMode,
-            meetingLink: a.meetingLink,
-            meetingPlatform: a.meetingPlatform,
           };
         });
         setBatch(b);
@@ -352,7 +346,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Interview Mode</p>
-              {candidate?.interviewMode === "ONLINE" ? (
+              {batch.hiringMode === "ONLINE" ? (
                 <span className="flex items-center gap-1 font-medium text-blue-600">
                   <Monitor className="h-3.5 w-3.5" /> Online
                 </span>
@@ -364,11 +358,11 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
             </div>
             <div>
               <p className="text-xs text-muted-foreground">
-                {candidate?.interviewMode === "ONLINE" ? "Meeting Link" : "Demo Room"}
+                {batch.hiringMode === "ONLINE" ? "Meeting Link" : "Demo Room"}
               </p>
-              {candidate?.interviewMode === "ONLINE" ? (
-                (candidate.meetingLink || batch.meetingLink) ? (
-                  <a href={candidate.meetingLink || batch.meetingLink} target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline text-xs break-all">{candidate.meetingLink || batch.meetingLink}</a>
+              {batch.hiringMode === "ONLINE" ? (
+                batch.meetingLink ? (
+                  <a href={batch.meetingLink} target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline text-xs break-all">{batch.meetingLink}</a>
                 ) : (
                   <p className="font-medium text-muted-foreground">-</p>
                 )
