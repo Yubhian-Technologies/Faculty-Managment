@@ -45,7 +45,45 @@ export interface AttendanceRecord {
   leaveApplicationId?: string;  // populated when status is ON_LEAVE
   onDutyRequestId?: string;     // populated when status is ON_DUTY
   permissionRequestId?: string; // populated for partial-day permission
+  // Snapshot of AttendanceCheckInPermission.permittedCheckInTime, copied onto
+  // the record at the moment checkIn is set (whichever route sets it - self
+  // check-in, HOD manual mark, or import) if a permission for that person/day
+  // existed at that time - see lib/attendance/lateStatus.ts's isLateCheckIn,
+  // which every "Late" badge/count in the app derives from. Kept as a
+  // snapshot rather than re-resolved live on every read so a permission
+  // granted AFTER the fact (or later revoked) never silently changes how an
+  // already-recorded day reads.
+  permittedCheckInTime?: string; // "HH:MM" 24h
   remarks?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── Late Check-In Permission (HOD-granted grace, one faculty, one day) ────────
+// Distinct from permissionRequestId above (a faculty's own request for
+// partial-day leave, "Permission & On-Duty") - this is the opposite
+// direction: an HOD proactively excusing a late arrival in advance (e.g.
+// "Dr. Anil is coming late today, that's fine"). A FULL exemption for the
+// whole day, not a raised-but-still-enforced cutoff - once granted, that
+// faculty member's own self-check-in never gets flagged Late or draws down
+// toward the 3-late -> 0.5 CL penalty (lib/leave/lateAttendancePenalty.ts)
+// no matter how late it actually lands. One per (uid, date) - doc id
+// `${uid}_${dateISO}`, same keying convention as attendanceRecords.
+export interface AttendanceCheckInPermission {
+  id: string;
+  collegeId: string;
+  uid: string;
+  facultyName: string;
+  department: string;
+  date: Timestamp;
+  // "HH:MM" 24h - the time agreed with the faculty member, kept as a record
+  // of what was granted. NOT an enforced cutoff - see isLateCheckIn, which
+  // treats this field's mere presence as "never late today", regardless of
+  // the value or the actual check-in time.
+  permittedCheckInTime: string;
+  reason: string;
+  grantedBy: string;            // uid of the HOD who granted it
+  grantedByName: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
