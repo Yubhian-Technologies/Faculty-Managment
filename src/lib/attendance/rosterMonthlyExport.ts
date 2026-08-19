@@ -1,6 +1,7 @@
 import { closeMissedCheckouts, toAttendanceDate } from "./closeMissedCheckouts";
 import { fillMissingDays } from "./fillMissingDays";
 import { resolveFaceRegisteredAt } from "./registration";
+import { istMonthBounds } from "./istTime";
 import { isLateCheckIn } from "./lateStatus";
 import { unitLabelForHeadRole, COLLEGE_STAFF_UNIT_HEAD_ROLES, type UnitHeadRole } from "./collegeStaffUnits";
 import { getWorkingDayWeightsForRole } from "./workingDays";
@@ -136,8 +137,7 @@ export async function buildRosterMonthlySummary(
   if (roster.length === 0) return [];
 
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1); // exclusive
+  const { monthStart, monthEnd } = istMonthBounds(year, month);
 
   const memberByUid = new Map(roster.map((m) => [m.uid, m]));
   const recordsByUid = new Map<

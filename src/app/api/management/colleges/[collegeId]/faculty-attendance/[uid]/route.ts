@@ -21,9 +21,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
     await requireManagement();
     const { collegeId, uid } = await params;
     const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const year = parseInt(searchParams.get("year") ?? String(now.getFullYear()), 10);
-    const month = parseInt(searchParams.get("month") ?? String(now.getMonth() + 1), 10);
+    const nowIST = getISTParts();
+    const year = parseInt(searchParams.get("year") ?? String(nowIST.year), 10);
+    const month = parseInt(searchParams.get("month") ?? String(nowIST.month), 10);
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(collegeId);
@@ -49,8 +49,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
 
     const recordsSnap = await collegeRef.collection("attendanceRecords").where("facultyId", "==", uid).get();
 
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month, 1); // exclusive
+    const { monthStart, monthEnd } = istMonthBounds(year, month);
 
     const records: (AttendanceRecord & { id: string; ref: FirebaseFirestore.DocumentReference; resolvedDate: Date | null })[] = recordsSnap.docs
       .map((d) => {

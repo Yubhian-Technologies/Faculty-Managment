@@ -1,10 +1,7 @@
 import { isSunday } from "./attendanceWindow";
 import { toAttendanceDate } from "./closeMissedCheckouts";
+import { istDateKey, istMidnightUTC } from "./istTime";
 import type { AttendanceRecord } from "@/types";
-
-function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 interface FillContext {
   collegeId: string;
@@ -46,18 +43,21 @@ export function fillMissingDays(
   workingDayDates?: Set<string>
 ): (AttendanceRecord & { id: string })[] {
   const byKey = new Map(
-    realRecords.map((r) => [dateKey(toAttendanceDate(r.date) ?? new Date(0)), r])
+    realRecords.map((r) => [istDateKey(toAttendanceDate(r.date) ?? new Date(0)), r])
   );
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const regStart = registeredAt
-    ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate())
-    : null;
+  const todayStart = istMidnightUTC(now);
+  const regStart = registeredAt ? istMidnightUTC(registeredAt) : null;
 
   const filled = [...realRecords];
-  for (const cursor = new Date(monthStart); cursor < monthEnd; cursor.setDate(cursor.getDate() + 1)) {
+  // Advance one IST calendar day (a fixed 24h - India observes no DST) at a
+  // time rather than mutating via local Date getters, which would drift
+  // against IST-anchored monthStart/monthEnd on a host running in another
+  // timezone.
+  const dayMs = 24 * 60 * 60 * 1000;
+  for (let cursor = monthStart.getTime(); cursor < monthEnd.getTime(); cursor += dayMs) {
     const day = new Date(cursor);
     if (day >= todayStart) continue; // today/future - not judged yet
-    const key = dateKey(day);
+    const key = istDateKey(day);
     if (byKey.has(key)) continue; // a real record already covers this day - always wins
 
     const isOverridden = workingDayDates?.has(key) ?? false;

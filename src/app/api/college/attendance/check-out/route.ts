@@ -5,16 +5,15 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { checkCampusGeofence } from "@/lib/attendance/geofence";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { istDateKey, istTimeHHMM } from "@/lib/attendance/istTime";
 import type { College } from "@/types";
 
 function todayDocSuffix(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return istDateKey(new Date());
 }
 
 function currentTimeHHMM(): string {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return istTimeHHMM(new Date());
 }
 
 export async function POST(request: Request) {
