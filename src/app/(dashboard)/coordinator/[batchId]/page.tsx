@@ -11,7 +11,7 @@ import { formatDate } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Maximize2, CheckCircle2, MapPin, Monitor } from "lucide-react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useAuthStore } from "@/store/authStore";
-import type { HiringBatch, Candidate, CandidateApplication, InterviewMode } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, InterviewMode, MeetingPlatform } from "@/types";
 
 // Joined view: person fields from Candidate, per-cycle fields (arrival,
 // interview mode, bio-data submission) from CandidateApplication. `id` is
@@ -24,6 +24,8 @@ type CoordinatorCandidateView = {
   email: string;
   bioDataSubmitted?: boolean;
   interviewMode?: InterviewMode;
+  meetingLink?: string;
+  meetingPlatform?: MeetingPlatform;
 };
 
 export default function CoordinatorQRPage({ params }: { params: Promise<{ batchId: string }> }) {
@@ -64,6 +66,8 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
             email: person?.email ?? "",
             bioDataSubmitted: person?.bioDataSubmitted,
             interviewMode: a.interviewMode,
+            meetingLink: a.meetingLink,
+            meetingPlatform: a.meetingPlatform,
           };
         });
         setBatch(b);
@@ -363,9 +367,11 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
                 {candidate?.interviewMode === "ONLINE" ? "Meeting Link" : "Demo Room"}
               </p>
               {candidate?.interviewMode === "ONLINE" ? (
-                batch.meetingLink
-                  ? <a href={batch.meetingLink} target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline text-xs break-all">{batch.meetingLink}</a>
-                  : <p className="font-medium text-muted-foreground">-</p>
+                (candidate.meetingLink || batch.meetingLink) ? (
+                  <a href={candidate.meetingLink || batch.meetingLink} target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline text-xs break-all">{candidate.meetingLink || batch.meetingLink}</a>
+                ) : (
+                  <p className="font-medium text-muted-foreground">-</p>
+                )
               ) : (
                 <p className="font-medium">{batch.demoClassroom ?? "-"}</p>
               )}

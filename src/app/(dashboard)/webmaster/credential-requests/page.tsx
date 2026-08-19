@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import { KeyRound, UserPlus, Clock, CheckCircle2, Dices, Link2 } from "lucide-react";
+import { KeyRound, UserPlus, Clock, Copy, Link2 } from "lucide-react";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS } from "@/types";
 import type { FacultyAccountRequest, FacultyAccountRequestStatus } from "@/types";
 
@@ -27,11 +27,6 @@ const STATUS_BADGE: Record<FacultyAccountRequestStatus, string> = {
 };
 
 const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
-
-function suggestPassword(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(9));
-  return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, "").slice(0, 12);
-}
 
 export default function WebmasterCredentialRequestsPage() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
@@ -78,7 +73,7 @@ export default function WebmasterCredentialRequestsPage() {
 
   async function transition(
     request: RequestRow,
-    action: "START_REVIEW" | "CREATE_CREDENTIALS" | "LINK_EXISTING_ACCOUNT" | "COMPLETE",
+    action: "START_REVIEW" | "CREATE_CREDENTIALS" | "LINK_EXISTING_ACCOUNT",
     extra?: { password?: string; existingUid?: string }
   ) {
     setBusyId(request.id);
@@ -95,8 +90,6 @@ export default function WebmasterCredentialRequestsPage() {
         setRevealedPassword({ name: request.candidateName, password: data.generatedPassword, employeeId: data.employeeId, email: data.assignedEmail });
       } else if (action === "LINK_EXISTING_ACCOUNT") {
         toast({ variant: "success", title: "Existing account linked", description: data.assignedEmail ? `Login: ${data.assignedEmail}` : undefined });
-      } else if (action === "COMPLETE") {
-        toast({ variant: "success", title: "Request completed", description: "Office has been notified." });
       } else {
         toast({ variant: "success", title: "Status updated" });
       }
@@ -109,7 +102,7 @@ export default function WebmasterCredentialRequestsPage() {
   }
 
   function openPasswordDialog(request: RequestRow) {
-    setPasswordInput(suggestPassword());
+    setPasswordInput("");
     setPasswordDialogRequest(request);
   }
 
@@ -214,12 +207,6 @@ export default function WebmasterCredentialRequestsPage() {
                     </Button>
                   </div>
                 )}
-                {request.status === "CREDENTIALS_CREATED" && (
-                  <Button size="sm" loading={busyId === request.id} onClick={() => void transition(request, "COMPLETE")}>
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                    Mark Completed &amp; Notify Office
-                  </Button>
-                )}
               </CardContent>
             </Card>
           ))}
@@ -232,7 +219,7 @@ export default function WebmasterCredentialRequestsPage() {
             <DialogTitle>Set Login Password</DialogTitle>
             <DialogDescription>
               Choose the password for <strong>{passwordDialogRequest?.candidateName}</strong>&rsquo;s login
-              ({passwordDialogRequest?.assignedEmail || passwordDialogRequest?.officialEmail}), or use the suggested one below.
+              ({passwordDialogRequest?.assignedEmail || passwordDialogRequest?.officialEmail}).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -244,8 +231,15 @@ export default function WebmasterCredentialRequestsPage() {
                 placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                 className="font-mono"
               />
-              <Button type="button" variant="outline" size="icon" title="Suggest a random password" onClick={() => setPasswordInput(suggestPassword())}>
-                <Dices className="h-4 w-4" />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Copy password"
+                disabled={!passwordInput}
+                onClick={() => { void navigator.clipboard.writeText(passwordInput); toast({ variant: "success", title: "Password copied" }); }}
+              >
+                <Copy className="h-4 w-4" />
               </Button>
             </div>
           </div>
