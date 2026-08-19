@@ -57,6 +57,9 @@ interface Row {
   checkOut: string | null;
   checkInVerified?: boolean;
   checkOutVerified?: boolean;
+  // HOD-granted exception for this specific day - see
+  // lib/attendance/lateStatus.ts's isLateCheckIn.
+  permittedCheckInTime?: string | null;
   // The reason an HOD/Principal/VP wrote when manually marking/correcting
   // this record, or the auto-generated explanation for a derived Absent day.
   remarks?: string | null;
@@ -98,7 +101,7 @@ function RosterTable({ rows, monthlyViewHref, monthlyViewBasePath }: { rows: Row
                     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(row.status)}`}>
                       {statusLabel(row.status)}
                     </span>
-                    {row.status === "PRESENT" && isLateCheckIn(row.checkIn) && (
+                    {row.status === "PRESENT" && isLateCheckIn(row.checkIn, row.permittedCheckInTime) && (
                       <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
                         Late
                       </span>
@@ -310,6 +313,7 @@ export default function ManagementAttendancePage() {
             checkOut: rec?.checkOut ?? null,
             checkInVerified: rec?.checkInVerified,
             checkOutVerified: rec?.checkOutVerified,
+            permittedCheckInTime: rec?.permittedCheckInTime ?? null,
             remarks: rec?.remarks ?? null,
           });
         })
@@ -340,6 +344,7 @@ export default function ManagementAttendancePage() {
             checkOut: rec?.checkOut ?? null,
             checkInVerified: rec?.checkInVerified,
             checkOutVerified: rec?.checkOutVerified,
+            permittedCheckInTime: rec?.permittedCheckInTime ?? null,
             remarks: rec?.remarks ?? null,
           });
         })

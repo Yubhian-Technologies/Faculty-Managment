@@ -479,9 +479,9 @@ export default function NewSectionPage() {
                     a section letter instead of typing a free-form name. */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Branch (feeds into) *</Label>
+                    <Label>Secondary Department *</Label>
                     <Select value={branch} onValueChange={setBranch}>
-                      <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select secondary department" /></SelectTrigger>
                       <SelectContent>
                         {branchOptions.map((b) => (
                           <SelectItem key={b} value={b}>{b} ({branchCodeOf(b)})</SelectItem>
@@ -489,7 +489,7 @@ export default function NewSectionPage() {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Students in this section are promoted into this branch next year.
+                      Students in this section are promoted into this secondary department next year.
                     </p>
                   </div>
                   <div className="space-y-2">

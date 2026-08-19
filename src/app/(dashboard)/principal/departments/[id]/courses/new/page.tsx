@@ -16,7 +16,7 @@ import {
   isSharedYearStructuralDepartment, findUnconnectedCourseOwners, type DepartmentWithId,
 } from "@/lib/college/academicStructure";
 import { toast } from "@/hooks/useToast";
-import type { AcademicYear, Course, CourseCatalogItem, Department } from "@/types";
+import type { Course, CourseCatalogItem, Department } from "@/types";
 
 export default function NewCoursePage() {
   const router = useRouter();
@@ -25,35 +25,38 @@ export default function NewCoursePage() {
   const [catalog, setCatalog] = useState<CourseCatalogItem[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [existingCourses, setExistingCourses] = useState<Course[]>([]);
-  const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
-  const [addingYear, setAddingYear] = useState(false);
   const [loading, setLoading] = useState(true);
   const [catalogId, setCatalogId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Every course now decides its own Years Taught / Secondary Departments at
-  // creation time - there's no department-level flat default to fall back to
-  // anymore (Add/Edit Department no longer offers one). Left blank rather
-  // than pre-filled, so the Principal makes an explicit choice for each
-  // course (e.g. a B.Tech shares Basic Science's first year while an M.Tech
-  // added to the same department usually needs its own, different years).
+  // Every course now decides its own Years Taught at creation time - there's
+  // no department-level flat default to fall back to anymore (Add/Edit
+  // Department no longer offers one). Left blank rather than pre-filled, so
+  // the Principal makes an explicit choice for each course (e.g. a B.Tech
+  // shares Basic Science's first year while an M.Tech added to the same
+  // department usually needs its own, different years). Always bounded to
+  // 1..durationYears (YearsTaughtAndSecondaryFields) - the server opens
+  // whichever of those years the college hasn't already opened
+  // (ensureAssignedYearsOpen, college/courses POST), so there's no separate
+  // "open academic years first" step to do here anymore.
+  //
+  // Secondary Departments is NOT decided here - it always follows the
+  // department's own flat `secondaryDepartments` (set on Add/Edit
+  // Department), so it can't be re-picked and silently diverge per course.
   const [structureAssignedYears, setStructureAssignedYears] = useState<number[]>([]);
-  const [structureSecondaryDepartments, setStructureSecondaryDepartments] = useState<string[]>([]);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/college/course-catalog").then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>),
       fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
-      fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>),
       // Unscoped - every course in the college, so a catalog course already
       // offered elsewhere can be spotted before it's added here too (see
       // conflictingDepartments below).
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
     ])
-      .then(([catalogRes, deptsRes, yearsRes, coursesRes]) => {
+      .then(([catalogRes, deptsRes, coursesRes]) => {
         setCatalog((catalogRes.items ?? []).filter((c) => c.isActive));
         setDepartments(deptsRes.departments ?? []);
-        setOpenYears((yearsRes.academicYears ?? []).filter((y) => y.isActive));
         setExistingCourses(coursesRes.courses ?? []);
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
@@ -77,9 +80,9 @@ export default function NewCoursePage() {
       existingCourses.filter((c) => c.catalogId === catalogId && c.departmentId !== id).map((c) => c.departmentId)
     ));
     return findUnconnectedCourseOwners(
-      ownDept, catalogId, otherIds, departments as DepartmentWithId[], structureSecondaryDepartments
+      ownDept, catalogId, otherIds, departments as DepartmentWithId[], ownDept.secondaryDepartments ?? []
     );
-  }, [catalogId, ownDept, existingCourses, departments, id, structureSecondaryDepartments]);
+  }, [catalogId, ownDept, existingCourses, departments, id]);
 
   // Basic Science adding an M.Tech unconnected to any branch is exactly the
   // accident this exists to stop: a department already acting as a
@@ -94,27 +97,6 @@ export default function NewCoursePage() {
 
   function toggleStructureYear(year: number, checked: boolean) {
     setStructureAssignedYears((prev) => (checked ? [...prev, year].sort((a, b) => a - b) : prev.filter((y) => y !== year)));
-  }
-
-  function toggleStructureSecondaryDepartment(name: string, checked: boolean) {
-    setStructureSecondaryDepartments((prev) => (checked ? [...prev, name] : prev.filter((n) => n !== name)));
-  }
-
-  async function handleAddYear() {
-    setAddingYear(true);
-    try {
-      const res = await fetch("/api/college/academic-years", { method: "POST" });
-      const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to add year");
-      const yearsRes = await fetch("/api/college/academic-years");
-      const data = await yearsRes.json() as { academicYears: AcademicYear[] };
-      setOpenYears((data.academicYears ?? []).filter((y) => y.isActive));
-      toast({ variant: "success", title: "Academic year added" });
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add year" });
-    } finally {
-      setAddingYear(false);
-    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -135,10 +117,12 @@ export default function NewCoursePage() {
         body: JSON.stringify({
           departmentId: id,
           catalogId,
-          // Every course now sets its own Years Taught / Secondary
-          // Departments atomically with creation - the server requires this
-          // unconditionally (not just for the structureRequired case).
-          courseScope: { assignedYears: structureAssignedYears, secondaryDepartments: structureSecondaryDepartments },
+          // Every course now sets its own Years Taught atomically with
+          // creation - the server requires this unconditionally (not just for
+          // the structureRequired case). Secondary Departments is NOT sent -
+          // the server always derives it from this department's own flat
+          // secondaryDepartments field instead.
+          courseScope: { assignedYears: structureAssignedYears },
         }),
       });
       if (!res.ok) {
@@ -216,24 +200,27 @@ export default function NewCoursePage() {
                     <span className="font-medium">{conflictingDepartments.map((d) => d.name).join(", ")}</span>,
                     with no shared-year link to {ownDept?.name ?? "this department"}.{" "}
                     {structureRequired
-                      ? `${ownDept?.name ?? "This department"} already runs a shared-year structure elsewhere - double-check the Years Taught / Secondary Departments below are what you intend before adding, since this won't silently inherit any other course's relationship.`
-                      : `Adding it here too will create a second, independent ${selected.name} program under the same catalog course - fine if that's intended (e.g. every branch runs its own), but if ${selected.name} is meant to be shared, use Secondary Departments below (or on ${conflictingDepartments[0]?.name}'s own course) to connect them instead.`}
+                      ? `${ownDept?.name ?? "This department"} already runs a shared-year structure elsewhere - this course will follow ${ownDept?.name ?? "this department"}'s own Secondary Departments setting, so double-check the Years Taught below are what you intend before adding.`
+                      : `Adding it here too will create a second, independent ${selected.name} program under the same catalog course - fine if that's intended (e.g. every branch runs its own), but if ${selected.name} is meant to be shared, set Secondary Departments on ${ownDept?.name ?? "this department"} (or on ${conflictingDepartments[0]?.name}'s own department) to connect them instead.`}
                   </p>
                 </div>
               )}
 
               {selected && (
                 <YearsTaughtAndSecondaryFields
-                  openYears={openYears}
-                  onAddYear={handleAddYear}
-                  isAddingYear={addingYear}
                   assignedYears={structureAssignedYears}
                   onToggleYear={toggleStructureYear}
                   maxYear={selected.durationYears}
                   yearsHelperText={`Which years of this ${selected.durationYears}-year course this department teaches. HODs can only create sections for these years.`}
                   secondaryDepartmentOptions={departments.filter((d) => d.id !== id && !d.parentDepartmentId)}
-                  secondaryDepartments={structureSecondaryDepartments}
-                  onToggleSecondaryDepartment={toggleStructureSecondaryDepartment}
+                  secondaryDepartments={ownDept?.secondaryDepartments ?? []}
+                  onToggleSecondaryDepartment={() => {}}
+                  showSecondaryDepartments={false}
+                  secondaryDepartmentsNote={
+                    (ownDept?.secondaryDepartments?.length ?? 0) > 0
+                      ? `Cross-listed with ${ownDept!.secondaryDepartments!.join(", ")} - set on ${ownDept?.name ?? "this department"}'s own page, not per course.`
+                      : `${ownDept?.name ?? "This department"} has no Secondary Departments set - edit the department to cross-list it to others.`
+                  }
                 />
               )}
 

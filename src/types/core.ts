@@ -570,6 +570,17 @@ export interface PeriodTiming {
   endTime: string; // "HH:MM" 24h
 }
 
+// One semester's calendar span (not to be confused with the daily
+// collegeStartTime/collegeEndTime above, which bound a single DAY, not a
+// date range). `semester` is a free-standing number, not fixed at 2 -
+// Office/Principal decides how many semesters a given course-year has and
+// adds/removes entries accordingly (see CourseYearTimingForm.tsx).
+export interface SemesterDuration {
+  semester: number; // 1, 2, 3, ...
+  startDate: Timestamp;
+  endDate: Timestamp;
+}
+
 export interface CourseYearTiming {
   id: string; // `${courseId}_year${year}`
   collegeId: string;
@@ -591,6 +602,13 @@ export interface CourseYearTiming {
   // down yet, so nothing already relying on it (isContiguousBlockAvailable,
   // the timetable solver, ...) has to change.
   periods?: PeriodTiming[];
+  // This academic year's semester date ranges - however many Office/
+  // Principal has configured, sorted by `semester`. Which one is "current"
+  // for a given date resolves via lib/college/semester.ts's
+  // resolveCurrentSemester. Absent/empty means this year has no semester
+  // concept yet - the timetable behaves as one continuous whole-year
+  // timetable until at least one semester is added.
+  semesters?: SemesterDuration[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -1276,15 +1294,33 @@ export interface StudentRecord {
   // any of these today, same as the older gender/dateOfBirth/etc. fields
   // above. Photo is intentionally not collected via CSV import at all.
   //
-  // The programme the student is admitted into (B.Tech, M.Tech …), as written
-  // on the admission sheet. Free text and purely a record of what that sheet
-  // said - it is NOT resolved against the college's `courses` collection, and
-  // nothing keys off it; the student's academic scope comes from `department`
-  // + `year` as before. "Branch" remains an alias of `department`, but
-  // "Course" no longer is: the roster template carries both columns, so
-  // reading them as the same field would have made a sheet naming its
-  // programme in one and its branch in the other silently unimportable.
+  // The programme the student is admitted into (B.Tech, M.Tech …). Validated
+  // against the college's `courses` collection when set (name or short Code,
+  // resolved to canonical name - see college/students/import-excel's
+  // resolveCourse), but this field alone still can't disambiguate "which
+  // section" on its own: `courseId` below is the real reference for that.
+  // "Branch" remains an alias of `department`, but "Course" no longer is: the
+  // roster template carries both columns, so reading them as the same field
+  // would have made a sheet naming its programme in one and its branch in the
+  // other silently unimportable.
   course?: string;
+  // The real reference `course` names. A department can run more than one
+  // Section sharing the exact same (department, name, year) as long as they
+  // belong to different courses (see college/sections POST's own duplicate
+  // check, scoped by courseId for exactly this reason - e.g. a B.Tech
+  // "PHYSICS-IT-A" and a later, independent M.Tech "PHYSICS-IT-A") - so
+  // `department`+`section`+`year` alone can no longer say which Section doc
+  // this student is actually in. Set/kept in sync with the section they're
+  // actually placed into (students/[id] PATCH's targetSectionId move, the
+  // bulk importer's placed rows, distribute/distribute-cohort) - the moment a
+  // student is genuinely IN a section, this always mirrors that section's own
+  // `courseId`, never admission-time free text. For an unassigned student, set
+  // best-effort from their (validated) `course` value when one was given.
+  // Every "students in this section" join must include this once it's
+  // present - see sections/route.ts GET's studentCount, students/[id]
+  // route.ts's findCurrentSectionDoc, student-attendance and
+  // internal-exam-marks routes' roster queries.
+  courseId?: string;
   semester?: number;
   dateOfAdmission?: string; // yyyy-mm-dd
   admissionNo?: string;
@@ -1516,6 +1552,7 @@ export type AuditAction =
   // Attendance module
   | "ATTENDANCE_MARKED"
   | "ATTENDANCE_CORRECTED"
+  | "LATE_CHECKIN_PERMISSION_GRANTED"
   // Payroll module
   | "SALARY_STRUCTURE_CREATED"
   | "PAYROLL_PROCESSED"

@@ -206,6 +206,15 @@ export interface TimetableSlot {
   classroom?: string;
   source?: TimetableSlotSource; // absent on rows written before this field existed - treat as MANUAL
   isPinned?: boolean;
+  // Which of the course-year's configured semesters (CourseYearTiming.
+  // semesters) this slot was published/placed under - null/absent when that
+  // course-year has no semesters configured at all. Set at publish time (see
+  // publish/route.ts) from lib/college/semester.ts's resolveCurrentSemester,
+  // not user-editable. A prior semester's slots are never deleted on the
+  // next publish (see matchesCurrentSemester's own doc-comment) - they stay
+  // in Firestore as history, just excluded from every live "current
+  // timetable" read.
+  semester?: number | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 
@@ -288,13 +297,21 @@ export interface DraftSlot {
 }
 
 export interface TimetableDraft {
-  id: string;            // == sectionId
+  // == sectionId when the course-year has no semesters configured (or never
+  // did) - `${sectionId}_sem${semester}` once it does, one draft per
+  // semester so building Semester 2 never clobbers Semester 1's own draft.
+  // See timetable/draft/route.ts's draftDocId.
+  id: string;
   collegeId: string;
   department: string;
   courseId: string;
   year: number;
   sectionId: string;
   sectionName: string;
+  // Resolved once at draft-start time (lib/college/semester.ts's
+  // resolveCurrentSemester) - null when the course-year has no semesters
+  // configured. Carried onto every published TimetableSlot on publish.
+  semester?: number | null;
   status: TimetableDraftStatus;
   slots: DraftSlot[];
   /** Human-readable notes from the solver - why it failed, or what it relaxed. */

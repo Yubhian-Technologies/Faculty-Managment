@@ -17,8 +17,8 @@ import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { disambiguateSectionLabels } from "@/lib/sections/sectionLabel";
-import type { StudentListItem, Section, Department } from "@/types";
+import { disambiguateSectionLabels, sectionFeedsTarget } from "@/lib/sections/sectionLabel";
+import type { StudentListItem, Section, Department, Course } from "@/types";
 
 type StudentRow = Record<string, unknown> & StudentListItem;
 type SectionRow = Section & { id: string; accessLevel?: "primary" | "secondary" };
@@ -42,6 +42,7 @@ export default function HodStudentsPage() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deptFilter, setDeptFilter] = useState("all");
 
@@ -56,6 +57,12 @@ export default function HodStudentsPage() {
   // the branches it manages (e.g. "cse"), never under itself.
   const [distBranch, setDistBranch] = useState("");
   const [distYear, setDistYear] = useState("");
+  // Only asked for when the filtered unassigned cohort itself spans more than
+  // one course (distCohortCourseIds below) - a department running two courses
+  // (e.g. B.Tech and M.Tech) can have unassigned students pending for both at
+  // once, and target sections must be scoped to exactly one (see
+  // StudentRecord.courseId's doc-comment).
+  const [distCourseId, setDistCourseId] = useState("");
   const [distSectionIds, setDistSectionIds] = useState<string[]>([]);
   const [isDistributing, setIsDistributing] = useState(false);
 
@@ -73,18 +80,21 @@ export default function HodStudentsPage() {
   const [assignTarget, setAssignTarget] = useState<StudentRow | null>(null);
   const [assignSectionId, setAssignSectionId] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
+  const [isUnassigning, setIsUnassigning] = useState(false);
 
   async function load() {
     setIsLoading(true);
     try {
-      const [studentsRes, sectionsRes, deptsRes] = await Promise.all([
+      const [studentsRes, sectionsRes, deptsRes, coursesRes] = await Promise.all([
         fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentRow[] }>),
         fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: SectionRow[] }>),
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+        fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
       ]);
       setStudents(studentsRes.students ?? []);
       setSections(sectionsRes.sections ?? []);
       setDepartments(deptsRes.departments ?? []);
+      setCourses(coursesRes.courses ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load students" });
     } finally {
@@ -142,19 +152,45 @@ export default function HodStudentsPage() {
   // Which department sections/placement actually resolve against - the chosen
   // branch once one is required and picked, otherwise distDept itself.
   const distTargetDept = distBranches.length > 0 ? distBranch : distDept;
-  const distYears = useMemo(
-    () => Array.from(new Set(
-      unassignedStudents
-        .filter((s) => s.department === distDept && (distBranches.length === 0 || s.secondaryDepartment === distBranch))
-        .map((s) => s.year)
-    )).sort((a, b) => a - b),
+  // The unassigned cohort narrowed to (department, branch) - reused below for
+  // both the Year options and, once a year is also picked, the course check.
+  const distCohortByDeptBranch = useMemo(
+    () => unassignedStudents.filter((s) =>
+      s.department === distDept && (distBranches.length === 0 || s.secondaryDepartment === distBranch)
+    ),
     [unassignedStudents, distDept, distBranch, distBranches.length]
   );
+  const distYears = useMemo(
+    () => Array.from(new Set(distCohortByDeptBranch.map((s) => s.year))).sort((a, b) => a - b),
+    [distCohortByDeptBranch]
+  );
+  const distCohortByYear = useMemo(
+    () => distCohortByDeptBranch.filter((s) => String(s.year) === distYear),
+    [distCohortByDeptBranch, distYear]
+  );
+  // Distinct courses this (department, branch, year) cohort has actually
+  // declared (StudentRecord.courseId - blank/undeclared students are excluded,
+  // since they impose no constraint). A department running two courses (e.g.
+  // B.Tech and M.Tech) can have unassigned students pending for both at once -
+  // target sections must be scoped to exactly one course (a department can run
+  // a same-named section under more than one - see StudentRecord.courseId's
+  // doc-comment), so a genuinely mixed cohort needs an explicit pick below
+  // rather than silently offering every course's sections together.
+  const distCohortCourseIds = useMemo(
+    () => Array.from(new Set(distCohortByYear.map((s) => s.courseId).filter((c): c is string => !!c))),
+    [distCohortByYear]
+  );
+  // Automatic when the cohort is uniform (0 or 1 distinct course declared),
+  // otherwise whatever was explicitly picked via the Course selector below.
+  const effectiveDistCourseId = distCohortCourseIds.length === 1 ? distCohortCourseIds[0] : distCourseId;
   const distTargetSections = useMemo(
     () => managedSections
-      .filter((s) => s.department === distTargetDept && String(s.year) === distYear)
+      .filter((s) =>
+        sectionFeedsTarget(s, distDept, distBranches.length > 0 ? distBranch : "")
+        && String(s.year) === distYear
+        && (!effectiveDistCourseId || s.courseId === effectiveDistCourseId))
       .sort((a, b) => a.name.localeCompare(b.name)),
-    [managedSections, distTargetDept, distYear]
+    [managedSections, distDept, distBranch, distBranches.length, distYear, effectiveDistCourseId]
   );
   // A department can run the same section name under more than one course
   // (e.g. "IT-A" under both B.Tech and M.Tech) - this list isn't scoped to a
@@ -164,14 +200,12 @@ export default function HodStudentsPage() {
     () => disambiguateSectionLabels(distTargetSections, departments),
     [distTargetSections, departments]
   );
-  const unassignedCount = useMemo(
-    () => unassignedStudents.filter((s) =>
-      s.department === distDept
-      && (distBranches.length === 0 || s.secondaryDepartment === distBranch)
-      && String(s.year) === distYear
-    ).length,
-    [unassignedStudents, distDept, distBranch, distBranches.length, distYear]
-  );
+  const unassignedCount = useMemo(() => {
+    // A mixed cohort with no course picked yet isn't actionable - showing
+    // "everyone" here would overcount (some belong to a different course).
+    if (distCohortCourseIds.length > 1 && !distCourseId) return 0;
+    return distCohortByYear.filter((s) => !effectiveDistCourseId || !s.courseId || s.courseId === effectiveDistCourseId).length;
+  }, [distCohortByYear, distCohortCourseIds.length, distCourseId, effectiveDistCourseId]);
 
   const filtered = useMemo(
     () => (deptFilter === "all" ? students : students.filter(
@@ -182,12 +216,23 @@ export default function HodStudentsPage() {
 
   // Sections a single student can be assigned into - their real branch's (if
   // pre-registered to one via secondaryDepartment) or their own department's,
-  // for their own year. Same resolution the bulk Distribute dialog uses.
+  // for their own year. Same resolution the bulk Distribute dialog uses. Also
+  // scoped to the student's own `courseId` when they have one (see
+  // StudentRecord.courseId's doc-comment) - a department can run a
+  // same-named section under more than one course, so without this a student
+  // could be offered (and placed into) a section belonging to the wrong one.
+  // A student with no declared course yet imposes no such filter.
   const assignTargetSections = useMemo(() => {
     if (!assignTarget) return [];
-    const dept = assignTarget.secondaryDepartment || assignTarget.department;
     return managedSections
-      .filter((s) => s.department === dept && s.year === assignTarget.year)
+      .filter((s) =>
+        sectionFeedsTarget(s, assignTarget.department, assignTarget.secondaryDepartment ?? "")
+        && s.year === assignTarget.year
+        && (!assignTarget.courseId || s.courseId === assignTarget.courseId)
+        // Exclude the section the student is already sitting in - listing it
+        // as a "Move" target read as "already in this section" and picking
+        // it would just be a no-op re-assign.
+        && s.name !== assignTarget.section)
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [assignTarget, managedSections]);
   const assignSectionLabels = useMemo(
@@ -276,6 +321,30 @@ export default function HodStudentsPage() {
     }
   }
 
+  // Removes a student from their current section back to "Unassigned" -
+  // keeps the student record (roll number, department, course intact),
+  // unlike the row's separate delete action which removes them outright.
+  async function handleUnassign() {
+    if (!assignTarget) return;
+    setIsUnassigning(true);
+    try {
+      const res = await fetch(`/api/college/students/${assignTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unassign: true }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to unassign");
+      toast({ variant: "success", title: `${assignTarget.name} unassigned` });
+      setAssignTarget(null);
+      void load();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to unassign" });
+    } finally {
+      setIsUnassigning(false);
+    }
+  }
+
   async function handleSaveEdit() {
     if (!editTarget) return;
     setIsSavingEdit(true);
@@ -319,6 +388,7 @@ export default function HodStudentsPage() {
       const summary = (json.perSection ?? []).map((p) => `${p.section}: ${p.count}`).join(", ");
       toast({ variant: "success", title: `Distributed ${json.distributed} students`, description: summary });
       setDistributeOpen(false);
+      setDistCourseId("");
       setDistSectionIds([]);
       void load();
     } catch (err) {
@@ -332,6 +402,19 @@ export default function HodStudentsPage() {
     { key: "rollNumber", header: "Roll No", render: (r) => <span className="font-medium">{r.rollNumber || "—"}</span> },
     { key: "name", header: "Name" },
     { key: "department", header: "Department", hideOnMobile: true, render: (r) => <span className="text-sm text-muted-foreground">{r.department}</span> },
+    {
+      key: "course",
+      header: "Course",
+      hideOnMobile: true,
+      // Kept in sync with whichever section a student is actually placed
+      // into (see StudentRecord.courseId's doc-comment) - a department can
+      // run more than one course, so this is the only reliable way to tell,
+      // at a glance, which one a given row belongs to (the same section name
+      // can exist under two different courses).
+      render: (r) => r.course
+        ? <span className="text-sm text-muted-foreground">{r.course}</span>
+        : <span className="text-sm text-muted-foreground/40">—</span>,
+    },
     {
       key: "secondaryDepartment",
       header: "Secondary Dept",
@@ -448,7 +531,7 @@ export default function HodStudentsPage() {
             open={distributeOpen}
             onOpenChange={(open) => {
               setDistributeOpen(open);
-              if (!open) { setDistBranch(""); setDistSectionIds([]); }
+              if (!open) { setDistBranch(""); setDistCourseId(""); setDistSectionIds([]); }
             }}
           >
             <DialogTrigger asChild>
@@ -468,7 +551,7 @@ export default function HodStudentsPage() {
                     <Label>Department</Label>
                     <Select
                       value={distDept}
-                      onValueChange={(v) => { setDistDept(v); setDistBranch(""); setDistYear(""); setDistSectionIds([]); }}
+                      onValueChange={(v) => { setDistDept(v); setDistBranch(""); setDistYear(""); setDistCourseId(""); setDistSectionIds([]); }}
                     >
                       <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                       <SelectContent>
@@ -487,7 +570,7 @@ export default function HodStudentsPage() {
                       <Label>Secondary Department</Label>
                       <Select
                         value={distBranch}
-                        onValueChange={(v) => { setDistBranch(v); setDistYear(""); setDistSectionIds([]); }}
+                        onValueChange={(v) => { setDistBranch(v); setDistYear(""); setDistCourseId(""); setDistSectionIds([]); }}
                       >
                         <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                         <SelectContent>
@@ -498,7 +581,7 @@ export default function HodStudentsPage() {
                   ) : (
                     <div className="space-y-2">
                       <Label>Year</Label>
-                      <Select value={distYear} onValueChange={(v) => { setDistYear(v); setDistSectionIds([]); }} disabled={!distDept}>
+                      <Select value={distYear} onValueChange={(v) => { setDistYear(v); setDistCourseId(""); setDistSectionIds([]); }} disabled={!distDept}>
                         <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                         <SelectContent>
                           {distYears.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
@@ -513,7 +596,7 @@ export default function HodStudentsPage() {
                     <Label>Year</Label>
                     <Select
                       value={distYear}
-                      onValueChange={(v) => { setDistYear(v); setDistSectionIds([]); }}
+                      onValueChange={(v) => { setDistYear(v); setDistCourseId(""); setDistSectionIds([]); }}
                       disabled={!distBranch}
                     >
                       <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
@@ -524,7 +607,31 @@ export default function HodStudentsPage() {
                   </div>
                 )}
 
-                {distDept && (distBranches.length === 0 || distBranch) && distYear && (
+                {/* Only shown when this (department, branch, year) cohort
+                    itself has unassigned students declared for more than one
+                    course - the common case (one course, or none declared)
+                    skips straight to Target Sections. */}
+                {distDept && (distBranches.length === 0 || distBranch) && distYear && distCohortCourseIds.length > 1 && (
+                  <div className="space-y-2">
+                    <Label>Course</Label>
+                    <Select
+                      value={distCourseId}
+                      onValueChange={(v) => { setDistCourseId(v); setDistSectionIds([]); }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                      <SelectContent>
+                        {distCohortCourseIds.map((cid) => (
+                          <SelectItem key={cid} value={cid}>{courses.find((c) => c.id === cid)?.name ?? cid}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      This department has unassigned students declared for more than one course - pick which one to distribute.
+                    </p>
+                  </div>
+                )}
+
+                {distDept && (distBranches.length === 0 || distBranch) && distYear && (distCohortCourseIds.length <= 1 || distCourseId) && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Target Sections</Label>
@@ -544,7 +651,9 @@ export default function HodStudentsPage() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                        No sections for {distTargetDept} Year {distYear} yet - create them under Sections first.
+                        No sections for {distTargetDept} Year {distYear}
+                        {effectiveDistCourseId ? ` (${courses.find((c) => c.id === effectiveDistCourseId)?.name ?? "this course"})` : ""}
+                        {" "}yet - create them under Sections first.
                       </p>
                     )}
                   </div>
@@ -654,6 +763,17 @@ export default function HodStudentsPage() {
             </div>
           </div>
           <DialogFooter>
+            {assignTarget?.section && (
+              <Button
+                type="button"
+                variant="outline"
+                className="mr-auto text-destructive hover:text-destructive"
+                onClick={() => void handleUnassign()}
+                loading={isUnassigning}
+              >
+                Unassign
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => setAssignTarget(null)}>Cancel</Button>
             <Button onClick={() => void handleAssign()} loading={isAssigning} disabled={!assignSectionId}>
               {assignTarget?.section ? "Move" : "Assign"}

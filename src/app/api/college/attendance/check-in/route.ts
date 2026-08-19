@@ -11,19 +11,9 @@ import { getHolidayNameForDate } from "@/lib/leave/holidaysCount";
 import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
+import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
+import { nowInIndia } from "@/lib/leave/dayCounter";
 import type { College, UserRole } from "@/types";
-
-function todayDocDate(): { date: Date; docSuffix: string } {
-  const now = new Date();
-  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const docSuffix = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  return { date, docSuffix };
-}
-
-function currentTimeHHMM(): string {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
 
 // Self-attendance check-in — geolocation and face-match verification both
 // happen client-side (see src/lib/attendance/faceMatch.ts); this route only
@@ -32,12 +22,18 @@ function currentTimeHHMM(): string {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
+    // India's own wall-clock date/time, not the server process's ambient
+    // timezone (commonly UTC on a hosted deployment) - see nowInIndia's own
+    // doc-comment. Everything below (which day this is, what time the
+    // check-in actually happened, which permission doc to look up) has to
+    // agree with what the person doing this literally just experienced.
+    const { date, dateISO: docSuffix, timeHHMM: checkIn } = nowInIndia();
     const db = getAdminDb();
-    const today = new Date();
+    const today = date;
     // A Working Day override (see college-office/holidays/page.tsx) naming
     // this caller's own role flips today from a Sunday off to a working day
     // for them specifically - everyone else still gets the day off.
-    if (isSunday() && !(await isWorkingDayForRole(db, session.collegeId, today, session.role as UserRole))) {
+    if (isSunday(date) && !(await isWorkingDayForRole(db, session.collegeId, today, session.role as UserRole))) {
       return NextResponse.json({ error: SUNDAY_HOLIDAY_MESSAGE }, { status: 403 });
     }
 
@@ -80,7 +76,6 @@ export async function POST(request: Request) {
     const userSnap = await collegeRef.collection("users").doc(session.uid).get();
     const user = userSnap.data() as { name?: string; department?: string } | undefined;
 
-    const { date, docSuffix } = todayDocDate();
     const recordId = `${session.uid}_${docSuffix}`;
     const recordRef = collegeRef.collection("attendanceRecords").doc(recordId);
     const existingSnap = await recordRef.get();
@@ -94,7 +89,12 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    const checkIn = currentTimeHHMM();
+    // An HOD may grant this specific person an exception for today, set
+    // before they check in themselves (see check-in-permission/route.ts) -
+    // snapshotted onto the record so every "Late" derivation downstream
+    // (isLateCheckIn) reads it the same way without a second lookup, and so
+    // it stays fixed even if the permission is later changed or removed.
+    const permittedCheckInTime = await resolveCheckInPermission(db, session.collegeId, session.uid, docSuffix);
     await recordRef.set({
       collegeId: session.collegeId,
       facultyId: session.uid,
@@ -107,11 +107,12 @@ export async function POST(request: Request) {
       checkInLocation: { latitude, longitude },
       checkInFaceMatchDistance: faceMatchDistance ?? null,
       checkInVerified: true,
+      ...(permittedCheckInTime ? { permittedCheckInTime } : {}),
       updatedAt: now,
       ...(existingSnap.exists ? {} : { createdAt: now }),
     }, { merge: true });
 
-    if (isLateCheckIn(checkIn)) {
+    if (isLateCheckIn(checkIn, permittedCheckInTime)) {
       try {
         await recordLateCheckIn(db, session.collegeId, session.uid, user?.name ?? "", user?.department ?? "", date);
       } catch (err) {

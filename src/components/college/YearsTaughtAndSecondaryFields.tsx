@@ -1,10 +1,9 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import type { AcademicYear, Department } from "@/types";
+import type { Department } from "@/types";
 
 // The "Years Taught" + "Secondary Departments" checkbox blocks, shared by the
 // flat Add/Edit Department forms and the per-course "Edit Academic Structure"
@@ -13,15 +12,17 @@ import type { AcademicYear, Department } from "@/types";
 // component so the three call sites can't drift apart.
 
 interface Props {
-  openYears: AcademicYear[];
-  onAddYear: () => void;
-  isAddingYear: boolean;
   assignedYears: number[];
   onToggleYear: (year: number, checked: boolean) => void;
   /**
-   * Bounds which open years are offered - omitted for a department-wide
-   * (flat) edit, or a course's own durationYears for a per-course override,
-   * so the checklist can't offer a year the course doesn't span.
+   * The course's own durationYears - Years Taught always offers exactly
+   * 1..maxYear, full stop. There used to be a separate college-wide "open
+   * academic years" list a Principal had to manually grow one year at a time
+   * (a "+ Add Year" button) before a longer course's later years became
+   * selectable here; the server now auto-opens whichever years a course
+   * scope actually uses (ensureAssignedYearsOpen, college/courses POST and
+   * college/departments PATCH), so that manual step is gone and this is the
+   * only bound left.
    */
   maxYear?: number;
   yearsHelperText: string;
@@ -35,39 +36,44 @@ interface Props {
    * two call sites, which are still per-course.
    */
   showYears?: boolean;
+  /**
+   * Hides the "Secondary Departments" picker, leaving only Years Taught (when
+   * shown) - cross-listing is decided once on Add/Edit Department and a
+   * course always follows it, never re-picked per course. Defaults to true
+   * (shown) for the Add/Edit Department call sites, which are the only place
+   * it's actually editable. When false, `secondaryDepartmentsNote` can render
+   * a read-only summary in its place.
+   */
+  showSecondaryDepartments?: boolean;
+  /** Read-only note shown instead of the picker when showSecondaryDepartments is false. */
+  secondaryDepartmentsNote?: string;
 }
 
 export function YearsTaughtAndSecondaryFields({
-  openYears, onAddYear, isAddingYear, assignedYears, onToggleYear, maxYear, yearsHelperText,
+  assignedYears, onToggleYear, maxYear, yearsHelperText,
   secondaryDepartmentOptions, secondaryDepartments, onToggleSecondaryDepartment, showYears = true,
+  showSecondaryDepartments = true, secondaryDepartmentsNote,
 }: Props) {
-  const yearOptions = maxYear != null ? openYears.filter((y) => y.yearNumber <= maxYear) : openYears;
+  const yearOptions = Array.from({ length: maxYear ?? 0 }, (_, i) => i + 1);
 
   return (
     <>
       {showYears && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Years Taught</Label>
-            <Button type="button" variant="outline" size="sm" onClick={onAddYear} loading={isAddingYear}>
-              + Add Year
-            </Button>
-          </div>
+          <Label>Years Taught</Label>
           {yearOptions.length === 0 ? (
             <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-              {openYears.length === 0
-                ? 'No academic years added yet for this college - use "+ Add Year" above.'
-                : "No open years within this course's duration yet."}
+              Select a course above first.
             </p>
           ) : (
             <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-              {yearOptions.map((y) => (
-                <label key={y.yearNumber} className="flex items-center gap-1.5 text-sm">
+              {yearOptions.map((year) => (
+                <label key={year} className="flex items-center gap-1.5 text-sm">
                   <Checkbox
-                    checked={assignedYears.includes(y.yearNumber)}
-                    onCheckedChange={(checked) => onToggleYear(y.yearNumber, !!checked)}
+                    checked={assignedYears.includes(year)}
+                    onCheckedChange={(checked) => onToggleYear(year, !!checked)}
                   />
-                  {yearOrdinalLabel(y.yearNumber)}
+                  {yearOrdinalLabel(year)}
                 </label>
               ))}
             </div>
@@ -76,31 +82,40 @@ export function YearsTaughtAndSecondaryFields({
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label>Secondary Departments</Label>
-        {secondaryDepartmentOptions.length > 0 ? (
-          <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
-            {secondaryDepartmentOptions.map((d) => (
-              <label key={d.id} className="flex items-center gap-1.5 text-sm">
-                <Checkbox
-                  checked={secondaryDepartments.includes(d.name)}
-                  onCheckedChange={(checked) => onToggleSecondaryDepartment(d.name, !!checked)}
-                />
-                {d.name}
-              </label>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-            No other top-level departments yet
+      {showSecondaryDepartments ? (
+        <div className="space-y-2">
+          <Label>Secondary Departments</Label>
+          {secondaryDepartmentOptions.length > 0 ? (
+            <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
+              {secondaryDepartmentOptions.map((d) => (
+                <label key={d.id} className="flex items-center gap-1.5 text-sm">
+                  <Checkbox
+                    checked={secondaryDepartments.includes(d.name)}
+                    onCheckedChange={(checked) => onToggleSecondaryDepartment(d.name, !!checked)}
+                  />
+                  {d.name}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+              No other top-level departments yet
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Optional - every section College Office creates under this department will be cross-listed to all
+            selected departments, so each one&apos;s HOD gets automatic view-only access to its students,
+            roster, and assigned faculty (e.g. a shared first-year department feeding both CSE and ECE).
           </p>
-        )}
-        <p className="text-xs text-muted-foreground">
-          Optional - every section College Office creates under this department will be cross-listed to all
-          selected departments, so each one&apos;s HOD gets automatic view-only access to its students,
-          roster, and assigned faculty (e.g. a shared first-year department feeding both CSE and ECE).
-        </p>
-      </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label className="text-muted-foreground">Secondary Departments</Label>
+          <p className="text-xs text-muted-foreground border rounded-md px-3 py-2">
+            {secondaryDepartmentsNote ?? "Follows this department's Secondary Departments setting (Edit Department page) - not set per course."}
+          </p>
+        </div>
+      )}
     </>
   );
 }

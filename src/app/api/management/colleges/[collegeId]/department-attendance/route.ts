@@ -29,6 +29,9 @@ interface RosterEntry {
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
+  // HOD-granted exception for this specific day - see
+  // /api/college/attendance/report and lib/attendance/lateStatus.ts.
+  permittedCheckInTime: string | null;
   registered: boolean;
   // The reason an HOD/Principal/VP wrote when manually marking/correcting
   // this record, or the auto-generated explanation when a day gets
@@ -78,6 +81,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
       return {
         uid: d.id, name: u.name ?? "", role,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+        permittedCheckInTime: null,
         // HOD registers directly on this same users/{uid} doc; PANEL_MEMBER
         // registers on their facultyMembers doc instead (filled in below).
         registered: role === "HOD" ? Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0 : false,
@@ -103,6 +107,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         remarks: string | null;
         checkInVerified: boolean;
         checkOutVerified: boolean;
+        permittedCheckInTime: string | null;
         entry: RosterEntry;
       }[] = [];
 
@@ -120,6 +125,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
           remarks: rec.remarks ?? null,
           checkInVerified: !!rec.checkInVerified,
           checkOutVerified: !!rec.checkOutVerified,
+          permittedCheckInTime: rec.permittedCheckInTime ?? null,
           entry: rosterByUid.get(rec.facultyId)!,
         });
       }
@@ -132,6 +138,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         p.entry.checkOut = p.checkOut;
         p.entry.checkInVerified = p.checkInVerified;
         p.entry.checkOutVerified = p.checkOutVerified;
+        p.entry.permittedCheckInTime = p.permittedCheckInTime;
         p.entry.remarks = p.remarks;
       }
 

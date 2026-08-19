@@ -69,6 +69,35 @@ export function todayISODate(): string {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+// The time-bearing counterpart to todayISODate() above, for a server route
+// that needs "what time is it right now" - not just "what day is it" - e.g.
+// recording a self-check-in's actual clock time (see
+// api/college/attendance/check-in/route.ts). Same rationale: reading
+// `new Date().getHours()/getMinutes()` on the server reflects the
+// deployment host's own ambient timezone, not India's - a UTC-run server
+// would record a check-in that felt like "9:15 AM" to the person doing it
+// as "03:45", silently breaking every time-of-day comparison downstream
+// (the 09:05 late cutoff included).
+export function nowInIndia(): { dateISO: string; timeHHMM: string; date: Date } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  const year = Number(get("year"));
+  const month = Number(get("month"));
+  const day = Number(get("day"));
+  // Some ICU builds format midnight as hour "24" under hour12:false -
+  // normalize back to 0.
+  const hour = Number(get("hour")) % 24;
+  const minute = Number(get("minute"));
+  return {
+    dateISO: `${get("year")}-${get("month")}-${get("day")}`,
+    timeHHMM: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+    date: new Date(year, month - 1, day),
+  };
+}
+
 // Every calendar date between `from` and `to` (inclusive) that counts as a
 // working day - same rule countWorkingDays uses (no Sundays, no declared
 // holidays) - but returning the actual Date objects instead of just a count.

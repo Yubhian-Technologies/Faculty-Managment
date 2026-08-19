@@ -5,7 +5,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import type { TimetableDraft, TimetableSlot } from "@/types";
+import { draftDocId, matchesCurrentSemester, resolveCurrentSemester } from "@/lib/college/semester";
+import type { CourseYearTiming, TimetableDraft, TimetableSlot } from "@/types";
 
 // Materialises a draft into `timetableSlots` - the moment it becomes visible to
 // the Principal, Vice Principal, faculty (panel/teaching) and the Class Leader.
@@ -23,18 +24,30 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
-    const draftRef = collegeRef.collection("timetableDrafts").doc(sectionId);
 
+    const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    const section = sectionSnap.data() as { department: string; courseId: string; year: number };
+
+    // Every course-year's own timing, so both this section's own current
+    // semester AND every OTHER slot's own course-year semester (for the
+    // conflict re-check below) resolve against the calendar that actually
+    // governs each of them - two different courses can be in different
+    // semesters (or none) at once, see loadContext.ts's own version of this.
+    const allTimingsSnap = await collegeRef.collection("courseYearTimings").get();
+    const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as CourseYearTiming);
+    const currentSemesterByCourseYear = new Map<string, number | null>(
+      allTimings.map((t) => [`${t.courseId}_${t.year}`, resolveCurrentSemester(t)])
+    );
+    const currentSemester = currentSemesterByCourseYear.get(`${section.courseId}_${section.year}`) ?? null;
+
+    const draftRef = collegeRef.collection("timetableDrafts").doc(draftDocId(sectionId, currentSemester));
     const draftSnap = await draftRef.get();
     if (!draftSnap.exists) return NextResponse.json({ error: "No draft to publish" }, { status: 404 });
     const draft = { id: draftSnap.id, ...draftSnap.data() } as TimetableDraft;
     if (!draft.slots?.length) {
       return NextResponse.json({ error: "This draft has no slots to publish" }, { status: 400 });
     }
-
-    const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
-    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
-    const section = sectionSnap.data() as { department: string; courseId: string; year: number };
 
     // Only the section's own department - or an HOD who owns/manages it (a
     // parent HOD over a sub-department, or a Sub-HOD's grouped/managed
@@ -55,9 +68,15 @@ export async function POST(request: Request) {
 
     // Re-check faculty double-booking against live data: another section may have
     // published since this draft was generated, so the draft's view of who is
-    // free can be stale.
+    // free can be stale. A slot from a DIFFERENT semester of its own
+    // course-year is history, not a live conflict - excluded up front the
+    // same way loadContext.ts scopes busyFaculty for the solver, so a
+    // faculty free again once their prior-semester class ended isn't
+    // wrongly blocked from a new placement at the same day/period.
     const allSlotsSnap = await collegeRef.collection("timetableSlots").get();
-    const allSlots = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
+    const allSlots = allSlotsSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot)
+      .filter((s) => matchesCurrentSemester(s.semester, currentSemesterByCourseYear.get(`${s.courseId}_${s.year}`) ?? null));
 
     const conflicts: string[] = [];
     for (const s of draft.slots) {
@@ -81,6 +100,13 @@ export async function POST(request: Request) {
       );
     }
 
+    // This section's own stale GENERATED slots - already narrowed to
+    // "current semester or untagged/legacy" by the allSlots filter above
+    // (this section's own course-year resolves to the same `currentSemester`
+    // in currentSemesterByCourseYear by construction), so this ALSO sweeps
+    // up any legacy/untagged slots the first time a section publishes under
+    // a newly-configured semester regime, while never touching a genuinely
+    // PRIOR semester's own tagged slots (those stay as history).
     const staleGenerated = allSlots.filter((s) => s.sectionId === sectionId && s.source === "GENERATED");
     const now = FieldValue.serverTimestamp();
 
@@ -117,6 +143,7 @@ export async function POST(request: Request) {
         periodNumber: s.periodNumber,
         source: "GENERATED",
         isPinned: false,
+        semester: currentSemester,
         createdAt: now,
         updatedAt: now,
       });
@@ -125,6 +152,7 @@ export async function POST(request: Request) {
 
     batch.update(draftRef, {
       status: "PUBLISHED",
+      semester: currentSemester,
       publishedAt: now,
       publishedByName: session.email,
     });

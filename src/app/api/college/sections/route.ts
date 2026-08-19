@@ -32,13 +32,20 @@ export async function GET(request: Request) {
     // sections too - they own the whole department tree, same as the
     // sub-HOD who runs that sub-department day to day (see
     // assertHodOwnsSection in sections/[id]/route.ts, which mirrors this).
-    // The one case that stays genuinely "secondary" (view-only) is a section
-    // explicitly cross-listed to this department via `secondaryDepartments`
-    // (inherited from the owning Department at creation) - a different,
-    // unrelated top-level department's section, not part of this HOD's own
-    // tree. Same shape as the students route.
+    //
+    // An HOD's Sections page deliberately does NOT also pull in sections
+    // cross-listed to them via `secondaryDepartments` (a different, unrelated
+    // top-level department's section feeding this one - e.g. Physics' own
+    // year-1 sections feeding Information Technology) even read-only. That
+    // grant used to exist here (mirroring the still-present one in the
+    // students route) but conflated "years this department actually teaches"
+    // (its own assignedYears/courseScopes) with "years some other department
+    // has decided to feed it" - an HOD only ever sees sections for years
+    // their own department is actually scoped to. This is scoped to Sections
+    // specifically; the separate "Incoming Students" feature (hod/students/
+    // incoming, keyed off Student.secondaryDepartment) and Teaching
+    // Assignments' own cross-listed view are untouched.
     let childDeptQuery: FirebaseFirestore.Query | null = null;
-    let secondaryDeptQuery: FirebaseFirestore.Query | null = null;
     // A branch can be BOTH a standalone department with its own dedicated HOD
     // (its own assignedYears, e.g. CIVIL's [2,3,4]) AND grouped under a
     // sub-department for the shared first year (e.g. BS-English managing
@@ -82,12 +89,6 @@ export async function GET(request: Request) {
       hodScope = scope;
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
-        // array-contains-any (not array-contains) since this HOD may own more
-        // than one department now - Firestore caps this variant at 10 values,
-        // tighter than the 30-value `in` cap used elsewhere in this route.
-        secondaryDeptQuery = withCommonFilters(
-          sectionsColl.where("secondaryDepartments", "array-contains-any", scope.ownDepartmentNames.slice(0, 10))
-        );
       }
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
       // both fully-owned - one `in` query covers both, tagged primary below.
@@ -115,10 +116,9 @@ export async function GET(request: Request) {
 
     primaryQuery = withCommonFilters(primaryQuery);
 
-    const [primarySnap, childDeptSnap, secondaryDeptSnap] = await Promise.all([
+    const [primarySnap, childDeptSnap] = await Promise.all([
       primaryQuery.get(),
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
-      secondaryDeptQuery ? secondaryDeptQuery.get() : Promise.resolve(null),
     ]);
 
     const seenIds = new Set<string>();
@@ -154,13 +154,6 @@ export async function GET(request: Request) {
         sections.push({ id: d.id, ...data, accessLevel: "primary" });
       }
     }
-    if (secondaryDeptSnap) {
-      for (const d of secondaryDeptSnap.docs) {
-        if (seenIds.has(d.id)) continue;
-        seenIds.add(d.id);
-        sections.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
-      }
-    }
     sections.sort((a, b) => {
       const ya = (a.year as number | undefined) ?? 0;
       const yb = (b.year as number | undefined) ?? 0;
@@ -177,7 +170,10 @@ export async function GET(request: Request) {
     // when they're cross-listed to different branches - e.g. two "A"s under
     // Basic Science, one feeding CSE and one ECE - and without this, both
     // would be double-counted into a single merged total instead of their
-    // own real counts.
+    // own real counts. Also includes `courseId` - a department can run a
+    // same-named section under more than one course (see StudentRecord.
+    // courseId's doc-comment), and without it a student in one gets
+    // double-counted into the other's total too.
     //
     // A shared-first-year student (department = the common department or one
     // of its sub-departments, secondaryDepartment = their real branch) stays
@@ -214,8 +210,8 @@ export async function GET(request: Request) {
         for (const d of snap.docs) {
           if (countedIds.has(d.id)) continue;
           countedIds.add(d.id);
-          const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string };
-          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}`;
+          const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string; courseId?: string };
+          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}|${s.courseId ?? ""}`;
           countMap.set(key, (countMap.get(key) ?? 0) + 1);
         }
       }
@@ -223,12 +219,12 @@ export async function GET(request: Request) {
         for (const d of snap.docs) {
           if (countedIds.has(d.id)) continue;
           countedIds.add(d.id);
-          const s = d.data() as { secondaryDepartment?: string; section?: string; year?: number };
+          const s = d.data() as { secondaryDepartment?: string; section?: string; year?: number; courseId?: string };
           // The section a shared-first-year student actually sits in is their
           // real branch's own - never itself cross-listed (see hod/sections/
           // new's managed-branch mode) - so the disambiguator stays "", same
           // as such a section's own (always-empty) secondaryDepartments.
-          const key = `${s.secondaryDepartment ?? ""}|${s.section ?? ""}|${s.year ?? 0}|`;
+          const key = `${s.secondaryDepartment ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${""}|${s.courseId ?? ""}`;
           countMap.set(key, (countMap.get(key) ?? 0) + 1);
         }
       }
@@ -236,7 +232,7 @@ export async function GET(request: Request) {
       for (const sec of sections) {
         const secondaryDepts = sec.secondaryDepartments as string[] | undefined;
         const secondary = secondaryDepts?.length === 1 ? secondaryDepts[0].toLowerCase() : "";
-        const key = `${sec.department as string}|${sec.name as string}|${sec.year as number}|${secondary}`;
+        const key = `${sec.department as string}|${sec.name as string}|${sec.year as number}|${secondary}|${(sec.courseId as string | undefined) ?? ""}`;
         sec.studentCount = countMap.get(key) ?? 0;
       }
     }

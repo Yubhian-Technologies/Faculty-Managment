@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getRelatedDepartmentIds } from "@/lib/departments/scope";
 import type { DepartmentWithId } from "@/lib/college/academicStructure";
-import { validateAssignedYears, validateSecondaryDepartmentNames } from "@/lib/departments/courseScopeValidation";
+import { ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import type { Department } from "@/types";
 
@@ -128,13 +128,15 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       departmentId: string;
       catalogId: string;
-      // This course's own academic-structure override, set atomically with its
-      // creation rather than as a separate follow-up edit. Required
-      // unconditionally - a department's flat assignedYears is a legacy
-      // fallback only (no longer editable from Add/Edit Department), so every
-      // course must decide its own years right here or it would resolve to
-      // nothing.
-      courseScope?: { assignedYears: number[]; secondaryDepartments: string[] };
+      // This course's own Years Taught, set atomically with its creation
+      // rather than as a separate follow-up edit. Required unconditionally -
+      // a department's flat assignedYears is a legacy fallback only (no
+      // longer editable from Add/Edit Department), so every course must
+      // decide its own years right here or it would resolve to nothing.
+      // Secondary Departments is deliberately NOT accepted here - it always
+      // follows the department's own flat secondaryDepartments (see below),
+      // never re-picked per course.
+      courseScope?: { assignedYears: number[] };
     };
 
     const { departmentId, catalogId } = body;
@@ -169,15 +171,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This course is already added to the department" }, { status: 409 });
     }
 
-    const [deptSnap, allDeptsSnap] = await Promise.all([
-      collegeRef.collection("departments").doc(departmentId).get(),
-      collegeRef.collection("departments").get(),
-    ]);
+    const deptSnap = await collegeRef.collection("departments").doc(departmentId).get();
     if (!deptSnap.exists) {
       return NextResponse.json({ error: "Department not found" }, { status: 400 });
     }
     const dept = { id: deptSnap.id, ...(deptSnap.data() as object) } as DepartmentWithId;
-    const allDepartments = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
 
     const years = Array.from(new Set(body.courseScope.assignedYears.map(Number).filter((y) => Number.isFinite(y))));
     const tooLong = years.filter((y) => y > catalog.durationYears);
@@ -187,15 +185,16 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const yearsError = await validateAssignedYears(db, session.collegeId, years);
-    if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
+    // Opens whichever of these years the college hasn't already opened -
+    // Years Taught no longer requires pre-opening them one at a time via the
+    // old "+ Add Year" button before a longer course's later years become
+    // assignable.
+    await ensureAssignedYearsOpen(db, session.collegeId, years);
 
-    const secNames = Array.from(new Set(body.courseScope.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
-    if (secNames.length > 0) {
-      const byName = new Map(allDepartments.map((d) => [d.name, d]));
-      const secError = validateSecondaryDepartmentNames(secNames, dept.name, byName);
-      if (secError) return NextResponse.json({ error: secError }, { status: 400 });
-    }
+    // Secondary Departments always follows this department's own flat field
+    // (set on Add/Edit Department) rather than anything the client sends -
+    // it was already validated when it was set there, so it's trusted as-is.
+    const secNames = Array.from(new Set((dept.secondaryDepartments ?? []).map((s) => s.trim()).filter(Boolean)));
 
     const scopeToWrite: { assignedYears: number[]; secondaryDepartments: string[] } = { assignedYears: years, secondaryDepartments: secNames };
 
