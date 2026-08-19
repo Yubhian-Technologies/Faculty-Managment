@@ -5,6 +5,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { isCollegeStaffUnitHead, unitLabelForHeadRole, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 import type { AttendanceStatus, UserRole } from "@/types";
@@ -184,6 +186,13 @@ export async function POST(request: Request) {
     const batch = new ChunkedBatch(db);
     const now = new Date();
     let created = 0;
+    // Every row that's actually written AND has a late checkIn - the same
+    // "3 late check-ins -> 0.5 CL" rule the live check-in route enforces
+    // (see lib/leave/lateAttendancePenalty.ts) must apply here too, or a
+    // late arrival that only ever gets entered via a historical import
+    // silently never counts toward the penalty the way the exact same
+    // arrival would have if checked in live that day.
+    const lateRows: ValidRow[] = [];
 
     validRows.forEach((vr, i) => {
       if (existingSnaps[i].exists) {
@@ -200,6 +209,7 @@ export async function POST(request: Request) {
         createdAt: now, updatedAt: now,
       });
       created++;
+      if (isLateCheckIn(vr.checkIn)) lateRows.push(vr);
     });
 
     if (created > 0) {
@@ -214,6 +224,25 @@ export async function POST(request: Request) {
         details: { created, skipped: skipped.length, failed: failed.length },
         timestamp: now,
       });
+    }
+
+    // Applied one at a time, in date order, per employee - recordLateCheckIn
+    // increments a running per-(uid, year) counter and only deducts on every
+    // 3rd late check-in, so it has to see each employee's own late arrivals
+    // in the same chronological order they'd have accumulated in live, or
+    // an out-of-order file could trip the deduction on the wrong date (or
+    // even the wrong count, if rows for the same employee straddle two
+    // different years). Sequential, not Promise.all - each call needs to
+    // read back the previous one's updated counter for the same employee.
+    lateRows.sort((a, b) => a.uid === b.uid ? a.date.getTime() - b.date.getTime() : a.uid.localeCompare(b.uid));
+    for (const vr of lateRows) {
+      try {
+        await recordLateCheckIn(db, collegeId, vr.uid, vr.name, vr.department, vr.date);
+      } catch (err) {
+        // Never fails the import over a penalty-bookkeeping error - the
+        // attendance records themselves are already committed either way.
+        console.error("[college/attendance/import] late-penalty recording failed", err);
+      }
     }
 
     return NextResponse.json({ created, skipped, failed }, { status: 201 });

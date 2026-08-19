@@ -262,9 +262,19 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
         const subjectsUsedElsewhere = new Set(
           value.filter((r) => r.localId !== row.localId && !r.isPast).map((r) => r.subjectId).filter(Boolean)
         );
+        // Narrow to the picked section's own curriculum regulation, if it has
+        // one set - a section otherwise shows every regulation's subjects for
+        // the year mixed together, which invites assigning the wrong batch's
+        // curriculum. Lenient both ways (matches api/college/subjects GET's
+        // own regulation filter): a subject with no regulation of its own
+        // still shows, and an unset section regulation shows everything.
+        const selectedSection = sections.find((s) => s.id === row.sectionId);
+        const regulationFiltered = subjects.filter(
+          (s) => !selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation
+        );
         const availableSubjects = row.isPast
-          ? subjects
-          : subjects.filter((s) => s.id === row.subjectId || !subjectsUsedElsewhere.has(s.id));
+          ? regulationFiltered
+          : regulationFiltered.filter((s) => s.id === row.subjectId || !subjectsUsedElsewhere.has(s.id));
 
         return (
           <div key={row.localId} className="space-y-3 rounded-md bg-muted/30 p-3">

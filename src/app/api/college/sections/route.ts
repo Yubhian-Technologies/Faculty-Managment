@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import type { Department, DepartmentCourseScope } from "@/types";
 
@@ -263,6 +263,7 @@ export async function POST(request: Request) {
       facultyInchargeName?: string;
       departmentId?: string;
       secondaryDepartment?: string;
+      regulation?: string;
     };
 
     if (!body.courseId || !body.name?.trim() || !body.year || !body.batch?.trim()) {
@@ -277,6 +278,30 @@ export async function POST(request: Request) {
     const course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
     if (Number(body.year) < 1 || Number(body.year) > course.durationYears) {
       return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
+    }
+
+    // The batch currently occupying this year-slot's curriculum regulation -
+    // same validation Subject.regulation uses (against this course's own
+    // catalog entry, narrowed to this year), but optional: a course with no
+    // regulations assigned yet still lets a section be created (backward
+    // compatible), same leniency as everywhere else this pattern shows up.
+    const regulation = body.regulation?.trim() || null;
+    if (regulation) {
+      if (!course.catalogId) {
+        return NextResponse.json(
+          { error: "This course isn't linked to a Course Catalog entry, so it has no regulations to choose from." },
+          { status: 400 },
+        );
+      }
+      const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
+      const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulations?: string[]; regulationYears?: Record<string, number[]> }) : null;
+      const allowed = regulationsForYear(catalogItem, Number(body.year));
+      if (!allowed.includes(regulation)) {
+        return NextResponse.json(
+          { error: `"${regulation}" isn't offered for Year ${body.year} of ${course.name}. Check Settings > Course Catalog.` },
+          { status: 400 },
+        );
+      }
     }
 
     // Reject years the college hasn't opened via Academic Years. Colleges that have
@@ -483,6 +508,7 @@ export async function POST(request: Request) {
       name: sectionName,
       year: Number(body.year),
       batch: body.batch.trim(),
+      ...(regulation ? { regulation } : {}),
       facultyInchargeUid,
       facultyInchargeName: body.facultyInchargeName ?? "",
       studentCount: body.studentCount != null ? Math.max(0, Number(body.studentCount)) : 0,

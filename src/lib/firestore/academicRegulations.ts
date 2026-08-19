@@ -1,11 +1,12 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { AcademicRegulationSettings } from "@/types/core";
 
-// colleges/{collegeId}/settings/academicRegulations - the curriculum
-// regulation(s) (e.g. R20, R23) the Principal has fixed for each year of study.
+// colleges/{collegeId}/settings/academicRegulations - the college-wide
+// curriculum regulation codes (e.g. R20, R23) in use. Which ones apply to a
+// given course, and to which of its years, lives on that course's own Course
+// Catalog entry instead (see types/core.ts's AcademicRegulationSettings).
 export const DEFAULT_ACADEMIC_REGULATIONS: Omit<AcademicRegulationSettings, "updatedAt" | "updatedByName"> = {
   regulations: [],
-  yearRegulations: {},
 };
 
 export function academicRegulationsRef(db: Firestore, collegeId: string) {

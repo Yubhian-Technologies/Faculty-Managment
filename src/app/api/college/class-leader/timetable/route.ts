@@ -3,8 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
-import { todayISODate } from "@/lib/leave/dayCounter";
+import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 
 // Self-contained read for the Class Leader dashboard AND timetable page (both
 // call this one endpoint): resolves the caller's own bound Section (never a
@@ -48,10 +47,11 @@ export async function GET() {
     const rawSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     const assignments = assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    // Overlay today's approved-leave substitutions - see
+    // Overlay this week's approved-leave substitutions, covering every day
+    // of the displayed week (not just today) - see
     // lib/leave/periodCoverage.ts and the same overlay in
     // GET college/timetable-slots.
-    const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, todayISODate());
+    const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys());
     const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
     const slots = rawSlots.map((s) => {
       const sub = substitutionBySlotId.get((s as { id: string }).id);

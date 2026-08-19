@@ -192,6 +192,11 @@ export async function POST(request: Request) {
         batch.update(ref, {
           section: section.name,
           year,
+          // One-time snapshot of the section's CURRENT regulation - the
+          // student's own copy, fixed for their whole academic run regardless
+          // of what this section's own `regulation` is later edited to for a
+          // different batch (see Section.regulation's doc-comment).
+          regulation: section.regulation ?? null,
           courseId: section.courseId,
           course: section.courseName ?? null,
           updatedAt: now,

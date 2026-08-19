@@ -6,18 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, X, Pencil, Info } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import type { AcademicRegulationSettings } from "@/types";
-
-const YEARS = ["1", "2", "3", "4"] as const;
-
-function yearLabel(y: string) {
-  const suffix = y === "1" ? "st" : y === "2" ? "nd" : y === "3" ? "rd" : "th";
-  return `${y}${suffix} Year`;
-}
 
 interface RegulationSettingsCardProps {
   // Dean's dashboard shows the same settings live off the Principal's own
@@ -26,16 +18,20 @@ interface RegulationSettingsCardProps {
   // Edit button entirely, rather than dropping them into a form that would
   // 403 on Save.
   readOnly?: boolean;
+  // Called after a successful save - lets the parent Settings page refresh
+  // CourseCatalogSettingsCard's own copy of the declared regulations (see its
+  // regulationsRefreshKey prop), since that's a sibling card that fetched
+  // them once on mount and has no other way to notice this save.
+  onSaved?: () => void;
 }
 
-export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsCardProps) {
+export function RegulationSettingsCard({ readOnly = false, onSaved }: RegulationSettingsCardProps) {
   const [settings, setSettings] = useState<AcademicRegulationSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   const [regulations, setRegulations] = useState<string[]>([]);
-  const [yearRegulations, setYearRegulations] = useState<Record<string, string>>({});
   const [newRegulation, setNewRegulation] = useState("");
 
   const load = useCallback(() => {
@@ -45,7 +41,6 @@ export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsC
       .then(({ settings: s }) => {
         setSettings(s);
         setRegulations(s.regulations ?? []);
-        setYearRegulations(s.yearRegulations ?? {});
         // Nothing saved yet - go straight into editing so there's something to do here.
         setIsEditing(!readOnly && (s.regulations ?? []).length === 0);
       })
@@ -72,18 +67,11 @@ export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsC
 
   function removeRegulation(name: string) {
     setRegulations((r) => r.filter((x) => x !== name));
-    // A year that was fixed to this regulation needs re-picking.
-    setYearRegulations((yr) => {
-      const next = { ...yr };
-      for (const y of YEARS) if (next[y] === name) delete next[y];
-      return next;
-    });
   }
 
   function cancelEdit() {
     if (settings) {
       setRegulations(settings.regulations ?? []);
-      setYearRegulations(settings.yearRegulations ?? {});
     }
     setIsEditing(false);
   }
@@ -98,7 +86,7 @@ export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsC
       const res = await fetch("/api/college/settings/regulations", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ regulations, yearRegulations }),
+        body: JSON.stringify({ regulations }),
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -108,6 +96,7 @@ export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsC
       toast({ variant: "success", title: "Regulations saved" });
       setIsEditing(false);
       load();
+      onSaved?.();
     } catch {
       toast({ variant: "destructive", title: "Network error" });
     } finally {
@@ -121,7 +110,9 @@ export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsC
         <div>
           <CardTitle className="text-base">Academic Regulations</CardTitle>
           <CardDescription>
-            Curriculum regulations in use (e.g. R20, R23) and which one applies to each year of study
+            Curriculum regulation codes in use across your college (e.g. R20, R23) — declare them here first. Which
+            ones a specific course may use, and for which of its years, is set on that course&rsquo;s own entry in
+            Course Catalog below.
           </CardDescription>
         </div>
         {!readOnly && !isLoading && !isEditing && (
@@ -132,7 +123,7 @@ export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsC
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
-          <div className="h-32 bg-muted animate-pulse rounded-lg" />
+          <div className="h-16 bg-muted animate-pulse rounded-lg" />
         ) : isEditing ? (
           <>
             <div className="space-y-2">
@@ -168,29 +159,6 @@ export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsC
               </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t">
-              <Label>Fix a regulation for each year</Label>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {YEARS.map((y) => (
-                  <div key={y} className="space-y-1.5">
-                    <p className="text-xs text-muted-foreground">{yearLabel(y)}</p>
-                    <Select
-                      value={yearRegulations[y] ?? ""}
-                      onValueChange={(v) => setYearRegulations((yr) => ({ ...yr, [y]: v }))}
-                      disabled={regulations.length === 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={regulations.length ? "Select" : "Add a regulation first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {regulations.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="flex justify-end gap-2 pt-2">
               {settings && settings.regulations.length > 0 && (
                 <Button type="button" variant="outline" onClick={cancelEdit} disabled={isSaving}>
@@ -203,21 +171,11 @@ export function RegulationSettingsCard({ readOnly = false }: RegulationSettingsC
             </div>
           </>
         ) : (settings?.regulations ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground">The Principal hasn&rsquo;t set any regulations yet.</p>
+          <p className="text-sm text-muted-foreground">The Principal hasn&rsquo;t declared any regulations yet.</p>
         ) : (
           <>
             <div className="flex flex-wrap gap-2">
               {(settings?.regulations ?? []).map((r) => <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>)}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {YEARS.map((y) => (
-                <div key={y} className="rounded-md border p-2.5">
-                  <p className="text-xs text-muted-foreground">{yearLabel(y)}</p>
-                  <p className="text-sm font-medium mt-0.5">
-                    {settings?.yearRegulations?.[y] ?? <span className="text-muted-foreground">Not fixed</span>}
-                  </p>
-                </div>
-              ))}
             </div>
             {settings?.updatedAt && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -94,7 +94,12 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     fetch("/api/college/holidays")
       .then((r) => r.json() as Promise<{ holidays: Holiday[] }>)
       .then((d) => {
-        const keys = (d.holidays ?? []).map((h) => toJsDate(h.date)).filter((d): d is Date => !!d).map(dateKey);
+        // Students-only holidays don't exempt faculty - matches the server's
+        // own filtering in getHolidayDateKeys (holidaysCount.ts). Absent
+        // appliesTo (legacy holidays) still counts, same as the server.
+        const keys = (d.holidays ?? [])
+          .filter((h) => h.appliesTo !== "STUDENTS")
+          .map((h) => toJsDate(h.date)).filter((d): d is Date => !!d).map(dateKey);
         setHolidayDates(new Set(keys));
       })
       .catch(() => {

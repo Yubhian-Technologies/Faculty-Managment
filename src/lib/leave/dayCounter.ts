@@ -36,8 +36,9 @@ export function countWorkingDays(from: Date, to: Date, holidayDates: Set<string>
 // the first ~5.5 hours of every India calendar day, a UTC-local read of
 // "now" still reports the PREVIOUS day - e.g. a substitute picked for
 // today's approved leave would silently fail to show up on the timetable
-// (see getActiveSubstitutionsForDate in periodCoverage.ts, which keys off
-// this same "what day is it" concept) because the server's idea of "today"
+// (see getActiveSubstitutionsForDates and currentWeekDateKeys in
+// periodCoverage.ts, which key off this same "what day is it" concept)
+// because the server's idea of "today"
 // disagreed with India's. Explicitly anchoring to Asia/Kolkata makes this
 // correct regardless of the host's own timezone - and is also correct for a
 // browser call (LeaveApplyForm.tsx): the college's calendar day is what

@@ -109,12 +109,25 @@ export const HOLIDAY_TYPE_LABELS: Record<HolidayType, string> = {
   RESTRICTED: "Restricted",
 };
 
+// Who the holiday applies to. Only "BOTH" holidays are working-day exclusions
+// for faculty (see holidaysCount.ts) - a students-only holiday (e.g. a study
+// holiday) doesn't exempt faculty from attendance/leave-day counting.
+export type HolidayAudience = "STUDENTS" | "BOTH";
+
+export const HOLIDAY_AUDIENCE_LABELS: Record<HolidayAudience, string> = {
+  STUDENTS: "Students only",
+  BOTH: "Faculty & Students",
+};
+
 export interface Holiday {
   id: string;
   collegeId: string;
   date: Timestamp;
   name: string;
   type: HolidayType;
+  // Absent on holidays created before this field existed - treat as "BOTH"
+  // everywhere it's read (holidaysCount.ts), matching their prior behavior.
+  appliesTo?: HolidayAudience;
   academicYear: string;       // "2025-26"
   createdAt: Timestamp;
 }

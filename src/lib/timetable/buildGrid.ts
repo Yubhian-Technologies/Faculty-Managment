@@ -39,17 +39,22 @@ export function defaultPeriodTimings(
 // places into and the grid the UI draws can never drift apart.
 
 export type TimetableRow =
-  // startTime/endTime are only present once an HOD has broken this
-  // course-year's day down period-by-period (see CourseYearTiming.periods) -
-  // absent for a course-year still running on the plain numberOfPeriods/
-  // periodDurationMinutes formula, which never carried real clock times.
   | { kind: "period"; period: number; startTime?: string; endTime?: string }
   | { kind: "lunch"; durationMinutes: number }
   | { kind: "short"; durationMinutes: number };
 
 export function buildRows(timing: CourseYearTiming): TimetableRow[] {
   const rows: TimetableRow[] = [];
-  const periodTimes = new Map((timing.periods ?? []).map((p) => [p.period, p]));
+  // Falls back to the same plain numberOfPeriods/periodDurationMinutes
+  // formula the "Edit Period Timings" dialog already pre-fills with (see
+  // hod/timetable/.../page.tsx's openPeriodDialog) whenever an HOD hasn't
+  // broken this course-year's day down period-by-period yet - otherwise the
+  // grid shows blank period times the moment the Principal first sets a
+  // course-year's timing, right up until an HOD happens to open that dialog
+  // and save once, even though a perfectly reasonable clock time already
+  // exists to show.
+  const source = timing.periods && timing.periods.length > 0 ? timing.periods : defaultPeriodTimings(timing);
+  const periodTimes = new Map(source.map((p) => [p.period, p]));
   for (let p = 1; p <= timing.numberOfPeriods; p++) {
     const pt = periodTimes.get(p);
     rows.push({ kind: "period", period: p, startTime: pt?.startTime, endTime: pt?.endTime });

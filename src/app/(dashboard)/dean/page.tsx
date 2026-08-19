@@ -24,12 +24,13 @@ export default function DeanDashboard() {
       </Card>
 
       {/* Read-only - the Principal maintains these under Settings; whatever
-          they save there shows up here immediately on next load. Course
-          Catalog shows each course's own regulations (segregated per course);
-          Academic Regulations below is the college-wide declared list and
-          the flat per-year fixing, which is course-agnostic. */}
-      <CourseCatalogSettingsCard readOnly />
+          they save there shows up here immediately on next load. Academic
+          Regulations is the college-wide declared list of regulation codes;
+          Course Catalog below shows each course's own subset of those codes
+          (and which of its years each applies to) - same order as the
+          Principal's own Settings page, since Regulations is the prerequisite. */}
       <RegulationSettingsCard readOnly />
+      <CourseCatalogSettingsCard readOnly />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import { isTeachingDesignation } from "@/lib/designations/config";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { notify } from "@/lib/notify";
-import { enumerateWorkingDates, isoDateKey } from "@/lib/leave/dayCounter";
+import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import type { CollegeType, DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
 import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
 
@@ -19,6 +19,38 @@ import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
 function dayOfWeekFromDate(d: Date): DayOfWeek | null {
   const map: Record<number, DayOfWeek> = { 1: "MON", 2: "TUE", 3: "WED", 4: "THU", 5: "FRI", 6: "SAT" };
   return map[d.getDay()] ?? null; // Sunday (0) never appears - enumerateWorkingDates already excludes it
+}
+
+// The Monday..Saturday date keys of the week containing `today` - feeds the
+// weekly timetable grid's substitution overlay (see getActiveSubstitutionsForDates
+// and its 3 callers: teaching-assignments, timetable-slots, class-leader/
+// timetable routes). Each TimetableSlot occurs on exactly one fixed weekday,
+// so within a single week it maps to exactly one calendar date - a Wednesday
+// slot's substitute (if any) always comes from Wednesday's date in whichever
+// week is being displayed. Previously these routes only checked TODAY's
+// date, so a weekly grid showing Mon-Sat correctly overlaid a substitute
+// onto today's own cell but left every OTHER day of that same week (already
+// past, or still to come, within an approved leave/extension spanning
+// several days) silently showing the original faculty instead.
+export function currentWeekDateKeys(todayISO: string = todayISODate()): string[] {
+  // Parsed as Y/M/D rather than run through `new Date(todayISO)` (which
+  // reads an unqualified "YYYY-MM-DD" as UTC midnight) and NEVER defaulted
+  // to a bare `new Date()` here - todayISODate() is already anchored to
+  // Asia/Kolkata specifically to dodge the bug this file's own dayCounter.ts
+  // documents: a UTC-run server's raw "now" reports the previous calendar
+  // day for the first ~5.5h of every India day, which would silently pick
+  // the wrong Monday and misalign this week's dates against the ones
+  // already stored on approved PeriodSubstitutions.
+  const [y, m, d] = todayISO.split("-").map(Number);
+  const today = new Date(y, m - 1, d);
+  const day = today.getDay(); // 0=Sun..6=Sat
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + mondayOffset);
+  const keys: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    keys.push(isoDateKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)));
+  }
+  return keys;
 }
 
 function isDateWithinLeave(req: LeaveRequest, dateISO: string): boolean {
@@ -220,6 +252,7 @@ export async function validatePeriodSubstitutions(params: {
 }
 
 export interface DateSubstitution {
+  date: string;
   timetableSlotId: string;
   day: DayOfWeek;
   periodNumber: number;
@@ -231,36 +264,73 @@ export interface DateSubstitution {
   requesterName: string;
 }
 
-// Every PeriodSubstitution active on a specific date - i.e. from an APPROVED
-// leave request whose periodSubstitutions include that exact date - across
-// the whole college. Used by timetable read surfaces (section view, class
-// leader view, a faculty's own Teaching Load grid) to show who's actually
-// covering a period that day instead of the regular weekly assignment. Since
-// a TimetableSlot only ever has one fixed weekday, a caller can key results
-// by `timetableSlotId` to override "who teaches this" and/or filter by
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+// Every PeriodSubstitution active on any of the given dates - i.e. from an
+// APPROVED leave request whose periodSubstitutions include that exact date -
+// across the whole college. Used by timetable read surfaces (section view,
+// class leader view, a faculty's own Teaching Load grid) to show who's
+// actually covering a period on a given day instead of the regular weekly
+// assignment. Since a TimetableSlot only ever has one fixed weekday, it
+// occurs on exactly one calendar date within any single week passed in here
+// (see currentWeekDateKeys) - so a caller can still key results by
+// `timetableSlotId` alone to override "who teaches this," and/or filter by
 // `substituteFacultyId` to find what a given faculty member is covering.
-export async function getActiveSubstitutionsForDate(
+//
+// A substitution is pinned to the timetableSlot doc that existed at the
+// moment the HOD/applicant picked it - but publish/route.ts deletes and
+// recreates every GENERATED slot with a brand-new id on each republish, even
+// when the same subject stays in the same day/period. That silently orphans
+// an already-approved substitution's stored id. So the id below is
+// re-resolved against whatever slot currently occupies this section/day/
+// period/subject, and only falls back to the originally-stored id if that
+// exact placement genuinely no longer exists (the class itself was moved or
+// dropped) - which the caller's Map lookup then simply won't match, same as
+// before this fix.
+export async function getActiveSubstitutionsForDates(
   db: Firestore,
   collegeId: string,
-  dateISO: string
+  dateISOs: string[]
 ): Promise<DateSubstitution[]> {
-  const snap = await db.collection("colleges").doc(collegeId).collection("leaveRequests")
-    .where("status", "==", "APPROVED").get();
-  const out: DateSubstitution[] = [];
+  const dateSet = new Set(dateISOs);
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const snap = await collegeRef.collection("leaveRequests").where("status", "==", "APPROVED").get();
+
+  const active: { req: LeaveRequest; sub: PeriodSubstitution }[] = [];
   for (const doc of snap.docs) {
     const r = doc.data() as LeaveRequest;
     if (!r.periodSubstitutions?.length) continue;
     for (const p of r.periodSubstitutions) {
-      if (p.date !== dateISO) continue;
-      out.push({
-        timetableSlotId: p.timetableSlotId, day: p.day, periodNumber: p.periodNumber,
-        sectionName: p.sectionName, subjectName: p.subjectName,
-        substituteFacultyId: p.substituteFacultyId, substituteFacultyName: p.substituteFacultyName,
-        requesterUid: r.uid, requesterName: r.employeeName,
-      });
+      if (dateSet.has(p.date)) active.push({ req: r, sub: p });
     }
   }
-  return out;
+  if (active.length === 0) return [];
+
+  const sectionIds = Array.from(new Set(active.map((a) => a.sub.sectionId)));
+  const slotsSnaps = await Promise.all(
+    chunk(sectionIds, 30).map((ids) => collegeRef.collection("timetableSlots").where("sectionId", "in", ids).get())
+  );
+  const currentSlotIdByPlacement = new Map<string, string>();
+  for (const slotsSnap of slotsSnaps) {
+    for (const doc of slotsSnap.docs) {
+      const s = doc.data() as TimetableSlot;
+      currentSlotIdByPlacement.set(`${s.sectionId}|${s.day}|${s.periodNumber}|${s.subjectId}`, doc.id);
+    }
+  }
+
+  return active.map(({ req: r, sub: p }) => {
+    const currentId = currentSlotIdByPlacement.get(`${p.sectionId}|${p.day}|${p.periodNumber}|${p.subjectId}`);
+    return {
+      date: p.date, timetableSlotId: currentId ?? p.timetableSlotId, day: p.day, periodNumber: p.periodNumber,
+      sectionName: p.sectionName, subjectName: p.subjectName,
+      substituteFacultyId: p.substituteFacultyId, substituteFacultyName: p.substituteFacultyName,
+      requesterUid: r.uid, requesterName: r.employeeName,
+    };
+  });
 }
 
 // Notifies each assigned substitute once - called only when a leave request

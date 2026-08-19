@@ -48,6 +48,7 @@ export default function PrincipalAttendancePage() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [faceRegistered, setFaceRegistered] = useState<boolean | null>(null);
+  const [todayStatus, setTodayStatus] = useState<{ isHoliday: boolean; holidayName: string | null; isOnLeave: boolean } | null>(null);
   const [dialogMode, setDialogMode] = useState<"check-in" | "check-out" | "register" | null>(null);
 
   const loadFaceRegistration = useCallback(async () => {
@@ -57,6 +58,16 @@ export default function PrincipalAttendancePage() {
       setFaceRegistered(!!json.registered);
     } catch {
       /* non-critical - Mark Attendance will show a clear error if the check fails */
+    }
+  }, []);
+
+  const loadTodayStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/college/attendance/today-status");
+      const json = await res.json() as { isHoliday?: boolean; holidayName?: string | null; isOnLeave?: boolean };
+      setTodayStatus({ isHoliday: !!json.isHoliday, holidayName: json.holidayName ?? null, isOnLeave: !!json.isOnLeave });
+    } catch {
+      /* non-critical - Check In will show a clear error server-side if this fails to load */
     }
   }, []);
 
@@ -82,6 +93,10 @@ export default function PrincipalAttendancePage() {
   useEffect(() => {
     void (async () => { await loadFaceRegistration(); })();
   }, [loadFaceRegistration]);
+
+  useEffect(() => {
+    void (async () => { await loadTodayStatus(); })();
+  }, [loadTodayStatus]);
 
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
   const todayRecord = isCurrentMonth
@@ -111,6 +126,12 @@ export default function PrincipalAttendancePage() {
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
             {isSunday(now) ? (
               <p className="text-sm text-muted-foreground">{SUNDAY_HOLIDAY_MESSAGE}</p>
+            ) : todayStatus?.isHoliday ? (
+              <p className="text-sm text-muted-foreground">
+                Today is a holiday{todayStatus.holidayName ? ` — ${todayStatus.holidayName}` : ""}. No attendance required.
+              </p>
+            ) : todayStatus?.isOnLeave ? (
+              <p className="text-sm text-muted-foreground">You&apos;re on approved leave today — attendance cannot be marked.</p>
             ) : faceRegistered === false ? (
               <>
                 <p className="text-sm text-muted-foreground">
