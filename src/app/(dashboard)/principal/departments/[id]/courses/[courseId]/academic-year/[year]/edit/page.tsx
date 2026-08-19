@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
-import type { Course, CourseAcademicYear } from "@/types";
+import { resolveCurrentAcademicYear } from "@/lib/college/academicSession";
+import type { AcademicSession, Course, CourseAcademicYear } from "@/types";
 
 // "2025-2026" -> "2026-2027"; falls back to blank if the label isn't in that shape.
 function suggestNextLabel(label: string): string {
@@ -26,6 +27,9 @@ export default function CourseAcademicYearPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [existing, setExisting] = useState<CourseAcademicYear | null>(null);
   const [label, setLabel] = useState("");
+  // The college's current academic year (Settings > Academic Year). It's what a
+  // first-time setup defaults to, so a new course-year needs nothing typed.
+  const [collegeYear, setCollegeYear] = useState("");
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -33,15 +37,24 @@ export default function CourseAcademicYearPage() {
     async function load() {
       setLoading(true);
       try {
-        const [coursesRes, academicYearsRes] = await Promise.all([
+        const [coursesRes, academicYearsRes, sessionsRes] = await Promise.all([
           fetch(`/api/college/courses?departmentId=${encodeURIComponent(id)}`).then((r) => r.json() as Promise<{ courses: Course[] }>),
           fetch(`/api/college/course-academic-years?courseId=${encodeURIComponent(courseId)}`).then((r) => r.json() as Promise<{ academicYears: CourseAcademicYear[] }>),
+          fetch("/api/college/academic-sessions").then((r) => r.json() as Promise<{ academicSessions?: AcademicSession[] }>).catch(() => ({ academicSessions: [] })),
         ]);
         setCourse((coursesRes.courses ?? []).find((c) => c.id === courseId) ?? null);
 
+        const current = resolveCurrentAcademicYear(
+          (sessionsRes.academicSessions ?? []).find((s) => s.isCurrent)?.label
+        );
+        setCollegeYear(current);
+
         const found = (academicYearsRes.academicYears ?? []).find((a) => a.year === yearNum) ?? null;
         setExisting(found);
-        setLabel(found ? suggestNextLabel(found.label) : "");
+        // First-time setup takes the college's current year rather than an empty
+        // box. An advance still suggests one on from whatever this course-year
+        // is actually on, which isn't necessarily the college's current year.
+        setLabel(found ? suggestNextLabel(found.label) : current);
       } catch {
         toast({ variant: "destructive", title: "Failed to load academic year" });
       } finally {
@@ -118,6 +131,7 @@ export default function CourseAcademicYearPage() {
             ) : (
               <p className="text-xs text-muted-foreground">
                 First-time setup - this just records the current academic year for this course/year. No experience will be changed.
+                {collegeYear ? <> Pre-filled with the college&rsquo;s current academic year (<strong>{collegeYear}</strong>), set in Settings &gt; Academic Year.</> : null}
               </p>
             )}
             <div className="space-y-2">

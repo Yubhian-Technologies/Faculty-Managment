@@ -239,12 +239,6 @@ export interface CandidateApplication {
   year?: number;                  // academic year within the course
   preferredSubjectIds?: string[]; // subjects the candidate is expected to teach, if known at hiring time
   preferredSubjectNames?: string[];
-  interviewMode?: InterviewMode;
-  // Only set when interviewMode is ONLINE but the batch itself is OFFLINE
-  // (an individually-online candidate mixed into an offline batch) - the
-  // batch's own meetingPlatform/meetingLink cover the all-online case.
-  meetingPlatform?: MeetingPlatform;
-  meetingLink?: string;
   currentStage: CandidateStage;
   interviewSubStage?: InterviewSubStage;
   status: CandidateStatus;

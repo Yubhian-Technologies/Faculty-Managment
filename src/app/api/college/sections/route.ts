@@ -8,6 +8,7 @@ import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } fro
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
 import { deriveHodScope } from "@/lib/departments/hodScope";
+import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { Department, DepartmentCourseScope } from "@/types";
 
 export async function GET(request: Request) {
@@ -125,16 +126,27 @@ export async function GET(request: Request) {
     const sections: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] = [];
     for (const d of primarySnap.docs) {
       const data = d.data();
-      // Own-department match: only actually "mine" if this year isn't claimed
-      // by whoever manages this branch elsewhere (e.g. a shared first year
-      // routed through a common department's sub-department instead).
+      // Own-department match. When this year is claimed by whoever manages the
+      // branch elsewhere (a shared first year routed through a common
+      // department's sub-department), the section still BELONGS to this
+      // department - it just isn't this HOD's to change - so it comes back
+      // read-only rather than being hidden.
+      //
+      // Hiding it was the old behaviour and left a department's own roster
+      // looking incomplete: CSE's HOD saw their 2nd/3rd/4th year sections but
+      // not the 1st year ones Basic Science runs for them, with nothing to
+      // indicate the year existed at all. Write access is unaffected - it is
+      // decided independently by assertHodOwnsSection (sections/[id]), which
+      // applies this same year-aware owner check on PATCH and DELETE, so a
+      // read-only row here cannot be edited even by calling the API directly.
+      let accessLevel: "primary" | "secondary" = "primary";
       if (hodScope && hodDepartments.length > 0) {
         const catalogId = catalogIdByCourseId.get(data.courseId as string);
         const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number, catalogId);
-        if (!hodScope.ownDepartmentNames.includes(owner)) continue;
+        if (!hodScope.ownDepartmentNames.includes(owner)) accessLevel = "secondary";
       }
       seenIds.add(d.id);
-      sections.push({ id: d.id, ...data, accessLevel: "primary" });
+      sections.push({ id: d.id, ...data, accessLevel });
     }
     if (childDeptSnap) {
       for (const d of childDeptSnap.docs) {
@@ -448,7 +460,16 @@ export async function POST(request: Request) {
         const chosen = body.secondaryDepartment?.trim()
           || (availableSecondaryDepts.length === 1 ? availableSecondaryDepts[0] : "");
         if (chosen) {
-          if (!availableSecondaryDepts.includes(chosen)) {
+          // `chosen` may itself be a sub-department of one of the available
+          // branches (e.g. "ECE-VLSI" under "Electronics and Communication
+          // Engineering") - the branch being configured is enough, its own
+          // sub-departments don't need to be separately, individually
+          // configured too (see isNameOrChildAmong's doc-comment).
+          const chosenDoc = allDepts.find((d) => d.name === chosen);
+          const chosenParentName = chosenDoc?.parentDepartmentId
+            ? allDepts.find((d) => d.id === chosenDoc.parentDepartmentId)?.name
+            : undefined;
+          if (!isNameOrChildAmong(availableSecondaryDepts, chosen, chosenParentName)) {
             return NextResponse.json(
               { error: `"${chosen}" is not one of this department's configured secondary departments` },
               { status: 400 }

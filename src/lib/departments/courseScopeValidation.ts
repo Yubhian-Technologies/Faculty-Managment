@@ -52,8 +52,15 @@ export async function ensureAssignedYearsOpen(
   }
 }
 
-// A named secondary department must exist, be a top-level department (never
-// a sub-department), and never be the department itself.
+// A named secondary department must exist and never be the department
+// itself. May be a top-level department (e.g. a shared first-year department
+// feeding plain "Electronics and Communication Engineering") OR one of its
+// sub-departments (e.g. feeding "ECE-VLSI" specifically, for students
+// admitted straight into that specialization) - a sub-department's own HOD is
+// always its parent's HOD (getHodDepartmentScope's childDepartmentNames
+// rollup), so once such a student is actually promoted into a real
+// ECE-VLSI-owned section, that HOD gets full (not just view-only) management
+// of them, exactly as for any other sub-department section.
 export function validateSecondaryDepartmentNames(
   names: string[],
   selfName: string,
@@ -63,9 +70,7 @@ export function validateSecondaryDepartmentNames(
     return "Secondary department must be different from this department";
   }
   for (const secName of names) {
-    const secDept = deptByName.get(secName);
-    if (!secDept) return `Secondary department "${secName}" not found`;
-    if (secDept.parentDepartmentId) return `"${secName}" is a sub-department and can't be used as a secondary department`;
+    if (!deptByName.has(secName)) return `Secondary department "${secName}" not found`;
   }
   return null;
 }

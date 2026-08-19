@@ -8,7 +8,7 @@ import { Step } from "@/components/shared/PipelineStep";
 import { getCurrentStage, stateForStage, getApprovedDetailedStatuses, getOnboardingSummary, getDetailedHiringStatus, isHiringClosed, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import type { VacancyRequest, Candidate, CandidateApplication, CandidateStatus, CandidateStage, InterviewMode, HiringBatch, OfferLetter, FacultyAccountRequestStatus } from "@/types";
+import type { VacancyRequest, Candidate, CandidateApplication, CandidateStatus, CandidateStage, HiringBatch, OfferLetter, FacultyAccountRequestStatus } from "@/types";
 import { BATCH_PHASE_LABELS } from "@/types";
 
 type OfferStatus = "SENT" | "ACCEPTED" | "REJECTED";
@@ -21,7 +21,6 @@ type PipelineCandidateView = {
   name: string;
   email: string;
   isShortlisted: boolean;
-  interviewMode?: InterviewMode;
   status: CandidateStatus;
   currentStage: CandidateStage;
   notifiedPrincipalDocsReady?: boolean;
@@ -102,6 +101,10 @@ function PipelineCard({
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base font-bold leading-snug">{vacancy.position}</h3>
               <StatusBadge status={vacancy.status} />
+              <span className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${vacancy.hiringMode === "ONLINE" ? "bg-blue-50 text-blue-600" : "bg-muted text-muted-foreground"}`}>
+                {vacancy.hiringMode === "ONLINE" ? <Monitor className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
+                {vacancy.hiringMode === "ONLINE" ? "Online" : "Offline"}
+              </span>
               {batch && (
                 <span className="text-[11px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
                   {BATCH_PHASE_LABELS[batch.currentPhase]}
@@ -169,11 +172,6 @@ function PipelineCard({
                       <span className="text-muted-foreground text-xs ml-2 truncate">{c.email}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {c.interviewMode === "ONLINE" ? (
-                        <Monitor className="h-3.5 w-3.5 text-blue-500" />
-                      ) : (
-                        <MapPin className="h-3.5 w-3.5 text-gray-500" />
-                      )}
                       {c.isShortlisted ? (
                         <Badge variant="default" className="text-[10px] py-0 px-1.5">
                           <UserCheck className="h-3 w-3 mr-0.5" /> Shortlisted
@@ -318,7 +316,6 @@ export function CollegeAccountsHiringBoard({ scope }: { scope: "active" | "close
             name: person?.name ?? "Unknown",
             email: person?.email ?? "",
             isShortlisted: a.isShortlisted,
-            interviewMode: a.interviewMode,
             status: a.status,
             currentStage: a.currentStage,
             notifiedPrincipalDocsReady: !!a.documentVerification?.notifiedPrincipalAt,

@@ -29,6 +29,11 @@ export function recentAcademicSessions(): string[] {
 // (see timetable/publish/route.ts) so a NEW cohort's published timetable
 // never silently deletes or gets confused with the PREVIOUS cohort's, and so
 // Timetable History can tell them apart.
+// NOTE: pure date-only resolution, unlike resolveCurrentAcademicYear below
+// (which honors a Principal-configured override) - the timetable/subject
+// callers of this are synchronous and don't have that stored setting loaded.
+// Worth reconciling the two later if a college's session ever needs to
+// diverge from the April cutoff for timetable purposes too.
 export function currentTimetableAcademicYear(now: Date = new Date()): string {
   return academicSessionLabel(now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1);
 }
@@ -40,4 +45,47 @@ export function currentTimetableAcademicYear(now: Date = new Date()): string {
 // stamped going forward.
 export function matchesCurrentAcademicYear(itemYear: string | null | undefined, currentYear: string): boolean {
   return itemYear == null || itemYear === currentYear;
+}
+
+// ─── Course academic-year labels ─────────────────────────────────────────────
+// CourseAcademicYear.label is written long ("2025-2026") while AcademicSession
+// .label is short ("2025-26"). Both name the same thing, so anything that
+// defaults one from the other has to read either shape and emit the long one.
+
+/** "2025-2026" - the shape CourseAcademicYear.label uses. */
+export function academicYearLongLabel(startYear: number): string {
+  return `${startYear}-${startYear + 1}`;
+}
+
+/**
+ * The start year out of either shape ("2025-26" or "2025-2026"), or undefined
+ * when the label isn't a year range at all - a Principal is free to have typed
+ * anything into the old free-text box, and such a value must not be mistaken
+ * for a session.
+ */
+export function parseAcademicYearStart(label: string | undefined | null): number | undefined {
+  const m = /^(\d{4})\s*-\s*(\d{2}|\d{4})$/.exec((label ?? "").trim());
+  if (!m) return undefined;
+  const start = Number(m[1]);
+  return Number.isFinite(start) ? start : undefined;
+}
+
+/**
+ * The college's academic year, long form. The stored current session wins when
+ * one is set (a Principal whose calendar differs from the April cutoff), and
+ * the clock supplies it otherwise.
+ *
+ * Derived rather than purely stored on purpose: there is no scheduler in this
+ * app, so a stored-only value would sit on last year's label until somebody
+ * noticed and edited it - which is the manual step this is meant to remove.
+ */
+export function resolveCurrentAcademicYear(storedCurrentLabel?: string | null): string {
+  const stored = parseAcademicYearStart(storedCurrentLabel);
+  return academicYearLongLabel(stored ?? currentAcademicStartYear());
+}
+
+/** Long-form sessions to choose from in Settings - newest first. */
+export function recentAcademicYearOptions(): string[] {
+  const current = currentAcademicStartYear();
+  return [current + 1, current, current - 1, current - 2].map(academicYearLongLabel);
 }

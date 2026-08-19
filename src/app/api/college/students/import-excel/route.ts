@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { buildStudentDoc, type StudentImportRow } from "@/lib/students/importRow";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode, isConfiguredSecondaryDepartment } from "@/lib/departments/codeOrNameResolver";
+import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode, isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Section } from "@/types";
 
@@ -187,8 +187,18 @@ export async function POST(request: Request) {
     const departmentDataByName = new Map(
       departmentsSnap.docs.map((d) => [
         ((d.data() as { name?: string }).name ?? "").trim(),
-        d.data() as { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }> },
+        d.data() as {
+          secondaryDepartments?: string[];
+          courseScopes?: Record<string, { secondaryDepartments?: string[] }>;
+          parentDepartmentId?: string;
+        },
       ])
+    );
+    // id -> name, so a resolved Secondary Department's OWN parentDepartmentId
+    // (when it's a sub-department, e.g. "ECE-VLSI") can resolve to its
+    // parent's name - see isConfiguredSecondaryDepartmentOrChild's doc-comment.
+    const departmentNameById = new Map(
+      departmentsSnap.docs.map((d) => [d.id, ((d.data() as { name?: string }).name ?? "").trim()])
     );
 
     const existingSnap = await db.collection("colleges").doc(collegeId).collection("students")
@@ -309,7 +319,11 @@ export async function POST(request: Request) {
           // back (the Distribute Unassigned dialog's branch picker, in
           // particular).
           const ownerDeptData = departmentDataByName.get(departmentName!);
-          if (!ownerDeptData || !isConfiguredSecondaryDepartment(ownerDeptData, unassignedSecondary)) {
+          const candidateData = departmentDataByName.get(unassignedSecondary);
+          const candidateParentName = candidateData?.parentDepartmentId
+            ? departmentNameById.get(candidateData.parentDepartmentId)
+            : undefined;
+          if (!ownerDeptData || !isConfiguredSecondaryDepartmentOrChild(ownerDeptData, unassignedSecondary, candidateParentName)) {
             failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `${departmentName} does not cross-list to "${unassignedSecondary}" - check Secondary Departments on the department` });
             continue;
           }

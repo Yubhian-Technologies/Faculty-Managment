@@ -167,26 +167,17 @@ export async function POST(request: Request) {
 
     // Cross-listing can be set on either a top-level department (by
     // Principal/VP) or a sub-department (by its parent's HOD, right here at
-    // sub-department creation). The *target* must always be a top-level
-    // department, never another sub-department. A department can cross-list
-    // to more than one other department (e.g. a shared first-year department
-    // feeding both CSE and ECE).
+    // sub-department creation). The target may be a top-level department or
+    // one of its sub-departments (e.g. feeding "ECE-VLSI" specifically, for
+    // students admitted straight into that specialization) - see
+    // validateSecondaryDepartmentNames's own doc-comment. A department can
+    // cross-list to more than one other department (e.g. a shared first-year
+    // department feeding both CSE and ECE).
     let secondaryDepartments: string[] = [];
     if (body.secondaryDepartments && body.secondaryDepartments.length > 0) {
       const names = Array.from(new Set(body.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
-      if (names.includes(name.trim())) {
-        return NextResponse.json({ error: "Secondary department must be different from this department" }, { status: 400 });
-      }
-      const byName = deptByName;
-      for (const secName of names) {
-        const secDept = byName.get(secName);
-        if (!secDept) {
-          return NextResponse.json({ error: `Secondary department "${secName}" not found` }, { status: 400 });
-        }
-        if (secDept.parentDepartmentId) {
-          return NextResponse.json({ error: `"${secName}" is a sub-department and can't be used as a secondary department` }, { status: 400 });
-        }
-      }
+      const secError = validateSecondaryDepartmentNames(names, name.trim(), deptByName);
+      if (secError) return NextResponse.json({ error: secError }, { status: 400 });
       secondaryDepartments = names;
     }
 
@@ -434,21 +425,65 @@ export async function DELETE(request: Request) {
     // later created reusing this exact name, it would be silently and
     // instantly "claimed" by whichever sub-department still lists it, purely
     // by name coincidence, with no confirmation step.
+    const deleteNow = new Date();
     const allDeptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
     for (const d of allDeptsSnap.docs) {
       if (d.id === deptId) continue;
-      const other = d.data() as { managedDepartments?: string[]; secondaryDepartments?: string[] };
+      const other = d.data() as {
+        managedDepartments?: string[];
+        secondaryDepartments?: string[];
+        courseScopes?: Record<string, { assignedYears?: number[]; secondaryDepartments?: string[] }>;
+      };
       const managed = other.managedDepartments ?? [];
       const secondary = other.secondaryDepartments ?? [];
       const newManaged = managed.filter((n) => n !== dept.name);
       const newSecondary = secondary.filter((n) => n !== dept.name);
-      if (newManaged.length !== managed.length || newSecondary.length !== secondary.length) {
+
+      // Each course a department offers can override its own secondaryDepartments
+      // (Department.courseScopes, resolveDepartmentCourseScope) - a snapshot taken
+      // from the flat field above at the time that course was added/edited, not a
+      // live reference to it. Stripping only the flat field above (as this used
+      // to) leaves a deleted department's name alive in every course's own
+      // override, still surfacing wherever a course-scoped consumer resolves
+      // secondaryDepartments (e.g. Add Section's "Secondary Department" picker,
+      // which reads course-scoped, not flat) - same cascade college/departments
+      // PATCH already does when secondaryDepartments is edited directly.
+      const courseScopePatch: Record<string, string[]> = {};
+      for (const [catalogId, scope] of Object.entries(other.courseScopes ?? {})) {
+        const scopeSecondary = scope.secondaryDepartments ?? [];
+        const newScopeSecondary = scopeSecondary.filter((n) => n !== dept.name);
+        if (newScopeSecondary.length !== scopeSecondary.length) {
+          courseScopePatch[`courseScopes.${catalogId}.secondaryDepartments`] = newScopeSecondary;
+        }
+      }
+
+      if (newManaged.length !== managed.length || newSecondary.length !== secondary.length || Object.keys(courseScopePatch).length > 0) {
         batch.update(d.ref, {
           ...(newManaged.length !== managed.length ? { managedDepartments: newManaged } : {}),
           ...(newSecondary.length !== secondary.length ? { secondaryDepartments: newSecondary } : {}),
-          updatedAt: new Date(),
+          ...courseScopePatch,
+          updatedAt: deleteNow,
         });
       }
+    }
+
+    // Same staleness, on Section docs: a section cross-lists to a branch via
+    // its own `secondaryDepartments` (at most one entry - see
+    // sections/route.ts POST's own comment), never cleaned up above since
+    // that loop only walks `departments`. An already-enrolled section isn't
+    // reachable here at all (the students/sections check above already
+    // blocked deletion if this department still owns any), but a DIFFERENT
+    // department's section that merely cross-lists to this now-deleted one
+    // survives untouched otherwise - left advertising a branch that no
+    // longer exists wherever that reference is read back (e.g. the section's
+    // display label, or an HOD's "already cross-listed" chip).
+    const staleSectionsSnap = await db.collection("colleges").doc(collegeId).collection("sections")
+      .where("secondaryDepartments", "array-contains", dept.name)
+      .get();
+    for (const s of staleSectionsSnap.docs) {
+      const secondaryDepartments = ((s.data() as { secondaryDepartments?: string[] }).secondaryDepartments ?? [])
+        .filter((n) => n !== dept.name);
+      batch.update(s.ref, { secondaryDepartments, updatedAt: deleteNow });
     }
 
     batch.delete(deptRef);
