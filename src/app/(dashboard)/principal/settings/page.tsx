@@ -12,6 +12,7 @@ import { Info } from "lucide-react";
 import { HiringTermsSettingsCard } from "@/components/hiring/HiringTermsSettingsCard";
 import { RegulationSettingsCard } from "@/components/settings/RegulationSettingsCard";
 import { CourseCatalogSettingsCard } from "@/components/academics/CourseCatalogSettingsCard";
+import { AcademicYearSettingsCard } from "@/components/academics/AcademicYearSettingsCard";
 import type { FacultyNorms } from "@/types/core";
 
 interface CollegeInfo {
@@ -129,6 +130,10 @@ export default function PrincipalSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Sits ahead of the course catalog: a course's academic year defaults
+          from this, so it reads in the order it's set up. */}
+      <AcademicYearSettingsCard />
 
       <CourseCatalogSettingsCard />
 
