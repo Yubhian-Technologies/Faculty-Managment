@@ -159,7 +159,7 @@ export default function ManagementPrincipalAttendancePage() {
                       <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(rec.status)}`}>
                         {ATTENDANCE_STATUS_LABELS[rec.status]}
                       </span>
-                      {rec.status === "PRESENT" && isLateCheckIn(rec.checkIn) && (
+                      {rec.status === "PRESENT" && isLateCheckIn(rec.checkIn, rec.permittedCheckInTime) && (
                         <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
                           Late
                         </span>

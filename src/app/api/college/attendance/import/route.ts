@@ -7,6 +7,7 @@ import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { isCollegeStaffUnitHead, unitLabelForHeadRole, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
+import { nowInIndia } from "@/lib/leave/dayCounter";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 import type { AttendanceStatus, UserRole } from "@/types";
@@ -112,8 +113,9 @@ export async function POST(request: Request) {
       byEmployeeId.set(u.employeeId.trim().toLowerCase(), { uid: doc.id, name: u.name ?? "", department: u.department ?? "" });
     }
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // India's own calendar day, not the server host's ambient timezone - see
+    // nowInIndia's doc-comment.
+    const todayStart = nowInIndia().date;
 
     const failed: { row: number; employeeId: string; error: string }[] = [];
     const validRows: ValidRow[] = [];

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ShieldCheck, Search, Download, Upload, Pencil, CalendarDays } from "lucide-react";
+import { CheckCircle2, ShieldCheck, Search, Download, Upload, Pencil, CalendarDays, Clock3 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -34,6 +34,9 @@ interface RosterEntry {
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
+  // HOD-granted exception for this specific day (see "Permission" below) -
+  // arriving at/before this time never counts as Late, even past 09:05.
+  permittedCheckInTime?: string | null;
   // The reason an HOD/Principal/VP wrote when manually marking/correcting
   // this record, or the auto-generated explanation for a derived Absent day
   // - visible here so Management (and anyone else reviewing this roster)
@@ -77,9 +80,17 @@ function StatusCell({ row }: { row: RosterEntry }) {
       <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(row.status)}`}>
         {statusLabel(row.status)}
       </span>
-      {row.status === "PRESENT" && isLateCheckIn(row.checkIn) && (
+      {row.status === "PRESENT" && isLateCheckIn(row.checkIn, row.permittedCheckInTime) && (
         <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
           Late
+        </span>
+      )}
+      {row.status === "PRESENT" && row.permittedCheckInTime && (
+        <span
+          className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800"
+          title={`HOD-permitted late check-in (agreed time: ${row.permittedCheckInTime}) - not counted as Late`}
+        >
+          Permitted
         </span>
       )}
     </span>
@@ -220,6 +231,15 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   const [manualReason, setManualReason] = useState("");
   const [isMarking, setIsMarking] = useState(false);
 
+  // "Permission" (HOD-only, Faculty only - see check-in-permission/route.ts):
+  // excuses a specific late arrival time in advance of the person's OWN
+  // self-check-in, distinct from Mark above (which sets the check-in/out
+  // time directly on their behalf).
+  const [permissionTarget, setPermissionTarget] = useState<RosterEntry | null>(null);
+  const [permissionTime, setPermissionTime] = useState("");
+  const [permissionReason, setPermissionReason] = useState("");
+  const [isGrantingPermission, setIsGrantingPermission] = useState(false);
+
   const loadRoster = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -276,6 +296,41 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     }
   }
 
+  function openPermissionDialog(row: RosterEntry) {
+    setPermissionTarget(row);
+    setPermissionTime(row.permittedCheckInTime ?? "");
+    setPermissionReason("");
+  }
+
+  async function handleGrantPermission() {
+    if (!permissionTarget) return;
+    setIsGrantingPermission(true);
+    try {
+      const res = await fetch("/api/college/attendance/check-in-permission", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          facultyId: permissionTarget.uid,
+          date,
+          permittedCheckInTime: permissionTime,
+          reason: permissionReason,
+        }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) {
+        toast({ variant: "destructive", title: json.error ?? "Failed to grant permission" });
+        return;
+      }
+      toast({ title: `Check-in permission granted for ${permissionTarget.name}`, description: `${date} is excused - won't count as late no matter when they check in.` });
+      setPermissionTarget(null);
+      await loadRoster();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to grant permission" });
+    } finally {
+      setIsGrantingPermission(false);
+    }
+  }
+
   useEffect(() => {
     if (!groupByDepartmentAndCourse) return;
     fetch("/api/college/departments")
@@ -322,6 +377,13 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   // 25th - see isManualEditWindowOpen. "This Month"/viewing stays available
   // regardless; only the "Mark" action is gated by this.
   const canEditSelectedDate = isManualEditWindowOpen(new Date(`${date}T00:00:00`));
+  // Permission is the opposite direction from Mark - a forward-looking
+  // exception granted BEFORE the person checks in themselves, not a
+  // correction of an already-passed day - so it's gated by "today or later"
+  // (matching check-in-permission/route.ts's own rule) instead of Mark's
+  // current-month/25th-cutoff window, which would wrongly block granting one
+  // for today once the month passes the 25th.
+  const canGrantPermission = date >= todayISO();
 
   const columns: Column<RosterEntry>[] = [
     { key: "name", header: "Faculty" },
@@ -347,6 +409,13 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
                 {allowManualMark && canEditSelectedDate && (
                   <Button variant="outline" size="sm" onClick={() => openMarkDialog(row)}>
                     <Pencil className="h-3.5 w-3.5 mr-1" /> Mark
+                  </Button>
+                )}
+                {/* Faculty (teaching or technical) only - COLLEGE_STAFF has no
+                    late-check-in penalty to excuse in the first place. */}
+                {allowManualMark && canGrantPermission && row.role === "PANEL_MEMBER" && (
+                  <Button variant="outline" size="sm" onClick={() => openPermissionDialog(row)}>
+                    <Clock3 className="h-3.5 w-3.5 mr-1" /> Permission
                   </Button>
                 )}
               </div>
@@ -646,6 +715,36 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
           </ConfirmDialog>
         );
       })()}
+
+      {allowManualMark && (
+        <ConfirmDialog
+          open={!!permissionTarget}
+          onOpenChange={(open) => { if (!open) setPermissionTarget(null); }}
+          title={`Grant check-in permission to ${permissionTarget?.name ?? "faculty"}?`}
+          description={`For ${date}. This whole day is excused - however late they actually check in, it won't count as Late (or toward the 3-late -> 0.5 Casual Leave deduction). They still check in themselves as normal; the time below is just a record of what was agreed.`}
+          confirmLabel="Grant"
+          loading={isGrantingPermission}
+          confirmDisabled={!permissionReason.trim() || !permissionTime}
+          onConfirm={() => void handleGrantPermission()}
+        >
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="permission-time">Permitted check-in time</Label>
+              <Input id="permission-time" type="time" value={permissionTime} onChange={(e) => setPermissionTime(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="permission-reason">Reason (required)</Label>
+              <Textarea
+                id="permission-reason"
+                value={permissionReason}
+                onChange={(e) => setPermissionReason(e.target.value)}
+                rows={3}
+                placeholder="Why are you granting this? e.g. Attending a family function in the morning."
+              />
+            </div>
+          </div>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

@@ -254,7 +254,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
                           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(record.status)}`}>
                             {ATTENDANCE_STATUS_LABELS[record.status]}
                           </span>
-                          {record.status === "PRESENT" && isLateCheckIn(record.checkIn) && (
+                          {record.status === "PRESENT" && isLateCheckIn(record.checkIn, record.permittedCheckInTime) && (
                             <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
                               Late
                             </span>

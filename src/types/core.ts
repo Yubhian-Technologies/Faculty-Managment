@@ -1534,6 +1534,7 @@ export type AuditAction =
   // Attendance module
   | "ATTENDANCE_MARKED"
   | "ATTENDANCE_CORRECTED"
+  | "LATE_CHECKIN_PERMISSION_GRANTED"
   // Payroll module
   | "SALARY_STRUCTURE_CREATED"
   | "PAYROLL_PROCESSED"
