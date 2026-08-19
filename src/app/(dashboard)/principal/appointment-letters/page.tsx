@@ -147,6 +147,11 @@ export default function PrincipalAppointmentLettersPage() {
     }
     const ctcAnnual = form.ctcAnnual ? Number(form.ctcAnnual) : undefined;
     setGeneratingId(candidate.id);
+    // Opened synchronously, before any await - the letter POST + PDF render
+    // below take long enough that opening the Gmail tab afterward gets
+    // silently blocked as a popup (browsers drop the "triggered by a click"
+    // trust after an async gap).
+    const mailWindow = window.open("", "_blank");
     try {
       const res = await fetch("/api/college/appointment-letters", {
         method: "POST",
@@ -203,8 +208,11 @@ Warm regards,
 ${institution}`;
         const cc = (data.ccEmails ?? []).join(",");
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidate.email)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.open(gmailUrl, "_blank");
+        if (mailWindow) mailWindow.location.href = gmailUrl;
+        else window.open(gmailUrl, "_blank");
         composed = true;
+      } else {
+        mailWindow?.close();
       }
 
       toast({
@@ -214,6 +222,7 @@ ${institution}`;
       });
       setGeneratedIds((prev) => new Set(prev).add(candidate.id));
     } catch (err) {
+      mailWindow?.close();
       toast({ variant: "destructive", title: "Failed to generate appointment letter", description: err instanceof Error ? err.message : undefined });
     } finally {
       setGeneratingId(null);

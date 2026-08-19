@@ -40,11 +40,15 @@ export interface StudentAttendanceSession {
   facultyId: string;
   facultyName: string;
   date: string; // "YYYY-MM-DD"
+  // The published TimetableSlot's period number this session was created
+  // for - set once at creation from the active period, never faculty-edited.
+  // Absent on sessions created before this field existed.
+  periodNumber?: number;
   status: StudentAttendanceSessionStatus;
   entries: StudentAttendanceEntry[];
   totalStudents: number;
   presentCount: number;
-  classNotes: string; // what the faculty covered in this class session
+  classNotes: string; // "Record of the Class Work" - what the faculty covered in this class session
 
   submittedAt?: Timestamp | null;
   createdAt: Timestamp;

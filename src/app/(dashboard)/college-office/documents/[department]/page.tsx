@@ -271,7 +271,7 @@ function DepartmentVacancyCard({
       <div className="px-5 pb-4 flex items-center justify-between gap-3 flex-wrap border-t pt-3">
         {readyForOffice ? (
           <Button size="sm" asChild>
-            <Link href={`/college-office/documents/${department}/${vacancy.id}`}>Manage Candidates & Credentials →</Link>
+            <Link href={`/college-office/documents/${department}/${vacancy.id}`}>{OFFICE_STAGE_LABELS[currentOfficeStage]} →</Link>
           </Button>
         ) : (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">

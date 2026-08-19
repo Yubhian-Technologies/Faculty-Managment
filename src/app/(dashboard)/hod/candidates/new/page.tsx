@@ -16,7 +16,10 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
 import { FileText, MapPin, Monitor, UploadCloud, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import type { VacancyRequest, CandidateApplication } from "@/types";
+import { MEETING_PLATFORM_LABELS } from "@/types";
+import type { VacancyRequest, CandidateApplication, MeetingPlatform } from "@/types";
+
+const MEETING_PLATFORMS = Object.keys(MEETING_PLATFORM_LABELS) as MeetingPlatform[];
 
 const schema = z.object({
   name: z.string().min(2, "Name required"),
@@ -52,6 +55,11 @@ export default function NewCandidatePage() {
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>(prefilledVacancyId);
   const [vacancySearch, setVacancySearch] = useState("");
   const [interviewMode, setInterviewMode] = useState<"OFFLINE" | "ONLINE">("OFFLINE");
+  // Only used for an individually-online candidate on an otherwise offline
+  // vacancy - an all-online vacancy collects its meeting details once, at
+  // batch creation, not here.
+  const [meetingPlatform, setMeetingPlatform] = useState<MeetingPlatform | "">("");
+  const [meetingLink, setMeetingLink] = useState("");
   const [sameAddress, setSameAddress] = useState(false);
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
@@ -178,7 +186,13 @@ export default function NewCandidatePage() {
     }
   }
 
+  const isIndividuallyOnline = selectedVacancy?.hiringMode !== "ONLINE" && interviewMode === "ONLINE";
+
   const onSubmit = async (data: FormData) => {
+    if (selectedVacancyId && isIndividuallyOnline && (!meetingPlatform || !meetingLink.trim())) {
+      toast({ variant: "destructive", title: "Select a platform and enter a meeting link for this online candidate" });
+      return;
+    }
     if (!resumeFile && !resumeUrl) {
       toast({ variant: "destructive", title: "Resume required", description: "Please upload the candidate's resume (PDF)" });
       return;
@@ -215,7 +229,12 @@ export default function NewCandidatePage() {
         const attachRes = await fetch("/api/college/candidate-applications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ candidateId: json.id, vacancyRequestId: selectedVacancyId, interviewMode }),
+          body: JSON.stringify({
+            candidateId: json.id,
+            vacancyRequestId: selectedVacancyId,
+            interviewMode,
+            ...(isIndividuallyOnline ? { meetingPlatform, meetingLink: meetingLink.trim() } : {}),
+          }),
         });
         if (!attachRes.ok) {
           const attachJson = await attachRes.json() as { error?: string };
@@ -566,6 +585,34 @@ export default function NewCandidatePage() {
                         </div>
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {isIndividuallyOnline && (
+                <div className="grid gap-4 pt-2 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="candMeetingPlatform">Platform *</Label>
+                    <Select value={meetingPlatform} onValueChange={(v) => setMeetingPlatform(v as MeetingPlatform)}>
+                      <SelectTrigger id="candMeetingPlatform">
+                        <SelectValue placeholder="Select a platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MEETING_PLATFORMS.map((p) => (
+                          <SelectItem key={p} value={p}>{MEETING_PLATFORM_LABELS[p]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="candMeetingLink">Meeting Link *</Label>
+                    <Input
+                      id="candMeetingLink"
+                      type="url"
+                      value={meetingLink}
+                      onChange={(e) => setMeetingLink(e.target.value)}
+                      placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                    />
                   </div>
                 </div>
               )}

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Clock, GitBranch } from "lucide-react";
+import { Building2, Clock, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step, type StepState } from "@/components/shared/PipelineStep";
 import { toast } from "@/hooks/useToast";
@@ -146,18 +148,44 @@ export function OfficePipelineBoard({ scope }: { scope: "active" | "closed" }) {
     );
   }
 
+  const byDept = new Map<string, PipelineEntry[]>();
+  for (const entry of visible) {
+    const list = byDept.get(entry.vacancy.department);
+    if (list) list.push(entry);
+    else byDept.set(entry.vacancy.department, [entry]);
+  }
+  const departments = Array.from(byDept.keys()).sort((a, b) => a.localeCompare(b));
+
   return (
-    <div className="space-y-3">
-      {visible.map((entry) => (
-        <VacancyOfficeCard
-          key={entry.vacancy.id}
-          entry={entry}
-          offerStatusByCandidate={offerStatusByCandidate}
-          appointmentCandidateIds={appointmentCandidateIds}
-          accountRequestStatusByCandidate={accountRequestStatusByCandidate}
-        />
-      ))}
-    </div>
+    <Accordion type="multiple" className="space-y-3">
+      {departments.map((department) => {
+        const deptEntries = byDept.get(department)!;
+        return (
+          <AccordionItem key={department} value={department} className="border rounded-xl bg-card px-5">
+            <AccordionTrigger className="hover:no-underline">
+              <span className="flex items-center gap-2 min-w-0">
+                <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="font-semibold truncate">{department}</span>
+                <Badge variant="secondary">{deptEntries.length}</Badge>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3">
+                {deptEntries.map((entry) => (
+                  <VacancyOfficeCard
+                    key={entry.vacancy.id}
+                    entry={entry}
+                    offerStatusByCandidate={offerStatusByCandidate}
+                    appointmentCandidateIds={appointmentCandidateIds}
+                    accountRequestStatusByCandidate={accountRequestStatusByCandidate}
+                  />
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        );
+      })}
+    </Accordion>
   );
 }
 
@@ -252,7 +280,7 @@ function VacancyOfficeCard({
       <div className="px-5 pb-4 flex items-center justify-between gap-3 flex-wrap border-t pt-3">
         {readyForOffice ? (
           <Button size="sm" asChild>
-            <Link href={`/college-office/documents/${encodeURIComponent(vacancy.department)}/${vacancy.id}`}>Manage Candidates &amp; Credentials →</Link>
+            <Link href={`/college-office/documents/${encodeURIComponent(vacancy.department)}/${vacancy.id}`}>{OFFICE_STAGE_LABELS[currentOfficeStage]} →</Link>
           </Button>
         ) : (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
