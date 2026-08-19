@@ -6,11 +6,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { checkCampusGeofence } from "@/lib/attendance/geofence";
 import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { isWorkingDayForRole } from "@/lib/attendance/workingDays";
 import { getHolidayNameForDate } from "@/lib/leave/holidaysCount";
 import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
-import type { College } from "@/types";
+import type { College, UserRole } from "@/types";
 
 function todayDocDate(): { date: Date; docSuffix: string } {
   const now = new Date();
@@ -31,12 +32,15 @@ function currentTimeHHMM(): string {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
-    if (isSunday()) {
+    const db = getAdminDb();
+    const today = new Date();
+    // A Working Day override (see college-office/holidays/page.tsx) naming
+    // this caller's own role flips today from a Sunday off to a working day
+    // for them specifically - everyone else still gets the day off.
+    if (isSunday() && !(await isWorkingDayForRole(db, session.collegeId, today, session.role as UserRole))) {
       return NextResponse.json({ error: SUNDAY_HOLIDAY_MESSAGE }, { status: 403 });
     }
 
-    const db = getAdminDb();
-    const today = new Date();
     const holidayName = await getHolidayNameForDate(db, session.collegeId, today);
     if (holidayName) {
       return NextResponse.json({ error: `Today is a holiday — ${holidayName}. No attendance required.` }, { status: 403 });

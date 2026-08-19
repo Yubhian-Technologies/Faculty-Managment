@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, CalendarDays } from "lucide-react";
+import { Plus, Trash2, CalendarDays, CalendarCheck, Check } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -15,8 +16,9 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
-import { HOLIDAY_TYPE_LABELS, HOLIDAY_AUDIENCE_LABELS } from "@/types";
-import type { Holiday, HolidayAudience, HolidayType } from "@/types";
+import { WORKING_DAY_ELIGIBLE_ROLES } from "@/lib/attendance/workingDays";
+import { HOLIDAY_TYPE_LABELS, HOLIDAY_AUDIENCE_LABELS, ROLE_LABELS } from "@/types";
+import type { Holiday, HolidayAudience, HolidayType, UserRole, WorkingDayOverride } from "@/types";
 
 const HOLIDAY_TYPES: HolidayType[] = ["NATIONAL", "REGIONAL", "COLLEGE", "RESTRICTED"];
 const HOLIDAY_AUDIENCES: HolidayAudience[] = ["BOTH", "STUDENTS"];
@@ -28,6 +30,10 @@ const ALL_SENTINEL = "__all__"; // sentinel: Radix Select items can't use an emp
 
 function emptyForm() {
   return { date: "", name: "", type: "COLLEGE" as HolidayType, appliesTo: "BOTH" as HolidayAudience };
+}
+
+function emptyWorkingDayForm() {
+  return { date: "", reason: "", roles: [] as UserRole[], isHalfDay: false, halfDaySession: "FN" as "FN" | "AN" };
 }
 
 // Session start year out of a "YYYY-YY" label, for sorting newest-first -
@@ -48,6 +54,18 @@ export default function CollegeOfficeHolidaysPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Holiday | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Working Day overrides - flips a normally-off Sunday into a working day
+  // for specific roles (e.g. only the Principal coming in for an inspection).
+  // Separate collection/list from the Holidays above since it targets roles
+  // rather than everyone - see types/attendance.ts's WorkingDayOverride.
+  const [workingDays, setWorkingDays] = useState<WorkingDayOverride[]>([]);
+  const [isLoadingWorkingDays, setIsLoadingWorkingDays] = useState(true);
+  const [workingDayOpen, setWorkingDayOpen] = useState(false);
+  const [workingDayForm, setWorkingDayForm] = useState(emptyWorkingDayForm());
+  const [isSavingWorkingDay, setIsSavingWorkingDay] = useState(false);
+  const [workingDayDeleteTarget, setWorkingDayDeleteTarget] = useState<WorkingDayOverride | null>(null);
+  const [isDeletingWorkingDay, setIsDeletingWorkingDay] = useState(false);
   // Defaults to the current session so Office lands on "this year" - the
   // year picker below still reaches back to any earlier session that has
   // holidays, and "All Years" shows the full history at once.
@@ -88,6 +106,73 @@ export default function CollegeOfficeHolidaysPage() {
     // the effect body (react-hooks/set-state-in-effect).
     void (async () => { load(); })();
   }, []);
+
+  function loadWorkingDays() {
+    setIsLoadingWorkingDays(true);
+    fetch("/api/college/working-days")
+      .then((r) => r.json() as Promise<{ workingDays: WorkingDayOverride[] }>)
+      .then((d) => setWorkingDays(d.workingDays ?? []))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load working days" }))
+      .finally(() => setIsLoadingWorkingDays(false));
+  }
+
+  useEffect(() => {
+    void (async () => { loadWorkingDays(); })();
+  }, []);
+
+  function toggleWorkingDayRole(role: UserRole) {
+    setWorkingDayForm((f) => ({
+      ...f,
+      roles: f.roles.includes(role) ? f.roles.filter((r) => r !== role) : [...f.roles, role],
+    }));
+  }
+
+  async function handleAddWorkingDay() {
+    if (!workingDayForm.date || !workingDayForm.reason.trim() || workingDayForm.roles.length === 0) {
+      toast({ variant: "destructive", title: "Date, reason and at least one role are required" });
+      return;
+    }
+    setIsSavingWorkingDay(true);
+    try {
+      const res = await fetch("/api/college/working-days", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: workingDayForm.date,
+          reason: workingDayForm.reason.trim(),
+          roles: workingDayForm.roles,
+          isHalfDay: workingDayForm.isHalfDay,
+          halfDaySession: workingDayForm.isHalfDay ? workingDayForm.halfDaySession : undefined,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to add working day");
+      toast({ variant: "success", title: "Working day added" });
+      setWorkingDayOpen(false);
+      setWorkingDayForm(emptyWorkingDayForm());
+      loadWorkingDays();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add working day" });
+    } finally {
+      setIsSavingWorkingDay(false);
+    }
+  }
+
+  async function handleDeleteWorkingDay() {
+    if (!workingDayDeleteTarget) return;
+    setIsDeletingWorkingDay(true);
+    try {
+      const res = await fetch(`/api/college/working-days/${workingDayDeleteTarget.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Working day removed" });
+      setWorkingDayDeleteTarget(null);
+      loadWorkingDays();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to remove working day" });
+    } finally {
+      setIsDeletingWorkingDay(false);
+    }
+  }
 
   async function handleAdd() {
     if (!form.date || !form.name.trim()) {
@@ -228,6 +313,78 @@ export default function CollegeOfficeHolidaysPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarCheck className="h-4 w-4" />Working Days
+            </CardTitle>
+            <CardDescription>
+              Flip a normally-off Sunday into a working day for specific roles - e.g. only the Principal coming in
+              for an inspection, or a few faculty for an event. Everyone not listed still gets the day off as usual,
+              and it counts as a normal working day (not a weekly off) for check-in and leave balance for whoever is.
+            </CardDescription>
+          </div>
+          <Button size="sm" onClick={() => setWorkingDayOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />Add Working Day
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoadingWorkingDays ? (
+            <div className="space-y-2 p-4">
+              {[1, 2].map((i) => <div key={i} className="h-10 bg-muted animate-pulse rounded-lg" />)}
+            </div>
+          ) : workingDays.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                icon={<CalendarCheck className="h-6 w-6" />}
+                title="No working-day overrides yet"
+                description="Add one when a specific role needs to come in on what would otherwise be a Sunday off."
+              />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Reason</th>
+                    <th className="px-4 py-3">Duration</th>
+                    <th className="px-4 py-3">Roles Required</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {workingDays.map((w) => (
+                    <tr key={w.id}>
+                      <td className="px-4 py-2.5 whitespace-nowrap">{formatDate(w.date)}</td>
+                      <td className="px-4 py-2.5 font-medium text-foreground">{w.reason}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant="outline" className="text-xs">
+                          {w.isHalfDay ? `Half Day (${w.halfDaySession === "AN" ? "Afternoon" : "Forenoon"})` : "Full Day"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex flex-wrap gap-1">
+                          {w.roles.map((r) => (
+                            <Badge key={r} variant="secondary" className="text-xs">{ROLE_LABELS[r] ?? r}</Badge>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setWorkingDayDeleteTarget(w)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setForm(emptyForm()); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -285,6 +442,92 @@ export default function CollegeOfficeHolidaysPage() {
         variant="destructive"
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
+      />
+
+      <Dialog open={workingDayOpen} onOpenChange={(o) => { setWorkingDayOpen(o); if (!o) setWorkingDayForm(emptyWorkingDayForm()); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Working Day</DialogTitle>
+            <DialogDescription>
+              Only the roles you pick below are required to work this date - everyone else keeps it as a day off.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Input type="date" value={workingDayForm.date} onChange={(e) => setWorkingDayForm((f) => ({ ...f, date: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Input
+                value={workingDayForm.reason}
+                onChange={(e) => setWorkingDayForm((f) => ({ ...f, reason: e.target.value }))}
+                placeholder="e.g. NAAC Inspection"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Roles Required</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {WORKING_DAY_ELIGIBLE_ROLES.map((r) => {
+                  const active = workingDayForm.roles.includes(r);
+                  return (
+                    <Badge
+                      key={r}
+                      variant={active ? "secondary" : "outline"}
+                      className="cursor-pointer text-xs"
+                      onClick={() => toggleWorkingDayRole(r)}
+                    >
+                      {active && <Check className="h-3 w-3 mr-1" />}{ROLE_LABELS[r]}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Duration</Label>
+              <SegmentedTabs
+                value={workingDayForm.isHalfDay ? "HALF" : "FULL"}
+                onChange={(v) => setWorkingDayForm((f) => ({ ...f, isHalfDay: v === "HALF" }))}
+                options={[
+                  { key: "FULL", label: "Full day" },
+                  { key: "HALF", label: "Half day" },
+                ]}
+              />
+              {workingDayForm.isHalfDay && (
+                <Select
+                  value={workingDayForm.halfDaySession}
+                  onValueChange={(v) => setWorkingDayForm((f) => ({ ...f, halfDaySession: v as "FN" | "AN" }))}
+                >
+                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FN">Forenoon</SelectItem>
+                    <SelectItem value="AN">Afternoon</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                {workingDayForm.isHalfDay
+                  ? "Taking leave instead of coming in only costs half a leave day for whoever's listed above."
+                  : "Taking leave instead of coming in costs a full leave day, same as any other working day."}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWorkingDayOpen(false)}>Cancel</Button>
+            <Button onClick={() => void handleAddWorkingDay()} loading={isSavingWorkingDay}>Add Working Day</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!workingDayDeleteTarget}
+        onOpenChange={(open) => { if (!open) setWorkingDayDeleteTarget(null); }}
+        title="Remove working day?"
+        description={`This will remove "${workingDayDeleteTarget?.reason ?? ""}" and restore it as a normal day off for the roles listed. This cannot be undone.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => void handleDeleteWorkingDay()}
+        loading={isDeletingWorkingDay}
       />
     </div>
   );

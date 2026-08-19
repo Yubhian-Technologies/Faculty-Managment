@@ -463,6 +463,11 @@ service cloud.firestore {
         allow write: if isPrincipalOrOffice(collegeId);
       }
 
+      match /workingDays/{workingDayId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isPrincipalOrOffice(collegeId);
+      }
+
       // ─── [ PAYROLL MODULE ] ─────────────────────────────────────────────────
 
       match /salaryStructures/{structureId} {

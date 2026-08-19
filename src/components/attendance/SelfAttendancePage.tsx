@@ -10,7 +10,7 @@ import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDial
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
-import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
+import { SUNDAY_HOLIDAY_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -46,6 +46,7 @@ interface SelfAttendancePageProps {
 }
 
 interface TodayStatus {
+  isSunday: boolean;
   isHoliday: boolean;
   holidayName: string | null;
   isOnLeave: boolean;
@@ -82,8 +83,8 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
   const loadTodayStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/college/attendance/today-status");
-      const json = await res.json() as { isHoliday?: boolean; holidayName?: string | null; isOnLeave?: boolean };
-      setTodayStatus({ isHoliday: !!json.isHoliday, holidayName: json.holidayName ?? null, isOnLeave: !!json.isOnLeave });
+      const json = await res.json() as { isSunday?: boolean; isHoliday?: boolean; holidayName?: string | null; isOnLeave?: boolean };
+      setTodayStatus({ isSunday: !!json.isSunday, isHoliday: !!json.isHoliday, holidayName: json.holidayName ?? null, isOnLeave: !!json.isOnLeave });
     } catch {
       /* non-critical - Check In will show a clear error server-side if this fails to load */
     }
@@ -139,7 +140,7 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
       {isCurrentMonth && (
         <Card>
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-            {isSunday(now) ? (
+            {todayStatus?.isSunday ? (
               <p className="text-sm text-muted-foreground">{SUNDAY_HOLIDAY_MESSAGE}</p>
             ) : todayStatus?.isHoliday ? (
               <p className="text-sm text-muted-foreground">

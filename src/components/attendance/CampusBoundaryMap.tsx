@@ -27,6 +27,12 @@ export function CampusBoundaryMap({ campusLocation, userLocation, className }: C
       if (disposed || !containerRef.current || mapRef.current) return;
 
       const map = L.map(containerRef.current, { zoomControl: false, attributionControl: false });
+      // Layers/getBounds() below need a pixel origin to project into, which
+      // Leaflet only establishes once the map has an initial view - without
+      // this, featureGroup.getBounds() crashes reading layerPointToLatLng
+      // off an unset _map reference. Centered on the user for now; fitBounds
+      // right after replaces this with the real framing.
+      map.setView([userLocation.latitude, userLocation.longitude], 17);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
 
       const boundaryLayer = campusLocation.shape === "polygon"
