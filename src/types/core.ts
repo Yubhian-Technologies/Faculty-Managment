@@ -528,6 +528,20 @@ export interface CourseCatalogItem {
   // also the default for every course until a Principal opts into narrowing
   // it, so nothing already relying on the old flat `regulations` list breaks.
   regulationYears?: Record<string, number[]>;
+  // Batch-based regulations: which regulation each ADMISSION BATCH follows,
+  // keyed by the batch's starting year as a string ("2026" -> "R26"). The
+  // batch's end year isn't stored - it's startYear + durationYears, so a
+  // 4-year B.Tech starting 2026 displays as "2026-2030".
+  //
+  // Preferred over `regulationYears` above, and resolved before it: a batch
+  // follows one regulation for its whole life, so this is stated once at
+  // admission and never revisited, whereas regulationYears describes where a
+  // regulation sits *this* year and has to be shifted by hand every time the
+  // cohorts move up (R23 [1,2] becomes [2,3] next year, and is simply wrong
+  // until someone remembers). regulationYears stays supported and is used as
+  // the fallback whenever a year has no batch mapped, so colleges already
+  // relying on it are unaffected.
+  batchRegulations?: Record<string, string>;
   isActive: boolean;
   createdBy?: string;
   createdByName?: string;

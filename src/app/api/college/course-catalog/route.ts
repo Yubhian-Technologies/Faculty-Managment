@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadAcademicRegulations } from "@/lib/firestore/academicRegulations";
-import { validateRegulationYears } from "@/lib/college/academicStructure";
+import { validateRegulationYears, validateBatchRegulations } from "@/lib/college/academicStructure";
 
 // colleges/{collegeId}/courseCatalog - the Principal's master list of course
 // definitions (canonical name + short code + duration). Departments only *select*
@@ -46,6 +46,7 @@ export async function POST(request: Request) {
       durationYears?: number;
       regulations?: string[];
       regulationYears?: Record<string, number[]>;
+      batchRegulations?: Record<string, string>;
     };
 
     const name = body.name?.trim();
@@ -74,6 +75,8 @@ export async function POST(request: Request) {
     }
     const regulationYearsErr = validateRegulationYears(body.regulationYears, regulations, durationYears);
     if (regulationYearsErr) return NextResponse.json({ error: regulationYearsErr }, { status: 400 });
+    const batchErr = validateBatchRegulations(body.batchRegulations, regulations);
+    if (batchErr) return NextResponse.json({ error: batchErr }, { status: 400 });
 
     const catalogCol = db.collection("colleges").doc(session.collegeId).collection("courseCatalog");
 
@@ -109,6 +112,7 @@ export async function POST(request: Request) {
         durationYears,
         regulations,
         ...(body.regulationYears ? { regulationYears: body.regulationYears } : {}),
+        ...(body.batchRegulations ? { batchRegulations: body.batchRegulations } : {}),
         isActive: true,
         createdBy: session.uid,
         createdByName: actorName,

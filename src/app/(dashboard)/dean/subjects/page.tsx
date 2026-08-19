@@ -14,7 +14,7 @@ import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { academicSessionLabel, currentAcademicStartYear } from "@/lib/college/academicSession";
-import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForStudyYear, batchLabel } from "@/lib/college/academicStructure";
 
 const ALL_REGULATIONS = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
@@ -107,10 +107,17 @@ export default function DeanSubjectsPage() {
   // (regulationYears) - the set a subject for this year may use. Empty means
   // nothing's assigned for this year yet, which blocks adding subjects here
   // (see subjects POST).
-  const allowedRegulations = useMemo(() => {
+  // Resolved batch-first: the year of study identifies an admission batch
+  // (2nd year in session 2026-27 == the 2025 intake), and that batch's
+  // regulation is the answer. Falls back to the older per-year mapping when
+  // the course has no batch configured - see regulationsForStudyYear.
+  const sessionStartYear = currentAcademicStartYear();
+  const resolvedRegulations = useMemo(() => {
     const catalogItem = selectedCourse?.catalogId ? catalogItems.find((c) => c.id === selectedCourse.catalogId) : null;
-    return selectedYear ? regulationsForYear(catalogItem, Number(selectedYear)) : (catalogItem?.regulations ?? []);
-  }, [selectedCourse, catalogItems, selectedYear]);
+    if (!selectedYear) return { regulations: catalogItem?.regulations ?? [], source: "year-range" as const, batchStartYear: undefined };
+    return regulationsForStudyYear(catalogItem, Number(selectedYear), sessionStartYear);
+  }, [selectedCourse, catalogItems, selectedYear, sessionStartYear]);
+  const allowedRegulations = resolvedRegulations.regulations;
 
   // Curriculum-table order: by S.No. when set (matches a printed curriculum
   // sheet), falling back to name for legacy subjects that predate the field.
@@ -255,7 +262,7 @@ export default function DeanSubjectsPage() {
     // allowedRegulations memo, which still reflects the OLD selectedYear at
     // this point in the same render.
     const catalogItem = selectedCourse?.catalogId ? catalogItems.find((c) => c.id === selectedCourse.catalogId) : null;
-    const regulationsForThisYear = regulationsForYear(catalogItem, Number(year));
+    const regulationsForThisYear = regulationsForStudyYear(catalogItem, Number(year), sessionStartYear).regulations;
     const regulation = regulationsForThisYear.length === 1 ? regulationsForThisYear[0] : "";
     setSelectedRegulation(regulation);
     if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, regulation);
@@ -335,6 +342,14 @@ export default function DeanSubjectsPage() {
                     {allowedRegulations.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {/* Which batch this year of study resolved to, and that it's
+                    the batch (not a year-range rule) deciding the regulation -
+                    otherwise an auto-filled regulation looks arbitrary. */}
+                {resolvedRegulations.source === "batch" && resolvedRegulations.batchStartYear !== undefined && selectedCourse && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Batch {batchLabel(resolvedRegulations.batchStartYear, selectedCourse.durationYears)} &rarr; {allowedRegulations[0]}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
