@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear } from "@/lib/departments/managedBranches";
+import { groupSectionsByBranch, sectionsForBranch } from "@/lib/sections/sectionLabel";
 import { getAcademicStructure } from "@/lib/college/academicStructure";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { evenSplit } from "@/lib/students/evenSplit";
@@ -88,17 +89,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // The year's sections, grouped by the branch that owns them.
+    // The year's sections, grouped by every branch they belong to - both the
+    // managed-branch shape (owns its own section directly) and the legacy
+    // secondaryDepartments shape (owned by the common department, merely
+    // cross-listed to the branch - e.g. "MATHS-AIDS-A" owned by "Maths",
+    // cross-listed to "Artificial Intelligence and Data Science"). See
+    // groupSectionsByBranch's doc-comment; without the second shape, a
+    // college using it would report every such branch as having "No Year N
+    // sections created yet" despite them existing.
     const sectionsSnap = await collegeRef.collection("sections").where("year", "==", year).get();
-    const sectionsByBranch = new Map<string, Section[]>();
-    for (const d of sectionsSnap.docs) {
-      const section = { id: d.id, ...(d.data() as object) } as Section;
-      const branch = (section.department ?? "").trim();
-      if (!branch) continue;
-      const list = sectionsByBranch.get(branch);
-      if (list) list.push(section);
-      else sectionsByBranch.set(branch, [section]);
-    }
+    const sectionsByBranch = groupSectionsByBranch(
+      sectionsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Section)
+    );
 
     // A manager can run more than one course with different years, so
     // canHodEditDepartmentYear below needs each branch's own course to
@@ -126,31 +128,58 @@ export async function POST(request: Request) {
       const managedBy = structure.managedBranchOwner.get(branch);
       const base = { branch, ...(managedBy ? { managedBy } : {}), distributed: 0, perSection: [] };
 
-      const sections = (sectionsByBranch.get(branch) ?? []).sort((a, b) =>
+      const sections = sectionsForBranch(sectionsByBranch, branch).sort((a, b) =>
         (a.name ?? "").localeCompare(b.name ?? "")
       );
 
-      // A (sub-)HOD may only section branches they own or manage FOR THIS YEAR -
-      // a branch's own dedicated HOD never owns the shared year of a branch
-      // grouped elsewhere (e.g. Basic Science manages CIVIL for year 1, even
-      // though CIVIL's own HOD owns CIVIL for every other year). A branch
-      // outside their scope is reported, not silently dropped. `catalogId`
-      // (from this branch's own Year-`year` sections, all necessarily this
-      // one course) lets a manager running more than one course resolve
-      // ownership against the right one.
-      const catalogId = catalogIdByCourseId.get(sections[0]?.courseId ?? "");
-      if (scope && !canHodEditDepartmentYear(scope, structure.allDepartments, branch, year, catalogId)) {
-        perBranch.push({ ...base, skippedReason: "Not yours or one you manage" });
-        continue;
-      }
       if (sections.length === 0) {
         perBranch.push({ ...base, skippedReason: `No Year ${year} sections created yet` });
         continue;
       }
 
+      // This route has no per-section picker (it auto-distributes the whole
+      // year at once) - it can't safely decide which of two different
+      // courses' sections a given student belongs in, so a branch whose
+      // sections span more than one course is skipped rather than risking a
+      // mixed, wrongly-split roster. Use the per-department Distribute
+      // dialog instead, which lets a single course be chosen explicitly.
+      const branchCourseIds = new Set(sections.map((s) => s.courseId).filter(Boolean));
+      if (branchCourseIds.size > 1) {
+        perBranch.push({ ...base, skippedReason: "Sections span more than one course - use Distribute Unassigned instead" });
+        continue;
+      }
+      const branchCourseId = sections[0]?.courseId;
+      const branchStudents = branchCourseId ? students.filter((s) => !s.courseId || s.courseId === branchCourseId) : students;
+      if (branchStudents.length === 0) {
+        perBranch.push({ ...base, skippedReason: "No students declared for this branch's course" });
+        continue;
+      }
+
+      // A (sub-)HOD may only section branches they own or manage FOR THIS YEAR -
+      // a branch's own dedicated HOD never owns the shared year of a branch
+      // grouped elsewhere (e.g. Basic Science manages CIVIL for year 1, even
+      // though CIVIL's own HOD owns CIVIL for every other year). A branch
+      // outside their scope is reported, not silently dropped. Checked
+      // against each resolved section's own (actual) `department` - never
+      // `branch` directly, since a legacy cross-listed section's real owner
+      // is that department (e.g. "Maths"), not the branch it merely
+      // cross-lists to; same fix as the per-department distribute route.
+      // `catalogId` (from this branch's own Year-`year` sections, all
+      // necessarily this one course) lets a manager running more than one
+      // course resolve ownership against the right one.
+      const catalogId = catalogIdByCourseId.get(sections[0]?.courseId ?? "");
+      if (scope) {
+        const owningDepartments = Array.from(new Set(sections.map((s) => s.department).filter(Boolean)));
+        const allOwned = owningDepartments.every((d) => canHodEditDepartmentYear(scope, structure.allDepartments, d, year, catalogId));
+        if (!allOwned) {
+          perBranch.push({ ...base, skippedReason: "Not yours or one you manage" });
+          continue;
+        }
+      }
+
       // Same name-ordered even split the per-department distribute uses, so
       // both paths section a branch identically.
-      const sorted = students.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+      const sorted = branchStudents.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
       const slices = evenSplit(sorted, sections.length);
       const perSection: { section: string; count: number }[] = [];
 
@@ -163,9 +192,14 @@ export async function POST(request: Request) {
           // department until promotion (students/promote or advance-year)
           // actually transitions them into `branch`, same fix as the
           // per-student PATCH and the per-department distribute route.
+          // courseId/course DO get set - see distribute/route.ts's identical
+          // comment; StudentRecord.courseId always mirrors the section a
+          // student is actually, currently sitting in.
           batch.update(collegeRef.collection("students").doc(student.id), {
             section: section.name,
             year,
+            courseId: section.courseId,
+            course: section.courseName ?? null,
             updatedAt: now,
           });
           const history = departmentHistoryEntry(

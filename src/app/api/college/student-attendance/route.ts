@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     let department: string;
     let sectionName: string;
     let year: number | undefined;
+    let courseId: string | undefined;
 
     if (assignment.sectionId) {
       const sectionSnap = await collegeRef.collection("sections").doc(assignment.sectionId).get();
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
       department = section.department;
       sectionName = section.name;
       year = section.year;
+      courseId = section.courseId;
     } else {
       department = assignment.department;
       sectionName = assignment.section?.trim() || "Section";
@@ -106,8 +108,11 @@ export async function POST(request: Request) {
     // until promotion) with secondaryDepartment naming this section's real
     // branch instead - fetchSectionStudents matches both and merges them, or
     // the roster (and therefore attendance for the whole class) would come
-    // up empty.
-    const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year }))
+    // up empty. Also scoped by `courseId` when this is a section-scoped
+    // assignment (a department can run a same-named section under more than
+    // one course - see StudentRecord.courseId's doc-comment - without this,
+    // attendance could be taken against the wrong course's roster entirely).
+    const students = (await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId }))
       .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
     if (!existingSnap.exists) {

@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 import { toast } from "@/hooks/useToast";
-import type { AcademicYear, Department, Course, CourseYearTiming, CourseAcademicYear } from "@/types";
+import type { Department, Course, CourseYearTiming, CourseAcademicYear } from "@/types";
 
 export default function DepartmentDetailPage() {
   const router = useRouter();
@@ -30,8 +30,6 @@ export default function DepartmentDetailPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [academicYears, setAcademicYears] = useState<CourseAcademicYear[]>([]);
-  const [openYears, setOpenYears] = useState<AcademicYear[]>([]);
-  const [addingYear, setAddingYear] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
@@ -42,7 +40,6 @@ export default function DepartmentDetailPage() {
   // rather than offering an on/off "custom vs. department default" toggle.
   const [structureTarget, setStructureTarget] = useState<Course | null>(null);
   const [structureAssignedYears, setStructureAssignedYears] = useState<number[]>([]);
-  const [structureSecondaryDepartments, setStructureSecondaryDepartments] = useState<string[]>([]);
   const [isSavingStructure, setIsSavingStructure] = useState(false);
 
   // A sub-department (one with a parent) shares its parent's courses/timings/
@@ -53,16 +50,14 @@ export default function DepartmentDetailPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [deptRes, coursesRes, yearsRes] = await Promise.all([
+      const [deptRes, coursesRes] = await Promise.all([
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch(`/api/college/courses?departmentId=${encodeURIComponent(id)}`).then((r) => r.json() as Promise<{ courses: Course[] }>),
-        fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>),
       ]);
       const allDepts = deptRes.departments ?? [];
       const dept = allDepts.find((d) => d.id === id) ?? null;
       setDepartment(dept);
       setAllDepartments(allDepts);
-      setOpenYears((yearsRes.academicYears ?? []).filter((y) => y.isActive));
       setSubDepartments(
         allDepts
           .filter((d) => d.parentDepartmentId === id)
@@ -144,32 +139,10 @@ export default function DepartmentDetailPage() {
     const scope = scopeForCourse(course);
     setStructureTarget(course);
     setStructureAssignedYears(scope.assignedYears);
-    setStructureSecondaryDepartments(scope.secondaryDepartments);
   }
 
   function toggleStructureYear(year: number, checked: boolean) {
     setStructureAssignedYears((prev) => (checked ? [...prev, year].sort((a, b) => a - b) : prev.filter((y) => y !== year)));
-  }
-
-  function toggleStructureSecondaryDepartment(name: string, checked: boolean) {
-    setStructureSecondaryDepartments((prev) => (checked ? [...prev, name] : prev.filter((n) => n !== name)));
-  }
-
-  async function handleAddYear() {
-    setAddingYear(true);
-    try {
-      const res = await fetch("/api/college/academic-years", { method: "POST" });
-      const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to add year");
-      const yearsRes = await fetch("/api/college/academic-years");
-      const data = await yearsRes.json() as { academicYears: AcademicYear[] };
-      setOpenYears((data.academicYears ?? []).filter((y) => y.isActive));
-      toast({ variant: "success", title: "Academic year added" });
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add year" });
-    } finally {
-      setAddingYear(false);
-    }
   }
 
   async function handleSaveStructure() {
@@ -182,10 +155,11 @@ export default function DepartmentDetailPage() {
     try {
       const body = {
         deptId: department.id,
+        // Secondary Departments is NOT sent - the server always derives it
+        // from this department's own flat secondaryDepartments field.
         courseScope: {
           catalogId: structureTarget.catalogId,
           assignedYears: structureAssignedYears,
-          secondaryDepartments: structureSecondaryDepartments,
         },
       };
       const res = await fetch("/api/college/departments", {
@@ -458,16 +432,19 @@ export default function DepartmentDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <YearsTaughtAndSecondaryFields
-              openYears={openYears}
-              onAddYear={handleAddYear}
-              isAddingYear={addingYear}
               assignedYears={structureAssignedYears}
               onToggleYear={toggleStructureYear}
               maxYear={structureTarget?.durationYears}
               yearsHelperText={`Which years of this ${structureTarget?.durationYears ?? ""}-year course ${department?.name ?? "this department"} teaches. HODs can only create sections for these years.`}
               secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId)}
-              secondaryDepartments={structureSecondaryDepartments}
-              onToggleSecondaryDepartment={toggleStructureSecondaryDepartment}
+              secondaryDepartments={department?.secondaryDepartments ?? []}
+              onToggleSecondaryDepartment={() => {}}
+              showSecondaryDepartments={false}
+              secondaryDepartmentsNote={
+                (department?.secondaryDepartments?.length ?? 0) > 0
+                  ? `Cross-listed with ${department!.secondaryDepartments!.join(", ")} - set on ${department?.name ?? "this department"}'s own page, not per course.`
+                  : `${department?.name ?? "This department"} has no Secondary Departments set - edit the department to cross-list it to others.`
+              }
             />
           </div>
           <DialogFooter>

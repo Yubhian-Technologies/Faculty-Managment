@@ -159,13 +159,20 @@ export async function POST(request: Request) {
     // this section stays filed under their common department (preserved
     // until promotion) with secondaryDepartment naming this section's real
     // branch instead - matched separately and merged, or the roster (and
-    // therefore marks entry for the whole class) would come up empty.
+    // therefore marks entry for the whole class) would come up empty. Also
+    // scoped by `courseId` - guaranteed non-null here (the check above
+    // already rejected a missing one) - a department can run a same-named
+    // section under more than one course (StudentRecord.courseId's
+    // doc-comment), and without this, marks entry could pull the wrong
+    // course's roster entirely.
     let primaryQuery = collegeRef.collection("students")
       .where("department", "==", assignment.department)
-      .where("section", "==", sectionName);
+      .where("section", "==", sectionName)
+      .where("courseId", "==", assignment.courseId);
     let secondaryQuery = collegeRef.collection("students")
       .where("secondaryDepartment", "==", assignment.department)
-      .where("section", "==", sectionName);
+      .where("section", "==", sectionName)
+      .where("courseId", "==", assignment.courseId);
     if (year != null) {
       primaryQuery = primaryQuery.where("year", "==", year);
       secondaryQuery = secondaryQuery.where("year", "==", year);

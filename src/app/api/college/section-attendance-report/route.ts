@@ -121,6 +121,7 @@ export async function GET(request: Request) {
       department: section.department,
       sectionName: section.name,
       year: section.year,
+      courseId: section.courseId,
     });
 
     const students = roster

@@ -4,6 +4,14 @@ export interface SectionIdentity {
   department: string;
   sectionName: string;
   year?: number | null;
+  // A department can run a same-named section under more than one course
+  // (e.g. a B.Tech and an independent M.Tech both with a "PHYSICS-IT-A" -
+  // see StudentRecord.courseId's doc-comment) - department+section-name+year
+  // alone can't tell those apart. Pass the Section doc's own courseId
+  // whenever it has one, or this roster (and every report built on it) can
+  // silently mix in the other course's students. Optional only for a legacy
+  // section with no courseId yet.
+  courseId?: string;
 }
 
 // The one canonical filter for "students belonging to this section" - used
@@ -13,8 +21,8 @@ export interface SectionIdentity {
 // the roster query actually returns. `identity` must come from the Section
 // doc's own fields (never a denormalized copy on some other doc, e.g.
 // TeachingAssignment.sectionName) - StudentRecord has no sectionId of its
-// own (see types/core.ts), so department+section-name+year is the real,
-// canonical match, same as api/college/students/route.ts already
+// own (see types/core.ts), so department+section-name+year(+courseId) is the
+// real, canonical match, same as api/college/students/route.ts already
 // establishes for section rosters.
 //
 // Two queries, merged and deduped: a shared first-year student stays filed
@@ -35,6 +43,10 @@ export async function fetchSectionStudents(
   if (identity.year != null) {
     primaryQuery = primaryQuery.where("year", "==", identity.year);
     secondaryQuery = secondaryQuery.where("year", "==", identity.year);
+  }
+  if (identity.courseId) {
+    primaryQuery = primaryQuery.where("courseId", "==", identity.courseId);
+    secondaryQuery = secondaryQuery.where("courseId", "==", identity.courseId);
   }
 
   const [primarySnap, secondarySnap] = await Promise.all([primaryQuery.get(), secondaryQuery.get()]);
