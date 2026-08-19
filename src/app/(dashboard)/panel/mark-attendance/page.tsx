@@ -1,54 +1,60 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Info, Lock, Pencil, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CalendarClock, Info, Lock, Pencil, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
-import type { StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
+import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
-interface Option {
-  value: string;
-  label: string;
-}
+// How often to re-check the published timetable for the active period. A
+// plain poll (rather than scheduling a timer at the next period boundary)
+// keeps this simple and also picks up a same-period republish within the
+// same window (see CLAUDE.md's HOD Timetable -> Faculty Dashboard connect).
+const PERIOD_POLL_MS = 30_000;
 
-// Teaching assignments come in two shapes (see TeachingAssignment): course/
-// section-scoped ones carry courseId/year and a real sectionId; semester-
-// scoped ones (HOD's "Teaching Assignments" page) carry academicYear/semester
-// and only a free-text section name. These helpers unify either shape into
-// one selectable option per dropdown level.
-function courseKeyOf(a: TeachingAssignment): string {
-  return a.courseId ?? `nocourse:${a.courseName ?? ""}`;
-}
-function courseLabelOf(a: TeachingAssignment): string {
-  return a.courseName?.trim() || "General";
-}
-
-function semesterKeyOf(a: TeachingAssignment): string {
-  return a.sectionId ? `year:${a.year ?? ""}` : `sem:${a.academicYear ?? ""}:${a.semester ?? ""}`;
-}
-function semesterLabelOf(a: TeachingAssignment): string {
-  if (a.sectionId) return `Year ${a.year ?? "?"}`;
-  const term = [a.academicYear, a.semester ? `Semester ${a.semester}` : ""].filter(Boolean).join(" · ");
-  return term || "Semester";
-}
-
-function sectionKeyOf(a: TeachingAssignment): string {
-  return a.sectionId ?? `sem:${a.department}:${a.section ?? ""}:${a.academicYear ?? ""}:${a.semester ?? ""}`;
-}
-function sectionLabelOf(a: TeachingAssignment): string {
-  if (a.sectionId) return a.sectionName ?? "Section";
-  return a.section?.trim() || "Section";
+interface CurrentPeriodInfo {
+  active: boolean;
+  assignmentId?: string;
+  periodNumber?: number;
+  startTime?: string;
+  endTime?: string;
+  department?: string;
+  courseId?: string;
+  courseName?: string;
+  year?: number;
+  sectionId?: string;
+  sectionName?: string;
+  subjectId?: string;
+  subjectName?: string;
+  subjectCode?: string;
 }
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** "2026-08-18" -> "18-08-2026" - display only. */
+function formatDateDDMMYYYY(dateStr: string) {
+  const [y, m, d] = dateStr.split("-");
+  return `${d}-${m}-${y}`;
+}
+
+function ordinalYear(year: number) {
+  const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
+  return `${year}${suffix} Year`;
+}
+
+/** "09:00" -> "9:00 AM" - display only, stored values stay 24h "HH:MM". */
+function formatTime12h(hhmm: string) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 // The faculty picks exactly one of these four modes to mark the whole class
@@ -72,15 +78,13 @@ function defaultFillFor(mode: AttendanceMode): StudentAttendanceMark {
 }
 
 export default function MarkAttendancePage() {
-  const [assignments, setAssignments] = useState<TeachingAssignment[]>([]);
-  const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
-
-  const [course, setCourse] = useState("");
-  const [semesterKey, setSemesterKey] = useState("");
-  const [branch, setBranch] = useState("");
-  const [sectionKey, setSectionKey] = useState("");
-  const [subjectId, setSubjectId] = useState("");
-  const [date, setDate] = useState(todayStr());
+  const [currentPeriod, setCurrentPeriod] = useState<CurrentPeriodInfo | null>(null);
+  const [isLoadingPeriod, setIsLoadingPeriod] = useState(true);
+  // The endTime of the period that was just active, so the empty state can
+  // say "ended at 9:50 AM" instead of a generic "no class" the moment a
+  // period closes and nothing has started in its place yet.
+  const [justEndedAt, setJustEndedAt] = useState<string | null>(null);
+  const prevPeriodRef = useRef<CurrentPeriodInfo | null>(null);
 
   const [attendanceSession, setAttendanceSession] = useState<StudentAttendanceSession | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -90,90 +94,35 @@ export default function MarkAttendancePage() {
   const [classNotes, setClassNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    void (async () => {
-      setIsLoadingAssignments(true);
-      try {
-        const res = await fetch("/api/college/teaching-assignments");
-        if (!res.ok) throw new Error("Failed to load teaching assignments");
-        const json = (await res.json()) as { assignments?: TeachingAssignment[] };
-        setAssignments((json.assignments ?? []).filter((a) => !a.isPast));
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load your teaching assignments" });
-      } finally {
-        setIsLoadingAssignments(false);
+  async function checkCurrentPeriod() {
+    try {
+      const res = await fetch("/api/college/student-attendance/current-period");
+      if (!res.ok) throw new Error("Failed to check current period");
+      const json = (await res.json()) as CurrentPeriodInfo;
+      const prev = prevPeriodRef.current;
+      if (prev?.active && !json.active && prev.endTime) {
+        setJustEndedAt(prev.endTime);
+      } else if (json.active) {
+        setJustEndedAt(null);
       }
-    })();
+      prevPeriodRef.current = json;
+      setCurrentPeriod(json);
+    } catch {
+      prevPeriodRef.current = { active: false };
+      setCurrentPeriod({ active: false });
+    } finally {
+      setIsLoadingPeriod(false);
+    }
+  }
+
+  // Poll the published timetable for the active period; on a fresh window
+  // (period changes, or nothing was active before) it flips automatically to
+  // PRESENTEES etc. below via the assignmentId-keyed effect.
+  useEffect(() => {
+    void checkCurrentPeriod();
+    const interval = setInterval(() => void checkCurrentPeriod(), PERIOD_POLL_MS);
+    return () => clearInterval(interval);
   }, []);
-
-  const courseOptions = useMemo<Option[]>(() => {
-    const seen = new Map<string, Option>();
-    assignments.forEach((a) => {
-      const key = courseKeyOf(a);
-      if (!seen.has(key)) seen.set(key, { value: key, label: courseLabelOf(a) });
-    });
-    return [...seen.values()];
-  }, [assignments]);
-
-  const semesterOptions = useMemo<Option[]>(() => {
-    const seen = new Map<string, Option>();
-    assignments
-      .filter((a) => courseKeyOf(a) === course)
-      .forEach((a) => {
-        const key = semesterKeyOf(a);
-        if (!seen.has(key)) seen.set(key, { value: key, label: semesterLabelOf(a) });
-      });
-    return [...seen.values()];
-  }, [assignments, course]);
-
-  const branchOptions = useMemo<Option[]>(() => {
-    const seen = new Set<string>();
-    assignments
-      .filter((a) => courseKeyOf(a) === course && semesterKeyOf(a) === semesterKey)
-      .forEach((a) => a.department && seen.add(a.department));
-    return [...seen].sort().map((b) => ({ value: b, label: b }));
-  }, [assignments, course, semesterKey]);
-
-  const sectionOptions = useMemo<Option[]>(() => {
-    const seen = new Map<string, Option>();
-    assignments
-      .filter((a) => courseKeyOf(a) === course && semesterKeyOf(a) === semesterKey && a.department === branch)
-      .forEach((a) => {
-        const key = sectionKeyOf(a);
-        if (!seen.has(key)) seen.set(key, { value: key, label: sectionLabelOf(a) });
-      });
-    return [...seen.values()];
-  }, [assignments, course, semesterKey, branch]);
-
-  const subjectOptions = useMemo<Option[]>(() => {
-    const seen = new Map<string, Option>();
-    assignments
-      .filter(
-        (a) =>
-          courseKeyOf(a) === course &&
-          semesterKeyOf(a) === semesterKey &&
-          a.department === branch &&
-          sectionKeyOf(a) === sectionKey
-      )
-      .forEach((a) => seen.set(a.subjectId, { value: a.subjectId, label: `${a.subjectName} (${a.subjectCode})` }));
-    return [...seen.values()];
-  }, [assignments, course, semesterKey, branch, sectionKey]);
-
-  // The exact assignment the current Course+Semester+Branch+Section+Subject
-  // selection maps to — its own id is what the API keys the attendance
-  // session off.
-  const selectedAssignment = useMemo(
-    () =>
-      assignments.find(
-        (a) =>
-          courseKeyOf(a) === course &&
-          semesterKeyOf(a) === semesterKey &&
-          a.department === branch &&
-          sectionKeyOf(a) === sectionKey &&
-          a.subjectId === subjectId
-      ) ?? null,
-    [assignments, course, semesterKey, branch, sectionKey, subjectId]
-  );
 
   function resetSession() {
     setAttendanceSession(null);
@@ -183,46 +132,14 @@ export default function MarkAttendancePage() {
     setClassNotes("");
   }
 
-  function handleCourseChange(v: string) {
-    setCourse(v);
-    setSemesterKey("");
-    setBranch("");
-    setSectionKey("");
-    setSubjectId("");
-    resetSession();
-  }
-  function handleSemesterChange(v: string) {
-    setSemesterKey(v);
-    setBranch("");
-    setSectionKey("");
-    setSubjectId("");
-    resetSession();
-  }
-  function handleBranchChange(v: string) {
-    setBranch(v);
-    setSectionKey("");
-    setSubjectId("");
-    resetSession();
-  }
-  function handleSectionChange(v: string) {
-    setSectionKey(v);
-    setSubjectId("");
-    resetSession();
-  }
-  function handleSubjectChange(v: string) {
-    setSubjectId(v);
-    resetSession();
-  }
-
-  async function handleLoadStudents() {
-    if (!selectedAssignment || !date) return;
+  async function handleLoadStudents(assignmentId: string) {
     setIsLoadingStudents(true);
     setLoadError(null);
     try {
       const res = await fetch("/api/college/student-attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignmentId: selectedAssignment.id, date }),
+        body: JSON.stringify({ assignmentId, date: todayStr() }),
       });
       const json = (await res.json()) as { session?: StudentAttendanceSession; error?: string };
       if (!res.ok || !json.session) {
@@ -231,6 +148,7 @@ export default function MarkAttendancePage() {
       }
       setAttendanceSession(json.session);
       setDraft(Object.fromEntries(json.session.entries.map((e) => [e.studentId, e.status])));
+      setMode(null);
       setClassNotes(json.session.classNotes ?? "");
     } catch {
       setLoadError("Failed to load students");
@@ -238,6 +156,21 @@ export default function MarkAttendancePage() {
       setIsLoadingStudents(false);
     }
   }
+
+  // The active period drives which class is loaded — no manual selection.
+  // Only (re)loads when the active assignment actually changes (period
+  // rolled over, or a class just became active), so an in-progress poll
+  // never wipes marks the faculty is still entering for the same period.
+  useEffect(() => {
+    if (!currentPeriod?.active || !currentPeriod.assignmentId) {
+      if (attendanceSession) resetSession();
+      return;
+    }
+    const key = `${currentPeriod.assignmentId}_${todayStr()}`;
+    if (attendanceSession?.id === key) return;
+    void handleLoadStudents(currentPeriod.assignmentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPeriod?.active, currentPeriod?.assignmentId]);
 
   // Only one of the four modes is active at a time. Picking a mode fills
   // every row with that mode's default status immediately — for "Mark All
@@ -268,12 +201,14 @@ export default function MarkAttendancePage() {
   const allMarked =
     !!attendanceSession && attendanceSession.totalStudents > 0 && markedCount === attendanceSession.totalStudents;
   const isReadOnly = attendanceSession?.status === "SUBMITTED";
+  const hasClassWorkRecord = classNotes.trim().length > 0;
+  const canSubmit = allMarked && hasClassWorkRecord;
   const presentCount = attendanceSession
     ? attendanceSession.entries.filter((e) => draft[e.studentId] === "PRESENT").length
     : 0;
 
   async function handleSubmit() {
-    if (!attendanceSession || !allMarked) return;
+    if (!attendanceSession || !canSubmit) return;
     setIsSubmitting(true);
     try {
       const entries = attendanceSession.entries.map((e) => ({
@@ -300,102 +235,61 @@ export default function MarkAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Attendance"
-        description="Select the class details and mark students present or absent. Once submitted, attendance cannot be edited."
+        description="Automatically loads the class you're assigned to teach right now, from the published timetable."
       />
 
-      {isLoadingAssignments ? (
+      {isLoadingPeriod ? (
         <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />
-      ) : assignments.length === 0 ? (
+      ) : !currentPeriod?.active ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            You have no teaching assignments yet. Ask your HOD to assign you to a section and subject
-            before taking attendance.
+            <CalendarClock className="mx-auto mb-3 h-8 w-8 text-muted-foreground/60" />
+            {justEndedAt
+              ? `Attendance period ended at ${formatTime12h(justEndedAt)}.`
+              : "No class assigned for the current time."}
           </CardContent>
         </Card>
       ) : (
         <>
           <Card>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
-                <div className="space-y-2">
-                  <Label>Course</Label>
-                  <Select value={course} onValueChange={handleCourseChange}>
-                    <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
-                    <SelectContent>
-                      {courseOptions.map((c) => (
-                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="flex items-start justify-between gap-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Current Period</p>
+                    <p className="mt-1 text-sm font-semibold">
+                      {currentPeriod.startTime && currentPeriod.endTime
+                        ? `${formatTime12h(currentPeriod.startTime)} – ${formatTime12h(currentPeriod.endTime)}`
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Subject</p>
+                    <p className="mt-1 text-sm font-semibold">{currentPeriod.subjectName || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Course</p>
+                    <p className="mt-1 text-sm font-semibold">{currentPeriod.courseName || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Year</p>
+                    <p className="mt-1 text-sm font-semibold">
+                      {currentPeriod.year != null ? ordinalYear(currentPeriod.year) : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Section</p>
+                    <p className="mt-1 text-sm font-semibold">{currentPeriod.sectionName || "—"}</p>
+                  </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Semester</Label>
-                  <Select value={semesterKey} onValueChange={handleSemesterChange} disabled={!course}>
-                    <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
-                    <SelectContent>
-                      {semesterOptions.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Branch</Label>
-                  <Select value={branch} onValueChange={handleBranchChange} disabled={!semesterKey}>
-                    <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
-                    <SelectContent>
-                      {branchOptions.map((b) => (
-                        <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Section</Label>
-                  <Select value={sectionKey} onValueChange={handleSectionChange} disabled={!branch}>
-                    <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
-                    <SelectContent>
-                      {sectionOptions.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Subject</Label>
-                  <Select value={subjectId} onValueChange={handleSubjectChange} disabled={!sectionKey}>
-                    <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-                    <SelectContent>
-                      {subjectOptions.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Date</Label>
-                  <Input
-                    type="date"
-                    value={date}
-                    max={todayStr()}
-                    onChange={(e) => { setDate(e.target.value); resetSession(); }}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex justify-end">
                 <Button
-                  onClick={() => void handleLoadStudents()}
-                  disabled={!selectedAssignment || !date || isLoadingStudents}
-                  loading={isLoadingStudents}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void checkCurrentPeriod()}
+                  disabled={isLoadingStudents}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  Submit
+                  Refresh
                 </Button>
               </div>
             </CardContent>
@@ -520,20 +414,46 @@ export default function MarkAttendancePage() {
               )}
 
               {attendanceSession.totalStudents > 0 && (
-                <Card>
-                  <CardContent className="space-y-4 py-5">
-                    <div className="space-y-2">
-                      <Label htmlFor="classNotes">Class Description</Label>
-                      <Textarea
-                        id="classNotes"
-                        placeholder="What did you cover in this class? (topics taught, activities, etc.)"
-                        value={classNotes}
-                        onChange={(e) => setClassNotes(e.target.value)}
-                        disabled={isReadOnly}
-                        rows={3}
-                      />
-                    </div>
+                <Card className="overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3">Period Number</th>
+                          <th className="px-4 py-3">Record of the Class Work</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t">
+                          <td className="px-4 py-3 align-top font-medium">{formatDateDDMMYYYY(attendanceSession.date)}</td>
+                          <td className="px-4 py-3 align-top font-medium">
+                            {attendanceSession.periodNumber ?? currentPeriod.periodNumber ?? "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Label htmlFor="classNotes" className="sr-only">Record of the Class Work</Label>
+                            <Textarea
+                              id="classNotes"
+                              placeholder="What was taught/done in this period? (required)"
+                              value={classNotes}
+                              onChange={(e) => setClassNotes(e.target.value)}
+                              disabled={isReadOnly}
+                              rows={3}
+                              required
+                              aria-required="true"
+                            />
+                            {!isReadOnly && !hasClassWorkRecord && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Required — Submit Attendance stays disabled until this is filled in.
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
 
+                  <CardContent className="space-y-4 py-5">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm text-muted-foreground">
                         <p>
@@ -549,7 +469,7 @@ export default function MarkAttendancePage() {
                       {!isReadOnly && (
                         <Button
                           onClick={() => void handleSubmit()}
-                          disabled={!allMarked || isSubmitting}
+                          disabled={!canSubmit || isSubmitting}
                           loading={isSubmitting}
                           className="shrink-0"
                         >

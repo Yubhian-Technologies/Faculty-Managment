@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
 import type { StudentAttendanceEntry, StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
 const VALID_MARKS: StudentAttendanceMark[] = ["PRESENT", "ABSENT"];
@@ -36,6 +38,20 @@ export async function PATCH(
       return NextResponse.json({ error: "Attendance has already been submitted and cannot be edited" }, { status: 409 });
     }
 
+    // The published timetable is the source of truth for WHEN this can be
+    // saved, not the client's clock or whatever the UI happened to show —
+    // reject any save (mark changes or submit) once this exact faculty +
+    // assignment has fallen outside its period window, even if the session
+    // itself is still a DRAFT (e.g. a request replayed after the period
+    // ended, or one crafted directly against an old/completed period).
+    const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
+    const windowCheck = await checkFacultyPeriodWindow(
+      db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date
+    );
+    if (!windowCheck.ok) {
+      return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
+    }
+
     let entries: StudentAttendanceEntry[] = existing.entries;
     if (body.entries) {
       const updates = new Map(body.entries.map((e) => [e.studentId, e.status]));
@@ -62,6 +78,13 @@ export async function PATCH(
       if (markedCount < existing.totalStudents || existing.totalStudents === 0) {
         return NextResponse.json(
           { error: "Please mark attendance for all students before submitting" },
+          { status: 400 }
+        );
+      }
+      const classNotes = ((update.classNotes as string | undefined) ?? existing.classNotes ?? "").trim();
+      if (!classNotes) {
+        return NextResponse.json(
+          { error: "Record of the Class Work is required before submitting attendance" },
           { status: 400 }
         );
       }

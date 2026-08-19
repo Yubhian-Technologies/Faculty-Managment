@@ -5,20 +5,24 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { toast } from "@/hooks/useToast";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Copy } from "lucide-react";
 import { ROLE_LABELS } from "@/types";
 import type { FMSUser } from "@/types";
 
 type UserRow = Record<string, unknown> & FMSUser & { isActive?: boolean };
 
+const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
+
 export default function WebmasterUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
+  const [passwordInput, setPasswordInput] = useState("");
   const [isResetting, setIsResetting] = useState(false);
-  const [revealedPassword, setRevealedPassword] = useState<{ name: string; password: string } | null>(null);
 
   async function load() {
     setIsLoading(true);
@@ -34,18 +38,27 @@ export default function WebmasterUsersPage() {
 
   useEffect(() => { void load(); }, []);
 
+  function openResetDialog(user: UserRow) {
+    setPasswordInput("");
+    setResetTarget(user);
+  }
+
   async function handleReset() {
     if (!resetTarget) return;
+    if (passwordInput.length < MIN_PASSWORD_LENGTH) {
+      toast({ variant: "destructive", title: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+      return;
+    }
     setIsResetting(true);
     try {
       const res = await fetch("/api/college/webmaster/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: resetTarget.uid }),
+        body: JSON.stringify({ uid: resetTarget.uid, password: passwordInput }),
       });
-      const data = await res.json() as { ok?: boolean; generatedPassword?: string; error?: string };
-      if (!res.ok || !data.generatedPassword) throw new Error(data.error ?? "Failed");
-      setRevealedPassword({ name: resetTarget.name, password: data.generatedPassword });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Failed");
+      toast({ variant: "success", title: "Password reset", description: `Share the new password with ${resetTarget.name} securely.` });
       setResetTarget(null);
     } catch (err) {
       toast({ variant: "destructive", title: "Failed to reset password", description: err instanceof Error ? err.message : undefined });
@@ -71,7 +84,7 @@ export default function WebmasterUsersPage() {
       key: "actions",
       header: "",
       render: (u) => (
-        <Button size="sm" variant="outline" onClick={() => setResetTarget(u)}>
+        <Button size="sm" variant="outline" onClick={() => openResetDialog(u)}>
           <KeyRound className="h-3.5 w-3.5 mr-1.5" />
           Reset Password
         </Button>
@@ -96,32 +109,36 @@ export default function WebmasterUsersPage() {
       <Dialog open={!!resetTarget} onOpenChange={(o) => { if (!o) setResetTarget(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reset this account&apos;s password?</DialogTitle>
+            <DialogTitle>Reset Password</DialogTitle>
             <DialogDescription>
-              You are resetting the password for <strong>{resetTarget ? (ROLE_LABELS[resetTarget.role] ?? resetTarget.role) : ""}</strong> — {resetTarget?.name} ({resetTarget?.email}).
-              A new password will be generated and shown once - share it with them securely.
+              Set the new password for <strong>{resetTarget ? (ROLE_LABELS[resetTarget.role] ?? resetTarget.role) : ""}</strong> — {resetTarget?.name} ({resetTarget?.email}).
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-2">
+            <Label>Password</Label>
+            <div className="flex gap-2">
+              <Input
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                className="font-mono"
+                disabled={isResetting}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Copy password"
+                disabled={!passwordInput || isResetting}
+                onClick={() => { void navigator.clipboard.writeText(passwordInput); toast({ variant: "success", title: "Password copied" }); }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setResetTarget(null)} disabled={isResetting}>Cancel</Button>
             <Button variant="destructive" onClick={() => void handleReset()} loading={isResetting}>Reset Password</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!revealedPassword} onOpenChange={(o) => { if (!o) setRevealedPassword(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Password Reset</DialogTitle>
-            <DialogDescription>
-              A new password was generated for <strong>{revealedPassword?.name}</strong>. Share this temporary password with them securely - it will not be shown again.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border bg-muted/40 p-3 font-mono text-sm text-center select-all">
-            {revealedPassword?.password}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setRevealedPassword(null)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
