@@ -406,9 +406,21 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
                 {/* Faculty (teaching or technical) only - COLLEGE_STAFF has no
                     late-check-in penalty to excuse in the first place. */}
                 {allowManualMark && canGrantPermission && row.role === "PANEL_MEMBER" && (
-                  <Button variant="outline" size="sm" onClick={() => openPermissionDialog(row)}>
-                    <Clock3 className="h-3.5 w-3.5 mr-1" /> Permission
-                  </Button>
+                  // Once granted for this person on this date, the day is
+                  // already excused - there's nothing further to decide, so
+                  // the action is replaced by what was granted rather than
+                  // reopening a dialog that would just re-submit the same
+                  // thing. permittedCheckInTime is set by the grant and comes
+                  // back on the reloaded roster.
+                  row.permittedCheckInTime ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                      <Clock3 className="h-3.5 w-3.5" /> Permitted {row.permittedCheckInTime}
+                    </span>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => openPermissionDialog(row)}>
+                      <Clock3 className="h-3.5 w-3.5 mr-1" /> Permission
+                    </Button>
+                  )
                 )}
               </div>
             ) : null,
