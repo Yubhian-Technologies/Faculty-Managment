@@ -169,3 +169,23 @@ export interface Holiday {
   academicYear: string;       // "2025-26"
   createdAt: Timestamp;
 }
+
+// ─── Summer Holidays (one continuous break period per academic year) ──────────
+// Distinct from the single-date Holiday above - College Office sets a single
+// from/to range per academic year (doc id = academicYear, so there's only
+// ever one). Surfaced as an informational banner in the dashboard shell
+// (components/layout/SummerHolidayBanner.tsx, rendered from
+// (dashboard)/layout.tsx - every role, every page) starting the day before
+// `fromDate` and staying up through `toDate` - never enforced server-side
+// against leave applications, purely informational.
+export interface SummerHoliday {
+  id: string;              // == academicYear
+  collegeId: string;
+  academicYear: string;    // "2025-26"
+  fromDate: Timestamp;
+  toDate: Timestamp;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}

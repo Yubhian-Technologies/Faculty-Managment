@@ -12,12 +12,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
-import { countWorkingDays, dateKey, todayISODate } from "@/lib/leave/dayCounter";
+import { countWorkingDays, dateKey, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { toDate as toJsDate, formatDate } from "@/lib/utils";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
-import type { Holiday } from "@/types";
+import type { Holiday, SummerHoliday } from "@/types";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -63,6 +63,14 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
   const [substituteByPeriod, setSubstituteByPeriod] = useState<Record<string, string>>({});
+  // College Office's declared Summer Holidays range (see the Holidays page's
+  // "Summer Holidays" section) - whichever one hasn't fully ended yet, soonest
+  // first. Selecting "Summer Holidays" below locks From/To to this exact
+  // range (see the effect further down) rather than letting the requester
+  // pick their own dates - it's the college's declared break, not a personal
+  // date choice. Kept out of the type dropdown entirely (see `types` filter
+  // below) when nothing's been set yet.
+  const [summerHoliday, setSummerHoliday] = useState<{ fromISO: string; toISO: string; from: Date; to: Date } | null>(null);
 
   const isHalfDayEligible = HALF_DAY_ELIGIBLE_TYPES.includes(leaveTypeCode as LeaveTypeCode);
   // Forenoon's window has already passed for a half-day request filed for
@@ -108,6 +116,68 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       });
   }, []);
 
+  useEffect(() => {
+    fetch("/api/college/summer-holidays")
+      .then((r) => r.json() as Promise<{ summerHolidays?: SummerHoliday[] }>)
+      .then((d) => {
+        const today = todayISO;
+        // Whichever range hasn't fully ended yet, soonest first - lets a
+        // requester pick "Summer Holidays" well before it starts, not just
+        // once it's imminent (unlike the dashboard banner, which only shows
+        // in the day-before window - see SummerHolidayBanner.tsx).
+        const upcoming = (d.summerHolidays ?? [])
+          .map((s) => {
+            const from = toJsDate(s.fromDate);
+            const to = toJsDate(s.toDate);
+            if (!from || !to) return null;
+            return { fromISO: isoDateKey(from), toISO: isoDateKey(to), from, to };
+          })
+          .filter((s): s is { fromISO: string; toISO: string; from: Date; to: Date } => !!s && s.toISO >= today)
+          .sort((a, b) => a.fromISO.localeCompare(b.fromISO));
+        setSummerHoliday(upcoming[0] ?? null);
+      })
+      .catch(() => {
+        // Non-fatal - "Summer Holidays" just won't be offered as an option.
+      });
+  }, [todayISO]);
+
+  // Defaults From/To to the FULL declared range the moment "Summer Holidays"
+  // is picked fresh (not via Extend, which computes its own From/To below) -
+  // just a starting point, not a lock. The requester can then narrow it to
+  // whatever sub-range they actually want (see the From/To inputs' min/max
+  // below, clamped to the declared range either way) - e.g. office declares
+  // the 20th through next month's 20th, but someone only takes 10 or 11 days
+  // of it. Only fires once on selection (fromDate/toDate aren't in the
+  // dependency array), so it never overwrites a range the requester has
+  // already narrowed down.
+  useEffect(() => {
+    // Wrapped so the setState calls aren't reachable synchronously from the
+    // effect body (react-hooks/set-state-in-effect).
+    void (async () => {
+      if (leaveTypeCode === "SH" && summerHoliday && !extendId) {
+        setFromDate(summerHoliday.fromISO);
+        setToDate(summerHoliday.toISO);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaveTypeCode, extendId]);
+
+  // Extending a Summer Holidays request (see LeaveProfileView.tsx's Extend
+  // button, now offered for SH the same way it already was for Sick Leave) -
+  // From already restarts the day after the original's last day (see the
+  // extend-fetch effect below); this defaults To to the rest of the declared
+  // range, so "extend" reads as "take more of what's left", not a blank
+  // range to fill in from scratch. Still just a default - narrowable the
+  // same as a fresh SH selection. Only defaults once (guarded by `!toDate`),
+  // so it never overwrites a range the requester has since narrowed down.
+  useEffect(() => {
+    void (async () => {
+      if (extendId && leaveTypeCode === "SH" && summerHoliday && !toDate) {
+        setToDate(summerHoliday.toISO);
+      }
+    })();
+  }, [extendId, leaveTypeCode, summerHoliday, toDate]);
+
   // Live preview only - the server never blocks on this (see applications/route.ts),
   // it just warns the requester before they submit that some days will exceed
   // their balance and be treated as Loss of Pay (final split happens at approval).
@@ -126,13 +196,16 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     if (!HALF_DAY_ELIGIBLE_TYPES.includes(value as LeaveTypeCode)) setIsHalfDay(false);
   }
 
-  // Standard leave types only (never "Other" - see PeriodSubstitution in
-  // types/leave.ts) - fetches which of the requester's own teaching periods
-  // fall within this date range and who in their department is free to cover
-  // each one. Empty for a non-teaching requester or a range with no affected
-  // periods; the picker below simply doesn't render in that case.
+  // Standard leave types only (never "Other" or "Summer Holidays" - see
+  // PeriodSubstitution in types/leave.ts) - fetches which of the requester's
+  // own teaching periods fall within this date range and who in their
+  // department is free to cover each one. Empty for a non-teaching requester
+  // or a range with no affected periods; the picker below simply doesn't
+  // render in that case. Summer Holidays is skipped outright - it's the
+  // college's own declared break, there's nothing to arrange substitute
+  // coverage for.
   useEffect(() => {
-    if (!leaveTypeCode || leaveTypeCode === "OTHER" || !fromDate || !toDate || toDate < fromDate) {
+    if (!leaveTypeCode || leaveTypeCode === "OTHER" || leaveTypeCode === "SH" || !fromDate || !toDate || toDate < fromDate) {
       setPeriods([]);
       setSubstituteByPeriod({});
       return;
@@ -189,7 +262,25 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       toast({ variant: "destructive", title: "All fields are required" });
       return;
     }
-    if (fromDate < todayISO || toDate < todayISO) {
+    // Summer Holidays defaults to College Office's own declared range but can
+    // be narrowed down (see the min/max on the inputs above), so an already-
+    // ongoing range (fromDate before today, toDate still ahead) is expected
+    // and not backdating in the sense this check exists to catch elsewhere.
+    if (leaveTypeCode === "SH") {
+      // Covers the Extend case running out of range too - a day-after-the-
+      // original fromDate that's pushed past the declared range's end (every
+      // day of it already taken) ends up later than toDate here rather than
+      // within it.
+      if (!summerHoliday || fromDate > toDate || fromDate < summerHoliday.fromISO || toDate > summerHoliday.toISO) {
+        toast({
+          variant: "destructive",
+          title: summerHoliday && fromDate > summerHoliday.toISO
+            ? "No days remain in the declared Summer Holidays range"
+            : "Summer Holidays dates must fall within your College Office's declared range",
+        });
+        return;
+      }
+    } else if (fromDate < todayISO || toDate < todayISO) {
       toast({ variant: "destructive", title: "Leave cannot be applied for a date before today" });
       return;
     }
@@ -262,12 +353,19 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <SelectValue placeholder="Select leave type" />
               </SelectTrigger>
               <SelectContent>
-                {types.map((t) => (
-                  <SelectItem key={t.code} value={t.code}>
-                    {t.label}
-                    {!t.unlimited ? ` (${t.remaining} remaining)` : ""}
-                  </SelectItem>
-                ))}
+                {types
+                  // Only offered once College Office has actually declared a
+                  // still-relevant range - otherwise there's nothing to lock
+                  // the dates to (see the summerHoliday fetch above).
+                  .filter((t) => t.code !== "SH" || summerHoliday)
+                  .map((t) => (
+                    <SelectItem key={t.code} value={t.code}>
+                      {t.code === "SH" && summerHoliday
+                        ? `${t.label} (${formatDate(summerHoliday.from)} - ${formatDate(summerHoliday.to)})`
+                        : t.label}
+                      {!t.unlimited ? ` (${t.remaining} remaining)` : ""}
+                    </SelectItem>
+                  ))}
                 <SelectItem value="OTHER">Other</SelectItem>
               </SelectContent>
             </Select>
@@ -295,7 +393,13 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           <div className={isHalfDay ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
             <div className="space-y-2">
               <Label>From</Label>
-              <Input type="date" value={fromDate} min={todayISO} onChange={(e) => handleFromDateChange(e.target.value)} />
+              <Input
+                type="date"
+                value={fromDate}
+                min={leaveTypeCode === "SH" && summerHoliday ? summerHoliday.fromISO : todayISO}
+                max={leaveTypeCode === "SH" && summerHoliday ? summerHoliday.toISO : undefined}
+                onChange={(e) => handleFromDateChange(e.target.value)}
+              />
             </div>
             {/* Half day is always that same single day - To stays locked equal
                 to From under the hood (see handleFromDateChange/
@@ -308,11 +412,17 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   type="date"
                   value={toDate}
                   min={fromDate || todayISO}
+                  max={leaveTypeCode === "SH" && summerHoliday ? summerHoliday.toISO : undefined}
                   onChange={(e) => setToDate(e.target.value)}
                 />
               </div>
             )}
           </div>
+          {leaveTypeCode === "SH" && summerHoliday && (
+            <p className="text-xs text-muted-foreground -mt-2">
+              Pick any dates within your College Office&rsquo;s declared range ({formatDate(summerHoliday.from)} - {formatDate(summerHoliday.to)}).
+            </p>
+          )}
 
           {isHalfDay && isHalfDayEligible && (
             <div className="space-y-2">

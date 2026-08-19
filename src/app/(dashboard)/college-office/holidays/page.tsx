@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, CalendarDays } from "lucide-react";
+import { Plus, Trash2, CalendarDays, Pencil, Sun } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
-import { formatDate, toDate } from "@/lib/utils";
+import { formatDate, toDate, toDateInputValue } from "@/lib/utils";
 import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
 import { HOLIDAY_TYPE_LABELS, HOLIDAY_AUDIENCE_LABELS } from "@/types";
-import type { Holiday, HolidayAudience, HolidayType } from "@/types";
+import type { Holiday, HolidayAudience, HolidayType, SummerHoliday } from "@/types";
 
 const HOLIDAY_TYPES: HolidayType[] = ["NATIONAL", "REGIONAL", "COLLEGE", "RESTRICTED"];
 const HOLIDAY_AUDIENCES: HolidayAudience[] = ["BOTH", "STUDENTS"];
@@ -28,6 +28,10 @@ const ALL_SENTINEL = "__all__"; // sentinel: Radix Select items can't use an emp
 
 function emptyForm() {
   return { date: "", name: "", type: "COLLEGE" as HolidayType, appliesTo: "BOTH" as HolidayAudience };
+}
+
+function emptySummerForm(academicYear: string) {
+  return { academicYear, fromDate: "", toDate: "" };
 }
 
 // Session start year out of a "YYYY-YY" label, for sorting newest-first -
@@ -53,6 +57,19 @@ export default function CollegeOfficeHolidaysPage() {
   // holidays, and "All Years" shows the full history at once.
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   const [selectedMonth, setSelectedMonth] = useState(""); // "" = all months
+
+  // Summer Holidays - one continuous from/to break period per academic year,
+  // distinct from the single-date holidays above (see SummerHoliday in
+  // src/types). Shown as a banner across every role's own Leave module
+  // starting the day before it begins (see SummerHolidayBanner.tsx) - not
+  // filtered by the Month picker above since it's a range, not a single date.
+  const [summerHolidays, setSummerHolidays] = useState<SummerHoliday[]>([]);
+  const [isSummerLoading, setIsSummerLoading] = useState(true);
+  const [summerOpen, setSummerOpen] = useState(false);
+  const [summerForm, setSummerForm] = useState(emptySummerForm(academicSessionLabel(currentAcademicStartYear())));
+  const [isSummerSaving, setIsSummerSaving] = useState(false);
+  const [summerDeleteTarget, setSummerDeleteTarget] = useState<SummerHoliday | null>(null);
+  const [isSummerDeleting, setIsSummerDeleting] = useState(false);
 
   // recentAcademicSessions() only covers ~4 sessions around now - merge in
   // whatever years actually show up in the data (older imported holidays,
@@ -83,10 +100,19 @@ export default function CollegeOfficeHolidaysPage() {
       .finally(() => setIsLoading(false));
   }
 
+  function loadSummerHolidays() {
+    setIsSummerLoading(true);
+    fetch("/api/college/summer-holidays")
+      .then((r) => r.json() as Promise<{ summerHolidays: SummerHoliday[] }>)
+      .then((d) => setSummerHolidays(d.summerHolidays ?? []))
+      .catch(() => toast({ variant: "destructive", title: "Failed to load summer holidays" }))
+      .finally(() => setIsSummerLoading(false));
+  }
+
   useEffect(() => {
     // Wrapped so load()'s setState calls aren't reachable synchronously from
     // the effect body (react-hooks/set-state-in-effect).
-    void (async () => { load(); })();
+    void (async () => { load(); loadSummerHolidays(); })();
   }, []);
 
   async function handleAdd() {
@@ -130,6 +156,59 @@ export default function CollegeOfficeHolidaysPage() {
     }
   }
 
+  function openSummerDialog(existing?: SummerHoliday) {
+    setSummerForm(
+      existing
+        ? { academicYear: existing.academicYear, fromDate: toDateInputValue(existing.fromDate), toDate: toDateInputValue(existing.toDate) }
+        : emptySummerForm(academicSessionLabel(currentAcademicStartYear()))
+    );
+    setSummerOpen(true);
+  }
+
+  async function handleSaveSummerHoliday() {
+    if (!summerForm.academicYear || !summerForm.fromDate || !summerForm.toDate) {
+      toast({ variant: "destructive", title: "Academic year, from date and to date are all required" });
+      return;
+    }
+    if (summerForm.toDate < summerForm.fromDate) {
+      toast({ variant: "destructive", title: "To date cannot be before from date" });
+      return;
+    }
+    setIsSummerSaving(true);
+    try {
+      const res = await fetch("/api/college/summer-holidays", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(summerForm),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to save summer holidays");
+      toast({ variant: "success", title: "Summer holidays saved" });
+      setSummerOpen(false);
+      loadSummerHolidays();
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save summer holidays" });
+    } finally {
+      setIsSummerSaving(false);
+    }
+  }
+
+  async function handleDeleteSummerHoliday() {
+    if (!summerDeleteTarget) return;
+    setIsSummerDeleting(true);
+    try {
+      const res = await fetch(`/api/college/summer-holidays/${summerDeleteTarget.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast({ variant: "success", title: "Summer holidays removed" });
+      setSummerDeleteTarget(null);
+      loadSummerHolidays();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to remove summer holidays" });
+    } finally {
+      setIsSummerDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -141,6 +220,49 @@ export default function CollegeOfficeHolidaysPage() {
           </Button>
         }
       />
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <Sun className="h-4 w-4 text-muted-foreground" />
+                Summer Holidays
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                One break period per academic year - shown as a banner across every role&rsquo;s Leave module starting the day before it begins.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => openSummerDialog()}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />Set Summer Holidays
+            </Button>
+          </div>
+          {isSummerLoading ? (
+            <div className="h-10 bg-muted animate-pulse rounded-lg" />
+          ) : summerHolidays.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No summer holidays set yet for any academic year.</p>
+          ) : (
+            <div className="space-y-2">
+              {summerHolidays.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 flex-wrap">
+                  <div className="text-sm">
+                    <span className="font-medium">{s.academicYear}</span>
+                    <span className="text-muted-foreground"> &middot; {formatDate(s.fromDate)} &ndash; {formatDate(s.toDate)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openSummerDialog(s)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setSummerDeleteTarget(s)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -275,6 +397,51 @@ export default function CollegeOfficeHolidaysPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={summerOpen} onOpenChange={setSummerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set Summer Holidays</DialogTitle>
+            <DialogDescription>One range per academic year - setting it again for the same year overwrites the existing one.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Academic Year</Label>
+              <Select value={summerForm.academicYear} onValueChange={(v) => setSummerForm((f) => ({ ...f, academicYear: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {recentAcademicSessions().map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>From</Label>
+                <Input type="date" value={summerForm.fromDate} onChange={(e) => setSummerForm((f) => ({ ...f, fromDate: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>To</Label>
+                <Input type="date" value={summerForm.toDate} min={summerForm.fromDate || undefined} onChange={(e) => setSummerForm((f) => ({ ...f, toDate: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSummerOpen(false)}>Cancel</Button>
+            <Button onClick={() => void handleSaveSummerHoliday()} loading={isSummerSaving}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!summerDeleteTarget}
+        onOpenChange={(open) => { if (!open) setSummerDeleteTarget(null); }}
+        title="Remove summer holidays?"
+        description={`This will remove the ${summerDeleteTarget?.academicYear ?? ""} summer holidays range and its Leave-module banner. This cannot be undone.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => void handleDeleteSummerHoliday()}
+        loading={isSummerDeleting}
+      />
 
       <ConfirmDialog
         open={!!deleteTarget}

@@ -70,4 +70,22 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
       eligibleCategories: ["new-joining", "vacation", "non-vacation"],
     },
   },
+  {
+    id: "SH",
+    code: "SH",
+    label: "Summer Holidays",
+    shortLabel: "SH",
+    color: "orange",
+    isActive: true,
+    sortOrder: 6,
+    rules: {
+      // Same as OD - the college's own declared break, not a personal
+      // allowance, so nothing is drawn down (see LeaveApplyForm.tsx, which
+      // locks the From/To dates to whatever College Office set in the
+      // Holidays page's "Summer Holidays" section - src/types/attendance.ts's
+      // SummerHoliday).
+      unlimited: true,
+      eligibleCategories: ["new-joining", "vacation", "non-vacation"],
+    },
+  },
 ];
