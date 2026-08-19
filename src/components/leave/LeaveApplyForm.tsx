@@ -66,9 +66,9 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
   const [substituteByPeriod, setSubstituteByPeriod] = useState<Record<string, string>>({});
-  // College Office's declared Summer Holidays range (see the Holidays page's
-  // "Summer Holidays" section) - whichever one hasn't fully ended yet, soonest
-  // first. Selecting "Summer Holidays" below locks From/To to this exact
+  // College Office's declared Summer Vacation range (see the Holidays page's
+  // "Summer Vacation" section) - whichever one hasn't fully ended yet, soonest
+  // first. Selecting "Summer Vacation" below locks From/To to this exact
   // range (see the effect further down) rather than letting the requester
   // pick their own dates - it's the college's declared break, not a personal
   // date choice. Kept out of the type dropdown entirely (see `types` filter
@@ -125,7 +125,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       .then((d) => {
         const today = todayISO;
         // Whichever range hasn't fully ended yet, soonest first - lets a
-        // requester pick "Summer Holidays" well before it starts, not just
+        // requester pick "Summer Vacation" well before it starts, not just
         // once it's imminent (unlike the dashboard banner, which only shows
         // in the day-before window - see SummerHolidayBanner.tsx).
         const upcoming = (d.summerHolidays ?? [])
@@ -140,11 +140,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         setSummerHoliday(upcoming[0] ?? null);
       })
       .catch(() => {
-        // Non-fatal - "Summer Holidays" just won't be offered as an option.
+        // Non-fatal - "Summer Vacation" just won't be offered as an option.
       });
   }, [todayISO]);
 
-  // Defaults From/To to the FULL declared range the moment "Summer Holidays"
+  // Defaults From/To to the FULL declared range the moment "Summer Vacation"
   // is picked fresh (not via Extend, which computes its own From/To below) -
   // just a starting point, not a lock. The requester can then narrow it to
   // whatever sub-range they actually want (see the From/To inputs' min/max
@@ -165,7 +165,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaveTypeCode, extendId]);
 
-  // Extending a Summer Holidays request (see LeaveProfileView.tsx's Extend
+  // Extending a Summer Vacation request (see LeaveProfileView.tsx's Extend
   // button, now offered for SH the same way it already was for Sick Leave) -
   // From already restarts the day after the original's last day (see the
   // extend-fetch effect below); this defaults To to the rest of the declared
@@ -225,12 +225,12 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     if (!HALF_DAY_ELIGIBLE_TYPES.includes(value as LeaveTypeCode)) setIsHalfDay(false);
   }
 
-  // Standard leave types only (never "Other" or "Summer Holidays" - see
+  // Standard leave types only (never "Other" or "Summer Vacation" - see
   // PeriodSubstitution in types/leave.ts) - fetches which of the requester's
   // own teaching periods fall within this date range and who in their
   // department is free to cover each one. Empty for a non-teaching requester
   // or a range with no affected periods; the picker below simply doesn't
-  // render in that case. Summer Holidays is skipped outright - it's the
+  // render in that case. Summer Vacation is skipped outright - it's the
   // college's own declared break, there's nothing to arrange substitute
   // coverage for.
   useEffect(() => {
@@ -291,7 +291,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
       toast({ variant: "destructive", title: "All fields are required" });
       return;
     }
-    // Summer Holidays defaults to College Office's own declared range but can
+    // Summer Vacation defaults to College Office's own declared range but can
     // be narrowed down (see the min/max on the inputs above), so an already-
     // ongoing range (fromDate before today, toDate still ahead) is expected
     // and not backdating in the sense this check exists to catch elsewhere.
@@ -304,8 +304,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         toast({
           variant: "destructive",
           title: summerHoliday && fromDate > summerHoliday.toISO
-            ? "No days remain in the declared Summer Holidays range"
-            : "Summer Holidays dates must fall within your College Office's declared range",
+            ? "No days remain in the declared Summer Vacation range"
+            : "Summer Vacation dates must fall within your College Office's declared range",
         });
         return;
       }

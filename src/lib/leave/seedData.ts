@@ -73,7 +73,7 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
   {
     id: "SH",
     code: "SH",
-    label: "Summer Holidays",
+    label: "Summer Vacation",
     shortLabel: "SH",
     color: "orange",
     isActive: true,
@@ -82,10 +82,17 @@ export const LEAVE_TYPE_SEED: LeaveTypeFull[] = [
       // Same as OD - the college's own declared break, not a personal
       // allowance, so nothing is drawn down (see LeaveApplyForm.tsx, which
       // locks the From/To dates to whatever College Office set in the
-      // Holidays page's "Summer Holidays" section - src/types/attendance.ts's
+      // Holidays page's "Summer Vacation" section - src/types/attendance.ts's
       // SummerHoliday).
       unlimited: true,
-      eligibleCategories: ["new-joining", "vacation", "non-vacation"],
+      // Vacation (teaching) staff only - the summer break is their vacation
+      // entitlement, not a college-wide shutdown, so supporting staff work
+      // through it and must not be offered it. Same shape as SCL above, and
+      // like SCL this excludes "new-joining": that category replaces the
+      // staff category outright for the first newJoiningYears of service
+      // (computeEffectiveCategory), so a recently-joined teacher is not yet
+      // in the vacation bucket.
+      eligibleCategories: ["vacation"],
     },
   },
 ];

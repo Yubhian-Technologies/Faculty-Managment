@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { cn, formatDate } from "@/lib/utils";
 import { CalendarClock, Check, X, ChevronDown, ChevronUp } from "lucide-react";
-import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
+import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_DESCRIPTIONS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
 
 const CATEGORY_TABS = EFFECTIVE_CATEGORY_ORDER.map((key) => ({ key, label: EFFECTIVE_CATEGORY_LABELS[key] }));
@@ -375,7 +375,8 @@ export function LeaveApprovalQueue() {
                     )}
 
                     {isPrincipalOtherDecision && (
-                      <div className="max-w-xs space-y-1.5">
+                      <div className="space-y-1.5">
+                        <div className="max-w-xs space-y-1.5">
                         <label className="text-xs text-muted-foreground">Leave category (required to approve)</label>
                         <Select
                           value={categoryById[r.id] ?? ""}
@@ -385,12 +386,35 @@ export function LeaveApprovalQueue() {
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
                           <SelectContent>
-                            {OTHER_LEAVE_CATEGORY_ORDER.map((c) => (
-                              <SelectItem key={c} value={c}>{OTHER_LEAVE_CATEGORY_LABELS[c]}</SelectItem>
-                            ))}
+                            {/* Maternity only for female staff - the server
+                                rejects it for anyone else regardless (see the
+                                APPROVE guard in applications/[id]), so this
+                                keeps the picker from offering a choice that
+                                can't be saved. Requesters with no gender on
+                                record don't get it either. */}
+                            {OTHER_LEAVE_CATEGORY_ORDER
+                              .filter((c) => c !== "MATERNITY" || r.requesterGender === "Female")
+                              .map((c) => (
+                                <SelectItem key={c} value={c}>{OTHER_LEAVE_CATEGORY_LABELS[c]}</SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                         <p className="text-[11px] text-muted-foreground">Only visible in your own Staff Leave History - never shown to the requester, their HOD, or anyone else.</p>
+                        </div>
+                        {/* The selected category's own rule (duration limits,
+                            certificate/service conditions), so the sanctioning
+                            terms are in front of the Principal at the moment of
+                            the decision. Nothing is enforced from it - Other
+                            requests aren't balance-tracked.
+                            Deliberately OUTSIDE the max-w-xs wrapper above: at
+                            the select's width these rules wrapped to three or
+                            four lines, so it takes the card's full width and
+                            reads as one. */}
+                        {categoryById[r.id] && OTHER_LEAVE_CATEGORY_DESCRIPTIONS[categoryById[r.id] as OtherLeaveCategory] && (
+                          <p className="text-xs text-amber-900 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+                            {OTHER_LEAVE_CATEGORY_DESCRIPTIONS[categoryById[r.id] as OtherLeaveCategory]}
+                          </p>
+                        )}
                       </div>
                     )}
 

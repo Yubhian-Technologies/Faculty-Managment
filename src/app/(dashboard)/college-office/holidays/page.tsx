@@ -76,7 +76,7 @@ export default function CollegeOfficeHolidaysPage() {
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   const [selectedMonth, setSelectedMonth] = useState(""); // "" = all months
 
-  // Summer Holidays - one continuous from/to break period per academic year,
+  // Summer Vacation - one continuous from/to break period per academic year,
   // distinct from the single-date holidays above (see SummerHoliday in
   // src/types). Shown as a banner across every role's own Leave module
   // starting the day before it begins (see SummerHolidayBanner.tsx) - not
@@ -312,14 +312,14 @@ export default function CollegeOfficeHolidaysPage() {
             <div>
               <p className="text-sm font-medium flex items-center gap-1.5">
                 <Sun className="h-4 w-4 text-muted-foreground" />
-                Summer Holidays
+                Summer Vacation
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 One break period per academic year - shown as a banner across every role&rsquo;s Leave module starting the day before it begins.
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => openSummerDialog()}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" />Set Summer Holidays
+              <Plus className="h-3.5 w-3.5 mr-1.5" />Set Summer Vacation
             </Button>
           </div>
           {isSummerLoading ? (
@@ -558,7 +558,7 @@ export default function CollegeOfficeHolidaysPage() {
       <Dialog open={summerOpen} onOpenChange={setSummerOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Set Summer Holidays</DialogTitle>
+            <DialogTitle>Set Summer Vacation</DialogTitle>
             <DialogDescription>One range per academic year - setting it again for the same year overwrites the existing one.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
