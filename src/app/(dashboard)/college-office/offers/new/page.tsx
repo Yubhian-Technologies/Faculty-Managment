@@ -190,6 +190,11 @@ export default function NewCollegeOfficeOfferLetterPage() {
       return;
     }
     setIsSaving(true);
+    // Opened synchronously, before any await - the offer POST + PDF render
+    // below take long enough that opening the Gmail tab afterward gets
+    // silently blocked as a popup (browsers drop the "triggered by a click"
+    // trust after an async gap).
+    const mailWindow = window.open("", "_blank");
     try {
       const selectedCandidate = candidates.find((c) => c.id === candidateId);
       const res = await fetch("/api/college/offer-letters", {
@@ -244,7 +249,10 @@ Warm regards,
 ${institution}`;
         const cc = (data.ccEmails ?? []).join(",");
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(selectedCandidate.email)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.open(gmailUrl, "_blank");
+        if (mailWindow) mailWindow.location.href = gmailUrl;
+        else window.open(gmailUrl, "_blank");
+      } else {
+        mailWindow?.close();
       }
 
       setSentConfirm({
@@ -252,6 +260,7 @@ ${institution}`;
         emailedTo: selectedCandidate?.email,
       });
     } catch (err) {
+      mailWindow?.close();
       toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);

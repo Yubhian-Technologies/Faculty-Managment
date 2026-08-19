@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,15 @@ type DocCandidateView = {
   isClosed: boolean;
 };
 
+function candidateHref(candidate: DocCandidateView): string {
+  return candidate.isClosed
+    ? `/candidate-profile/${candidate.candidateId}`
+    : `/college-office/documents/candidate/${candidate.id}`;
+}
+
 export default function CollegeOfficeVacancyCandidatesPage() {
   const { department, vacancyId } = useParams<{ department: string; vacancyId: string }>();
+  const router = useRouter();
   const [vacancy, setVacancy] = useState<VacancyRequest | null>(null);
   const [candidates, setCandidates] = useState<DocCandidateView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +125,14 @@ export default function CollegeOfficeVacancyCandidatesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vacancyId]);
 
+  // Only one candidate to manage - skip straight to their action page instead
+  // of making Office click through a one-row list first.
+  useEffect(() => {
+    if (!isLoading && candidates.length === 1) {
+      router.replace(candidateHref(candidates[0]));
+    }
+  }, [isLoading, candidates, router]);
+
   function toggleSelected(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -154,14 +169,14 @@ export default function CollegeOfficeVacancyCandidatesPage() {
       {candidates.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">No candidates reached the decision stage on this request yet.</div>
       ) : (
-        <div className="rounded-lg border divide-y bg-card">
+        <div className="grid gap-3 sm:grid-cols-2">
           {candidates.map((candidate) => (
-            <div key={candidate.id} className="flex items-center gap-3 px-4 py-3">
+            <div key={candidate.id} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
               {candidate.eligibleForCredentialRequest && (
                 <Checkbox checked={selected.has(candidate.id)} onCheckedChange={() => toggleSelected(candidate.id)} />
               )}
               <Link
-                href={candidate.isClosed ? `/candidate-profile/${candidate.candidateId}` : `/college-office/documents/candidate/${candidate.id}`}
+                href={candidateHref(candidate)}
                 className="flex-1 min-w-0 flex items-center justify-between gap-3 group"
               >
                 <p className="font-medium text-sm truncate">{candidate.name}</p>

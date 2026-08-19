@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -391,10 +392,10 @@ export default function CandidateFormPage() {
         </Card>
 
         <form onSubmit={handleSubmitClick} className="space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Personal Details</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+        <Accordion type="multiple" className="space-y-3">
+          <AccordionItem value="personal" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Personal Details</AccordionTrigger>
+            <AccordionContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="fatherName">Father&apos;s Name</Label>
@@ -524,12 +525,12 @@ export default function CandidateFormPage() {
                   <Input id="emergencyContactPhone" value={form.emergencyContactPhone ?? ""} inputMode="numeric" maxLength={10} onChange={(e) => updateForm({ emergencyContactPhone: onlyDigits(e.target.value, 10) })} placeholder="10-digit number" />
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </AccordionContent>
+          </AccordionItem>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Academic Qualifications</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+          <AccordionItem value="academic" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Academic Qualifications</AccordionTrigger>
+            <AccordionContent className="space-y-4">
               {qualifications.map((row, i) => (
                 <div key={row.id} className={`rounded-lg border p-3 space-y-3 ${row.sourceLabel ? "border-primary/40 bg-primary/5" : ""}`}>
                   <div className="flex items-center justify-between">
@@ -578,12 +579,12 @@ export default function CandidateFormPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Another Qualification
               </Button>
-            </CardContent>
-          </Card>
+            </AccordionContent>
+          </AccordionItem>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Work Experience</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+          <AccordionItem value="experience" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Work Experience</AccordionTrigger>
+            <AccordionContent className="space-y-4">
               {experiences.map((row, i) => (
                 <div key={row.id} className="rounded-lg border p-3 space-y-3">
                   <div className="flex items-center justify-between">
@@ -624,15 +625,13 @@ export default function CandidateFormPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Another Experience
               </Button>
-            </CardContent>
-          </Card>
+            </AccordionContent>
+          </AccordionItem>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Research Profile</CardTitle>
-              <p className="text-xs text-muted-foreground">For teaching/research faculty roles — leave blank if not applicable</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <AccordionItem value="research" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Research Profile</AccordionTrigger>
+            <AccordionContent className="space-y-4">
+              <p className="text-xs text-muted-foreground -mt-2">For teaching/research faculty roles — leave blank if not applicable</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="firstAuthorPublications">Publications (first/corresponding author)</Label>
@@ -695,12 +694,12 @@ export default function CandidateFormPage() {
                 <Label htmlFor="keyResearchSkills">Key Research Skills</Label>
                 <Textarea id="keyResearchSkills" value={form.researchProfile?.keyResearchSkills ?? ""} onChange={(e) => updateResearchProfile({ keyResearchSkills: e.target.value })} rows={2} />
               </div>
-            </CardContent>
-          </Card>
+            </AccordionContent>
+          </AccordionItem>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Relatives Working in the Society</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+          <AccordionItem value="relatives" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Relatives Working in the Society</AccordionTrigger>
+            <AccordionContent className="space-y-4">
               <div className="flex gap-2">
                 <Button type="button" variant={hasRelatives ? "default" : "outline"} onClick={() => setHasRelatives(true)}>Yes</Button>
                 <Button type="button" variant={!hasRelatives ? "default" : "outline"} onClick={() => setHasRelatives(false)}>No</Button>
@@ -749,12 +748,12 @@ export default function CandidateFormPage() {
                   </Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </AccordionContent>
+          </AccordionItem>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Professional Details</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+          <AccordionItem value="professional" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Professional Details</AccordionTrigger>
+            <AccordionContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="currentEmployer">Current / Previous Employer</Label>
                 <Input id="currentEmployer" value={form.currentEmployer ?? ""} onChange={(e) => updateForm({ currentEmployer: e.target.value })} placeholder="College / Institution name" />
@@ -785,13 +784,15 @@ export default function CandidateFormPage() {
                 <Label htmlFor="additionalInfo">Any additional information</Label>
                 <Textarea id="additionalInfo" value={form.additionalInfo ?? ""} onChange={(e) => updateForm({ additionalInfo: e.target.value })} rows={2} placeholder="Publications, awards, patents, etc." />
               </div>
-            </CardContent>
-          </Card>
+            </AccordionContent>
+          </AccordionItem>
 
           {groupRequiredDocuments(requiredDocuments.filter((l) => !EDUCATION_DOCUMENT_TEMPLATES[l])).map(({ category, labels }) => (
-            <Card key={category}>
-              <CardHeader className="pb-3"><CardTitle className="text-base">{category}</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
+            <AccordionItem key={category} value={`docs-${category}`} className="border rounded-lg bg-card px-4">
+              <AccordionTrigger className="text-base font-semibold hover:no-underline">
+                {category} <span className="text-destructive">*</span>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4">
                 {labels.map((label) => (
                   <div key={label} className="rounded-lg border p-3 space-y-2">
                     <p className="text-sm font-medium">
@@ -805,13 +806,13 @@ export default function CandidateFormPage() {
                     />
                   </div>
                 ))}
-              </CardContent>
-            </Card>
+              </AccordionContent>
+            </AccordionItem>
           ))}
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Additional Documents (Optional)</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+          <AccordionItem value="additional-docs" className="border rounded-lg bg-card px-4">
+            <AccordionTrigger className="text-base font-semibold hover:no-underline">Additional Documents (Optional)</AccordionTrigger>
+            <AccordionContent className="space-y-4">
               {certRows.map((row) => (
                 <div key={row.key} className="rounded-lg border p-3 space-y-2">
                   <div className="flex items-center gap-2">
@@ -840,9 +841,9 @@ export default function CandidateFormPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Another Certificate
               </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
           <Button type="submit" className="w-full">
             Submit My Details

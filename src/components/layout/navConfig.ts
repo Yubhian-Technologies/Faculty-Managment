@@ -285,8 +285,6 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
-  { label: "Email Requests", href: "/webmaster/requests", iconName: "AtSign", roles: ["WEBMASTER"], section: "Email Provisioning" },
-  { label: "History", href: "/webmaster/history", iconName: "History", roles: ["WEBMASTER"] },
   { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Hiring" },
   { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"], section: "Accounts" },
   { label: "My Profile", href: "/webmaster/profile", iconName: "UserCircle", roles: ["WEBMASTER"], section: "Personal" },
