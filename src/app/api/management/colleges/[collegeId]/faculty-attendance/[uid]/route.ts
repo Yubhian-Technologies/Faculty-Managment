@@ -7,6 +7,9 @@ import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMi
 import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
 import { resolveFaceRegisteredAt } from "@/lib/attendance/registration";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
+// Both already exported from istTime; the import was missing, so this route
+// failed to type-check (pre-existing on main, unrelated to leave types).
+import { getISTParts, istMonthBounds } from "@/lib/attendance/istTime";
 import type { AttendanceRecord, AttendanceSummary, UserRole } from "@/types";
 
 // MANAGEMENT is read-only - this route only implements GET.
