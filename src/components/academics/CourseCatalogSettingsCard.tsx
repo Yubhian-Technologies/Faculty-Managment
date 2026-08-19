@@ -57,9 +57,16 @@ interface CourseCatalogSettingsCardProps {
   // and per-item edit/delete/activate controls and shows courses + their
   // assigned regulations only.
   readOnly?: boolean;
+  // Bumped by the parent Settings page whenever RegulationSettingsCard (a
+  // sibling card on the same page, not a child of this one) saves a change -
+  // this card fetches declaredRegulations once on mount, so without this it
+  // keeps showing "Declare regulation codes... first" and an empty Edit
+  // picker even after regulations are declared, until the whole page is
+  // reloaded. See principal/settings/page.tsx for the wiring.
+  regulationsRefreshKey?: number;
 }
 
-export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSettingsCardProps) {
+export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefreshKey }: CourseCatalogSettingsCardProps) {
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // The college's declared regulation codes (Settings > Academic Regulations,
@@ -101,12 +108,15 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
     if (readOnly) return;
     fetch("/api/college/settings/regulations")
       .then((r) => r.json() as Promise<{ settings: AcademicRegulationSettings }>)
       .then((d) => setDeclaredRegulations(d.settings.regulations ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
-  }, [readOnly]);
+  }, [readOnly, regulationsRefreshKey]);
 
   // Derived, not effect-synced state: as long as the Principal hasn't
   // touched a chip by hand for this draft, the effective selection just
@@ -306,51 +316,59 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
         </CardTitle>
         <CardDescription>
           The fixed list of courses for your entire college. Departments can only select from these — this keeps
-          course names and codes consistent and prevents duplicates.
+          course names and codes consistent and prevents duplicates. Declare regulation codes under Academic
+          Regulations above first, then for each course: set its duration, pick which regulations it uses, and which
+          of its years each one applies to.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Add new */}
+        {/* Add new - laid out as the three steps that actually happen in
+            order: course details (incl. duration), then which regulations
+            apply, then which of the course's own years each one covers. */}
         {!readOnly && (
-          <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-            <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px_auto] sm:items-end">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Course Name</Label>
-                <Input
-                  value={newDraft.name}
-                  onChange={(e) => setNewDraft((d) => ({ ...d, name: e.target.value }))}
-                  placeholder="e.g. Bachelor of Technology"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Short Code</Label>
-                <Input
-                  value={newDraft.code}
-                  onChange={(e) => setNewDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
-                  placeholder="BTECH"
-                  className="uppercase"
-                  maxLength={10}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Years</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={newDraft.durationYears}
-                  onChange={(e) => setNewDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
-                />
-              </div>
-              <Button onClick={addItem} loading={isAdding} className="sm:mb-0.5">
-                <Plus className="h-4 w-4 mr-1" /> Add
-              </Button>
-            </div>
+          <div className="space-y-4 rounded-lg border bg-muted/30 p-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Regulations that apply to this course</Label>
+              <Label className="text-xs font-semibold text-foreground">1. Course details</Label>
+              <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px_auto] sm:items-end">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Course Name</Label>
+                  <Input
+                    value={newDraft.name}
+                    onChange={(e) => setNewDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder="e.g. Bachelor of Technology"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Short Code</Label>
+                  <Input
+                    value={newDraft.code}
+                    onChange={(e) => setNewDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
+                    placeholder="BTECH"
+                    className="uppercase"
+                    maxLength={10}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Duration (years)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={newDraft.durationYears}
+                    onChange={(e) => setNewDraft((d) => ({ ...d, durationYears: stripLeadingZeros(e.target.value) }))}
+                  />
+                </div>
+                <Button onClick={addItem} loading={isAdding} className="sm:mb-0.5">
+                  <Plus className="h-4 w-4 mr-1" /> Add
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-2 border-t">
+              <Label className="text-xs font-semibold text-foreground">2. Regulations for this course</Label>
               {declaredRegulations.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Declare regulation codes under Academic Regulations below first.
+                  Declare regulation codes under Academic Regulations above first.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
@@ -369,19 +387,24 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                   })}
                 </div>
               )}
-              {effectiveNewRegulations.length > 0 && (
-                <div className="space-y-1 pt-1">
-                  {effectiveNewRegulations.map((code) => (
-                    <RegulationYearsRow key={code} draft={newDraft} setDraft={setNewDraft} code={code} onToggleYear={toggleRegulationYear} />
-                  ))}
-                </div>
-              )}
               {regulationsAutoFilled && effectiveNewRegulations.length > 0 && (
                 <p className="text-[11px] text-muted-foreground">
                   Pre-filled with every declared regulation - click a badge to narrow it down.
                 </p>
               )}
             </div>
+
+            {effectiveNewRegulations.length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t">
+                <Label className="text-xs font-semibold text-foreground">3. Which years each regulation applies to</Label>
+                <p className="text-[11px] text-muted-foreground">Leave a regulation untouched to offer it for every year of this course.</p>
+                <div className="space-y-1 pt-1">
+                  {effectiveNewRegulations.map((code) => (
+                    <RegulationYearsRow key={code} draft={newDraft} setDraft={setNewDraft} code={code} onToggleYear={toggleRegulationYear} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -462,27 +485,31 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
 
                   {isEditing ? (
                     <>
-                      <div className="flex flex-wrap gap-1.5">
-                        {declaredRegulations.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No regulations declared yet.</p>
-                        ) : (
-                          declaredRegulations.map((r) => {
-                            const active = editDraft.regulations.includes(r);
-                            return (
-                              <Badge
-                                key={r}
-                                variant={active ? "secondary" : "outline"}
-                                className="cursor-pointer text-xs"
-                                onClick={() => toggleRegulation(editDraft, setEditDraft, r)}
-                              >
-                                {active && <Check className="h-3 w-3 mr-1" />}{r}
-                              </Badge>
-                            );
-                          })
-                        )}
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Regulations for this course</Label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {declaredRegulations.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No regulations declared yet.</p>
+                          ) : (
+                            declaredRegulations.map((r) => {
+                              const active = editDraft.regulations.includes(r);
+                              return (
+                                <Badge
+                                  key={r}
+                                  variant={active ? "secondary" : "outline"}
+                                  className="cursor-pointer text-xs"
+                                  onClick={() => toggleRegulation(editDraft, setEditDraft, r)}
+                                >
+                                  {active && <Check className="h-3 w-3 mr-1" />}{r}
+                                </Badge>
+                              );
+                            })
+                          )}
+                        </div>
                       </div>
                       {editDraft.regulations.length > 0 && (
                         <div className="space-y-1 pt-1">
+                          <Label className="text-[11px] text-muted-foreground">Which years each applies to</Label>
                           {editDraft.regulations.map((code) => (
                             <RegulationYearsRow key={code} draft={editDraft} setDraft={setEditDraft} code={code} onToggleYear={toggleRegulationYear} />
                           ))}

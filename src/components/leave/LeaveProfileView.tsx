@@ -297,6 +297,7 @@ const PENDING_STATUSES: LeaveRequestStatus[] = ["PENDING_HOD", "PENDING_PRINCIPA
 // requests have no such restriction (the server enforces both the same way -
 // see applications/[id]/route.ts's CANCEL branch).
 function isCancellable(request: LeaveRequest): boolean {
+  if (request.isLateAttendancePenalty) return false;
   if (PENDING_STATUSES.includes(request.status)) return true;
   if (request.status !== "APPROVED") return false;
   const to = toDate(request.toDate);
@@ -365,6 +366,9 @@ export function LeaveHistoryRow({
           )}
           {request.extendsRequestId && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">Extension</Badge>
+          )}
+          {request.isLateAttendancePenalty && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">Attendance Penalty</Badge>
           )}
           {categoryLabel && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">{categoryLabel}</Badge>

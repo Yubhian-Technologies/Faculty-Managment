@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import type { AcademicRegulationSettings, Course, CourseCatalogItem, Department, Subject } from "@/types";
+import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
 import { academicSessionLabel, currentAcademicStartYear } from "@/lib/college/academicSession";
 import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
@@ -32,9 +32,6 @@ export default function DeanSubjectsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  // Fixed once by the Principal under Settings (see RegulationSettingsCard) -
-  // loaded once here and looked up by year below, purely for display.
-  const [regulationSettings, setRegulationSettings] = useState<AcademicRegulationSettings | null>(null);
   // Course Catalog entries, keyed by which regulations the Principal assigned
   // to each (see CourseCatalogSettingsCard) - a course's OWN assigned subset,
   // not the college's full declared list, gates which regulation a subject
@@ -52,8 +49,8 @@ export default function DeanSubjectsPage() {
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   // Curriculum regulation (e.g. "R20", "R23") to browse/segregate subjects
   // by - "" means "All" (subjects across every regulation, badge-labelled).
-  // Defaults to whatever the Principal fixed for this year of study once a
-  // year is picked, but stays freely switchable.
+  // Auto-picked once a year is chosen when this course only allows exactly
+  // one regulation for it (see selectYear), but stays freely switchable.
   const [selectedRegulation, setSelectedRegulation] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
@@ -73,11 +70,6 @@ export default function DeanSubjectsPage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
       .finally(() => setIsLoading(false));
-
-    fetch("/api/college/settings/regulations")
-      .then((r) => r.json() as Promise<{ settings: AcademicRegulationSettings }>)
-      .then((d) => setRegulationSettings(d.settings))
-      .catch(() => {}); // purely informational - no error state needed if this fails
 
     fetch("/api/college/course-catalog")
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
@@ -100,7 +92,6 @@ export default function DeanSubjectsPage() {
     const assigned = resolveDepartmentCourseScope(selectedDepartment, selectedCourse.catalogId).assignedYears;
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
   }, [selectedCourse, selectedDepartment]);
-  const currentRegulation = selectedYear ? regulationSettings?.yearRegulations?.[selectedYear] : undefined;
   // This course's own assigned regulations (Course Catalog > Regulations),
   // narrowed to whichever are actually offered for the selected year
   // (regulationYears) - the set a subject for this year may use. Empty means
@@ -223,12 +214,15 @@ export default function DeanSubjectsPage() {
 
   function selectYear(year: string) {
     setSelectedYear(year);
-    // Default the regulation filter to whatever's fixed for this year of
-    // study in Settings, but only if this course is actually allowed to use
-    // it - otherwise fall back to "All" (within this course's own allowed
-    // set), switchable right after via its own picker.
-    const yearDefault = regulationSettings?.yearRegulations?.[year];
-    const regulation = yearDefault && allowedRegulations.includes(yearDefault) ? yearDefault : "";
+    // Auto-pick this course's own regulation for this year when it's
+    // unambiguous (exactly one applies, per Course Catalog's regulationYears)
+    // - otherwise fall back to "All", switchable right after via its own
+    // picker. Computed inline against `year` rather than reading the
+    // allowedRegulations memo, which still reflects the OLD selectedYear at
+    // this point in the same render.
+    const catalogItem = selectedCourse?.catalogId ? catalogItems.find((c) => c.id === selectedCourse.catalogId) : null;
+    const regulationsForThisYear = regulationsForYear(catalogItem, Number(year));
+    const regulation = regulationsForThisYear.length === 1 ? regulationsForThisYear[0] : "";
     setSelectedRegulation(regulation);
     if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, regulation);
   }
@@ -324,12 +318,6 @@ export default function DeanSubjectsPage() {
                   <h2 className="font-semibold text-sm flex items-center gap-2">
                     <BookOpen className="h-4 w-4" />
                     {selectedDepartment.name} · {selectedCourse.name} · {ordinalYear(Number(selectedYear))}
-                    {/* Fixed by the Principal under Settings for this year of study - see RegulationSettingsCard. */}
-                    {currentRegulation ? (
-                      <Badge variant="secondary" className="text-xs font-normal">Regulation {currentRegulation}</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs font-normal text-muted-foreground">Regulation not fixed</Badge>
-                    )}
                   </h2>
                   <Button
                     size="sm"

@@ -27,6 +27,11 @@ export default function PrincipalSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Bumped whenever RegulationSettingsCard saves - tells the sibling
+  // CourseCatalogSettingsCard above it to refetch its own copy of the
+  // declared regulations, which it otherwise only fetches once on mount.
+  const [regulationsRefreshKey, setRegulationsRefreshKey] = useState(0);
+
   const [studentFacultyRatio, setStudentFacultyRatio] = useState("15");
   const [teachingHoursPerWeek, setTeachingHoursPerWeek] = useState("16");
   const [defaultMinFacultyPerDept, setDefaultMinFacultyPerDept] = useState("3");
@@ -130,9 +135,9 @@ export default function PrincipalSettingsPage() {
         </CardContent>
       </Card>
 
-      <CourseCatalogSettingsCard />
+      <RegulationSettingsCard onSaved={() => setRegulationsRefreshKey((k) => k + 1)} />
 
-      <RegulationSettingsCard />
+      <CourseCatalogSettingsCard regulationsRefreshKey={regulationsRefreshKey} />
 
       <Card>
         <CardHeader>

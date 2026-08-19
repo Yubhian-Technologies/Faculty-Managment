@@ -6,6 +6,10 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { checkCampusGeofence } from "@/lib/attendance/geofence";
 import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { getHolidayNameForDate } from "@/lib/leave/holidaysCount";
+import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
+import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import type { College } from "@/types";
 
 function todayDocDate(): { date: Date; docSuffix: string } {
@@ -30,6 +34,17 @@ export async function POST(request: Request) {
     if (isSunday()) {
       return NextResponse.json({ error: SUNDAY_HOLIDAY_MESSAGE }, { status: 403 });
     }
+
+    const db = getAdminDb();
+    const today = new Date();
+    const holidayName = await getHolidayNameForDate(db, session.collegeId, today);
+    if (holidayName) {
+      return NextResponse.json({ error: `Today is a holiday — ${holidayName}. No attendance required.` }, { status: 403 });
+    }
+    if (await isOnApprovedLeaveToday(db, session.collegeId, session.uid, today)) {
+      return NextResponse.json({ error: "You're on approved leave today — attendance cannot be marked." }, { status: 403 });
+    }
+
     const body = (await request.json()) as {
       latitude?: number;
       longitude?: number;
@@ -45,7 +60,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Face not verified — please try again" }, { status: 400 });
     }
 
-    const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     const collegeSnap = await collegeRef.get();
@@ -76,6 +90,7 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
+    const checkIn = currentTimeHHMM();
     await recordRef.set({
       collegeId: session.collegeId,
       facultyId: session.uid,
@@ -83,7 +98,7 @@ export async function POST(request: Request) {
       department: user?.department ?? "",
       date,
       status: "PRESENT",
-      checkIn: currentTimeHHMM(),
+      checkIn,
       source: "BIOMETRIC",
       checkInLocation: { latitude, longitude },
       checkInFaceMatchDistance: faceMatchDistance ?? null,
@@ -92,7 +107,17 @@ export async function POST(request: Request) {
       ...(existingSnap.exists ? {} : { createdAt: now }),
     }, { merge: true });
 
-    return NextResponse.json({ ok: true, checkIn: currentTimeHHMM() });
+    if (isLateCheckIn(checkIn)) {
+      try {
+        await recordLateCheckIn(db, session.collegeId, session.uid, user?.name ?? "", user?.department ?? "", date);
+      } catch (err) {
+        // Never fails the check-in itself over a penalty-bookkeeping error -
+        // the person is still correctly marked PRESENT either way.
+        console.error("[college/attendance/check-in] late-penalty recording failed", err);
+      }
+    }
+
+    return NextResponse.json({ ok: true, checkIn });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

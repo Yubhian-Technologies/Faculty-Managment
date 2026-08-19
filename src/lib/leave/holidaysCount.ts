@@ -60,6 +60,28 @@ export async function countHolidaysPerMonth(
 // spanning a declared holiday doesn't draw down balance for that day. See
 // applications/route.ts POST for the authoritative (server-side) use.
 // Students-only holidays are excluded - faculty still work those days.
+// Faculty-applicable holiday name for a single calendar date, or null if
+// today isn't a declared holiday - feeds the self-attendance check-in gate
+// (see check-in/route.ts and today-status/route.ts) so marking attendance is
+// blocked on a declared holiday the same way isSunday() blocks it on Sundays.
+export async function getHolidayNameForDate(
+  db: Firestore,
+  collegeId: string,
+  date: Date
+): Promise<string | null> {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const endExclusive = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+  const snap = await db
+    .collection("colleges").doc(collegeId).collection("holidays")
+    .where("date", ">=", start)
+    .where("date", "<", endExclusive)
+    .get();
+  const holiday = snap.docs
+    .map((d) => d.data() as { name?: string; appliesTo?: string })
+    .find(appliesToFaculty);
+  return holiday?.name ?? null;
+}
+
 export async function getHolidayDateKeys(
   db: Firestore,
   collegeId: string,

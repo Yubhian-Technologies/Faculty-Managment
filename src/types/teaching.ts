@@ -209,15 +209,15 @@ export interface TimetableSlot {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 
-  // Attached at read time only (never persisted on the doc itself) when
-  // today has an APPROVED leave's PeriodSubstitution covering this exact
-  // slot - see lib/leave/periodCoverage.ts's getActiveSubstitutionsForDate,
-  // applied by GET college/timetable-slots, college/class-leader/timetable,
-  // and college/teaching-assignments. Absent on every other day, and absent
-  // for a slot nobody's covering today even if `day` matches today.
+  // Attached at read time only (never persisted on the doc itself) when this
+  // slot's own day, within the currently-displayed week, has an APPROVED
+  // leave's PeriodSubstitution covering it - see lib/leave/periodCoverage.ts's
+  // getActiveSubstitutionsForDates, applied by GET college/timetable-slots,
+  // college/class-leader/timetable, and college/teaching-assignments. Absent
+  // for a slot nobody's covering this week even if `day` matches.
   substituteFacultyId?: string;
   substituteFacultyName?: string;
-  substituteForName?: string; // the regularly-scheduled faculty's name, on leave today
+  substituteForName?: string; // the regularly-scheduled faculty's name, on leave that day
 }
 
 // ─── Timetable Rules ──────────────────────────────────────────────────────────

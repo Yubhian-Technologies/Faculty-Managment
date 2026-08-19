@@ -6,8 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
-import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
-import { todayISODate } from "@/lib/leave/dayCounter";
+import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -71,13 +70,14 @@ export async function GET(request: Request) {
         .get();
       const ownSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }));
 
-      // Today's approved-leave substitutions - both directions: mark this
-      // faculty's own slots that are being covered by someone else today,
-      // and add synthetic entries for periods THEY are covering for someone
-      // else today (their own facultyId won't otherwise appear on that
-      // slot). See lib/leave/periodCoverage.ts and the same overlay in
-      // GET college/timetable-slots / college/class-leader/timetable.
-      const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, todayISODate());
+      // This week's approved-leave substitutions - both directions: mark this
+      // faculty's own slots that are being covered by someone else, and add
+      // synthetic entries for periods THEY are covering for someone else
+      // (their own facultyId won't otherwise appear on that slot). Covers
+      // every day of the currently-displayed week, not just today - see
+      // currentWeekDateKeys. See lib/leave/periodCoverage.ts and the same
+      // overlay in GET college/timetable-slots / college/class-leader/timetable.
+      const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys());
       const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
       timetableSlots = ownSlots.map((s) => {
         const sub = substitutionBySlotId.get(s.id);

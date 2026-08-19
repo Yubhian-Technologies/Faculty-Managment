@@ -645,12 +645,14 @@ export interface FacultyNorms {
 // ─── Academic Regulations ─────────────────────────────────────────────────────
 // A college's curriculum "regulation" (e.g. R20, R23) usually changes only for
 // incoming batches, so the 1st through 4th year of study can each be running a
-// different regulation at the same time. The Principal maintains the list of
-// regulation names in use and fixes which one applies to each year.
+// different regulation at the same time. The Principal maintains the college-
+// wide list of regulation codes in use here; WHICH of them apply to a given
+// course, and to which of that course's own years, is set per-course on its
+// Course Catalog entry instead (CourseCatalogItem.regulations/regulationYears,
+// see lib/college/academicStructure.ts's regulationsForYear) - not here, since
+// different courses can legitimately run different regulations at once.
 export interface AcademicRegulationSettings {
   regulations: string[];
-  // Year of study ("1".."4") -> one of `regulations`. Omitted/empty until fixed.
-  yearRegulations: Record<string, string>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
