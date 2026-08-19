@@ -183,9 +183,6 @@ export default function NewDepartmentPage() {
 
             <YearsTaughtAndSecondaryFields
               showYears={false}
-              openYears={[]}
-              onAddYear={() => {}}
-              isAddingYear={false}
               assignedYears={[]}
               onToggleYear={() => {}}
               yearsHelperText=""

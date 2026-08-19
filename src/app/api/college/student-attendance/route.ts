@@ -43,6 +43,7 @@ export async function POST(request: Request) {
     let sectionId: string | undefined;
     let sectionName: string;
     let year: number | undefined;
+    let courseId: string | undefined;
 
     if (assignment.sectionId) {
       const sectionSnap = await collegeRef.collection("sections").doc(assignment.sectionId).get();
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       sectionId = assignment.sectionId;
       sectionName = section.name;
       year = section.year;
+      courseId = section.courseId;
     } else {
       sectionName = assignment.section?.trim() || "Section";
     }
@@ -73,7 +75,11 @@ export async function POST(request: Request) {
     // this section stays filed under their common department (preserved
     // until promotion) with secondaryDepartment naming this section's real
     // branch instead - matched separately and merged, or the roster (and
-    // therefore attendance for the whole class) would come up empty.
+    // therefore attendance for the whole class) would come up empty. Also
+    // scoped by `courseId` when this is a section-scoped assignment (a
+    // department can run a same-named section under more than one course -
+    // see StudentRecord.courseId's doc-comment - without this, attendance
+    // could be taken against the wrong course's roster entirely).
     let primaryQuery = collegeRef.collection("students")
       .where("department", "==", assignment.department)
       .where("section", "==", sectionName);
@@ -83,6 +89,10 @@ export async function POST(request: Request) {
     if (year != null) {
       primaryQuery = primaryQuery.where("year", "==", year);
       secondaryQuery = secondaryQuery.where("year", "==", year);
+    }
+    if (courseId) {
+      primaryQuery = primaryQuery.where("courseId", "==", courseId);
+      secondaryQuery = secondaryQuery.where("courseId", "==", courseId);
     }
 
     const [primarySnap, secondarySnap] = await Promise.all([primaryQuery.get(), secondaryQuery.get()]);

@@ -239,9 +239,6 @@ export default function EditDepartmentPage() {
 
             <YearsTaughtAndSecondaryFields
               showYears={false}
-              openYears={[]}
-              onAddYear={() => {}}
-              isAddingYear={false}
               assignedYears={[]}
               onToggleYear={() => {}}
               yearsHelperText=""
