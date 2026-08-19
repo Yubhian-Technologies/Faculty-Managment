@@ -154,7 +154,7 @@ export const HOLIDAY_TYPE_LABELS: Record<HolidayType, string> = {
 export type HolidayAudience = "STUDENTS" | "BOTH";
 
 export const HOLIDAY_AUDIENCE_LABELS: Record<HolidayAudience, string> = {
-  STUDENTS: "Students only",
+  STUDENTS: "Students (Outing)",
   BOTH: "Faculty & Students",
 };
 

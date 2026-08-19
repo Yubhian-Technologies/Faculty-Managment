@@ -55,9 +55,19 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Add at least one regulation" }, { status: 400 });
     }
 
+    // Only ever keeps entries for regulation codes actually in the list above -
+    // a removed regulation's batch label is dropped along with it, rather than
+    // lingering as an orphaned key nothing can reach anymore.
+    const regulationBatches: Record<string, string> = {};
+    for (const code of regulations) {
+      const batch = body.regulationBatches?.[code]?.trim();
+      if (batch) regulationBatches[code] = batch;
+    }
+
     const db = getAdminDb();
     const settings: AcademicRegulationSettings = {
       regulations,
+      regulationBatches,
       updatedAt: new Date() as unknown as AcademicRegulationSettings["updatedAt"],
       updatedByName: session.email || "Unknown",
     };

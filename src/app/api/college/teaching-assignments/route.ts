@@ -9,6 +9,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { currentTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
       "PRINCIPAL",
       "SUPER_ADMIN",
       "PANEL_MEMBER",
+      "COLLEGE_STAFF",
       "VICE_PRINCIPAL",
     );
 
@@ -25,6 +27,11 @@ export async function GET(request: Request) {
     const deptView = searchParams.get("dept") === "true";
     const requestedFacultyId = searchParams.get("facultyId");
     const sectionId = searchParams.get("sectionId");
+    // Course-year-scoped view (e.g. a Timetable Incharge's own narrow "my
+    // course & year" page, which - unlike an HOD's dept=true view - has no
+    // business seeing the rest of the department's assignments).
+    const courseIdParam = searchParams.get("courseId");
+    const yearParam = searchParams.get("year");
     // Optional - the Teaching Assignments and Timetable editor pages' own
     // semester picker (see TeachingAssignment.timetableSemester) narrows the
     // section-scoped view down to one semester's assignments; omitted keeps
@@ -44,6 +51,8 @@ export async function GET(request: Request) {
       // Section-scoped view (e.g. "assign faculty per subject" on the section edit page) -
       // all HOD/Principal/etc. roles above may view any section within their own college.
       assignmentQuery = assignmentQuery.where("sectionId", "==", sectionId);
+    } else if (courseIdParam && yearParam) {
+      assignmentQuery = assignmentQuery.where("courseId", "==", courseIdParam).where("year", "==", Number(yearParam));
     } else if (deptView && session.role === "HOD") {
       // Resolve HOD's department scope, including any sub-departments. A parent
       // HOD runs the whole tree, so child assignments come back as "primary" -
@@ -183,7 +192,7 @@ export async function GET(request: Request) {
 // Teaching Assignments page - academicYear + semester, no section link).
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await request.json()) as {
       facultyId: string;
       facultyName?: string;
@@ -249,6 +258,16 @@ export async function POST(request: Request) {
         const facultyDept = (facultySnap.data() as { department?: string }).department ?? "";
         if (!canHodEditDepartment(scope, facultyDept)) {
           return NextResponse.json({ error: "Faculty must be in your department or one of your sub-departments" }, { status: 403 });
+        }
+      } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+        // Co-editor, not a handoff - a faculty member only reaches here at all
+        // if the HOD delegated THIS exact course-year's Timetable/Teaching
+        // Assignments to them (see lib/departments/timetableIncharge.ts).
+        // Never grants access to any other course-year, even one they'd
+        // otherwise be scoped to via their own department.
+        const ok = await isTimetableIncharge(db, session.collegeId, session.uid, courseId, section.year);
+        if (!ok) {
+          return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
         }
       }
 
@@ -396,6 +415,14 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ id: ref.id, slotIds: createdSlots }, { status: 201 });
     } else if (body.academicYear && body.semester) {
+      // This legacy semester-scoped shape (no section/course link) is
+      // unrelated to Timetable Incharge delegation - PANEL_MEMBER is only in
+      // the allow-list above for the course/section-scoped branch, guarded
+      // by isTimetableIncharge there. Reject explicitly here rather than
+      // falling through the HOD-only check below unchecked.
+      if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
       const [facultySnap, subjectSnap] = await Promise.all([
         collegeRef.collection("facultyMembers").doc(body.facultyId).get(),
         collegeRef.collection("subjects").doc(body.subjectId).get(),
@@ -497,7 +524,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { searchParams } = new URL(request.url);
     const assignmentId = searchParams.get("id");
     if (!assignmentId) {
@@ -518,6 +545,15 @@ export async function DELETE(request: Request) {
           { error: "You can only remove assignments in your own department or its sub-departments" },
           { status: 403 },
         );
+      }
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      const assignmentSnap = await ref.get();
+      if (!assignmentSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      const assignment = assignmentSnap.data() as { courseId?: string; year?: number };
+      const ok = assignment.courseId && assignment.year != null
+        && await isTimetableIncharge(db, session.collegeId, session.uid, assignment.courseId, assignment.year);
+      if (!ok) {
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
     }
 

@@ -12,6 +12,43 @@ export function academicSessionLabel(startYear: number): string {
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
 }
 
+/** "2024-2028" -> 2024 (the intake/start year). Null if the label doesn't start with a 4-digit year. */
+function parseBatchStartYear(batch: string): number | null {
+  const m = batch.match(/^(\d{4})/);
+  return m ? Number(m[1]) : null;
+}
+
+// Which regulation code governs ordinal course-year `courseYear` (1-based -
+// 1st Year, 2nd Year, ...) AS OF a given session, derived purely from each
+// regulation's own Batch (intake range, e.g. "2024-2028" - see
+// AcademicRegulationSettings.regulationBatches) versus that session, with no
+// per-course configuration needed at all. A batch starting in year Y sits in
+// ordinal year `asOfStartYear - Y + 1` for the session starting `asOfStartYear`;
+// this returns every regulation whose batch computes to exactly `courseYear`
+// for that session - normally exactly one, since each admission year has its
+// own regulation, but callers should treat more than one as "ambiguous, ask
+// the Principal to fix the batches" rather than silently picking the first.
+// `asOfStartYear` defaults to the real current session (unchanged from
+// before this param existed) - dean/subjects/page.tsx passes its own
+// Academic Year selector's session instead, so a Dean can browse which
+// regulation covered a year in a past or future session, not just today's.
+// Used by dean/subjects/page.tsx only - other pages (HOD Subjects, Sections)
+// still use the older, per-course Course Catalog regulationYears mechanism
+// (see regulationsForYear in academicStructure.ts).
+export function regulationsForCourseYearByBatch(
+  regulationBatches: Record<string, string>,
+  courseYear: number,
+  asOfStartYear: number = currentAcademicStartYear(),
+): string[] {
+  const matches: string[] = [];
+  for (const [code, batch] of Object.entries(regulationBatches)) {
+    const batchStartYear = parseBatchStartYear(batch);
+    if (batchStartYear == null) continue;
+    if (asOfStartYear - batchStartYear + 1 === courseYear) matches.push(code);
+  }
+  return matches;
+}
+
 // A handful of sessions to choose from - two years back through one year
 // ahead, newest first. Deliberately short (unlike indents' full history since
 // EARLIEST_ACADEMIC_START_YEAR) - a Subject's session only ever needs to be

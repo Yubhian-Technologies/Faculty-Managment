@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, CalendarDays, Pencil, Sun, CalendarCheck, Check } from "lucide-react";
+import Link from "next/link";
+import { Plus, Trash2, CalendarDays, Pencil, Sun, CalendarCheck, Check, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -300,9 +301,14 @@ export default function CollegeOfficeHolidaysPage() {
         title="Holidays"
         description="Academic calendar holidays - feeds the Holidays column on the Leave History Report"
         actions={
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />Add Holiday
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/college-office/holidays/import"><Upload className="h-4 w-4 mr-2" />Import</Link>
+            </Button>
+            <Button onClick={() => setOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />Add Holiday
+            </Button>
+          </div>
         }
       />
 

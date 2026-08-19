@@ -11,7 +11,7 @@ import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { searchParams } = new URL(request.url);
     const deptFilter = searchParams.get("department");
     const statusFilter = searchParams.get("status");
@@ -56,6 +56,22 @@ export async function GET(request: Request) {
       if (ownedNames.length > 0) {
         childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
       }
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      // A Timetable Incharge (see TimetableIncharge in src/types/core.ts) -
+      // whether teaching faculty or supporting staff - fetching their
+      // delegated department's own faculty roster to assign subjects to.
+      // Restricted to their OWN department only, never an arbitrary one -
+      // this role list previously had no access to this route at all. No
+      // `department` param (e.g. TimetableGridEditor's own unfiltered "which
+      // faculty count as mine" check) defaults to their own department
+      // rather than 400ing - an explicit DIFFERENT department is still
+      // rejected below.
+      const callerSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
+      const callerDepartment = (callerSnap.data() as { department?: string } | undefined)?.department;
+      if (!callerDepartment || (deptFilter && callerDepartment !== deptFilter)) {
+        return NextResponse.json({ error: "You can only view your own department's faculty" }, { status: 403 });
+      }
+      primaryQuery = primaryQuery.where("department", "==", callerDepartment);
     } else if (deptFilter) {
       // Office/Principal/VP picking faculty for a specific department (e.g.
       // a section's Faculty Incharge) also see faculty registered under that

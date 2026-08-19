@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
+import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import type { BreakConfig, CourseYearTiming, PeriodTiming } from "@/types";
 
@@ -16,7 +17,7 @@ function toMinutes(hhmm: string): number {
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HOD", "COLLEGE_OFFICE", "ACCOUNTS", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
 
@@ -187,7 +188,7 @@ export async function POST(request: Request) {
 // down a day the Principal has already bounded, they don't invent the bounds.
 export async function PATCH(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await request.json()) as {
       courseId?: string;
       year?: number;
@@ -214,6 +215,11 @@ export async function PATCH(request: Request) {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!canHodEditDepartmentId(scope, existing.departmentId)) {
         return NextResponse.json({ error: "This course-year isn't in your department" }, { status: 403 });
+      }
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      const ok = await isTimetableIncharge(db, session.collegeId, session.uid, courseId, year);
+      if (!ok) {
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
     }
 

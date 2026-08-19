@@ -9,122 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/useToast";
-import { batchLabel } from "@/lib/college/academicStructure";
-import { currentAcademicStartYear } from "@/lib/college/academicSession";
 import { stripLeadingZeros } from "@/lib/utils";
 import type { AcademicRegulationSettings, CourseCatalogItem } from "@/types";
 
-type Draft = { name: string; code: string; durationYears: string; regulations: string[]; regulationYears: Record<string, number[]>; batchRegulations: Record<string, string> };
-const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [], regulationYears: {}, batchRegulations: {} };
-
-function yearsForDuration(durationYears: string) {
-  const n = Number(durationYears) || 0;
-  return Array.from({ length: Math.min(Math.max(n, 0), 10) }, (_, i) => i + 1);
-}
-
-// Inline "which years is this regulation offered for" row, shown under each
-// active regulation badge - unchecked/empty means unrestricted (every year),
-// so nothing needs configuring here until a Principal wants to narrow one
-// down (e.g. an outgoing regulation kept only for its remaining senior years).
-function RegulationYearsRow({
-  draft, setDraft, code, onToggleYear,
-}: { draft: Draft; setDraft: (d: Draft) => void; code: string; onToggleYear: (draft: Draft, setDraft: (d: Draft) => void, code: string, year: number) => void }) {
-  const years = yearsForDuration(draft.durationYears);
-  const active = draft.regulationYears[code] ?? [];
-  if (years.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 pl-1">
-      <span className="text-[11px] text-muted-foreground">{code} years:</span>
-      {years.map((y) => {
-        const on = active.includes(y);
-        return (
-          <button
-            key={y}
-            type="button"
-            onClick={() => onToggleYear(draft, setDraft, code, y)}
-            className={`h-5 min-w-5 rounded px-1 text-[11px] border ${on ? "bg-secondary border-secondary-foreground/20" : "border-input text-muted-foreground"}`}
-          >
-            {y}
-          </button>
-        );
-      })}
-      <span className="text-[11px] text-muted-foreground">{active.length === 0 ? "(all years)" : ""}</span>
-    </div>
-  );
-}
-
-// "Which regulation does each admission batch follow" - the batch-first way
-// of stating the same thing RegulationYearsRow states year-first.
-//
-// Preferred because it's stated once and never revisited: a 2026-2030 batch
-// follows R26 for all four of its years, whereas the year rows above describe
-// where a regulation sits *this* session and quietly go stale every time the
-// cohorts move up. The Dean's page resolves batch-first and only falls back to
-// the year rows (see regulationsForStudyYear).
-function BatchRegulationsEditor({
-  draft, setDraft,
-}: { draft: Draft; setDraft: (d: Draft) => void }) {
-  const duration = Number(draft.durationYears) || 0;
-  const entries = Object.entries(draft.batchRegulations).sort((a, b) => Number(b[0]) - Number(a[0]));
-  // Offered starting years: this session and the previous few, so every batch
-  // currently on campus can be mapped, plus next year's intake in advance.
-  const thisYear = currentAcademicStartYear();
-  const options = [thisYear + 1, thisYear, thisYear - 1, thisYear - 2, thisYear - 3, thisYear - 4]
-    .filter((y) => !(String(y) in draft.batchRegulations));
-
-  function setBatch(start: string, code: string) {
-    setDraft({ ...draft, batchRegulations: { ...draft.batchRegulations, [start]: code } });
-  }
-  function removeBatch(start: string) {
-    const next = { ...draft.batchRegulations };
-    delete next[start];
-    setDraft({ ...draft, batchRegulations: next });
-  }
-
-  if (draft.regulations.length === 0) return null;
-
-  return (
-    <div className="space-y-1.5 pl-1">
-      <p className="text-[11px] font-medium text-muted-foreground">Batches</p>
-      {entries.length === 0 && (
-        <p className="text-[11px] text-muted-foreground">
-          None yet - map an admission batch to its regulation and the Dean&rsquo;s year picker resolves it automatically.
-        </p>
-      )}
-      {entries.map(([start, code]) => (
-        <div key={start} className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-medium">{batchLabel(Number(start), duration)}</span>
-          <select
-            value={code}
-            onChange={(e) => setBatch(start, e.target.value)}
-            className="h-6 rounded-md border border-input bg-background px-1.5 text-[11px]"
-          >
-            {draft.regulations.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <button
-            type="button"
-            onClick={() => removeBatch(start)}
-            className="text-[11px] text-destructive hover:underline"
-          >
-            remove
-          </button>
-        </div>
-      ))}
-      {options.length > 0 && (
-        <select
-          value=""
-          onChange={(e) => e.target.value && setBatch(e.target.value, draft.regulations[0])}
-          className="h-6 rounded-md border border-input bg-background px-1.5 text-[11px]"
-        >
-          <option value="">+ Add batch…</option>
-          {options.map((y) => (
-            <option key={y} value={String(y)}>{batchLabel(y, duration)}</option>
-          ))}
-        </select>
-      )}
-    </div>
-  );
-}
+type Draft = { name: string; code: string; durationYears: string; regulations: string[] };
+const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [] };
 
 interface CourseCatalogSettingsCardProps {
   // Dean's dashboard reads the same catalog off the Principal's own GET
@@ -161,10 +50,6 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
 
   const [newDraft, setNewDraft] = useState<Draft>(EMPTY_DRAFT);
   const [isAdding, setIsAdding] = useState(false);
-  // False the moment the Principal manually toggles a chip on the add form -
-  // once they've made an explicit choice, the auto-fill below must never
-  // overwrite it again for this draft.
-  const [regulationsAutoFilled, setRegulationsAutoFilled] = useState(true);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -193,45 +78,14 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
   }, [readOnly, regulationsRefreshKey]);
 
-  // Derived, not effect-synced state: as long as the Principal hasn't
-  // touched a chip by hand for this draft, the effective selection just
-  // tracks declaredRegulations live (nothing to keep in sync). The moment
-  // they toggle one manually (toggleNewDraftRegulation), newDraft.regulations
-  // itself takes over.
-  const effectiveNewRegulations = regulationsAutoFilled ? declaredRegulations : newDraft.regulations;
-
   function toggleRegulation(draft: Draft, setDraft: (d: Draft) => void, code: string) {
     const isRemoving = draft.regulations.includes(code);
-    const regulationYears = { ...draft.regulationYears };
-    // Removing a regulation drops its year-scoping too - re-adding it later
-    // starts fresh (unrestricted) rather than resurrecting a stale mapping.
-    if (isRemoving) delete regulationYears[code];
     setDraft({
       ...draft,
       regulations: isRemoving
         ? draft.regulations.filter((r) => r !== code)
         : [...draft.regulations, code],
-      regulationYears,
     });
-  }
-
-  // Which years (within the draft's own duration) a regulation is offered
-  // for - empty means unrestricted (every year), the default until narrowed.
-  function toggleRegulationYear(draft: Draft, setDraft: (d: Draft) => void, code: string, year: number) {
-    const current = draft.regulationYears[code] ?? [];
-    const next = current.includes(year) ? current.filter((y) => y !== year) : [...current, year].sort((a, b) => a - b);
-    const regulationYears = { ...draft.regulationYears };
-    if (next.length === 0) delete regulationYears[code]; else regulationYears[code] = next;
-    setDraft({ ...draft, regulationYears });
-  }
-
-  function toggleNewDraftRegulation(code: string) {
-    const base = effectiveNewRegulations;
-    setRegulationsAutoFilled(false);
-    setNewDraft((d) => ({
-      ...d,
-      regulations: base.includes(code) ? base.filter((r) => r !== code) : [...base, code],
-    }));
   }
 
   function validate(d: Draft): string | null {
@@ -254,9 +108,12 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
           name: newDraft.name.trim(),
           code: newDraft.code.trim(),
           durationYears: Number(newDraft.durationYears),
-          regulations: effectiveNewRegulations,
-          regulationYears: newDraft.regulationYears,
-          batchRegulations: newDraft.batchRegulations,
+          // Every declared regulation - no longer a step the Principal walks
+          // through here; Edit further down still lets them narrow a
+          // specific course's regulations afterwards if needed. Which year
+          // each regulation actually applies to is resolved from its own
+          // Batch (see Academic Regulations) instead of set per-course.
+          regulations: declaredRegulations,
         }),
       });
       if (!res.ok) {
@@ -264,7 +121,6 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
         throw new Error(j.error ?? "Failed to add course");
       }
       setNewDraft(EMPTY_DRAFT);
-      setRegulationsAutoFilled(true);
       toast({ variant: "success", title: "Course added to catalog" });
       load();
     } catch (e) {
@@ -285,8 +141,6 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
       // something to just confirm (or narrow down) rather than an empty
       // click-fest. A course that already has regulations keeps them as-is.
       regulations: item.regulations?.length ? item.regulations : declaredRegulations,
-      regulationYears: item.regulationYears ?? {},
-      batchRegulations: item.batchRegulations ?? {},
     });
   }
 
@@ -303,8 +157,6 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
           code: editDraft.code.trim(),
           durationYears: Number(editDraft.durationYears),
           regulations: editDraft.regulations,
-          regulationYears: editDraft.regulationYears,
-          batchRegulations: editDraft.batchRegulations,
         }),
       });
       if (!res.ok) {
@@ -395,8 +247,8 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
         <CardDescription>
           The fixed list of courses for your entire college. Departments can only select from these — this keeps
           course names and codes consistent and prevents duplicates. Declare regulation codes under Academic
-          Regulations above first, then for each course: set its duration, pick which regulations it uses, and which
-          of its years each one applies to.
+          Regulations above first. A new course starts assigned to every declared regulation, unrestricted by year -
+          use Edit below to narrow a specific course down if needed.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -440,50 +292,10 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
                   <Plus className="h-4 w-4 mr-1" /> Add
                 </Button>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Starts with every declared regulation, unrestricted by year - narrow a specific course down afterwards via Edit below if needed.
+              </p>
             </div>
-
-            <div className="space-y-1.5 pt-2 border-t">
-              <Label className="text-xs font-semibold text-foreground">2. Regulations for this course</Label>
-              {declaredRegulations.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Declare regulation codes under Academic Regulations above first.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {declaredRegulations.map((r) => {
-                    const active = effectiveNewRegulations.includes(r);
-                    return (
-                      <Badge
-                        key={r}
-                        variant={active ? "secondary" : "outline"}
-                        className="cursor-pointer text-xs"
-                        onClick={() => toggleNewDraftRegulation(r)}
-                      >
-                        {active && <Check className="h-3 w-3 mr-1" />}{r}
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )}
-              {regulationsAutoFilled && effectiveNewRegulations.length > 0 && (
-                <p className="text-[11px] text-muted-foreground">
-                  Pre-filled with every declared regulation - click a badge to narrow it down.
-                </p>
-              )}
-            </div>
-
-            {effectiveNewRegulations.length > 0 && (
-              <div className="space-y-1.5 pt-2 border-t">
-                <Label className="text-xs font-semibold text-foreground">3. Which years each regulation applies to</Label>
-                <p className="text-[11px] text-muted-foreground">Leave a regulation untouched to offer it for every year of this course.</p>
-                <div className="space-y-1 pt-1">
-                  {effectiveNewRegulations.map((code) => (
-                    <RegulationYearsRow key={code} draft={newDraft} setDraft={setNewDraft} code={code} onToggleYear={toggleRegulationYear} />
-                  ))}
-                  <BatchRegulationsEditor draft={{ ...newDraft, regulations: effectiveNewRegulations }} setDraft={setNewDraft} />
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -563,39 +375,28 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
                   </div>
 
                   {isEditing ? (
-                    <>
-                      <div className="space-y-1">
-                        <Label className="text-[11px] text-muted-foreground">Regulations for this course</Label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {declaredRegulations.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">No regulations declared yet.</p>
-                          ) : (
-                            declaredRegulations.map((r) => {
-                              const active = editDraft.regulations.includes(r);
-                              return (
-                                <Badge
-                                  key={r}
-                                  variant={active ? "secondary" : "outline"}
-                                  className="cursor-pointer text-xs"
-                                  onClick={() => toggleRegulation(editDraft, setEditDraft, r)}
-                                >
-                                  {active && <Check className="h-3 w-3 mr-1" />}{r}
-                                </Badge>
-                              );
-                            })
-                          )}
-                        </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Regulations for this course</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {declaredRegulations.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No regulations declared yet.</p>
+                        ) : (
+                          declaredRegulations.map((r) => {
+                            const active = editDraft.regulations.includes(r);
+                            return (
+                              <Badge
+                                key={r}
+                                variant={active ? "secondary" : "outline"}
+                                className="cursor-pointer text-xs"
+                                onClick={() => toggleRegulation(editDraft, setEditDraft, r)}
+                              >
+                                {active && <Check className="h-3 w-3 mr-1" />}{r}
+                              </Badge>
+                            );
+                          })
+                        )}
                       </div>
-                      {editDraft.regulations.length > 0 && (
-                        <div className="space-y-1 pt-1">
-                          <Label className="text-[11px] text-muted-foreground">Which years each applies to</Label>
-                          {editDraft.regulations.map((code) => (
-                            <RegulationYearsRow key={code} draft={editDraft} setDraft={setEditDraft} code={code} onToggleYear={toggleRegulationYear} />
-                          ))}
-                          <BatchRegulationsEditor draft={editDraft} setDraft={setEditDraft} />
-                        </div>
-                      )}
-                    </>
+                    </div>
                   ) : (item.regulations ?? []).length === 0 ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="flex items-center gap-1 text-xs text-amber-600">
@@ -616,14 +417,9 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
-                      {(item.regulations ?? []).map((r) => {
-                        const years = item.regulationYears?.[r];
-                        return (
-                          <Badge key={r} variant="secondary" className="text-xs">
-                            {r}{years && years.length > 0 ? ` (Y${years.join(",")})` : ""}
-                          </Badge>
-                        );
-                      })}
+                      {(item.regulations ?? []).map((r) => (
+                        <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>
+                      ))}
                     </div>
                   )}
                 </li>

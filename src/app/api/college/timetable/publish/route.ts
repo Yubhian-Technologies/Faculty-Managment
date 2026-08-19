@@ -5,6 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { draftDocId, matchesCurrentSemester, resolveCurrentSemester, resolveRequestedSemester } from "@/lib/college/semester";
 import { currentTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import type { CourseYearTiming, TimetableDraft, TimetableSlot } from "@/types";
@@ -18,7 +19,7 @@ import type { CourseYearTiming, TimetableDraft, TimetableSlot } from "@/types";
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF");
     const body = (await request.json()) as { sectionId?: string; semester?: number };
     const sectionId = body.sectionId;
     if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -80,6 +81,11 @@ export async function POST(request: Request) {
           { error: "This section isn't in your department - notify its own HOD instead of publishing it directly." },
           { status: 403 },
         );
+      }
+    } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
+      const ok = await isTimetableIncharge(db, session.collegeId, session.uid, section.courseId, section.year);
+      if (!ok) {
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
       }
     }
 

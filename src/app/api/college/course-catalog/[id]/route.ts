@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadAcademicRegulations } from "@/lib/firestore/academicRegulations";
-import { validateRegulationYears, validateBatchRegulations } from "@/lib/college/academicStructure";
+import { validateRegulationYears } from "@/lib/college/academicStructure";
 
 export async function PATCH(
   request: Request,
@@ -20,7 +20,6 @@ export async function PATCH(
       isActive?: boolean;
       regulations?: string[];
       regulationYears?: Record<string, number[]>;
-      batchRegulations?: Record<string, string>;
     };
 
     const db = getAdminDb();
@@ -84,13 +83,6 @@ export async function PATCH(
       const err = validateRegulationYears(body.regulationYears, effectiveRegulations, effectiveDuration);
       if (err) return NextResponse.json({ error: err }, { status: 400 });
       updates.regulationYears = body.regulationYears;
-    }
-
-    if (body.batchRegulations != null) {
-      const effectiveRegulations = (updates.regulations as string[] | undefined) ?? existing.regulations ?? [];
-      const err = validateBatchRegulations(body.batchRegulations, effectiveRegulations);
-      if (err) return NextResponse.json({ error: err }, { status: 400 });
-      updates.batchRegulations = body.batchRegulations;
     }
 
     await ref.update(updates);

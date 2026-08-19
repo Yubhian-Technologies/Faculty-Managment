@@ -12,7 +12,7 @@ import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "EXAM_CELL", "DEAN");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "COLLEGE_STAFF", "EXAM_CELL", "DEAN");
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get("courseId");
     const year = searchParams.get("year");

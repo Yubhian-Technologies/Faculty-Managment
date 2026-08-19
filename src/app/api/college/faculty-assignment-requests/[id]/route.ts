@@ -5,18 +5,22 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
 import { getHodDepartmentScope, canHodEditDepartment, ownDepartmentNames } from "@/lib/departments/scope";
+import { isTimetableInchargeForDepartment } from "@/lib/departments/timetableIncharge";
 import type { FacultyAssignmentRequest } from "@/types";
 
 // Fulfills (allocate) or declines an incoming faculty-assignment request -
-// only the target department's HOD (or someone who edits that department,
-// e.g. its own parent HOD) may act on it. Allocating creates the actual
-// TeachingAssignment record directly, filed under the *requesting* section's
-// own department (matching how a normal direct assignment is filed) - the
-// requester then picks weekly periods for it the usual way, via the
-// Timetable page's "Add a subject".
+// the target department's HOD (or someone who edits that department, e.g.
+// its own parent HOD), or a Timetable Incharge for ANY course-year in that
+// department (see TimetableIncharge in src/types/core.ts - fulfilling isn't
+// tied to one specific course-year, it's "does this department have anyone
+// free"), may act on it. Allocating creates the actual TeachingAssignment
+// record directly, filed under the *requesting* section's own department
+// (matching how a normal direct assignment is filed) - the requester then
+// picks weekly periods for it the usual way, via the Timetable page's "Add a
+// subject".
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireCollegeMember("HOD");
+    const session = await requireCollegeMember("HOD", "PANEL_MEMBER", "COLLEGE_STAFF");
     const { id } = await params;
     const body = (await request.json()) as {
       action?: "allocate" | "decline" | "notify_timetable_updated";
@@ -32,12 +36,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!reqSnap.exists) return NextResponse.json({ error: "Request not found" }, { status: 404 });
     const reqData = reqSnap.data() as FacultyAssignmentRequest;
 
-    const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-    // Own department/sub-departments only, not managed branches (see
-    // ownDepartmentNames doc) - matches the GET route's incoming-list
-    // filter, so a request that isn't listed here can't be acted on either.
-    if (!ownDepartmentNames(scope).includes(reqData.targetDepartmentName)) {
-      return NextResponse.json({ error: "This request wasn't sent to your department" }, { status: 403 });
+    const scope = session.role === "HOD" ? await getHodDepartmentScope(db, session.collegeId, session.uid) : null;
+    if (scope) {
+      // Own department/sub-departments only, not managed branches (see
+      // ownDepartmentNames doc) - matches the GET route's incoming-list
+      // filter, so a request that isn't listed here can't be acted on either.
+      if (!ownDepartmentNames(scope).includes(reqData.targetDepartmentName)) {
+        return NextResponse.json({ error: "This request wasn't sent to your department" }, { status: 403 });
+      }
+    } else {
+      const ok = await isTimetableInchargeForDepartment(db, session.collegeId, session.uid, reqData.targetDepartmentName);
+      if (!ok) {
+        return NextResponse.json({ error: "This request wasn't sent to your department" }, { status: 403 });
+      }
     }
 
     const now = new Date();
@@ -82,7 +93,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const facultySnap = await collegeRef.collection("facultyMembers").doc(body.facultyId).get();
     if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
     const faculty = facultySnap.data() as { name?: string; department?: string };
-    if (!canHodEditDepartment(scope, faculty.department ?? "")) {
+    // An Incharge (no HOD scope tree) may only offer up faculty from the
+    // exact department the request targeted - an HOD may also reach into a
+    // sub-department's own faculty, same as before.
+    const facultyInScope = scope
+      ? canHodEditDepartment(scope, faculty.department ?? "")
+      : faculty.department === reqData.targetDepartmentName;
+    if (!facultyInScope) {
       return NextResponse.json({ error: "That faculty member isn't in your department" }, { status: 403 });
     }
 

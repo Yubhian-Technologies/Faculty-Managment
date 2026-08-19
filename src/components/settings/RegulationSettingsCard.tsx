@@ -32,6 +32,11 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
   const [isEditing, setIsEditing] = useState(false);
 
   const [regulations, setRegulations] = useState<string[]>([]);
+  // Which intake batch (e.g. "2024-2028") each regulation code covers - one
+  // per regulation, purely descriptive (see AcademicRegulationSettings's own
+  // doc-comment). Keyed by code rather than tracked per-index so a reorder
+  // (not currently possible here, but future-proof) can't scramble pairing.
+  const [batches, setBatches] = useState<Record<string, string>>({});
   const [newRegulation, setNewRegulation] = useState("");
 
   const load = useCallback(() => {
@@ -41,6 +46,7 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
       .then(({ settings: s }) => {
         setSettings(s);
         setRegulations(s.regulations ?? []);
+        setBatches(s.regulationBatches ?? {});
         // Nothing saved yet - go straight into editing so there's something to do here.
         setIsEditing(!readOnly && (s.regulations ?? []).length === 0);
       })
@@ -67,11 +73,13 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
 
   function removeRegulation(name: string) {
     setRegulations((r) => r.filter((x) => x !== name));
+    setBatches((b) => { const next = { ...b }; delete next[name]; return next; });
   }
 
   function cancelEdit() {
     if (settings) {
       setRegulations(settings.regulations ?? []);
+      setBatches(settings.regulationBatches ?? {});
     }
     setIsEditing(false);
   }
@@ -86,7 +94,7 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
       const res = await fetch("/api/college/settings/regulations", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ regulations }),
+        body: JSON.stringify({ regulations, regulationBatches: batches }),
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -129,19 +137,25 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
             <div className="space-y-2">
               <Label>Regulations</Label>
               {regulations.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-2">
                   {regulations.map((r) => (
-                    <Badge key={r} variant="secondary" className="gap-1.5 pr-1 text-xs">
-                      {r}
+                    <div key={r} className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs shrink-0 w-16 justify-center">{r}</Badge>
+                      <Input
+                        value={batches[r] ?? ""}
+                        onChange={(e) => setBatches((b) => ({ ...b, [r]: e.target.value }))}
+                        placeholder="Batch, e.g. 2024-2028"
+                        className="text-sm max-w-xs"
+                      />
                       <button
                         type="button"
                         onClick={() => removeRegulation(r)}
-                        className="rounded-full p-0.5 hover:bg-muted-foreground/20"
+                        className="rounded-full p-1 hover:bg-muted-foreground/20 shrink-0"
                         aria-label={`Remove ${r}`}
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-3.5 w-3.5" />
                       </button>
-                    </Badge>
+                    </div>
                   ))}
                 </div>
               )}
@@ -157,6 +171,9 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
                   <Plus className="h-4 w-4 mr-1" />Add
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                The batch is the intake year range this regulation covers (e.g. students admitted 2024, graduating 2028).
+              </p>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -175,7 +192,14 @@ export function RegulationSettingsCard({ readOnly = false, onSaved }: Regulation
         ) : (
           <>
             <div className="flex flex-wrap gap-2">
-              {(settings?.regulations ?? []).map((r) => <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>)}
+              {(settings?.regulations ?? []).map((r) => {
+                const batch = settings?.regulationBatches?.[r];
+                return (
+                  <Badge key={r} variant="secondary" className="text-xs">
+                    {r}{batch ? ` (${batch})` : ""}
+                  </Badge>
+                );
+              })}
             </div>
             {settings?.updatedAt && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">

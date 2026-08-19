@@ -528,20 +528,6 @@ export interface CourseCatalogItem {
   // also the default for every course until a Principal opts into narrowing
   // it, so nothing already relying on the old flat `regulations` list breaks.
   regulationYears?: Record<string, number[]>;
-  // Batch-based regulations: which regulation each ADMISSION BATCH follows,
-  // keyed by the batch's starting year as a string ("2026" -> "R26"). The
-  // batch's end year isn't stored - it's startYear + durationYears, so a
-  // 4-year B.Tech starting 2026 displays as "2026-2030".
-  //
-  // Preferred over `regulationYears` above, and resolved before it: a batch
-  // follows one regulation for its whole life, so this is stated once at
-  // admission and never revisited, whereas regulationYears describes where a
-  // regulation sits *this* year and has to be shifted by hand every time the
-  // cohorts move up (R23 [1,2] becomes [2,3] next year, and is simply wrong
-  // until someone remembers). regulationYears stays supported and is used as
-  // the fallback whenever a year has no batch mapped, so colleges already
-  // relying on it are unaffected.
-  batchRegulations?: Record<string, string>;
   isActive: boolean;
   createdBy?: string;
   createdByName?: string;
@@ -627,6 +613,41 @@ export interface CourseYearTiming {
   updatedAt?: Timestamp;
 }
 
+// ─── Timetable Incharge ────────────────────────────────────────────────────────
+// One person - either a PANEL_MEMBER (teaching faculty, from `facultyMembers`)
+// or a COLLEGE_STAFF member with `staffCategory === "TECHNICAL"` (from
+// `supportingStaff`; NON_TECHNICAL supporting staff are Principal/College-
+// Office-managed and college-wide, so not eligible here) - the HOD delegates
+// a specific course-year's Timetable AND Teaching Assignments to - a
+// co-editor, not a handoff: the HOD keeps full access too. Doc id matches
+// CourseYearTiming's own convention
+// (`${courseId}_year${year}`) so a department can hand off different years to
+// different people (e.g. 2nd Year to one person, 3rd Year to another) - see
+// lib/departments/timetableIncharge.ts for the authorization check every
+// Timetable/Teaching-Assignments write route uses alongside its existing
+// HOD-scope check.
+export interface TimetableIncharge {
+  id: string; // `${courseId}_year${year}`
+  collegeId: string;
+  departmentId: string;
+  departmentName: string;
+  courseId: string;
+  courseName: string;
+  year: number;
+  // The person's LOGIN uid (matches session.uid in every authorization check
+  // - see lib/departments/timetableIncharge.ts), NOT their FacultyMember
+  // DOCUMENT id - deliberately distinct naming from TeachingAssignment.
+  // facultyId/TimetableSlot.facultyId, which key off the FacultyMember doc id
+  // instead (see resolveFacultyMemberId). A FacultyMember with no `userUid`
+  // (no system login yet) can't be made Incharge - nothing to authenticate as.
+  uid: string;
+  facultyName: string;
+  assignedBy: string;
+  assignedByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 // ─── Course Academic Year (per course, per year — advancing it bumps active faculty
 // experience). Distinct from AcademicYear below (a college-wide 1-4 year open/close
 // gate) — the two are unrelated features that happen to share a similar name.
@@ -685,6 +706,13 @@ export interface FacultyNorms {
 // different courses can legitimately run different regulations at once.
 export interface AcademicRegulationSettings {
   regulations: string[];
+  // Human-readable intake range each regulation code covers (e.g.
+  // "R23" -> "2024-2028") - purely descriptive, keyed by regulation code, one
+  // batch per regulation. Shown wherever the regulation itself is shown (see
+  // RegulationSettingsCard) so a Dean reading a course-year's auto-resolved
+  // regulation (see regulationsForYear in lib/college/academicStructure.ts)
+  // also sees which batch it belongs to, without picking it manually.
+  regulationBatches?: Record<string, string>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
