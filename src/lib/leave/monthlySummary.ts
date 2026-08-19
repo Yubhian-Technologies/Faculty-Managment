@@ -5,6 +5,8 @@ import { REQUESTS_COL, computeEntitlement, loadBalances, initBalancesForYear } f
 import { computeEffectiveCategory } from "./categoryEngine";
 import { getOrCreateProfile } from "./profile";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { countWorkingDays } from "./dayCounter";
+import { getHolidayDateKeys } from "./holidaysCount";
 
 export interface MonthlyTypeSummary {
   taken: number;   // approved days whose fromDate falls in this month
@@ -46,6 +48,51 @@ function toDate(v: unknown): Date {
   return typeof t?.toDate === "function" ? t.toDate() : new Date(v as string);
 }
 
+// How many of a request's days fall inside [windowStart, windowEndExclusive).
+//
+// A request is NOT attributed wholly to the month it starts in. That was the
+// old rule, on the stated assumption that spanning requests are rare because
+// CL/SL/SCL run a few days - but "Other" leave (maternity and the like) runs
+// for months, so a single 94-day request landed as 94 in its start month and
+// nothing in the three months it actually covered. A monthly register is read
+// per month, for payroll among other things, so each month must show its own
+// days.
+//
+// Counted with the same countWorkingDays the request's stored totalDays was
+// produced by, over the clipped span, so the months add back up to that total
+// instead of a proration that only approximately does.
+function daysWithinWindow(
+  r: LeaveRequest,
+  windowStart: Date,
+  windowEndExclusive: Date,
+  holidayDates: Set<string>
+): number {
+  const from = toDate(r.fromDate);
+  const to = toDate(r.toDate ?? r.fromDate);
+  const start = from > windowStart ? from : windowStart;
+  // countWorkingDays takes an inclusive end, the window an exclusive one.
+  const windowEnd = new Date(windowEndExclusive.getFullYear(), windowEndExclusive.getMonth(), windowEndExclusive.getDate() - 1);
+  const end = to < windowEnd ? to : windowEnd;
+  if (start > end) return 0;
+  // A half day is 0.5 wherever it falls, and never spans a boundary.
+  if (r.isHalfDay) return 0.5;
+  return countWorkingDays(start, end, holidayDates);
+}
+
+// The same share, expressed as a fraction of the request's own total - used to
+// split a request's lopDays across the months it covers. lopDays is a portion
+// of totalDays (the part that exceeded balance), not a separately dated thing,
+// so it can only be apportioned rather than recounted.
+function shareOfRequest(
+  r: LeaveRequest,
+  windowStart: Date,
+  windowEndExclusive: Date,
+  holidayDates: Set<string>
+): number {
+  if (!r.totalDays) return 0;
+  return daysWithinWindow(r, windowStart, windowEndExclusive, holidayDates) / r.totalDays;
+}
+
 // Pure - the date-filtering/summing math for a single month, given
 // already-fetched requests/balances. Shared by computeMonthlyLeaveSummary and
 // computeYearlyLeaveSummary so a yearly view doesn't refetch the same
@@ -54,6 +101,7 @@ function computeMonthSummary(
   allApproved: LeaveRequest[], // this uid's APPROVED requests, every type
   category: EffectiveLeaveCategory | null,
   balanceByType: Map<LeaveTypeCode, LeaveBalance>,
+  holidayDates: Set<string>,
   year: number,
   month: number // 1-12
 ): PeriodLeaveSummary {
@@ -62,13 +110,24 @@ function computeMonthSummary(
   const monthStart = new Date(year, month - 1, 1);
   const monthEndExclusive = new Date(year, month, 1);
 
-  const sumTotalDays = (reqs: LeaveRequest[]) => reqs.reduce((s, r) => s + r.totalDays, 0);
+  // Days falling strictly before this month, and up to its end - the running
+  // totals OPB/CLB are built from. Windowed rather than keyed off fromDate, so
+  // a request straddling the boundary contributes only its earlier part to
+  // "before" instead of all-or-nothing.
+  const EPOCH = new Date(1970, 0, 1);
+  const daysBefore = (r: LeaveRequest) => daysWithinWindow(r, EPOCH, monthStart, holidayDates);
+  const daysThrough = (r: LeaveRequest) => daysWithinWindow(r, EPOCH, monthEndExclusive, holidayDates);
+  const daysInMonth = (r: LeaveRequest) => daysWithinWindow(r, monthStart, monthEndExclusive, holidayDates);
+
   // Only the within-balance portion of each request ever gets committed to
   // `used` (see splitLeaveDays in applications/[id]/route.ts) - lopDays never
   // touches the balance, so OPB/CLB must subtract it out too, or a request
   // with any LOP days makes the running total overcount what's actually been
   // drawn down, pushing CLB negative even though the real balance is fine.
-  const sumCommittedDays = (reqs: LeaveRequest[]) => reqs.reduce((s, r) => s + (r.totalDays - (r.lopDays ?? 0)), 0);
+  // The balance-drawing portion of however many of a request's days fall in
+  // the window - lopDays never touches balance, so it's excluded pro rata.
+  const committedShare = (r: LeaveRequest, daysInWindow: number) =>
+    r.totalDays ? daysInWindow * ((r.totalDays - (r.lopDays ?? 0)) / r.totalDays) : 0;
 
   const types: PeriodLeaveSummary["types"] = {};
   for (const lt of LEAVE_TYPE_SEED) {
@@ -76,9 +135,7 @@ function computeMonthSummary(
     if (category && !lt.rules.eligibleCategories.includes(category)) continue;
 
     const forType = approved.filter((r) => r.leaveTypeCode === lt.code);
-    const beforeMonthReqs = forType.filter((r) => toDate(r.fromDate) < monthStart);
-    const throughMonthReqs = forType.filter((r) => toDate(r.fromDate) < monthEndExclusive);
-    const taken = sumTotalDays(throughMonthReqs) - sumTotalDays(beforeMonthReqs);
+    const taken = forType.reduce((sum, r) => sum + daysInMonth(r), 0);
 
     if (lt.rules.unlimited) {
       // OD: no balance is ever tracked - just how many days were taken.
@@ -90,27 +147,24 @@ function computeMonthSummary(
     const entitled = bal?.entitled ?? (category ? computeEntitlement(lt, category) : 0);
     types[lt.code] = {
       taken,
-      opb: Math.max(0, entitled - sumCommittedDays(beforeMonthReqs)),
-      clb: Math.max(0, entitled - sumCommittedDays(throughMonthReqs)),
+      opb: Math.max(0, entitled - forType.reduce((sum, r) => sum + committedShare(r, daysBefore(r)), 0)),
+      clb: Math.max(0, entitled - forType.reduce((sum, r) => sum + committedShare(r, daysThrough(r)), 0)),
     };
   }
 
   const standardLopDays = approved
-    .filter((r) => toDate(r.fromDate) >= monthStart && toDate(r.fromDate) < monthEndExclusive)
-    .reduce((s, r) => s + (r.lopDays ?? 0), 0);
+    .reduce((s, r) => s + (r.lopDays ?? 0) * shareOfRequest(r, monthStart, monthEndExclusive, holidayDates), 0);
 
-  const otherInMonth = allApproved
-    .filter((r) => r.isOtherRequest)
-    .filter((r) => toDate(r.fromDate) >= monthStart && toDate(r.fromDate) < monthEndExclusive);
-  const otherDays = otherInMonth.reduce((s, r) => s + r.totalDays, 0);
+  const otherRequests = allApproved.filter((r) => r.isOtherRequest);
+  const otherDays = otherRequests.reduce((s, r) => s + daysInMonth(r), 0);
   // An "Other" request the HOD tagged unpaid (isPaidLeave: false) when
   // forwarding it - see types/leave.ts - is Loss of Pay by definition, so
   // those days count toward LOP same as a standard type's balance overflow,
   // on top of still showing under the Others column above. A paid Other
   // request contributes nothing here.
-  const otherLopDays = otherInMonth
+  const otherLopDays = otherRequests
     .filter((r) => r.isPaidLeave === false)
-    .reduce((s, r) => s + r.totalDays, 0);
+    .reduce((s, r) => s + daysInMonth(r), 0);
   const lopDays = standardLopDays + otherLopDays;
 
   return { types, lopDays, otherDays };
@@ -148,7 +202,16 @@ async function loadEmployeeLeaveData(db: Firestore, collegeId: string, uid: stri
     .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
     .filter((r) => r.status === "APPROVED");
 
-  return { category, dateOfJoining, balanceByType, allApproved };
+  // Holidays across the whole reporting year plus a year either side, so a
+  // request that starts before January or runs past December is still counted
+  // by the same working-day rule for the part that lands inside the year.
+  // Fetched once here rather than per month - computeYearlyLeaveSummary calls
+  // computeMonthSummary twelve times off this one load.
+  const holidayDates = await getHolidayDateKeys(
+    db, collegeId, new Date(year - 1, 0, 1), new Date(year + 1, 11, 31)
+  );
+
+  return { category, dateOfJoining, balanceByType, allApproved, holidayDates };
 }
 
 // For a single employee: this month's days taken per leave type, plus the
@@ -163,8 +226,8 @@ export async function computeMonthlyLeaveSummary(
   year: number,
   month: number // 1-12
 ): Promise<MonthlyLeaveSummary> {
-  const { category, dateOfJoining, balanceByType, allApproved } = await loadEmployeeLeaveData(db, collegeId, uid, year);
-  const summary = computeMonthSummary(allApproved, category, balanceByType, year, month);
+  const { category, dateOfJoining, balanceByType, allApproved, holidayDates } = await loadEmployeeLeaveData(db, collegeId, uid, year);
+  const summary = computeMonthSummary(allApproved, category, balanceByType, holidayDates, year, month);
   return { uid, category, dateOfJoining, ...summary };
 }
 
@@ -177,11 +240,11 @@ export async function computeYearlyLeaveSummary(
   uid: string,
   year: number
 ): Promise<YearlyLeaveSummary> {
-  const { category, dateOfJoining, balanceByType, allApproved } = await loadEmployeeLeaveData(db, collegeId, uid, year);
+  const { category, dateOfJoining, balanceByType, allApproved, holidayDates } = await loadEmployeeLeaveData(db, collegeId, uid, year);
 
   const months: YearlyMonthSummary[] = [];
   for (let month = 1; month <= 12; month++) {
-    months.push({ month, ...computeMonthSummary(allApproved, category, balanceByType, year, month) });
+    months.push({ month, ...computeMonthSummary(allApproved, category, balanceByType, holidayDates, year, month) });
   }
 
   const totals: PeriodLeaveSummary = { types: {}, lopDays: 0, otherDays: 0 };

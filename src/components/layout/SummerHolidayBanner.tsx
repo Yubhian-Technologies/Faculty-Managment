@@ -6,7 +6,7 @@ import { todayISODate, isoDateKey } from "@/lib/leave/dayCounter";
 import type { SummerHoliday } from "@/types";
 
 // College Office's one from/to range per academic year (see the Holidays
-// page's "Summer Holidays" section) - shown here the day before it starts
+// page's "Summer Vacation" section) - shown here the day before it starts
 // and through to its last day, purely informational (never blocks applying
 // for regular leave). Rendered once in the dashboard shell (see
 // (dashboard)/layout.tsx) so it's visible everywhere, not just the Leave
@@ -41,7 +41,7 @@ export function SummerHolidayBanner() {
 
   return (
     <div className="w-full border-b bg-muted/50 px-4 md:px-6 py-2 text-center text-sm text-foreground">
-      Summer Holidays: {formatDate(active.fromDate)} &ndash; {formatDate(active.toDate)}
+      Summer Vacation: {formatDate(active.fromDate)} &ndash; {formatDate(active.toDate)}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
+import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
 import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
 import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
 import { ROLE_DASHBOARD_PATHS } from "@/types/core";
@@ -103,6 +104,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Person not found" }, { status: 404 });
     }
     const target = targetSnap.data() as { name?: string; department?: string; role?: string };
+
+    // A day already covered by approved leave isn't an attendance day at all.
+    // The person's own check-in has always refused it (check-in/route.ts), but
+    // this route - the HOD/Principal marking on someone's behalf - did not, so
+    // the same day could still be recorded as Present/Absent from the roster
+    // and end up contradicting the approved leave it sits inside.
+    // Checked against the record's own date rather than today, since this
+    // route can correct any day in the open window.
+    if (await isOnApprovedLeaveToday(db, session.collegeId, facultyId, docDate)) {
+      return NextResponse.json(
+        { error: `${target.name ?? "This person"} is on approved leave on this date — attendance cannot be marked.` },
+        { status: 409 }
+      );
+    }
 
     if (session.role === "HOD") {
       if (target.role !== "PANEL_MEMBER") {

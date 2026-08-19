@@ -7,6 +7,7 @@ import { canAccessLeaveProfile } from "@/lib/leave/access";
 import { getOrCreateProfile } from "@/lib/leave/profile";
 import { resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { resolveStaffGender } from "@/lib/leave/identity";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
 import { countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
@@ -31,11 +32,19 @@ function sortByCreatedAtDesc(requests: LeaveRequest[]): LeaveRequest[] {
   });
 }
 
-// Attaches each requester's current effective category (New Joining /
-// Vacation / Non-Vacation) - not stored on the request itself, computed the
-// same way the Leave Profiles roster and Leave History register do - so the
-// approvals queue can offer the same three-way tab split.
-async function attachCategory(
+// Attaches, per request, the two things the approvals queue needs about the
+// requester that the request document itself doesn't carry:
+//
+//  - their current effective category (New Joining / Vacation / Non-Vacation),
+//    computed the same way the Leave Profiles roster and Leave History
+//    register do, for the three-way tab split;
+//  - their gender, read from their own user record, so the Principal's "Other"
+//    leave-category picker can hide Maternity for anyone who isn't female.
+//
+// Gender is deliberately read live rather than copied onto the request at
+// submission: it's a correction-prone field, and a stale copy would decide
+// eligibility from whatever was recorded on the day the leave was applied for.
+async function attachRequesterContext(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
   requests: LeaveRequest[]
@@ -43,8 +52,15 @@ async function attachCategory(
   const settings = await loadCollegeSettings(db, collegeId);
   return Promise.all(
     requests.map(async (r) => {
-      const profile = await getOrCreateProfile(db, collegeId, r.uid);
-      return { ...r, category: profile ? computeEffectiveCategory(profile, settings.newJoiningYears) : undefined };
+      const [profile, requesterGender] = await Promise.all([
+        getOrCreateProfile(db, collegeId, r.uid),
+        resolveStaffGender(db, collegeId, r.uid),
+      ]);
+      return {
+        ...r,
+        category: profile ? computeEffectiveCategory(profile, settings.newJoiningYears) : undefined,
+        requesterGender,
+      };
     })
   );
 }
@@ -70,7 +86,7 @@ export async function GET(request: Request) {
         const requests = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
           .filter((r) => r.department === (dept || "__NO_DEPARTMENT__"));
-        return NextResponse.json({ requests: sortByCreatedAtDesc(await attachCategory(db, session.collegeId, requests)) });
+        return NextResponse.json({ requests: sortByCreatedAtDesc(await attachRequesterContext(db, session.collegeId, requests)) });
       }
       if (session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
         const snap = await REQUESTS_COL(session.collegeId, db)
@@ -83,7 +99,7 @@ export async function GET(request: Request) {
         if (session.role === "VICE_PRINCIPAL") {
           requests = requests.filter((r) => r.uid !== session.uid);
         }
-        return NextResponse.json({ requests: sortByCreatedAtDesc(await attachCategory(db, session.collegeId, requests)) });
+        return NextResponse.json({ requests: sortByCreatedAtDesc(await attachRequesterContext(db, session.collegeId, requests)) });
       }
       return NextResponse.json({ requests: [] });
     }
@@ -166,7 +182,7 @@ export async function POST(request: Request) {
     // and the requester's history shows the link. Only ever points at one of
     // their own APPROVED requests - never someone else's, and never a
     // still-pending or rejected one (nothing to "extend" there). Sick Leave
-    // (no planned return date up front) and Summer Holidays (may only have
+    // (no planned return date up front) and Summer Vacation (may only have
     // taken part of the declared range) only - every other type has a
     // planned return date decided up front, so there's nothing to extend
     // (the client already only offers the button for these two - see
@@ -181,7 +197,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "The leave request you're trying to extend was not found" }, { status: 400 });
       }
       if (sourceData.leaveTypeCode !== "SL" && sourceData.leaveTypeCode !== "SH") {
-        return NextResponse.json({ error: "Only Sick Leave and Summer Holidays can be extended" }, { status: 400 });
+        return NextResponse.json({ error: "Only Sick Leave and Summer Vacation can be extended" }, { status: 400 });
       }
     }
 
@@ -207,8 +223,8 @@ export async function POST(request: Request) {
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || toDate < fromDate) {
       return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
     }
-    // Summer Holidays is bounded by whatever range(s) College Office has
-    // declared (see the Holidays page's "Summer Holidays" section) rather
+    // Summer Vacation is bounded by whatever range(s) College Office has
+    // declared (see the Holidays page's "Summer Vacation" section) rather
     // than the usual "not before today" rule - an already-started declared
     // range is expected, not backdating, but the requester's chosen From/To
     // must still fall entirely within a real declared range (the client
@@ -225,7 +241,7 @@ export async function POST(request: Request) {
       });
       if (!withinDeclaredRange) {
         return NextResponse.json(
-          { error: "Summer Holidays dates must fall within a range declared by College Office" },
+          { error: "Summer Vacation dates must fall within a range declared by College Office" },
           { status: 400 }
         );
       }

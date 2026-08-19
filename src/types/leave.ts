@@ -36,7 +36,7 @@ export const LEAVE_TYPE_LABELS: Record<LeaveTypeCode, string> = {
   SCL: "Special Casual Leave",
   EL: "Earned Leave",
   OD: "On Duty",
-  SH: "Summer Holidays",
+  SH: "Summer Vacation",
 };
 
 export type StaffCategory = "vacation" | "non-vacation";
@@ -169,6 +169,27 @@ export const OTHER_LEAVE_CATEGORY_ORDER: OtherLeaveCategory[] = [
   "MATERNITY", "FAMILY_PLANNING", "QUARANTINE", "EXTRAORDINARY", "COMPENSATORY",
 ];
 
+// One- or two-line summary of each category's rule, shown under the picker
+// once the Principal selects one (LeaveApprovalQueue) so the sanctioning
+// limits are visible at the moment of the decision rather than looked up.
+//
+// Condensed from the college's own written leave policy. Informational only -
+// nothing here is enforced, since these are all "Other" requests whose days
+// are never balance-tracked; the durations are what the Principal is
+// sanctioning against by hand.
+export const OTHER_LEAVE_CATEGORY_DESCRIPTIONS: Record<OtherLeaveCategory, string> = {
+  MATERNITY:
+    "Married women employees with at least 1 year of regular service — 90 days on full pay.",
+  FAMILY_PLANNING:
+    "For Family Planning Operations — 6 days for male and 14 days for female employees.",
+  QUARANTINE:
+    "Ordered absence due to an infectious disease — maximum 21 days, medical certificate required.",
+  EXTRAORDINARY:
+    "Leave without pay when no other leave applies — 3 months, 6 months with a medical certificate (1 year service), 2 years for higher studies (3 years service). Needs Management approval.",
+  COMPENSATORY:
+    "5 days per year as compensatory leave for working on holidays with prior approval. Must be used in the same year and cannot be carried forward. Not applicable to paid duties like exams or EAMCET.",
+};
+
 export interface LeaveActionRecord {
   action: "APPROVED" | "REJECTED";
   by: string;
@@ -278,4 +299,9 @@ export interface LeaveRequest {
   // at read time and attached only by the approvals-queue endpoint, for the
   // New Joining / Vacation / Non-Vacation tab split.
   category?: EffectiveLeaveCategory;
+  // Also not stored - read from the requester's own user record by the same
+  // endpoint, so the Principal's "Other" leave-category picker can hide
+  // Maternity for anyone who isn't female. Undefined when the requester has
+  // no gender recorded, which the picker treats as "don't offer Maternity".
+  requesterGender?: "Male" | "Female" | "Other";
 }

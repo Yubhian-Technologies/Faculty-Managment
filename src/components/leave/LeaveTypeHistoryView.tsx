@@ -28,7 +28,7 @@ const DESCRIPTIONS: Record<LeaveHistoryFilter, string> = {
   SCL: "All Special Casual Leave requests",
   EL: "All Earned Leave requests",
   OD: "All On Duty requests - no annual limit",
-  SH: "All Summer Holidays requests - no annual limit",
+  SH: "All Summer Vacation requests - no annual limit",
   OTHER: 'All "Other" leave requests',
   ALL: "Every leave request you've made, across all types - latest first",
 };

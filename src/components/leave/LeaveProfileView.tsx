@@ -220,11 +220,13 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
               <CardContent className="p-4 flex flex-col justify-between h-full">
                 <div>
                   <p className="text-sm text-muted-foreground">{b.label}</p>
-                  <p className="text-3xl font-bold mt-1">{b.remaining}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    of {b.entitled}
-                    {b.used ? ` · ${b.used} used` : ""}
-                  </p>
+                  {/* remaining/entitled read as one figure, at one size - the
+                      entitlement was previously a separate small "of N" line
+                      below the big number. */}
+                  <p className="text-3xl font-bold mt-1">{b.remaining}/{b.entitled}</p>
+                  {b.used ? (
+                    <p className="text-xs text-muted-foreground mt-1">{b.used} used</p>
+                  ) : null}
                 </div>
                 <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
                   View history <ChevronRight className="h-3.5 w-3.5" />

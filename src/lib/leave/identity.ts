@@ -23,6 +23,38 @@ export interface ResolvedIdentity {
 //    always has. Everyone else here (Accounts/Finance/College Office/IQAC/
 //    T&P/R&D) is non-vacation. dateOfJoining falls back to when their login
 //    was created.
+export type StaffGender = "Male" | "Female" | "Other";
+
+// A staff member's recorded gender, looked up through the same three account
+// shapes resolveEmployeeIdentity walks - the teaching record first, then the
+// non-teaching one, then the bare login doc.
+//
+// The order matters: gender is captured on the staff record (facultyMembers /
+// supportingStaff) by the add/edit forms, and is almost never on the
+// users/{uid} login doc - across this deployment only 4 of 177 login docs
+// carry it, against 33 of 58 faculty records. Reading the login doc alone
+// would report "unknown" for nearly everyone, which for the Maternity rule
+// (leave/applications/[id]) would deny it to genuinely female staff.
+//
+// Returns undefined when nobody has recorded one - callers treat that as "not
+// eligible" rather than guessing.
+export async function resolveStaffGender(
+  db: Firestore,
+  collegeId: string,
+  uid: string
+): Promise<StaffGender | undefined> {
+  const collegeRef = db.collection("colleges").doc(collegeId);
+
+  for (const sub of ["facultyMembers", "supportingStaff"] as const) {
+    const snap = await collegeRef.collection(sub).where("userUid", "==", uid).limit(1).get();
+    const gender = (snap.docs[0]?.data() as { gender?: StaffGender } | undefined)?.gender;
+    if (gender) return gender;
+  }
+
+  const userSnap = await collegeRef.collection("users").doc(uid).get();
+  return (userSnap.data() as { gender?: StaffGender } | undefined)?.gender;
+}
+
 export async function resolveEmployeeIdentity(
   db: Firestore,
   collegeId: string,

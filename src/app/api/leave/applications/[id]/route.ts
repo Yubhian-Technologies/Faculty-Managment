@@ -9,6 +9,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
+import { resolveStaffGender } from "@/lib/leave/identity";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify, notifyRole } from "@/lib/notify";
@@ -407,6 +408,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             { error: "Select a leave category (Maternity, Family Planning, Quarantine, Extraordinary, or Compensatory) before approving" },
             { status: 400 }
           );
+        }
+        // Maternity applies to female staff only. The picker already hides it
+        // for everyone else (LeaveApprovalQueue), but that's presentation -
+        // this is the guard, so a direct API call can't set it either. Read
+        // live from the requester's user record rather than from anything
+        // copied onto the request, matching how the queue decides what to
+        // offer. A requester with no gender recorded is not eligible: the
+        // college should record it rather than have the app assume.
+        if (body.otherLeaveCategory === "MATERNITY") {
+          const gender = await resolveStaffGender(db, session.collegeId, req.uid);
+          if (gender !== "Female") {
+            return NextResponse.json(
+              { error: "Maternity leave applies to female staff only" },
+              { status: 400 }
+            );
+          }
         }
         // Normally an HOD already tagged paid/unpaid when forwarding it here.
         // A Vice Principal's own Other leave skips the HOD stage entirely
