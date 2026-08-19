@@ -186,7 +186,7 @@ export async function buildRosterMonthlySummary(
       switch (rec.status) {
         case "PRESENT":
           present++;
-          if (isLateCheckIn(rec.checkIn)) lateArrivals++;
+          if (isLateCheckIn(rec.checkIn, rec.permittedCheckInTime)) lateArrivals++;
           break;
         case "ABSENT": absent++; break;
         case "HALF_DAY": halfDay++; break;

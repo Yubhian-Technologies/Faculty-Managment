@@ -39,6 +39,10 @@ interface RosterEntry {
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
+  // HOD-granted exception for this specific day (see AttendanceRecord's own
+  // doc-comment) - "Late" everywhere in the app derives from checkIn AND
+  // this together (see lib/attendance/lateStatus.ts's isLateCheckIn).
+  permittedCheckInTime: string | null;
   registered: boolean;
   // The reason an HOD/Principal/VP wrote when manually marking/correcting
   // this record (see /api/college/attendance/manual), or the auto-generated
@@ -91,6 +95,7 @@ export async function GET(request: Request) {
         return {
           uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "COLLEGE_STAFF" as const,
           status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+          permittedCheckInTime: null,
           registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null,
         };
       });
@@ -111,6 +116,7 @@ export async function GET(request: Request) {
         remarks: string | null;
         checkInVerified: boolean;
         checkOutVerified: boolean;
+        permittedCheckInTime: string | null;
         entry: RosterEntry;
       }[] = [];
 
@@ -123,6 +129,7 @@ export async function GET(request: Request) {
           ref: doc.ref, resolvedDate: d, status: rec.status,
           checkIn: rec.checkIn ?? null, checkOut: rec.checkOut ?? null, remarks: rec.remarks ?? null,
           checkInVerified: !!rec.checkInVerified, checkOutVerified: !!rec.checkOutVerified,
+          permittedCheckInTime: rec.permittedCheckInTime ?? null,
           entry: rosterByUid.get(rec.facultyId)!,
         });
       }
@@ -135,6 +142,7 @@ export async function GET(request: Request) {
         p.entry.checkOut = p.checkOut;
         p.entry.checkInVerified = p.checkInVerified;
         p.entry.checkOutVerified = p.checkOutVerified;
+        p.entry.permittedCheckInTime = p.permittedCheckInTime;
         p.entry.remarks = p.remarks;
       }
 
@@ -194,6 +202,7 @@ export async function GET(request: Request) {
       return {
         uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "PANEL_MEMBER" as const,
         status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+        permittedCheckInTime: null,
         registered: uidToRegistered.get(d.id) ?? false, remarks: null,
       };
     });
@@ -210,6 +219,7 @@ export async function GET(request: Request) {
         roster.push({
           uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "HOD" as const,
           status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
+          permittedCheckInTime: null,
           registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null,
         });
         uidToRegisteredAt.set(d.id, u.faceRegisteredAt ? u.faceRegisteredAt.toDate() : null);
@@ -238,6 +248,7 @@ export async function GET(request: Request) {
       remarks: string | null;
       checkInVerified: boolean;
       checkOutVerified: boolean;
+      permittedCheckInTime: string | null;
       entry: RosterEntry;
     }[] = [];
 
@@ -255,6 +266,7 @@ export async function GET(request: Request) {
         remarks: rec.remarks ?? null,
         checkInVerified: !!rec.checkInVerified,
         checkOutVerified: !!rec.checkOutVerified,
+        permittedCheckInTime: rec.permittedCheckInTime ?? null,
         entry: rosterByUid.get(rec.facultyId)!,
       });
     }
@@ -267,6 +279,7 @@ export async function GET(request: Request) {
       p.entry.checkOut = p.checkOut;
       p.entry.checkInVerified = p.checkInVerified;
       p.entry.checkOutVerified = p.checkOutVerified;
+      p.entry.permittedCheckInTime = p.permittedCheckInTime;
       p.entry.remarks = p.remarks;
     }
 

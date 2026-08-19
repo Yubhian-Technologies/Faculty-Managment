@@ -8,6 +8,8 @@ import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
+import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
+import { nowInIndia } from "@/lib/leave/dayCounter";
 import { ROLE_DASHBOARD_PATHS } from "@/types/core";
 import { notify } from "@/lib/notify";
 import type { AttendanceRecord } from "@/types";
@@ -83,8 +85,9 @@ export async function POST(request: Request) {
     }
 
     const { date: docDate, docSuffix } = parseDocDate(date);
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // India's own calendar day, not the server host's ambient timezone - see
+    // nowInIndia's doc-comment.
+    const todayStart = nowInIndia().date;
     if (docDate > todayStart) {
       return NextResponse.json({ error: "Cannot mark attendance for a future date" }, { status: 400 });
     }
@@ -143,6 +146,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Check-out time must be after check-in time" }, { status: 400 });
     }
 
+    // Snapshotted onto the record whenever checkIn is being set (new or
+    // corrected) - see AttendanceRecord.permittedCheckInTime's doc-comment
+    // and check-in/route.ts for the same lookup on the live check-in path.
+    const permittedCheckInTime = checkIn
+      ? await resolveCheckInPermission(db, session.collegeId, facultyId, docSuffix)
+      : null;
+
     const update: Record<string, unknown> = {
       status: "PRESENT",
       source: "MANUAL",
@@ -150,7 +160,10 @@ export async function POST(request: Request) {
       remarks: reason,
       updatedAt: now,
     };
-    if (checkIn) update.checkIn = checkIn;
+    if (checkIn) {
+      update.checkIn = checkIn;
+      if (permittedCheckInTime) update.permittedCheckInTime = permittedCheckInTime;
+    }
     if (checkOut) update.checkOut = checkOut;
 
     if (!existing) {
@@ -174,7 +187,7 @@ export async function POST(request: Request) {
       // via an earlier manual mark, and recordLateCheckIn has no way to
       // undo a wrongly-applied penalty, so re-evaluating on every edit would
       // risk double-counting the same day.
-      if (checkIn && isLateCheckIn(checkIn)) {
+      if (checkIn && isLateCheckIn(checkIn, permittedCheckInTime)) {
         try {
           await recordLateCheckIn(db, session.collegeId, facultyId, target.name ?? "", target.department ?? "", docDate);
         } catch (err) {
