@@ -33,19 +33,12 @@ export async function GET(request: Request) {
     // sub-HOD who runs that sub-department day to day (see
     // assertHodOwnsSection in sections/[id]/route.ts, which mirrors this).
     //
-    // An HOD's Sections page deliberately does NOT also pull in sections
-    // cross-listed to them via `secondaryDepartments` (a different, unrelated
-    // top-level department's section feeding this one - e.g. Physics' own
-    // year-1 sections feeding Information Technology) even read-only. That
-    // grant used to exist here (mirroring the still-present one in the
-    // students route) but conflated "years this department actually teaches"
-    // (its own assignedYears/courseScopes) with "years some other department
-    // has decided to feed it" - an HOD only ever sees sections for years
-    // their own department is actually scoped to. This is scoped to Sections
-    // specifically; the separate "Incoming Students" feature (hod/students/
-    // incoming, keyed off Student.secondaryDepartment) and Teaching
-    // Assignments' own cross-listed view are untouched.
+    // An HOD ALSO sees, read-only, the sections another department cross-lists
+    // to theirs via `secondaryDepartments` (e.g. Physics' own year-1 sections
+    // feeding Information Technology) - see where crossListedQuery's results
+    // are pushed below for why that grant is back after having been removed.
     let childDeptQuery: FirebaseFirestore.Query | null = null;
+    let crossListedQuery: FirebaseFirestore.Query | null = null;
     // A branch can be BOTH a standalone department with its own dedicated HOD
     // (its own assignedYears, e.g. CIVIL's [2,3,4]) AND grouped under a
     // sub-department for the shared first year (e.g. BS-English managing
@@ -96,6 +89,14 @@ export async function GET(request: Request) {
       if (ownedDeptNames.length > 0) {
         childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
       }
+      // Sections another department owns but cross-lists to this one
+      // (Department.secondaryDepartments - e.g. Chemistry's year-1
+      // "CHEMISTRY-ECE-A" feeding ECE). Read-only, never owned.
+      if (scope.ownDepartmentNames.length > 0) {
+        crossListedQuery = withCommonFilters(
+          sectionsColl.where("secondaryDepartments", "array-contains-any", scope.ownDepartmentNames.slice(0, 30))
+        );
+      }
       if (scope.ownDepartmentNames.length > 0) {
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
@@ -116,9 +117,10 @@ export async function GET(request: Request) {
 
     primaryQuery = withCommonFilters(primaryQuery);
 
-    const [primarySnap, childDeptSnap] = await Promise.all([
+    const [primarySnap, childDeptSnap, crossListedSnap] = await Promise.all([
       primaryQuery.get(),
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
+      crossListedQuery ? crossListedQuery.get() : Promise.resolve(null),
     ]);
 
     const seenIds = new Set<string>();
@@ -163,6 +165,25 @@ export async function GET(request: Request) {
         }
         seenIds.add(d.id);
         sections.push({ id: d.id, ...data, accessLevel: "primary" });
+      }
+    }
+    // Cross-listed last, and skipping anything already seen, so a section this
+    // HOD actually owns is never downgraded by also being cross-listed to them.
+    //
+    // This grant was removed once, on the grounds that it conflated "years this
+    // department teaches" with "years another department feeds it". The
+    // conflation was real but the fix was too broad: it left a branch's HOD
+    // unable to see their own first year at all whenever a common department
+    // runs it, with no hint the year existed. Read-only visibility says exactly
+    // that - the section feeds you, someone else runs it - and the year concern
+    // is handled by the accessLevel, not by hiding the row. It also matches how
+    // the managed-branch shape already behaves, so the two ways a college can
+    // structure a shared first year no longer disagree.
+    if (crossListedSnap) {
+      for (const d of crossListedSnap.docs) {
+        if (seenIds.has(d.id)) continue;
+        seenIds.add(d.id);
+        sections.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
       }
     }
     sections.sort((a, b) => {
