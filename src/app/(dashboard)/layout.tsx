@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { MobileDrawer } from "@/components/layout/MobileDrawer";
 import { TopBar } from "@/components/layout/TopBar";
+import { SummerHolidayBanner } from "@/components/layout/SummerHolidayBanner";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
@@ -45,6 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <MobileDrawer hiddenModules={hiddenModules} hiddenItems={hiddenItems} />
       <div className="md:ml-64 flex flex-col min-h-screen">
         <TopBar />
+        <SummerHolidayBanner />
         <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 max-w-7xl mx-auto w-full">
           {children}
         </main>

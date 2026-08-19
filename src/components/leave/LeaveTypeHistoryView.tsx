@@ -28,6 +28,7 @@ const DESCRIPTIONS: Record<LeaveHistoryFilter, string> = {
   SCL: "All Special Casual Leave requests",
   EL: "All Earned Leave requests",
   OD: "All On Duty requests - no annual limit",
+  SH: "All Summer Holidays requests - no annual limit",
   OTHER: 'All "Other" leave requests',
   ALL: "Every leave request you've made, across all types - latest first",
 };
@@ -35,7 +36,7 @@ const DESCRIPTIONS: Record<LeaveHistoryFilter, string> = {
 export function parseLeaveHistoryFilter(raw: string): LeaveHistoryFilter | null {
   const upper = raw.toUpperCase();
   if (upper === "OTHER" || upper === "ALL") return upper;
-  return (["CL", "SL", "SCL", "EL", "OD"] as const).includes(upper as LeaveTypeCode)
+  return (["CL", "SL", "SCL", "EL", "OD", "SH"] as const).includes(upper as LeaveTypeCode)
     ? (upper as LeaveTypeCode)
     : null;
 }

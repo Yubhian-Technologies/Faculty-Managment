@@ -16,6 +16,8 @@ import {
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { TimetableHistoryPanel } from "@/components/timetable/TimetableHistoryPanel";
 import type {
   Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek, DraftSlot, TimetableDraft,
   TeachingAssignment, FacultyAssignmentRequest, PeriodTiming,
@@ -71,6 +73,11 @@ export default function HODTimetableGridPage() {
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [draft, setDraft] = useState<TimetableDraft | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Which top-level tab is showing - "History" is a fully separate,
+  // read-only view (see TimetableHistoryPanel) of a PAST cohort's own
+  // published timetable for this section; everything below (build/edit/
+  // publish/discard) stays exactly as it always has and is untouched by it.
+  const [activeView, setActiveView] = useState<"timetable" | "history">("timetable");
 
   const [modeState, setModeState] = useState<Mode>("published");
   const [isEditing, setIsEditing] = useState(false);
@@ -504,6 +511,19 @@ export default function HODTimetableGridPage() {
         }
       />
 
+      <SegmentedTabs
+        value={activeView}
+        onChange={(v) => setActiveView(v as "timetable" | "history")}
+        options={[
+          { key: "timetable", label: "Timetable" },
+          { key: "history", label: "History" },
+        ]}
+      />
+
+      {activeView === "history" ? (
+        <TimetableHistoryPanel courseId={courseId} year={year} sectionId={sectionId} />
+      ) : (
+      <>
       {/* ── Draft toolbar ─────────────────────────────────────────────────── */}
       {hasDraft && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3">
@@ -667,7 +687,7 @@ export default function HODTimetableGridPage() {
                               {pSlot?.substituteFacultyName ? (
                                 <>
                                   <p className="text-[11px] font-medium text-amber-700 mt-0.5">{pSlot.substituteFacultyName}</p>
-                                  <p className="text-[10px] text-muted-foreground">Substituting for {pSlot.substituteForName} today</p>
+                                  <p className="text-[10px] text-muted-foreground">Substituting for {pSlot.substituteForName}</p>
                                 </>
                               ) : (
                                 <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
@@ -856,6 +876,8 @@ export default function HODTimetableGridPage() {
         loading={busy === "discard"}
         onConfirm={handleDiscard}
       />
+      </>
+      )}
     </div>
   );
 }

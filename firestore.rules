@@ -458,7 +458,22 @@ service cloud.firestore {
         allow write: if isHODorAbove(collegeId) || isAccounts(collegeId);
       }
 
+      match /attendanceCheckInPermissions/{permissionId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isHODorAbove(collegeId);
+      }
+
       match /holidays/{holidayId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isPrincipalOrOffice(collegeId);
+      }
+
+      match /summerHolidays/{summerHolidayId} {
+        allow read: if isStaff(collegeId);
+        allow write: if isCollegeOffice(collegeId);
+      }
+
+      match /workingDays/{workingDayId} {
         allow read: if isStaff(collegeId);
         allow write: if isPrincipalOrOffice(collegeId);
       }

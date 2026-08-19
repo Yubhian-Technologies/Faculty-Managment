@@ -173,9 +173,9 @@ export default function HODTeachingPage() {
                             )}
                             <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
                             {slot.substituteFacultyName ? (
-                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Covered by {slot.substituteFacultyName} today</p>
+                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Covered by {slot.substituteFacultyName}</p>
                             ) : slot.substituteForName ? (
-                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Substituting for {slot.substituteForName} today</p>
+                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Substituting for {slot.substituteForName}</p>
                             ) : (
                               subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>
                             )}

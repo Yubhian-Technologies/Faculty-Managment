@@ -3,6 +3,7 @@ import type {
   CourseYearTiming, Section, Subject, TeachingAssignment, TimetableRules, TimetableSlot,
 } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
+import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 
 // Everything the preflight and the solver need for one section, loaded once.
 // Kept server-side (takes an admin Firestore) so the solver itself stays pure.
@@ -18,12 +19,30 @@ export interface TimetableContext {
   pinnedSlots: TimetableSlot[];
   /** facultyId -> "DAY:period" cells busy in ANY other section. */
   busyFaculty: Map<string, Set<string>>;
+  // Resolved once from `timing` - null when this course-year has no
+  // semesters configured (see CourseYearTiming.semesters). pinnedSlots and
+  // busyFaculty above are already narrowed to this (via
+  // matchesCurrentSemester - a slot from a DIFFERENT prior semester never
+  // blocks or gets treated as pinned for the one being built now), so
+  // callers don't need to re-filter them; this is exposed mainly for
+  // draft/publish routes to stamp onto what they write.
+  currentSemester: number | null;
 }
 
 export async function loadTimetableContext(
   db: Firestore,
   collegeId: string,
   sectionId: string,
+  // Overrides the date-resolved "current" semester for THIS section's own
+  // course-year - the Timetable editor's own semester picker, letting an HOD
+  // deliberately build/edit a semester other than whichever one today's date
+  // falls in (see draft/route.ts). Every OTHER course-year (another
+  // section's busyFaculty/pinnedSlots below) still resolves its own semester
+  // naturally from today's date regardless - only the section actually being
+  // edited is affected. `undefined` (the default) keeps the previous
+  // date-only resolution; pass `null` explicitly for "no override, but I
+  // considered it" call sites if that's ever needed.
+  requestedSemester?: number | null,
 ): Promise<TimetableContext | null> {
   const collegeRef = db.collection("colleges").doc(collegeId);
 
@@ -31,8 +50,15 @@ export async function loadTimetableContext(
   if (!sectionSnap.exists) return null;
   const section = { id: sectionSnap.id, ...sectionSnap.data() } as Section;
 
-  const [timingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allSlotsSnap] = await Promise.all([
-    collegeRef.collection("courseYearTimings").where("courseId", "==", section.courseId).get(),
+  const [allTimingsSnap, rulesSnap, assignmentsSnap, subjectsSnap, allSlotsSnap] = await Promise.all([
+    // Every course-year's timing, not just this section's own course - a
+    // slot from ANOTHER section can belong to an entirely different course-
+    // year with its own independent semester calendar (see "per course +
+    // year" in CourseYearTiming.semesters), and busyFaculty below needs each
+    // one resolved on its own terms, not against this section's dates. This
+    // collection stays small (one doc per course x year in the college) so
+    // fetching it whole is cheap next to the per-section queries below.
+    collegeRef.collection("courseYearTimings").get(),
     collegeRef.collection("settings").doc("timetableRules").get(),
     collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).get(),
     collegeRef.collection("subjects").where("courseId", "==", section.courseId).get(),
@@ -43,10 +69,29 @@ export async function loadTimetableContext(
     collegeRef.collection("timetableSlots").get(),
   ]);
 
-  const timing =
-    timingsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as unknown as CourseYearTiming)
-      .find((t) => Number(t.year) === Number(section.year)) ?? null;
+  const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as CourseYearTiming);
+  const timing = allTimings.find((t) => t.courseId === section.courseId && Number(t.year) === Number(section.year)) ?? null;
+
+  const now = new Date();
+  // Every distinct course-year's OWN current semester, keyed the same way a
+  // TimetableSlot identifies its course-year - resolved once here so slots
+  // below can be filtered against the semester calendar that actually
+  // governs THEM, not this section's. A course-year with no timing doc at
+  // all (shouldn't normally happen once a slot exists for it, but the map
+  // simply has no entry then) falls through matchesCurrentSemester's own
+  // null-is-always-current rule.
+  const currentSemesterByCourseYear = new Map<string, number | null>(
+    allTimings.map((t) => [`${t.courseId}_${t.year}`, resolveCurrentSemester(t, now)])
+  );
+  // The override, if given, replaces THIS section's own course-year entry in
+  // the map too - so pinnedSlots/busyFaculty below (which check every slot
+  // against its own course-year's entry) treat the section being edited as
+  // belonging to the requested semester, not today's, while every other
+  // section/course-year is unaffected.
+  if (requestedSemester !== undefined) {
+    currentSemesterByCourseYear.set(`${section.courseId}_${section.year}`, requestedSemester);
+  }
+  const currentSemester = currentSemesterByCourseYear.get(`${section.courseId}_${section.year}`) ?? null;
 
   const rules: TimetableRules = rulesSnap.exists
     ? { ...DEFAULT_TIMETABLE_RULES, ...(rulesSnap.data() as Partial<TimetableRules>) }
@@ -62,7 +107,19 @@ export async function loadTimetableContext(
   );
   const subjectsById = new Map(allCourseSubjects.map((s) => [s.id, s]));
 
-  const allSlots = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
+  const allSlotsRaw = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
+
+  // A slot from a DIFFERENT, prior semester of ITS OWN course-year (see
+  // CourseYearTiming.semesters) is history, not something the current build
+  // has to work around or that should block a faculty member's availability
+  // now - excluded up front so neither pinnedSlots nor busyFaculty below
+  // ever "see" it. Each slot is checked against its OWN course-year's
+  // current semester (currentSemesterByCourseYear), not this section's -
+  // two different courses can be in different semesters (or none) at once.
+  const allSlots = allSlotsRaw.filter((s) => {
+    const slotCurrentSemester = currentSemesterByCourseYear.get(`${s.courseId}_${s.year}`) ?? null;
+    return matchesCurrentSemester(s.semester, slotCurrentSemester);
+  });
 
   // Slots written before `source` existed are manual by definition - the only
   // way to create one back then was the per-faculty picker. Treat them as pinned
@@ -86,7 +143,7 @@ export async function loadTimetableContext(
   }
 
   return {
-    section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots, busyFaculty,
+    section, timing, rules, assignments, courseYearSubjects, subjectsById, pinnedSlots, busyFaculty, currentSemester,
   };
 }
 
