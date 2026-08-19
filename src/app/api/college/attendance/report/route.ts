@@ -7,6 +7,7 @@ import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { closeMissedCheckouts, toAttendanceDate } from "@/lib/attendance/closeMissedCheckouts";
 import { isSunday } from "@/lib/attendance/attendanceWindow";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { istMidnightUTC, parseISTDateParam } from "@/lib/attendance/istTime";
 import type { AttendanceRecord } from "@/types";
 
 interface RosterEntry {
@@ -52,14 +53,6 @@ interface RosterEntry {
   remarks: string | null;
 }
 
-function parseDateParam(dateParam: string | null): { start: Date; end: Date; docSuffix: string } {
-  const d = dateParam ? new Date(`${dateParam}T00:00:00`) : new Date();
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
-  const docSuffix = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
-  return { start, end, docSuffix };
-}
-
 // Daily oversight roster: every PANEL_MEMBER in scope (HOD: own department +
 // sub-departments; Principal/VP/Super Admin: whole college), cross-referenced
 // against that day's attendanceRecords so faculty who haven't checked in yet
@@ -68,7 +61,7 @@ export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
     const { searchParams } = new URL(request.url);
-    const { start, end, docSuffix } = parseDateParam(searchParams.get("date"));
+    const { start, end, docSuffix } = parseISTDateParam(searchParams.get("date"));
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -146,8 +139,7 @@ export async function GET(request: Request) {
         p.entry.remarks = p.remarks;
       }
 
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayStart = istMidnightUTC(new Date());
       for (const entry of roster) {
         if (entry.status !== "NOT_MARKED") continue;
         if (!entry.registered) {
@@ -155,7 +147,7 @@ export async function GET(request: Request) {
           continue;
         }
         const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
-        const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
+        const regStart = registeredAt ? istMidnightUTC(registeredAt) : null;
         if (start < todayStart && regStart && start >= regStart) {
           const holiday = isSunday(start);
           entry.status = holiday ? "HOLIDAY" : "ABSENT";
@@ -288,8 +280,7 @@ export async function GET(request: Request) {
     //   - A past date, on/after their registration date -> ABSENT (or
     //     HOLIDAY if that date is a Sunday) - they could have checked in
     //     and didn't. Before registration, or today, stays NOT_MARKED.
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStart = istMidnightUTC(new Date());
     for (const entry of roster) {
       if (entry.status !== "NOT_MARKED") continue;
       if (!entry.registered) {
@@ -297,7 +288,7 @@ export async function GET(request: Request) {
         continue;
       }
       const registeredAt = uidToRegisteredAt.get(entry.uid) ?? null;
-      const regStart = registeredAt ? new Date(registeredAt.getFullYear(), registeredAt.getMonth(), registeredAt.getDate()) : null;
+      const regStart = registeredAt ? istMidnightUTC(registeredAt) : null;
       if (start < todayStart && regStart && start >= regStart) {
         const holiday = isSunday(start);
         entry.status = holiday ? "HOLIDAY" : "ABSENT";
