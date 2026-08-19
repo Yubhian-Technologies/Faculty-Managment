@@ -6,6 +6,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
+import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { ROLE_DASHBOARD_PATHS } from "@/types/core";
 import { notify } from "@/lib/notify";
 import type { AttendanceRecord } from "@/types";
@@ -161,6 +163,24 @@ export async function POST(request: Request) {
         createdAt: now,
         ...update,
       });
+      // Only for a brand-new record - this is someone checking in for the
+      // first time that day via their HOD/unit head instead of the
+      // self-service flow (they couldn't complete it themselves, e.g. off
+      // campus), so the same "3 late check-ins -> 0.5 CL" rule the live
+      // check-in route enforces (see lib/leave/lateAttendancePenalty.ts)
+      // should apply exactly as if they'd checked in themselves. Never
+      // applied when correcting an EXISTING record's time (existing is
+      // truthy) - that check-in was already evaluated once, whether live or
+      // via an earlier manual mark, and recordLateCheckIn has no way to
+      // undo a wrongly-applied penalty, so re-evaluating on every edit would
+      // risk double-counting the same day.
+      if (checkIn && isLateCheckIn(checkIn)) {
+        try {
+          await recordLateCheckIn(db, session.collegeId, facultyId, target.name ?? "", target.department ?? "", docDate);
+        } catch (err) {
+          console.error("[college/attendance/manual] late-penalty recording failed", err);
+        }
+      }
     } else {
       await recordRef.update(update);
     }
