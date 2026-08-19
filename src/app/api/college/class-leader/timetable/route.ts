@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
+import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import type { CourseYearTiming, TimetableSlot } from "@/types";
 
 // Self-contained read for the Class Leader dashboard AND timetable page (both
 // call this one endpoint): resolves the caller's own bound Section (never a
@@ -42,9 +44,15 @@ export async function GET() {
 
     const course = courseSnap.exists ? { id: courseSnap.id, ...courseSnap.data() } : null;
     const timing = timingsSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as unknown as { id: string; year: number })
+      .map((d) => ({ id: d.id, ...d.data() }) as unknown as CourseYearTiming)
       .find((t) => t.year === section.year) ?? null;
-    const rawSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const currentSemester = resolveCurrentSemester(timing);
+    // A prior semester's published slots stay in Firestore as history (see
+    // publish/route.ts) but drop out of the student's live weekly grid once
+    // the next semester starts.
+    const rawSlots = slotsSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
+      .filter((s) => matchesCurrentSemester(s.semester, currentSemester));
     const assignments = assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
     // Overlay this week's approved-leave substitutions, covering every day

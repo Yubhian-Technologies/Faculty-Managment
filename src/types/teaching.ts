@@ -130,6 +130,18 @@ export interface TeachingAssignment {
   assignmentSemester?: string;
   passPercentage?: number;
   studentFeedback?: number;   // average student feedback rating for this teaching period, as a %
+
+  // Course/section-scoped rows only - which of the course-year's configured
+  // CourseYearTiming.semesters (src/types/core.ts) this assignment is
+  // for, e.g. Semester 1 vs Semester 2 of Year 2 - see lib/college/semester.ts.
+  // Absent when the course-year has no semesters configured at all (single
+  // continuous timetable, the common case) - never silently hidden by
+  // filtering once a course-year DOES turn semesters on elsewhere (same
+  // null-matches-everything convention as TimetableSlot.semester). Distinct
+  // from the free-text `assignmentSemester` above (a resume-only label the
+  // HOD types by hand, unrelated to CourseYearTiming) and from `semester`
+  // near the top of this interface (the independent semester-scoped shape).
+  timetableSemester?: number;
 }
 
 // ─── Faculty Assignment Request ────────────────────────────────────────────────
@@ -206,6 +218,30 @@ export interface TimetableSlot {
   classroom?: string;
   source?: TimetableSlotSource; // absent on rows written before this field existed - treat as MANUAL
   isPinned?: boolean;
+  // Which of the course-year's configured semesters (CourseYearTiming.
+  // semesters) this slot was published/placed under - null/absent when that
+  // course-year has no semesters configured at all. Set either at publish
+  // time (see publish/route.ts, from lib/college/semester.ts's
+  // resolveCurrentSemester) or - for a slot booked directly through Teaching
+  // Assignments rather than the auto-generator - at creation time from
+  // whichever semester the HOD had picked there (see
+  // teaching-assignments/route.ts POST); not otherwise user-editable. A
+  // prior semester's slots are never deleted on the next publish (see
+  // matchesCurrentSemester's own doc-comment) - they stay in Firestore as
+  // history, just excluded from every live "current timetable" read.
+  semester?: number | null;
+  // Which calendar academic session (e.g. "2026-27") this slot was
+  // published/placed under - see lib/college/academicSession.ts's
+  // currentTimetableAcademicYear. Absent on a slot written before this field
+  // existed. A Section is a fixed year-slot a new cohort occupies every
+  // session (see Section.batch), so without this a new cohort's published
+  // timetable would be indistinguishable from - and previously WOULD have
+  // silently deleted, see publish/route.ts's staleGenerated filter - the
+  // previous cohort's own slots for the exact same sectionId/courseId/year.
+  // Never deleted on a later session's publish; excluded from every live
+  // "current timetable" read the same way a prior semester's slots are (see
+  // matchesCurrentAcademicYear) - this is what Timetable History reads.
+  academicYear?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 
@@ -288,13 +324,35 @@ export interface DraftSlot {
 }
 
 export interface TimetableDraft {
-  id: string;            // == sectionId
+  // == sectionId when the course-year has no semesters configured (or never
+  // did) - `${sectionId}_sem${semester}` once it does, one draft per
+  // semester so building Semester 2 never clobbers Semester 1's own draft.
+  // See timetable/draft/route.ts's draftDocId.
+  id: string;
   collegeId: string;
   department: string;
   courseId: string;
   year: number;
   sectionId: string;
   sectionName: string;
+  // Resolved once at draft-start time (lib/college/semester.ts's
+  // resolveCurrentSemester) - null when the course-year has no semesters
+  // configured. Carried onto every published TimetableSlot on publish.
+  semester?: number | null;
+  // Stamped at publish time (lib/college/academicSession.ts's
+  // currentTimetableAcademicYear) - which cohort's session this published
+  // draft belongs to. Absent on a draft still being worked on (only set once
+  // it's actually gone live) and on any draft from before this field
+  // existed. NOTE: unlike `semester`, this draft DOC ITSELF (see `id`'s own
+  // doc-comment) is reused across academic sessions for the same section -
+  // reopening "Edit" the following year starts from last year's published
+  // slots as a seed and then overwrites this same doc on the next publish.
+  // This field records which session is CURRENTLY live in it, not a history
+  // of every session it's ever represented - past sessions' own published
+  // TimetableSlots (which this field also gets stamped onto, and which are
+  // never deleted by a later publish - see publish/route.ts) are the actual
+  // source of Timetable History, not this doc.
+  academicYear?: string;
   status: TimetableDraftStatus;
   slots: DraftSlot[];
   /** Human-readable notes from the solver - why it failed, or what it relaxed. */

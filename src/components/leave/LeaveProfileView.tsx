@@ -94,7 +94,10 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   }
 
   const trackedBalances = balances.filter((b) => !b.unlimited);
-  const odBalance = balances.find((b) => b.unlimited);
+  // OD and Summer Holidays are both "unlimited" (no balance tracked) - a
+  // card per entry, not just the first (a bare .find() here would silently
+  // drop whichever of the two didn't come first).
+  const unlimitedBalances = balances.filter((b) => b.unlimited);
 
   // Every APPROVED request that hasn't run its course yet - either ongoing
   // right now, or approved for a future date not yet taken. At most one of
@@ -145,15 +148,17 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
       ? "You already have a leave request pending approval"
       : null;
 
-  // OD's count resets every calendar year, same as the tracked balances above
-  // (the year comes from the request's fromDate, matching how HOD/Principal
-  // approval commits a balance - see applications/[id]/route.ts). "Other" is
-  // never balance-tracked and never resets - it's a running lifetime count.
-  // Both only count APPROVED requests, not ones still pending decision.
+  // An unlimited type's (OD, Summer Holidays) count resets every calendar
+  // year, same as the tracked balances above (the year comes from the
+  // request's fromDate, matching how HOD/Principal approval commits a
+  // balance - see applications/[id]/route.ts). "Other" is never
+  // balance-tracked and never resets - it's a running lifetime count. All
+  // only count APPROVED requests, not ones still pending decision.
   const currentYear = new Date().getFullYear();
-  const odApprovedCount = requests.filter(
-    (r) => r.leaveTypeCode === "OD" && r.status === "APPROVED" && toDate(r.fromDate)?.getFullYear() === currentYear
-  ).length;
+  const approvedCountForCode = (code: LeaveTypeCode) =>
+    requests.filter(
+      (r) => r.leaveTypeCode === code && r.status === "APPROVED" && toDate(r.fromDate)?.getFullYear() === currentYear
+    ).length;
   const otherApprovedCount = requests.filter((r) => r.isOtherRequest && r.status === "APPROVED").length;
 
   return (
@@ -171,16 +176,21 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
         {applyHref && (
           // Currently on leave (already started, not just approved for a
           // future date) - offer "Extend Leave" instead of a dead-end
-          // disabled button. Sick Leave only (you often don't know your
-          // return date until you're already out) - every other leave type
-          // has a planned return date decided up front, so it stays a
-          // dead-end disabled button instead (the applyBlockedReason branch
-          // below). It submits as a brand-new request through the same
-          // HOD/Principal/Management approval chain as any other request -
-          // see applications/route.ts POST - just tagged with which request
-          // it extends for the approver's context. Server enforces the same
-          // SL-only restriction - see applications/route.ts POST.
-          isOngoingLeave && unfinishedApprovedLeave && unfinishedApprovedLeave.leaveTypeCode === "SL" ? (
+          // disabled button. Sick Leave (you often don't know your return
+          // date until you're already out) and Summer Holidays (the
+          // requester may have only taken part of College Office's declared
+          // range and want more of what's left, e.g. 10 of 20 available
+          // days) - every other leave type has a planned return date decided
+          // up front, so it stays a dead-end disabled button instead (the
+          // applyBlockedReason branch below). It submits as a brand-new
+          // request through the same HOD/Principal/Management approval chain
+          // as any other request - see applications/route.ts POST - just
+          // tagged with which request it extends for the approver's context.
+          // Server enforces the same SL/SH-only restriction, and for SH also
+          // that the extended dates still fall within the declared range -
+          // see applications/route.ts POST.
+          isOngoingLeave && unfinishedApprovedLeave &&
+          (unfinishedApprovedLeave.leaveTypeCode === "SL" || unfinishedApprovedLeave.leaveTypeCode === "SH") ? (
             <Button asChild size="sm" variant="outline">
               <Link href={`${applyHref}?extend=${unfinishedApprovedLeave.id}`}>
                 <CalendarPlus className="h-4 w-4 mr-1" />
@@ -224,21 +234,24 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
           </Link>
         ))}
 
-        {odBalance && (
-          <Link href={`${historyBaseHref}/od`}>
-            <Card className="h-full hover:border-primary transition-colors">
-              <CardContent className="p-4 flex flex-col justify-between h-full">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm text-muted-foreground">{odBalance.label}</p>
-                  <CountBadge count={odApprovedCount} title={`${odApprovedCount} approved this year`} />
-                </div>
-                <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
-                  View history <ChevronRight className="h-3.5 w-3.5" />
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-        )}
+        {unlimitedBalances.map((b) => {
+          const count = approvedCountForCode(b.code);
+          return (
+            <Link key={b.code} href={`${historyBaseHref}/${b.code.toLowerCase()}`}>
+              <Card className="h-full hover:border-primary transition-colors">
+                <CardContent className="p-4 flex flex-col justify-between h-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm text-muted-foreground">{b.label}</p>
+                    <CountBadge count={count} title={`${count} approved this year`} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                    View history <ChevronRight className="h-3.5 w-3.5" />
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
 
         {/* "Other" is a catch-all reason, not a balance-tracked LeaveTypeCode
             (see types/leave.ts) - it's never in the balances response, so

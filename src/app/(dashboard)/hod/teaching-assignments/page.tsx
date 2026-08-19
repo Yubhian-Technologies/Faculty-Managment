@@ -14,7 +14,8 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { sectionDisplayLabel, departmentCode } from "@/lib/sections/sectionLabel";
 import { deriveHodScope, buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
 import { fedYears } from "@/lib/college/academicStructure";
-import type { Course, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember, FacultyAssignmentRequest } from "@/types";
+import { matchesCurrentSemester } from "@/lib/college/semester";
+import type { Course, CourseYearTiming, Department, SectionListItem, Subject, TeachingAssignment, FacultyMember, FacultyAssignmentRequest } from "@/types";
 
 type AssignmentRow = TeachingAssignment & { accessLevel?: "primary" | "secondary" };
 type FacultyRow = FacultyMember;
@@ -72,6 +73,16 @@ export default function TeachingAssignmentsPage() {
   // department code is what tells them apart - see sectionDisplayLabel.
   const [departments, setDepartments] = useState<Department[]>([]);
   const [subjectsCache, setSubjectsCache] = useState<Record<string, Subject[]>>({});
+  // This course+year's configured semester numbers (union across every
+  // course-doc id in the group - see CourseYearTiming.semesters) - empty
+  // when none are configured, which keeps the semester picker below hidden
+  // and every filter that reads `effectiveSemester` a no-op, exactly as this
+  // page behaved before semesters existed.
+  const [timingsCache, setTimingsCache] = useState<Record<string, CourseYearTiming[]>>({});
+  // An explicit user pick; falls back to the smallest configured semester
+  // once options exist, rather than needing an effect to "correct" it after
+  // the fact - see effectiveSemester below.
+  const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
 
   const [assignForm, setAssignForm] = useState({ sectionId: "", subjectId: "", facultyId: "" });
   const [savingAssignment, setSavingAssignment] = useState(false);
@@ -242,9 +253,29 @@ export default function TeachingAssignmentsPage() {
     [editableSections, filterDepartmentNames]
   );
   const subjects = useMemo(() => subjectsCache[key] ?? [], [subjectsCache, key]);
+  const timings = useMemo(() => timingsCache[key] ?? [], [timingsCache, key]);
+  // Union across every course-doc id in the group, sorted - a shared
+  // programme's docs are all expected to agree on this, but union rather
+  // than "first doc wins" costs nothing and can't leave a real semester
+  // hidden if they ever briefly disagree mid-edit.
+  const semesterOptions = useMemo(() => {
+    const nums = new Set<number>();
+    for (const t of timings) for (const s of t.semesters ?? []) nums.add(s.semester);
+    return Array.from(nums).sort((a, b) => a - b);
+  }, [timings]);
+  // The semester every filter/action below actually uses - the explicit pick
+  // when it's still one of the current options, otherwise the smallest
+  // configured one, otherwise null (no semester concept for this course-year
+  // - every filter that reads this treats null as "everything matches", so
+  // the page behaves exactly as it did before semesters existed).
+  const effectiveSemester = semesterOptions.length === 0
+    ? null
+    : selectedSemester != null && semesterOptions.includes(selectedSemester)
+      ? selectedSemester
+      : semesterOptions[0];
 
-  // Queried once per course-doc id and merged, since the sections/subjects
-  // APIs take a single courseId and one programme spans several docs.
+  // Queried once per course-doc id and merged, since the sections/subjects/
+  // timings APIs take a single courseId and one programme spans several docs.
   async function ensureCourseYearData(courseIds: string[], k: string, y: string) {
     if (courseIds.length === 0) return;
     if (!(k in sectionsCache)) {
@@ -269,13 +300,23 @@ export default function TeachingAssignmentsPage() {
       const byId = new Map(lists.flat().map((s) => [s.id, s]));
       setSubjectsCache((c) => ({ ...c, [k]: Array.from(byId.values()) }));
     }
+    if (!(k in timingsCache)) {
+      const lists = await Promise.all(
+        courseIds.map((cId) =>
+          fetch(`/api/college/course-year-timings?courseId=${encodeURIComponent(cId)}`)
+            .then((r) => r.json() as Promise<{ timings: CourseYearTiming[] }>)
+            .then((d) => (d.timings ?? []).filter((t) => t.year === Number(y)))
+        )
+      );
+      setTimingsCache((c) => ({ ...c, [k]: lists.flat() }));
+    }
   }
 
   function handleTopDepartmentChange(v: string) {
     setPickedTopDepartment(v);
     // A different top-level department has a different course list, sub-
     // department cascade, and assigned years - clear everything downstream.
-    setCourseKey(""); setYear(""); setDepartmentFilter("");
+    setCourseKey(""); setYear(""); setDepartmentFilter(""); setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
@@ -283,12 +324,14 @@ export default function TeachingAssignmentsPage() {
     setCourseKey(v);
     setYear("");
     setDepartmentFilter("");
+    setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
   function handleYearChange(v: string) {
     setYear(v);
     setDepartmentFilter("");
+    setSelectedSemester(null);
     setAssignForm({ sectionId: "", subjectId: "", facultyId: "" });
   }
 
@@ -328,7 +371,13 @@ export default function TeachingAssignmentsPage() {
     [assignmentRequests]
   );
 
-  // Which subject/section combos for the selected course+year have no faculty assigned yet.
+  // Which subject/section combos for the selected course+year (and, once
+  // this course-year has semesters configured, the selected semester) have
+  // no faculty assigned yet. Subjects themselves aren't semester-tagged (one
+  // subject can be taught across more than one semester) - it's the
+  // ASSIGNMENT that's semester-specific, so switching semesters re-surfaces
+  // the same subject as a gap again for whichever semester hasn't been
+  // staffed yet, even if it's already staffed for another.
   const gapRows = useMemo(() => {
     if (!courseKey || !year) return [];
     // Matched against every course-doc id in the group: an assignment stores
@@ -337,7 +386,10 @@ export default function TeachingAssignmentsPage() {
     return subjects.map((subject) => {
       const staffedSectionIds = new Set(
         assignments
-          .filter((a) => a.subjectId === subject.id && courseIdSet.has(a.courseId ?? "") && a.year === Number(year))
+          .filter((a) =>
+            a.subjectId === subject.id && courseIdSet.has(a.courseId ?? "") && a.year === Number(year) &&
+            matchesCurrentSemester(a.timetableSemester, effectiveSemester)
+          )
           .map((a) => a.sectionId)
       );
       const unstaffedSections = sections
@@ -345,7 +397,7 @@ export default function TeachingAssignmentsPage() {
         .map((s) => ({ section: s, isRequested: pendingRequestKeys.has(`${s.id}_${subject.id}`) }));
       return { subject, unstaffedSections };
     });
-  }, [subjects, sections, assignments, courseKey, activeCourseIds, year, pendingRequestKeys]);
+  }, [subjects, sections, assignments, courseKey, activeCourseIds, year, pendingRequestKeys, effectiveSemester]);
 
   // Subjects already staffed for the section picked in the assign-faculty form shouldn't be
   // offered again there - pick a different subject or remove the existing assignment first.
@@ -357,7 +409,10 @@ export default function TeachingAssignmentsPage() {
         const selectedSection = sections.find((s) => s.id === assignForm.sectionId);
         return subjects.filter((s) =>
           (!selectedSection?.regulation || !s.regulation || s.regulation === selectedSection.regulation) &&
-          !assignments.some((a) => a.sectionId === assignForm.sectionId && a.subjectId === s.id) &&
+          !assignments.some((a) =>
+            a.sectionId === assignForm.sectionId && a.subjectId === s.id &&
+            matchesCurrentSemester(a.timetableSemester, effectiveSemester)
+          ) &&
           !pendingRequestKeys.has(`${assignForm.sectionId}_${s.id}`)
         );
       })()
@@ -402,6 +457,7 @@ export default function TeachingAssignmentsPage() {
           sectionId: assignForm.sectionId,
           subjectId: assignForm.subjectId,
           hoursPerWeek: subj?.hoursPerWeek,
+          ...(effectiveSemester != null ? { timetableSemester: effectiveSemester } : {}),
         }),
       });
       const json = await res.json() as { error?: string };
@@ -516,7 +572,7 @@ export default function TeachingAssignmentsPage() {
               </Select>
             </div>
           )}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:max-w-3xl">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:max-w-4xl">
             <div className="space-y-2">
               <Label>Course</Label>
               <Select value={courseKey} onValueChange={handleCourseChange}>
@@ -538,6 +594,21 @@ export default function TeachingAssignmentsPage() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Only once this course-year has semesters configured (see
+                College Office/Principal's "Semester Timings") - otherwise
+                there's nothing to pick and the page behaves exactly as
+                before this feature existed. */}
+            {semesterOptions.length > 0 && (
+              <div className="space-y-2">
+                <Label>Semester</Label>
+                <Select value={String(effectiveSemester ?? "")} onValueChange={(v) => setSelectedSemester(Number(v))}>
+                  <SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger>
+                  <SelectContent>
+                    {semesterOptions.map((s) => <SelectItem key={s} value={String(s)}>Semester {s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {/* Only for an HOD who actually has sub-departments. A sub-HOD has
                 none beneath them and works solely within their own, so the
                 field is omitted rather than shown with a single option. */}
@@ -727,6 +798,7 @@ export default function TeachingAssignmentsPage() {
                         <div>
                           <p className="text-sm font-medium flex items-center gap-1.5">
                             {a.subjectName} <span className="text-muted-foreground">({a.subjectCode})</span>
+                            {a.timetableSemester != null && <Badge variant="outline" className="text-xs">Sem {a.timetableSemester}</Badge>}
                             {a.accessLevel === "secondary" && <Badge variant="secondary" className="text-xs">View only</Badge>}
                           </p>
                           <p className="text-xs text-muted-foreground">{a.facultyName} · {a.hoursPerWeek} hrs/wk</p>

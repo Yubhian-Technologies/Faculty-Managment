@@ -191,6 +191,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Students", href: "/college-office/students", iconName: "GraduationCap", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Import Students", href: "/college-office/students/import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   { label: "Graduated Students", href: "/college-office/graduates", iconName: "Award", roles: ["COLLEGE_OFFICE"] },
+  { label: "Semester Timings", href: "/college-office/timings", iconName: "Clock", roles: ["COLLEGE_OFFICE"] },
   { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   // Only the first item of a group carries `section` - the sidebar renders a
   // header for every item that sets one, so repeating it printed "STAFF" three

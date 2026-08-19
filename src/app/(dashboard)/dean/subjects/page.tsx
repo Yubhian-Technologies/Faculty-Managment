@@ -82,16 +82,26 @@ export default function DeanSubjectsPage() {
     [departments, selectedDepartmentId]
   );
   const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
-  // Scoped to the picked department's own "Years Taught" for this course
-  // (resolveDepartmentCourseScope), not the raw 1..durationYears span - e.g.
-  // Basic Science only offers 1st Year even though its shared B.Tech course
-  // spans 4.
+  // Scoped to the course's own ACTUAL owning department's "Years Taught"
+  // (resolveDepartmentCourseScope), not the raw 1..durationYears span, and
+  // deliberately not the top-level Department picker either - loadCourses
+  // above can surface a feeder's own course row under a fed department that
+  // owns none of its own (e.g. Basic Science's course shown while "CSE" is
+  // picked above), and that course's real scope lives on Basic Science, not
+  // CSE. Matching the fed department's own (wrong) years here is exactly
+  // what used to make the feeder's reserved year unreachable - see
+  // hod/subjects/page.tsx's courseLabel/yearOptions for the same fix already
+  // applied there.
+  const courseOwningDepartment = useMemo(
+    () => (selectedCourse ? departments.find((d) => d.id === selectedCourse.departmentId) ?? null : null),
+    [selectedCourse, departments]
+  );
   const yearOptions = useMemo(() => {
-    if (!selectedCourse || !selectedDepartment) return [];
+    if (!selectedCourse || !courseOwningDepartment) return [];
     const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
-    const assigned = resolveDepartmentCourseScope(selectedDepartment, selectedCourse.catalogId).assignedYears;
+    const assigned = resolveDepartmentCourseScope(courseOwningDepartment, selectedCourse.catalogId).assignedYears;
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
-  }, [selectedCourse, selectedDepartment]);
+  }, [selectedCourse, courseOwningDepartment]);
   // This course's own assigned regulations (Course Catalog > Regulations),
   // narrowed to whichever are actually offered for the selected year
   // (regulationYears) - the set a subject for this year may use. Empty means
@@ -133,7 +143,11 @@ export default function DeanSubjectsPage() {
       // normalized name for legacy courses created before the catalog), keeping
       // THIS department's own doc when both exist so subjects file against the
       // department the Dean actually picked. A feeder's copy is still kept when
-      // the department owns none, which is the case that merge exists for.
+      // the department owns none, which is the case that merge exists for - see
+      // yearOptions below, which resolves scope against the SURVIVING course's
+      // own owning department (not necessarily the one picked above) so the
+      // feeder's reserved year is still reachable through it rather than stuck
+      // showing the fed department's own (wrong) years.
       const active = (data.courses ?? []).filter((c) => c.isActive);
       const byCatalogCourse = new Map<string, Course>();
       for (const c of active) {

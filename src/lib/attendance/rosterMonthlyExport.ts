@@ -4,7 +4,8 @@ import { resolveFaceRegisteredAt } from "./registration";
 import { istMonthBounds } from "./istTime";
 import { isLateCheckIn } from "./lateStatus";
 import { unitLabelForHeadRole, COLLEGE_STAFF_UNIT_HEAD_ROLES, type UnitHeadRole } from "./collegeStaffUnits";
-import type { AttendanceRecord, MonthlySummaryRow } from "@/types";
+import { getWorkingDayWeightsForRole } from "./workingDays";
+import type { AttendanceRecord, MonthlySummaryRow, UserRole } from "@/types";
 
 export interface ExportRosterMember {
   uid: string;
@@ -167,6 +168,20 @@ export async function buildRosterMonthlySummary(
     )
   );
 
+  // Working Day overrides (see college-office/holidays/page.tsx), fetched
+  // once per DISTINCT role in the roster rather than once per member - a
+  // college-wide export can have hundreds of members but only a handful of
+  // distinct roles, so this keeps the query count small.
+  const distinctRoles = Array.from(new Set(roster.map((m) => m.role)));
+  const workingDayDatesByRole = new Map(
+    await Promise.all(
+      distinctRoles.map(async (role) => {
+        const weights = await getWorkingDayWeightsForRole(db, collegeId, monthStart, monthEnd, role as UserRole);
+        return [role, new Set(weights.keys())] as const;
+      })
+    )
+  );
+
   const rows: MonthlySummaryRow[] = [];
   for (const member of roster) {
     const records = (recordsByUid.get(member.uid) ?? []).sort(
@@ -179,7 +194,7 @@ export async function buildRosterMonthlySummary(
       facultyId: member.uid,
       facultyName: member.name,
       department: member.department,
-    });
+    }, new Date(), workingDayDatesByRole.get(member.role));
 
     let present = 0, absent = 0, halfDay = 0, onLeave = 0, onDuty = 0, holiday = 0, lateArrivals = 0;
     for (const rec of filled) {

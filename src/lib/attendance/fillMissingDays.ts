@@ -18,9 +18,14 @@ interface FillContext {
 // that check runs first. Two independent rules apply only once a day has
 // no real record:
 //   1. Sunday always synthesizes as Holiday - a fact about the calendar,
-//      true whether or not the person had registered their face yet.
-//      Matches the fixed weekly rule self check-in already enforces live
-//      (see isSunday).
+//      true whether or not the person had registered their face yet -
+//      UNLESS it's in `workingDayDates` (dateKey()s of Working Day overrides
+//      naming this person's own role, see workingDays.ts's
+//      getWorkingDayWeightsForRole), in which case it falls through to rule 2
+//      below like any other working day: they were required to be there, so
+//      no record means Absent, not an excused Holiday. Matches the same
+//      per-role override self check-in already enforces live (see isSunday
+//      and isWorkingDayForRole in check-in/route.ts).
 //   2. Any other day only synthesizes as Absent from the person's
 //      face-registration date onward - before that, or for today/future
 //      days, the day is left out entirely, exactly like a day with nothing
@@ -34,7 +39,8 @@ export function fillMissingDays(
   monthEnd: Date,
   registeredAt: Date | null,
   ctx: FillContext,
-  now: Date = new Date()
+  now: Date = new Date(),
+  workingDayDates?: Set<string>
 ): (AttendanceRecord & { id: string })[] {
   const byKey = new Map(
     realRecords.map((r) => [istDateKey(toAttendanceDate(r.date) ?? new Date(0)), r])
@@ -54,7 +60,8 @@ export function fillMissingDays(
     const key = istDateKey(day);
     if (byKey.has(key)) continue; // a real record already covers this day - always wins
 
-    const isHoliday = isSunday(day);
+    const isOverridden = workingDayDates?.has(key) ?? false;
+    const isHoliday = isSunday(day) && !isOverridden;
     if (!isHoliday && (!regStart || day < regStart)) continue; // before registration - leave as no record
 
     filled.push({
@@ -66,7 +73,9 @@ export function fillMissingDays(
       date: day as unknown as AttendanceRecord["date"],
       status: isHoliday ? "HOLIDAY" : "ABSENT",
       source: "SYSTEM",
-      ...(isHoliday ? {} : { remarks: "No check-in recorded" }),
+      ...(isHoliday
+        ? {}
+        : { remarks: isOverridden ? "No check-in recorded — working day override" : "No check-in recorded" }),
       createdAt: day as unknown as AttendanceRecord["createdAt"],
       updatedAt: day as unknown as AttendanceRecord["updatedAt"],
     } as AttendanceRecord & { id: string });

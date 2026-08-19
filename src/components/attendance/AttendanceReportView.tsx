@@ -85,14 +85,6 @@ function StatusCell({ row }: { row: RosterEntry }) {
           Late
         </span>
       )}
-      {row.status === "PRESENT" && row.permittedCheckInTime && (
-        <span
-          className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800"
-          title={`HOD-permitted late check-in (agreed time: ${row.permittedCheckInTime}) - not counted as Late`}
-        >
-          Permitted
-        </span>
-      )}
     </span>
   );
 }

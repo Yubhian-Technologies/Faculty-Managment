@@ -10,17 +10,33 @@ export function dateKey(d: Date): string {
 // getHolidayDateKeys) - neither was ever a working day to begin with, so a
 // leave request spanning one doesn't draw down balance for it. Half-day
 // requests are always a single day, counted as 0.5 regardless.
+// `workingDayWeights` (dateKey() -> 1 or 0.5 - see workingDays.ts's
+// getWorkingDayWeightsForRole, already narrowed to the requester's own role)
+// is the inverse exception: a Sunday the requester is specifically required
+// to work on still counts toward the total, same as any other working day,
+// instead of getting the automatic Sunday exemption - at its full weight
+// (1), or just half (0.5) when the override itself only requires half the
+// day. Takes priority over both the Sunday rule and holidayDates - a
+// deliberate per-role override always wins.
 // Shared by the server (applications/route.ts POST, the authoritative count
 // that gets stored and deducted) and the client-side preview
 // (LeaveApplyForm.tsx), so both agree on the same number before and after
 // submission.
-export function countWorkingDays(from: Date, to: Date, holidayDates: Set<string>, isHalfDay?: boolean): number {
+export function countWorkingDays(
+  from: Date, to: Date, holidayDates: Set<string>, isHalfDay?: boolean, workingDayWeights?: Map<string, number>
+): number {
   if (isHalfDay) return 0.5;
   let count = 0;
   const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
   while (cursor <= end) {
-    if (cursor.getDay() !== 0 && !holidayDates.has(dateKey(cursor))) count++;
+    const key = dateKey(cursor);
+    const overrideWeight = workingDayWeights?.get(key);
+    if (overrideWeight !== undefined) {
+      count += overrideWeight;
+    } else if (cursor.getDay() !== 0 && !holidayDates.has(key)) {
+      count++;
+    }
     cursor.setDate(cursor.getDate() + 1);
   }
   return count;
