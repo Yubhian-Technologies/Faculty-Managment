@@ -7,6 +7,7 @@ import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getHodTechnicalDesignations } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import type {
@@ -17,28 +18,6 @@ import type {
 
 function designationLabel(designation: SupportingStaffDesignation): string {
   return (NON_TECHNICAL_STAFF_DESIGNATION_LABELS as Record<string, string>)[designation] ?? designation;
-}
-
-// Same resolver as faculty/students CSV imports (src/app/api/college/
-// students/import-excel/route.ts) - accepts a department's short Code (e.g.
-// "CSE", the template's own sample value) or its full name and normalizes to
-// the canonical `name`. Without this, a row typed with a code got stored
-// verbatim (e.g. department: "CSE"), which never matches the exact-string
-// department filter the HOD's own Supporting Staff list queries by - the
-// record was created successfully but simply never appeared for them again.
-function buildDepartmentResolver(
-  departmentsSnap: FirebaseFirestore.QuerySnapshot
-): (input: string) => string | undefined {
-  const byCodeOrName = new Map<string, string>();
-  for (const d of departmentsSnap.docs) {
-    const data = d.data() as { name?: string; code?: string };
-    const name = (data.name ?? "").trim();
-    if (!name) continue;
-    byCodeOrName.set(name.toLowerCase(), name);
-    const code = (data.code ?? "").trim();
-    if (code) byCodeOrName.set(code.toLowerCase(), name);
-  }
-  return (input: string) => byCodeOrName.get(input.trim().toLowerCase());
 }
 
 // Free text (see src/lib/designations/config.ts) - normalizes the original
@@ -332,7 +311,14 @@ export async function POST(request: Request) {
     const existingIds = new Set(existingSnap.docs.map((d) => (d.data() as { employeeId: string }).employeeId));
 
     const departmentsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
-    const resolveDepartment = buildDepartmentResolver(departmentsSnap);
+    // Accepts a department's short Code (e.g. "CSE", the template's own
+    // sample value) or its full name and normalizes to the canonical `name`.
+    // Without this, a row typed with a code got stored verbatim (e.g.
+    // department: "CSE"), which never matches the exact-string department
+    // filter the HOD's own Supporting Staff list queries by - the record was
+    // created successfully but simply never appeared for them again.
+    const plainDepartmentsForResolve = departmentsSnap.docs.map((d) => d.data() as { name?: string; code?: string });
+    const resolveDepartment = (input: string) => resolveDepartmentByNameOrCode(plainDepartmentsForResolve, input);
 
     const now = new Date();
     const created: string[] = [];

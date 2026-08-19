@@ -24,6 +24,7 @@ export async function PATCH(
       isActive?: boolean;
       serialNumber?: number;
       category?: SubjectCategory;
+      customCategory?: string;
       lectureHours?: number;
       tutorialHours?: number;
       practicalHours?: number;
@@ -31,6 +32,9 @@ export async function PATCH(
 
     if (body.category != null && !(body.category in SUBJECT_CATEGORY_LABELS)) {
       return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+    }
+    if (body.category === "OTHER" && !body.customCategory?.trim()) {
+      return NextResponse.json({ error: "Enter a name for the custom category" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -64,7 +68,10 @@ export async function PATCH(
     if (body.type != null) updates.type = body.type;
     if (body.isActive != null) updates.isActive = body.isActive;
     if (body.serialNumber != null) updates.serialNumber = Number(body.serialNumber);
-    if (body.category != null) updates.category = body.category;
+    if (body.category != null) {
+      updates.category = body.category;
+      updates.customCategory = body.category === "OTHER" ? body.customCategory!.trim() : null;
+    }
     if (body.lectureHours != null) updates.lectureHours = Number(body.lectureHours);
     if (body.tutorialHours != null) updates.tutorialHours = Number(body.tutorialHours);
     if (body.practicalHours != null) updates.practicalHours = Number(body.practicalHours);

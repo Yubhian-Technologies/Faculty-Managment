@@ -69,10 +69,9 @@ export async function POST(request: Request) {
       year?: number;
       preferredSubjectIds?: string[];
       preferredSubjectNames?: string[];
-      interviewMode?: string;
     };
 
-    const { candidateId, vacancyRequestId, courseId, courseName, year, preferredSubjectIds, preferredSubjectNames, interviewMode } = body;
+    const { candidateId, vacancyRequestId, courseId, courseName, year, preferredSubjectIds, preferredSubjectNames } = body;
     if (!candidateId || !vacancyRequestId) {
       return NextResponse.json({ error: "candidateId, vacancyRequestId required" }, { status: 400 });
     }
@@ -91,7 +90,7 @@ export async function POST(request: Request) {
     if (!vacancySnap.exists) {
       return NextResponse.json({ error: "Hiring request not found" }, { status: 404 });
     }
-    const vacancy = vacancySnap.data() as { status?: string; department?: string; position?: string };
+    const vacancy = vacancySnap.data() as { status?: string; department?: string; position?: string; hiringMode?: string };
     if (vacancy.status !== "APPROVED") {
       return NextResponse.json({ error: "Hiring request is not approved" }, { status: 400 });
     }
@@ -136,7 +135,6 @@ export async function POST(request: Request) {
       ...(courseId ? { courseId, courseName: courseName ?? "" } : {}),
       ...(year ? { year: Number(year) } : {}),
       ...(preferredSubjectIds?.length ? { preferredSubjectIds, preferredSubjectNames: preferredSubjectNames ?? [] } : {}),
-      interviewMode: interviewMode ?? "OFFLINE",
       currentStage: "DEMO",
       status: "PENDING",
       isShortlisted: false,

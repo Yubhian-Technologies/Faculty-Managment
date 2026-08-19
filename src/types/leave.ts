@@ -28,7 +28,7 @@ import type { DayOfWeek } from "./teaching";
 //              colleges/{id}/leaveBalances, colleges/{id}/leaveRequests
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LeaveTypeCode = "CL" | "SL" | "SCL" | "EL" | "OD";
+export type LeaveTypeCode = "CL" | "SL" | "SCL" | "EL" | "OD" | "SH";
 
 export const LEAVE_TYPE_LABELS: Record<LeaveTypeCode, string> = {
   CL: "Casual Leave",
@@ -36,6 +36,7 @@ export const LEAVE_TYPE_LABELS: Record<LeaveTypeCode, string> = {
   SCL: "Special Casual Leave",
   EL: "Earned Leave",
   OD: "On Duty",
+  SH: "Summer Holidays",
 };
 
 export type StaffCategory = "vacation" | "non-vacation";
@@ -248,6 +249,14 @@ export interface LeaveRequest {
   // person - own balance/LOP handling), this is purely informational so the
   // approver has context and the requester's history shows the link.
   extendsRequestId?: string;
+  // System-generated: set on the auto-created, auto-APPROVED CL request a
+  // late check-in penalty creates (see lib/leave/lateAttendancePenalty.ts) -
+  // every 3rd late check-in in a calendar year deducts 0.5 Casual Leave.
+  // Distinguishes it from a real request so it can't be cancelled (see
+  // applications/[id]/route.ts's CANCEL branch and isCancellable() in
+  // LeaveProfileView.tsx) - cancelling it would hand the days back for
+  // nothing the requester did.
+  isLateAttendancePenalty?: boolean;
   // Which of the requester's own teaching periods are covered while they're
   // out, and by whom - see PeriodSubstitution above. Undefined/empty for a
   // non-teaching requester, a leave range with no affected periods, or an

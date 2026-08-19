@@ -520,6 +520,14 @@ export interface CourseCatalogItem {
   // subjects to any Course created from this catalog entry (see
   // api/college/subjects POST) until it's set.
   regulations?: string[];
+  // Which years (within 1..durationYears) each of the above `regulations` is
+  // currently offered for - e.g. during a transition, R20 -> [3, 4] (existing
+  // senior batches) while R23 -> [1, 2] (new intakes), both active for this
+  // course at once. A regulation present in `regulations` but absent (or with
+  // an empty array) here is unrestricted - offered for every year - which is
+  // also the default for every course until a Principal opts into narrowing
+  // it, so nothing already relying on the old flat `regulations` list breaks.
+  regulationYears?: Record<string, number[]>;
   isActive: boolean;
   createdBy?: string;
   createdByName?: string;
@@ -562,6 +570,17 @@ export interface PeriodTiming {
   endTime: string; // "HH:MM" 24h
 }
 
+// One semester's calendar span (not to be confused with the daily
+// collegeStartTime/collegeEndTime above, which bound a single DAY, not a
+// date range). `semester` is a free-standing number, not fixed at 2 -
+// Office/Principal decides how many semesters a given course-year has and
+// adds/removes entries accordingly (see CourseYearTimingForm.tsx).
+export interface SemesterDuration {
+  semester: number; // 1, 2, 3, ...
+  startDate: Timestamp;
+  endDate: Timestamp;
+}
+
 export interface CourseYearTiming {
   id: string; // `${courseId}_year${year}`
   collegeId: string;
@@ -583,6 +602,13 @@ export interface CourseYearTiming {
   // down yet, so nothing already relying on it (isContiguousBlockAvailable,
   // the timetable solver, ...) has to change.
   periods?: PeriodTiming[];
+  // This academic year's semester date ranges - however many Office/
+  // Principal has configured, sorted by `semester`. Which one is "current"
+  // for a given date resolves via lib/college/semester.ts's
+  // resolveCurrentSemester. Absent/empty means this year has no semester
+  // concept yet - the timetable behaves as one continuous whole-year
+  // timetable until at least one semester is added.
+  semesters?: SemesterDuration[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -637,12 +663,14 @@ export interface FacultyNorms {
 // ─── Academic Regulations ─────────────────────────────────────────────────────
 // A college's curriculum "regulation" (e.g. R20, R23) usually changes only for
 // incoming batches, so the 1st through 4th year of study can each be running a
-// different regulation at the same time. The Principal maintains the list of
-// regulation names in use and fixes which one applies to each year.
+// different regulation at the same time. The Principal maintains the college-
+// wide list of regulation codes in use here; WHICH of them apply to a given
+// course, and to which of that course's own years, is set per-course on its
+// Course Catalog entry instead (CourseCatalogItem.regulations/regulationYears,
+// see lib/college/academicStructure.ts's regulationsForYear) - not here, since
+// different courses can legitimately run different regulations at once.
 export interface AcademicRegulationSettings {
   regulations: string[];
-  // Year of study ("1".."4") -> one of `regulations`. Omitted/empty until fixed.
-  yearRegulations: Record<string, string>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
@@ -1199,6 +1227,20 @@ export interface Section {
   // inherits it as StudentRecord.secondaryDepartment (their promotion target).
   // Stored plural for legacy shape, but a section commits to a single branch.
   secondaryDepartments?: string[];
+  // The curriculum regulation (e.g. "R20", "R23") the batch CURRENTLY
+  // occupying this year-slot follows - one of the owning course's
+  // CourseCatalogItem.regulations (narrowed by regulationYears for this
+  // section's own `year`, same validation as Subject.regulation). Like
+  // `batch` above, this is edited by the HOD whenever a new cohort starts
+  // occupying the slot (e.g. a fresh intake reaching this year, or a
+  // transition-year correction) and is left untouched by promotion/
+  // advance-year - those only ever move students, never edit Section docs.
+  // A student's OWN regulation (StudentRecord.regulation) is a one-time
+  // snapshot of this value taken the moment they're first placed into a
+  // section, and stays fixed for that student regardless of what this field
+  // is later edited to for a different batch passing through the same slot.
+  // Optional/lenient like Subject.regulation - absent means unrestricted.
+  regulation?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -1237,21 +1279,48 @@ export interface StudentRecord {
   // department (see students/promote/route.ts), at which point it becomes
   // their primary `department` instead.
   secondaryDepartment?: string;
+  // The curriculum regulation this student follows - a one-time snapshot of
+  // Section.regulation, copied in the moment this student is FIRST placed
+  // into a real section (students/distribute, distribute-cohort,
+  // import-excel), then never touched again by promotion/advance-year or by
+  // later edits to that section's own `regulation` (which just reflects
+  // whichever batch currently occupies the slot). Fixed for this student's
+  // entire academic run, per Section.regulation's own doc-comment. Optional/
+  // lenient - absent when the section they were placed into had none set.
+  regulation?: string;
   // ─── Admission-detail fields ────────────────────────────────────────────
   // All optional, all set only via the College Office bulk import (see
   // src/lib/students/importRow.ts) - there is no per-student edit form for
   // any of these today, same as the older gender/dateOfBirth/etc. fields
   // above. Photo is intentionally not collected via CSV import at all.
   //
-  // The programme the student is admitted into (B.Tech, M.Tech …), as written
-  // on the admission sheet. Free text and purely a record of what that sheet
-  // said - it is NOT resolved against the college's `courses` collection, and
-  // nothing keys off it; the student's academic scope comes from `department`
-  // + `year` as before. "Branch" remains an alias of `department`, but
-  // "Course" no longer is: the roster template carries both columns, so
-  // reading them as the same field would have made a sheet naming its
-  // programme in one and its branch in the other silently unimportable.
+  // The programme the student is admitted into (B.Tech, M.Tech …). Validated
+  // against the college's `courses` collection when set (name or short Code,
+  // resolved to canonical name - see college/students/import-excel's
+  // resolveCourse), but this field alone still can't disambiguate "which
+  // section" on its own: `courseId` below is the real reference for that.
+  // "Branch" remains an alias of `department`, but "Course" no longer is: the
+  // roster template carries both columns, so reading them as the same field
+  // would have made a sheet naming its programme in one and its branch in the
+  // other silently unimportable.
   course?: string;
+  // The real reference `course` names. A department can run more than one
+  // Section sharing the exact same (department, name, year) as long as they
+  // belong to different courses (see college/sections POST's own duplicate
+  // check, scoped by courseId for exactly this reason - e.g. a B.Tech
+  // "PHYSICS-IT-A" and a later, independent M.Tech "PHYSICS-IT-A") - so
+  // `department`+`section`+`year` alone can no longer say which Section doc
+  // this student is actually in. Set/kept in sync with the section they're
+  // actually placed into (students/[id] PATCH's targetSectionId move, the
+  // bulk importer's placed rows, distribute/distribute-cohort) - the moment a
+  // student is genuinely IN a section, this always mirrors that section's own
+  // `courseId`, never admission-time free text. For an unassigned student, set
+  // best-effort from their (validated) `course` value when one was given.
+  // Every "students in this section" join must include this once it's
+  // present - see sections/route.ts GET's studentCount, students/[id]
+  // route.ts's findCurrentSectionDoc, student-attendance and
+  // internal-exam-marks routes' roster queries.
+  courseId?: string;
   semester?: number;
   dateOfAdmission?: string; // yyyy-mm-dd
   admissionNo?: string;
@@ -1483,6 +1552,7 @@ export type AuditAction =
   // Attendance module
   | "ATTENDANCE_MARKED"
   | "ATTENDANCE_CORRECTED"
+  | "LATE_CHECKIN_PERMISSION_GRANTED"
   // Payroll module
   | "SALARY_STRUCTURE_CREATED"
   | "PAYROLL_PROCESSED"

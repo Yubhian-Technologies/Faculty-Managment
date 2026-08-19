@@ -10,7 +10,7 @@ import {
   branchClaimConflictMessage,
   type DepartmentClaimRow,
 } from "@/lib/departments/managedBranches";
-import { validateAssignedYears, validateSecondaryDepartmentNames } from "@/lib/departments/courseScopeValidation";
+import { validateAssignedYears, validateSecondaryDepartmentNames, ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 
 // yyyy-mm-dd, the same shape StudentRecord.dateOfBirth already uses.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -167,26 +167,17 @@ export async function POST(request: Request) {
 
     // Cross-listing can be set on either a top-level department (by
     // Principal/VP) or a sub-department (by its parent's HOD, right here at
-    // sub-department creation). The *target* must always be a top-level
-    // department, never another sub-department. A department can cross-list
-    // to more than one other department (e.g. a shared first-year department
-    // feeding both CSE and ECE).
+    // sub-department creation). The target may be a top-level department or
+    // one of its sub-departments (e.g. feeding "ECE-VLSI" specifically, for
+    // students admitted straight into that specialization) - see
+    // validateSecondaryDepartmentNames's own doc-comment. A department can
+    // cross-list to more than one other department (e.g. a shared first-year
+    // department feeding both CSE and ECE).
     let secondaryDepartments: string[] = [];
     if (body.secondaryDepartments && body.secondaryDepartments.length > 0) {
       const names = Array.from(new Set(body.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
-      if (names.includes(name.trim())) {
-        return NextResponse.json({ error: "Secondary department must be different from this department" }, { status: 400 });
-      }
-      const byName = deptByName;
-      for (const secName of names) {
-        const secDept = byName.get(secName);
-        if (!secDept) {
-          return NextResponse.json({ error: `Secondary department "${secName}" not found` }, { status: 400 });
-        }
-        if (secDept.parentDepartmentId) {
-          return NextResponse.json({ error: `"${secName}" is a sub-department and can't be used as a secondary department` }, { status: 400 });
-        }
-      }
+      const secError = validateSecondaryDepartmentNames(names, name.trim(), deptByName);
+      if (secError) return NextResponse.json({ error: secError }, { status: 400 });
       secondaryDepartments = names;
     }
 
@@ -434,21 +425,65 @@ export async function DELETE(request: Request) {
     // later created reusing this exact name, it would be silently and
     // instantly "claimed" by whichever sub-department still lists it, purely
     // by name coincidence, with no confirmation step.
+    const deleteNow = new Date();
     const allDeptsSnap = await db.collection("colleges").doc(collegeId).collection("departments").get();
     for (const d of allDeptsSnap.docs) {
       if (d.id === deptId) continue;
-      const other = d.data() as { managedDepartments?: string[]; secondaryDepartments?: string[] };
+      const other = d.data() as {
+        managedDepartments?: string[];
+        secondaryDepartments?: string[];
+        courseScopes?: Record<string, { assignedYears?: number[]; secondaryDepartments?: string[] }>;
+      };
       const managed = other.managedDepartments ?? [];
       const secondary = other.secondaryDepartments ?? [];
       const newManaged = managed.filter((n) => n !== dept.name);
       const newSecondary = secondary.filter((n) => n !== dept.name);
-      if (newManaged.length !== managed.length || newSecondary.length !== secondary.length) {
+
+      // Each course a department offers can override its own secondaryDepartments
+      // (Department.courseScopes, resolveDepartmentCourseScope) - a snapshot taken
+      // from the flat field above at the time that course was added/edited, not a
+      // live reference to it. Stripping only the flat field above (as this used
+      // to) leaves a deleted department's name alive in every course's own
+      // override, still surfacing wherever a course-scoped consumer resolves
+      // secondaryDepartments (e.g. Add Section's "Secondary Department" picker,
+      // which reads course-scoped, not flat) - same cascade college/departments
+      // PATCH already does when secondaryDepartments is edited directly.
+      const courseScopePatch: Record<string, string[]> = {};
+      for (const [catalogId, scope] of Object.entries(other.courseScopes ?? {})) {
+        const scopeSecondary = scope.secondaryDepartments ?? [];
+        const newScopeSecondary = scopeSecondary.filter((n) => n !== dept.name);
+        if (newScopeSecondary.length !== scopeSecondary.length) {
+          courseScopePatch[`courseScopes.${catalogId}.secondaryDepartments`] = newScopeSecondary;
+        }
+      }
+
+      if (newManaged.length !== managed.length || newSecondary.length !== secondary.length || Object.keys(courseScopePatch).length > 0) {
         batch.update(d.ref, {
           ...(newManaged.length !== managed.length ? { managedDepartments: newManaged } : {}),
           ...(newSecondary.length !== secondary.length ? { secondaryDepartments: newSecondary } : {}),
-          updatedAt: new Date(),
+          ...courseScopePatch,
+          updatedAt: deleteNow,
         });
       }
+    }
+
+    // Same staleness, on Section docs: a section cross-lists to a branch via
+    // its own `secondaryDepartments` (at most one entry - see
+    // sections/route.ts POST's own comment), never cleaned up above since
+    // that loop only walks `departments`. An already-enrolled section isn't
+    // reachable here at all (the students/sections check above already
+    // blocked deletion if this department still owns any), but a DIFFERENT
+    // department's section that merely cross-lists to this now-deleted one
+    // survives untouched otherwise - left advertising a branch that no
+    // longer exists wherever that reference is read back (e.g. the section's
+    // display label, or an HOD's "already cross-listed" chip).
+    const staleSectionsSnap = await db.collection("colleges").doc(collegeId).collection("sections")
+      .where("secondaryDepartments", "array-contains", dept.name)
+      .get();
+    for (const s of staleSectionsSnap.docs) {
+      const secondaryDepartments = ((s.data() as { secondaryDepartments?: string[] }).secondaryDepartments ?? [])
+        .filter((n) => n !== dept.name);
+      batch.update(s.ref, { secondaryDepartments, updatedAt: deleteNow });
     }
 
     batch.delete(deptRef);
@@ -490,12 +525,14 @@ export async function PATCH(request: Request) {
       parentDepartmentId?: string | null;
       commonYearStart?: string;
       commonYearEnd?: string;
-      // Per-course override of assignedYears/secondaryDepartments - see
-      // Department.courseScopes. Principal/VP/Super Admin only: deliberately
-      // NOT added to the HOD-restricted allowlist below, same tier as
-      // assignedYears/hasSubDepartments.
+      // Per-course override of assignedYears - see Department.courseScopes.
+      // Principal/VP/Super Admin only: deliberately NOT added to the
+      // HOD-restricted allowlist below, same tier as assignedYears/
+      // hasSubDepartments. secondaryDepartments is NOT settable per course -
+      // it always follows the department's own flat field below, so it's
+      // never accepted here even if a client sends one.
       courseScope?:
-        | { catalogId: string; assignedYears: number[]; secondaryDepartments: string[] }
+        | { catalogId: string; assignedYears: number[] }
         | { catalogId: string; clear: true };
     };
 
@@ -553,11 +590,24 @@ export async function PATCH(request: Request) {
       }
     }
 
+    // Per-course override of assignedYears/secondaryDepartments - see
+    // Department.courseScopes. `courseScope` is popped off `updates` (rather
+    // than left as a literal field) and resolved into `courseScopes.<id>`
+    // dot-path keys on `courseScopePatch`, merged in at write time below -
+    // declared up front so both the flat secondaryDepartments cascade
+    // (immediately below) and the courseScope branch (further down) can add
+    // to it.
+    const { courseScope, ...updatesWithoutCourseScope } = updates;
+    updates = updatesWithoutCourseScope;
+    const courseScopePatch: Record<string, unknown> = {};
+
     if (updates.secondaryDepartments !== undefined) {
       const names = Array.from(new Set(updates.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
+      const currentSnap = await deptRef.get();
+      const currentData = currentSnap.data() as
+        | { name?: string; parentDepartmentId?: string; courseScopes?: Record<string, { assignedYears: number[]; secondaryDepartments: string[] }> }
+        | undefined;
       if (names.length > 0) {
-        const currentSnap = await deptRef.get();
-        const currentData = currentSnap.data() as { name?: string; parentDepartmentId?: string } | undefined;
         const currentName = updates.name?.trim() ?? currentData?.name ?? "";
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
         const byName = new Map(deptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }]));
@@ -565,17 +615,18 @@ export async function PATCH(request: Request) {
         if (secError) return NextResponse.json({ error: secError }, { status: 400 });
       }
       updates.secondaryDepartments = names;
+
+      // Cascade into every course this department already offers - Secondary
+      // Departments is no longer re-picked per course (see courses/new and
+      // the Edit Academic Structure dialog), so editing it here is the only
+      // place it changes, and it must reach already-created courses without
+      // requiring each one to be reopened. Each course's own assignedYears is
+      // untouched.
+      for (const catalogId of Object.keys(currentData?.courseScopes ?? {})) {
+        courseScopePatch[`courseScopes.${catalogId}.secondaryDepartments`] = names;
+      }
     }
 
-    // Per-course override of assignedYears/secondaryDepartments - see
-    // Department.courseScopes. Popped off `updates` (rather than left as a
-    // literal `courseScope` field) and resolved into a `courseScopes.<id>`
-    // dot-path key on `courseScopePatch`, merged in at write time below -
-    // touches only that one catalogId, sibling overrides and the flat fields
-    // are untouched.
-    const { courseScope, ...updatesWithoutCourseScope } = updates;
-    updates = updatesWithoutCourseScope;
-    const courseScopePatch: Record<string, unknown> = {};
     if (courseScope) {
       const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses")
         .where("departmentId", "==", deptId)
@@ -587,6 +638,10 @@ export async function PATCH(request: Request) {
       }
 
       if ("clear" in courseScope && courseScope.clear) {
+        // Same overlapping-path guard as below - dropping the whole entry
+        // conflicts with a sibling dot-path write the cascade above may have
+        // already queued for this exact catalogId.
+        delete courseScopePatch[`courseScopes.${courseScope.catalogId}.secondaryDepartments`];
         courseScopePatch[`courseScopes.${courseScope.catalogId}`] = FieldValue.delete();
       } else if ("assignedYears" in courseScope) {
         const durationYears = (courseSnap.docs[0].data() as { durationYears?: number }).durationYears ?? 0;
@@ -598,19 +653,27 @@ export async function PATCH(request: Request) {
             { status: 400 }
           );
         }
-        const yearsError = await validateAssignedYears(db, session.collegeId, years);
-        if (yearsError) return NextResponse.json({ error: yearsError }, { status: 400 });
+        // Opens whichever of these years the college hasn't already opened -
+        // Years Taught no longer requires pre-opening them one at a time via
+        // the old "+ Add Year" button before a longer course's later years
+        // become assignable.
+        await ensureAssignedYearsOpen(db, session.collegeId, years);
 
-        const names = Array.from(new Set(courseScope.secondaryDepartments.map((s) => s.trim()).filter(Boolean)));
-        if (names.length > 0) {
-          const currentSnap = await deptRef.get();
-          const currentName = updates.name?.trim() ?? (currentSnap.data() as { name?: string } | undefined)?.name ?? "";
-          const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
-          const byName = new Map(deptsSnap.docs.map((d) => [(d.data() as { name?: string }).name ?? "", d.data() as { parentDepartmentId?: string }]));
-          const secError = validateSecondaryDepartmentNames(names, currentName, byName);
-          if (secError) return NextResponse.json({ error: secError }, { status: 400 });
-        }
+        // Secondary Departments always follows this department's own flat
+        // field, never a per-course value - use the one just set earlier in
+        // this same request if the flat edit came in alongside this Years
+        // Taught edit, otherwise read what's already stored. Already
+        // validated whenever it was set, so it's trusted as-is here.
+        const names = updates.secondaryDepartments
+          ?? ((await deptRef.get()).data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments
+          ?? [];
 
+        // The flat-edit cascade above may have already queued a sibling dot-path
+        // write for this exact catalogId (`courseScopes.<id>.secondaryDepartments`) -
+        // this branch is about to replace the whole `courseScopes.<id>` object
+        // (which already carries the correct, up-to-date names), so drop it to
+        // avoid Firestore rejecting two updates on overlapping paths.
+        delete courseScopePatch[`courseScopes.${courseScope.catalogId}.secondaryDepartments`];
         courseScopePatch[`courseScopes.${courseScope.catalogId}`] = { assignedYears: years, secondaryDepartments: names };
       }
     }

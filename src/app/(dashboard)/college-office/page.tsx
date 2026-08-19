@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle, GraduationCap } from "lucide-react";
+import { CheckCircle, GraduationCap, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -68,6 +68,20 @@ export default function CollegeOfficeDashboard() {
               <div>
                 <p className="text-xs text-muted-foreground">Students</p>
                 <p className="text-sm font-semibold">Add, view or remove</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/college-office/faculty" className="block">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-violet-600 bg-violet-50">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Faculty</p>
+                <p className="text-sm font-semibold">Promotion &amp; salary</p>
               </div>
             </CardContent>
           </Card>

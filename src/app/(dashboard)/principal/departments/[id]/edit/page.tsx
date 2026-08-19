@@ -239,13 +239,15 @@ export default function EditDepartmentPage() {
 
             <YearsTaughtAndSecondaryFields
               showYears={false}
-              openYears={[]}
-              onAddYear={() => {}}
-              isAddingYear={false}
               assignedYears={[]}
               onToggleYear={() => {}}
               yearsHelperText=""
-              secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && !d.parentDepartmentId)}
+              // A sub-department can be a valid target too (e.g. feeding
+              // "ECE-VLSI" specifically, not just plain ECE) - excluded here
+              // are only this department itself and its OWN direct children,
+              // which are redundant targets (already reachable directly via
+              // Add Section's Department picker, not through cross-listing).
+              secondaryDepartmentOptions={allDepartments.filter((d) => d.id !== department?.id && d.parentDepartmentId !== department?.id)}
               secondaryDepartments={secondaryDepartments}
               onToggleSecondaryDepartment={toggleSecondaryDepartment}
             />

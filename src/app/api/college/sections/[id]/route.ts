@@ -8,7 +8,8 @@ import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/department
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { DepartmentCourseScope } from "@/types";
 
 // A parent department's HOD has full (not just view-only) access to their own
@@ -66,6 +67,7 @@ export async function PATCH(
       facultyInchargeName?: string;
       departmentId?: string;
       secondaryDepartment?: string | null;
+      regulation?: string | null;
     };
 
     const db = getAdminDb();
@@ -156,6 +158,37 @@ export async function PATCH(
       }
     }
 
+    // The batch currently occupying this year-slot's curriculum regulation -
+    // same validation as create (sections/route.ts POST): must be offered
+    // (per the course's catalog entry, narrowed to the section's own year)
+    // for the year this section actually ends up at. "" / null clears it.
+    if (body.regulation !== undefined) {
+      const regulation = body.regulation?.trim() || null;
+      if (regulation) {
+        if (!course) {
+          const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId ?? "").get();
+          if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+          course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
+        }
+        if (!course.catalogId) {
+          return NextResponse.json(
+            { error: "This course isn't linked to a Course Catalog entry, so it has no regulations to choose from." },
+            { status: 400 },
+          );
+        }
+        const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
+        const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulations?: string[]; regulationYears?: Record<string, number[]> }) : null;
+        const allowed = regulationsForYear(catalogItem, targetYear ?? sectionYear);
+        if (!allowed.includes(regulation)) {
+          return NextResponse.json(
+            { error: `"${regulation}" isn't offered for Year ${targetYear ?? sectionYear} of ${course.name}. Check Settings > Course Catalog.` },
+            { status: 400 },
+          );
+        }
+      }
+      updates.regulation = regulation;
+    }
+
     // Reassigning an existing section to a different (sub-)department - e.g.
     // a parent HOD handing a section over to a Sub-HOD to run day to day, or
     // pulling one back. Only within the caller's own department tree for an
@@ -220,7 +253,21 @@ export async function PATCH(
             .collection("departments").doc(ownerData.parentDepartmentId).get();
           available = (parentSnap.data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments ?? [];
         }
-        if (!available.includes(chosen)) {
+        // `chosen` may itself be a sub-department of one of the available
+        // branches (e.g. "ECE-VLSI" under "Electronics and Communication
+        // Engineering") - the branch being configured is enough, its own
+        // sub-departments don't need to be separately, individually
+        // configured too (see isNameOrChildAmong's doc-comment).
+        const chosenSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("departments").where("name", "==", chosen).limit(1).get();
+        const chosenParentId = chosenSnap.empty
+          ? undefined
+          : (chosenSnap.docs[0].data() as { parentDepartmentId?: string }).parentDepartmentId;
+        const chosenParentName = chosenParentId
+          ? (await db.collection("colleges").doc(session.collegeId).collection("departments").doc(chosenParentId).get())
+              .data()?.name as string | undefined
+          : undefined;
+        if (!isNameOrChildAmong(available, chosen, chosenParentName)) {
           return NextResponse.json(
             { error: `"${chosen}" is not one of this department's configured secondary departments` },
             { status: 400 }
@@ -280,17 +327,24 @@ export async function PATCH(
     const batch = new ChunkedBatch(db);
     batch.update(ref, updates);
 
-    // Students are keyed by (department, section name, year), not by this
-    // section's document id - so reassigning the section's department (or
-    // renaming it / moving it to a different year) would otherwise strand
-    // its already-enrolled students under the *old* identity: invisible on
-    // the new roster (department mismatch), yet still blocking re-import as
-    // "duplicate roll number" since that check isn't department-scoped.
-    // Carry them along whenever any part of that identity actually changes.
+    // Students are keyed by (department, section name, year, courseId), not
+    // by this section's document id - so reassigning the section's
+    // department (or renaming it / moving it to a different year or course)
+    // would otherwise strand its already-enrolled students under the *old*
+    // identity: invisible on the new roster (mismatch), yet still blocking
+    // re-import as "duplicate roll number" since that check isn't scoped that
+    // way either. Carry them along whenever any part of that identity
+    // actually changes - courseId included, since a department can run a
+    // same-named section under more than one course (StudentRecord.courseId's
+    // doc-comment) and moving THIS section to a different course must not
+    // sweep in (or leave behind) students who actually belong to a different,
+    // merely same-named sibling.
     const newDepartment = (updates.department as string | undefined) ?? sectionDept;
     const newName = (updates.name as string | undefined) ?? (oldSection.name ?? "");
     const newYear = (updates.year as number | undefined) ?? (oldSection.year ?? 0);
-    const identityChanged = newDepartment !== sectionDept || newName !== (oldSection.name ?? "") || newYear !== (oldSection.year ?? 0);
+    const newCourseId = (updates.courseId as string | undefined) ?? oldSection.courseId;
+    const identityChanged = newDepartment !== sectionDept || newName !== (oldSection.name ?? "")
+      || newYear !== (oldSection.year ?? 0) || newCourseId !== oldSection.courseId;
 
     if (identityChanged && sectionDept && oldSection.name) {
       const now = new Date();
@@ -301,18 +355,24 @@ export async function PATCH(
       // section identity. Match on secondaryDepartment too, and for a student
       // found only that way, follow the section's move via secondaryDepartment
       // (their real-branch pointer) rather than their own (unaffected)
-      // department.
+      // department. Both queries are also scoped by this section's own
+      // (old) courseId when it has one, so a same-named sibling section
+      // under a different course is never swept in by mistake.
+      const withOldCourseId = (q: FirebaseFirestore.Query) =>
+        oldSection.courseId ? q.where("courseId", "==", oldSection.courseId) : q;
       const [primarySnap, secondarySnap] = await Promise.all([
-        db.collection("colleges").doc(session.collegeId).collection("students")
-          .where("department", "==", sectionDept)
-          .where("section", "==", oldSection.name)
-          .where("year", "==", oldSection.year ?? 0)
-          .get(),
-        db.collection("colleges").doc(session.collegeId).collection("students")
-          .where("secondaryDepartment", "==", sectionDept)
-          .where("section", "==", oldSection.name)
-          .where("year", "==", oldSection.year ?? 0)
-          .get(),
+        withOldCourseId(
+          db.collection("colleges").doc(session.collegeId).collection("students")
+            .where("department", "==", sectionDept)
+            .where("section", "==", oldSection.name)
+            .where("year", "==", oldSection.year ?? 0)
+        ).get(),
+        withOldCourseId(
+          db.collection("colleges").doc(session.collegeId).collection("students")
+            .where("secondaryDepartment", "==", sectionDept)
+            .where("section", "==", oldSection.name)
+            .where("year", "==", oldSection.year ?? 0)
+        ).get(),
       ]);
       const primaryIds = new Set(primarySnap.docs.map((d) => d.id));
       const seen = new Set<string>();
@@ -321,8 +381,8 @@ export async function PATCH(
         seen.add(studentDoc.id);
         const isSecondaryMatch = !primaryIds.has(studentDoc.id);
         const studentUpdate = isSecondaryMatch
-          ? { secondaryDepartment: newDepartment, section: newName, year: newYear, updatedAt: now }
-          : { department: newDepartment, section: newName, year: newYear, updatedAt: now };
+          ? { secondaryDepartment: newDepartment, section: newName, year: newYear, courseId: newCourseId, updatedAt: now }
+          : { department: newDepartment, section: newName, year: newYear, courseId: newCourseId, updatedAt: now };
         batch.update(studentDoc.ref, studentUpdate);
         const historyDept = isSecondaryMatch
           ? ((studentDoc.data() as { department?: string }).department ?? "")
@@ -367,25 +427,35 @@ export async function DELETE(
       }
     }
 
+    // Students are keyed by (department, section name, year, courseId) - see
+    // StudentRecord.courseId's doc-comment - so a department can run a
+    // same-named section under more than one course (e.g. a B.Tech
+    // "PHYSICS-IT-A" and an independent M.Tech "PHYSICS-IT-A"). Without
+    // scoping by this section's own courseId, an empty M.Tech section would
+    // be blocked from deletion by students actually enrolled in the
+    // same-named B.Tech section (and vice versa) - mirrors the PATCH
+    // handler's withOldCourseId above.
+    const withCourseId = (q: FirebaseFirestore.Query) =>
+      data.courseId ? q.where("courseId", "==", data.courseId) : q;
     const [enrolledPrimarySnap, enrolledSecondarySnap, siblingSnap] = await Promise.all([
-      db.collection("colleges").doc(session.collegeId).collection("students")
-        .where("department", "==", data.department ?? "")
-        .where("section", "==", data.name ?? "")
-        .where("year", "==", data.year ?? 0)
-        .limit(1)
-        .get(),
+      withCourseId(
+        db.collection("colleges").doc(session.collegeId).collection("students")
+          .where("department", "==", data.department ?? "")
+          .where("section", "==", data.name ?? "")
+          .where("year", "==", data.year ?? 0)
+      ).limit(1).get(),
       // A shared-first-year student sitting in this section stays filed under
       // their common department (department preserved until promotion - see
       // students/[id] PATCH) with secondaryDepartment naming this section's
       // real branch instead - the primary-only check above misses them
       // entirely, which would let a section full of live students be deleted
       // outright. Catch them too.
-      db.collection("colleges").doc(session.collegeId).collection("students")
-        .where("secondaryDepartment", "==", data.department ?? "")
-        .where("section", "==", data.name ?? "")
-        .where("year", "==", data.year ?? 0)
-        .limit(1)
-        .get(),
+      withCourseId(
+        db.collection("colleges").doc(session.collegeId).collection("students")
+          .where("secondaryDepartment", "==", data.department ?? "")
+          .where("section", "==", data.name ?? "")
+          .where("year", "==", data.year ?? 0)
+      ).limit(1).get(),
       db.collection("colleges").doc(session.collegeId).collection("sections")
         .where("department", "==", data.department ?? "")
         .where("courseId", "==", data.courseId ?? "")

@@ -52,8 +52,25 @@ export async function POST(request: Request) {
 
     const batchRef = db.collection("colleges").doc(collegeId).collection("hiringBatches").doc(batchId);
     const batchSnap = await batchRef.get();
+    if (!batchSnap.exists) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     if (batchSnap.get("demoComplete") === true) {
       return NextResponse.json({ error: "Demo class is complete; feedback is closed." }, { status: 403 });
+    }
+
+    // The QR link is public by design (no student login), so this is the only
+    // check standing between "feedback for the candidate who actually demoed"
+    // and anyone who can guess/alter a candidateId in the URL.
+    const membershipSnap = await db
+      .collection("colleges").doc(collegeId)
+      .collection("candidateApplications")
+      .where("batchId", "==", batchId)
+      .where("candidateId", "==", candidateId)
+      .limit(1)
+      .get();
+    if (membershipSnap.empty) {
+      return NextResponse.json({ error: "Candidate is not part of this batch" }, { status: 400 });
     }
 
     await batchRef

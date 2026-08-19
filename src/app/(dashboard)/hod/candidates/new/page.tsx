@@ -51,16 +51,9 @@ export default function NewCandidatePage() {
   const [candidateNames, setCandidateNames] = useState<Map<string, string>>(new Map());
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>(prefilledVacancyId);
   const [vacancySearch, setVacancySearch] = useState("");
-  const [interviewMode, setInterviewMode] = useState<"OFFLINE" | "ONLINE">("OFFLINE");
   const [sameAddress, setSameAddress] = useState(false);
 
   const selectedVacancy = vacancies.find((v) => v.id === selectedVacancyId);
-  // An Online vacancy decided its interview mode at creation - every candidate
-  // attached to it follows automatically, no per-candidate choice (the manual
-  // toggle below stays exactly as-is for Offline/unset vacancies).
-  useEffect(() => {
-    if (selectedVacancy?.hiringMode === "ONLINE") setInterviewMode("ONLINE");
-  }, [selectedVacancy?.hiringMode]);
 
   // Resume upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -215,7 +208,10 @@ export default function NewCandidatePage() {
         const attachRes = await fetch("/api/college/candidate-applications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ candidateId: json.id, vacancyRequestId: selectedVacancyId, interviewMode }),
+          body: JSON.stringify({
+            candidateId: json.id,
+            vacancyRequestId: selectedVacancyId,
+          }),
         });
         if (!attachRes.ok) {
           const attachJson = await attachRes.json() as { error?: string };
@@ -534,39 +530,14 @@ export default function NewCandidatePage() {
                 </div>
               )}
 
-              {selectedVacancyId && selectedVacancy?.hiringMode === "ONLINE" && (
+              {selectedVacancyId && (
                 <div className="pt-2 flex items-center gap-2 text-sm text-primary">
-                  <Monitor className="h-4 w-4 shrink-0" />
-                  This is an Online hiring request — interview mode is Online for every candidate.
-                </div>
-              )}
-
-              {selectedVacancyId && selectedVacancy?.hiringMode !== "ONLINE" && (
-                <div className="space-y-2 pt-2">
-                  <Label>Interview Mode</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(["OFFLINE", "ONLINE"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setInterviewMode(mode)}
-                        className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all ${
-                          interviewMode === mode
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/40"
-                        }`}
-                      >
-                        {mode === "OFFLINE"
-                          ? <MapPin className="h-5 w-5 shrink-0" />
-                          : <Monitor className="h-5 w-5 shrink-0" />
-                        }
-                        <div>
-                          <p className="text-sm font-medium">{mode === "OFFLINE" ? "Offline" : "Online"}</p>
-                          <p className="text-xs opacity-70">{mode === "OFFLINE" ? "In-person demo class" : "Video call / meet"}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                  {selectedVacancy?.hiringMode === "ONLINE" ? (
+                    <Monitor className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <MapPin className="h-4 w-4 shrink-0" />
+                  )}
+                  Interview mode for this hiring request is {selectedVacancy?.hiringMode === "ONLINE" ? "Online" : "Offline"} for every candidate.
                 </div>
               )}
             </div>

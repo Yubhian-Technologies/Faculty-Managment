@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
-import type { Course, Department, Section, Subject, TeachingAssignment } from "@/types";
+import { regulationsForYear } from "@/lib/college/academicStructure";
+import type { Course, CourseCatalogItem, Department, Section, Subject, TeachingAssignment } from "@/types";
 
 type SectionRow = Section & { id: string };
 // `id` is the facultyMembers doc id — used for teachingAssignments.facultyId
@@ -34,12 +35,13 @@ type SectionForm = {
   name: string;
   year: string;
   batch: string;
+  regulation: string;
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
 
 const EMPTY_FORM: SectionForm = {
-  courseId: "", name: "", year: "", batch: "", facultyInchargeUid: "", facultyInchargeName: "",
+  courseId: "", name: "", year: "", batch: "", regulation: "", facultyInchargeUid: "", facultyInchargeName: "",
 };
 
 type ClassLeaderUser = { uid: string; name: string; email: string };
@@ -63,6 +65,7 @@ export default function EditSectionPage() {
   // a shared-first-year section (e.g. Basic Science → CSE) can be re-pointed.
   const [ownerDept, setOwnerDept] = useState("");
   const [branch, setBranch] = useState("");
+  const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
 
   // Class Leader (CR) login - bound to this section via Section.classLeaderUid.
   const [classLeaderUid, setClassLeaderUid] = useState<string | undefined>(undefined);
@@ -83,10 +86,16 @@ export default function EditSectionPage() {
   const [stagedFaculty, setStagedFaculty] = useState<Record<string, string>>({});
   const assignmentIdBySubject = useRef<Record<string, string>>({});
 
-  const loadSubjects = useCallback((courseId: string, year: string) => {
+  // Scoped to this section's own regulation (when set) so "Subjects & Faculty"
+  // below only offers the curriculum this section's own batch actually
+  // follows, instead of every regulation's subjects for the year mixed
+  // together - the /api/college/subjects GET filter is lenient (a subject
+  // with no regulation of its own still matches), so this stays safe for
+  // subjects created before regulation existed.
+  const loadSubjects = useCallback((courseId: string, year: string, regulation: string) => {
     if (!courseId || !year) { setSubjects([]); return; }
     setSubjectsLoading(true);
-    fetch(`/api/college/subjects?courseId=${courseId}&year=${year}`)
+    fetch(`/api/college/subjects?courseId=${courseId}&year=${year}${regulation ? `&regulation=${encodeURIComponent(regulation)}` : ""}`)
       .then((r) => r.json() as Promise<{ subjects?: SubjectRow[] }>)
       .then((d) => setSubjects(d.subjects ?? []))
       .catch(() => toast({ variant: "destructive", title: "Failed to load subjects" }))
@@ -110,6 +119,11 @@ export default function EditSectionPage() {
       .then((d) => setDepartments(d.departments ?? []))
       .catch(() => { /* non-critical - falls back to no branch picker */ });
 
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
+      .then((d) => setCatalogItems(d.items ?? []))
+      .catch(() => { /* non-critical - regulation picker just stays empty */ });
+
     fetch("/api/college/sections")
       .then((r) => r.json() as Promise<{ sections: SectionRow[] }>)
       .then((d) => {
@@ -129,10 +143,11 @@ export default function EditSectionPage() {
           name: s.name,
           year: String(s.year),
           batch: s.batch,
+          regulation: s.regulation ?? "",
           facultyInchargeUid: s.facultyInchargeUid ?? "",
           facultyInchargeName: s.facultyInchargeName ?? "",
         });
-        loadSubjects(s.courseId ?? "", String(s.year));
+        loadSubjects(s.courseId ?? "", String(s.year), s.regulation ?? "");
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load section" }))
       .finally(() => setLoading(false));
@@ -348,6 +363,15 @@ export default function EditSectionPage() {
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
 
+  // This course's own assigned regulations, narrowed to whichever are
+  // actually offered for this section's (fixed) year - same set the Dean's
+  // Add Subject page and Add Section form offer.
+  const regulationOptions = useMemo(() => {
+    if (!formCourse?.catalogId || !form.year) return [];
+    const catalogItem = catalogItems.find((c) => c.id === formCourse.catalogId);
+    return regulationsForYear(catalogItem, Number(form.year));
+  }, [formCourse, catalogItems, form.year]);
+
   // Collapse the several Course docs that represent one catalog programme into
   // a single dropdown choice - `courses` legitimately holds one row per related
   // department, so without this the Course dropdown lists "Bachelor of
@@ -363,14 +387,16 @@ export default function EditSectionPage() {
     // never resets it, only revalidates subjects against the (unchanged) year;
     // the server rejects a course whose own span or teaching-years no longer
     // fit that fixed year.
-    if (!group) { setF({ courseId: "" }); setSubjects([]); return; }
+    if (!group) { setF({ courseId: "", regulation: "" }); setSubjects([]); return; }
     // Prefer the course doc owned by this section's own department, so the
     // stored courseId doesn't drift to a feeder department's row.
     const ownerDeptId = departments.find((d) => d.name === ownerDept)?.id;
     const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === ownerDeptId);
     const newCourseId = own ?? group.courseIds[0];
-    setF({ courseId: newCourseId });
-    loadSubjects(newCourseId, form.year);
+    // A different course may not offer the previously-picked regulation for
+    // this (fixed) year - clear it and let the HOD re-pick.
+    setF({ courseId: newCourseId, regulation: "" });
+    loadSubjects(newCourseId, form.year, "");
   }
 
   // Branch mode: this section's owning department cross-lists to one or more
@@ -407,6 +433,7 @@ export default function EditSectionPage() {
           // created (see the read-only Year field below); the server also
           // rejects an HOD attempting to change it directly regardless.
           batch: form.batch,
+          regulation: form.regulation || null,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
           // Only sent for a shared-first-year department; re-points the section
@@ -471,9 +498,9 @@ export default function EditSectionPage() {
 
             {isBranchMode && (
               <div className="space-y-2">
-                <Label>Branch (feeds into) *</Label>
+                <Label>Secondary Department *</Label>
                 <Select value={branch} onValueChange={setBranch}>
-                  <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select secondary department" /></SelectTrigger>
                   <SelectContent>
                     {branchOptions.map((b) => (
                       <SelectItem key={b} value={b}>{b}</SelectItem>
@@ -481,7 +508,7 @@ export default function EditSectionPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Students in this section are promoted into this branch next year.
+                  Students in this section are promoted into this secondary department next year.
                 </p>
               </div>
             )}
@@ -507,14 +534,34 @@ export default function EditSectionPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Batch *</Label>
-              <Input
-                value={form.batch}
-                onChange={(e) => setF({ batch: e.target.value })}
-                placeholder="e.g. 2023-2027"
-              />
-              <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Batch *</Label>
+                <Input
+                  value={form.batch}
+                  onChange={(e) => setF({ batch: e.target.value })}
+                  placeholder="e.g. 2023-2027"
+                />
+                <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Regulation</Label>
+                <Select
+                  value={form.regulation}
+                  onValueChange={(v) => { setF({ regulation: v }); loadSubjects(form.courseId, form.year, v); }}
+                  disabled={!form.year || regulationOptions.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={regulationOptions.length ? "Select regulation" : "None assigned for this year"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Which curriculum the batch currently in this class follows. Update this when a new batch moves in.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-2">

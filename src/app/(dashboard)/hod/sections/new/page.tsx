@@ -13,8 +13,8 @@ import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
-import type { Course, Department } from "@/types";
+import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import type { Course, CourseCatalogItem, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
 // `userUid` is the faculty member's actual Firebase Auth uid (set once HOD
@@ -31,6 +31,7 @@ type SectionForm = {
   courseId: string;
   year: string;
   batch: string;
+  regulation: string;
   facultyInchargeUid: string;
   facultyInchargeName: string;
 };
@@ -48,9 +49,14 @@ export default function NewSectionPage() {
     courseId: prefilledCourseId,
     year: "",
     batch: "",
+    regulation: "",
     facultyInchargeUid: "",
     facultyInchargeName: "",
   });
+  // This course's own assigned regulations (Course Catalog > Regulations),
+  // narrowed to whichever are actually offered for the picked year - same
+  // set the Dean's Add Subject page offers. Empty until a year is picked.
+  const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [saving, setSaving] = useState(false);
   // Which of this HOD's own departments the section is being created under -
   // only shown/choosable when they head more than one (see useMyDepartments).
@@ -75,6 +81,13 @@ export default function NewSectionPage() {
   // name; `letter` is the section letter (A, B) so one branch can have several
   // sections. The stored section name is derived as `${branchCode}-${letter}`.
   const [branch, setBranch] = useState("");
+  // Once `branch` (a top-level department, e.g. "Electronics and
+  // Communication Engineering") is picked, its own sub-departments (e.g.
+  // "ECE-VLSI") become an optional further narrowing - for students admitted
+  // straight into that specialization rather than the plain branch. Reset
+  // whenever `branch` itself changes (see the Select below), since a
+  // different branch has a different set of sub-departments.
+  const [branchSubDept, setBranchSubDept] = useState("");
   const [letter, setLetter] = useState("");
 
   useEffect(() => {
@@ -91,6 +104,11 @@ export default function NewSectionPage() {
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
       .catch(() => { /* non-critical - falls back to the full course span */ });
+
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
+      .then((d) => setCatalogItems(d.items ?? []))
+      .catch(() => { /* non-critical - regulation picker just stays empty */ });
   }, []);
 
   const topDepartmentId = useMemo(
@@ -139,6 +157,20 @@ export default function NewSectionPage() {
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
 
+  // This course's own assigned regulations, narrowed to whichever are
+  // actually offered for the picked year (regulationYears) - same set the
+  // Dean's Add Subject page offers, so a section can only ever be tagged
+  // with a regulation its own course/year combination could actually use.
+  const regulationOptions = useMemo(() => {
+    if (!formCourse?.catalogId || !form.year) return [];
+    const catalogItem = catalogItems.find((c) => c.id === formCourse.catalogId);
+    return regulationsForYear(catalogItem, Number(form.year));
+  }, [formCourse, catalogItems, form.year]);
+
+  function selectYear(year: string) {
+    setF({ year, regulation: "" });
+  }
+
   // The department this section is being created under: the sub-department a
   // parent HOD explicitly targeted, otherwise the chosen top-level department
   // (topDepartment - their only department, unless they head several). Its
@@ -160,12 +192,12 @@ export default function NewSectionPage() {
   );
   function selectCourseGroup(groupKey: string) {
     const group = courseGroups.find((g) => g.key === groupKey);
-    if (!group) { setF({ courseId: "", year: "" }); return; }
+    if (!group) { setF({ courseId: "", year: "", regulation: "" }); return; }
     // Prefer the course doc owned by the department this section is actually
     // being created under, so the stored courseId lines up with it rather than
     // a feeder's - same preference the Sections list uses when jumping here.
     const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === (departmentId || activeDept?.id));
-    setF({ courseId: own ?? group.courseIds[0], year: "" });
+    setF({ courseId: own ?? group.courseIds[0], year: "", regulation: "" });
   }
 
   // Managed-branch mode: activeDept is a real branch (e.g. IT) reached through
@@ -279,14 +311,30 @@ export default function NewSectionPage() {
   const isBranchMode = branchOptions.length > 0;
   const branchCodeOf = (name: string) =>
     departments.find((d) => d.name === name)?.code?.trim() || name;
+  // The picked branch's own sub-departments (e.g. ECE -> ECE-VLSI) - offered
+  // as an optional further narrowing once a branch with any is picked, for
+  // students admitted straight into that specialization. Configuring the
+  // parent as a Secondary Department (Edit Department page) is enough; a
+  // sub-department never needs to be separately, individually configured
+  // there for this to work (see isConfiguredSecondaryDepartmentOrChild's own
+  // doc-comment - the section/student write paths accept it either way).
+  const branchDept = useMemo(() => departments.find((d) => d.name === branch) ?? null, [departments, branch]);
+  const branchSubDeptOptions = useMemo(
+    () => (branchDept ? departments.filter((d) => d.parentDepartmentId === branchDept.id) : []),
+    [departments, branchDept]
+  );
+  // What the section actually feeds and gets submitted as - the narrowed
+  // sub-department when one was picked, otherwise the plain branch.
+  const effectiveBranch = branchSubDept || branch;
   // Derived section name in legacy branch mode: primary department code + branch
-  // code + letter, e.g. Basic Science → CSE → "BS-CSE-A". The primary prefix
-  // makes the section self-describing (which shared department owns it and
-  // which branch it feeds) everywhere it appears - lists, rosters, promotion
-  // dropdowns.
+  // code + letter, e.g. Basic Science → CSE → "BS-CSE-A" (or, narrowed to a
+  // sub-department, Chemistry → ECE-VLSI → "CHEMISTRY-ECEVLSI-A"). The primary
+  // prefix makes the section self-describing (which shared department owns it
+  // and which branch it feeds) everywhere it appears - lists, rosters,
+  // promotion dropdowns.
   const ownerCode = activeDept?.code?.trim() || "";
   const derivedName = branch && letter
-    ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(branch)}-${letter.trim().toUpperCase()}`
+    ? `${ownerCode ? `${ownerCode}-` : ""}${branchCodeOf(effectiveBranch)}-${letter.trim().toUpperCase()}`
     : "";
   // Plain mode: this department's own code + letter, e.g. CSE's own dedicated
   // HOD creating a 2nd-year section gets "CSE-A" - no shared-structure prefix,
@@ -322,9 +370,10 @@ export default function NewSectionPage() {
           name: sectionName,
           year: Number(form.year),
           batch: form.batch,
+          regulation: form.regulation || undefined,
           facultyInchargeUid: form.facultyInchargeUid || null,
           facultyInchargeName: form.facultyInchargeName,
-          ...(isBranchMode && !isManagedBranchMode ? { secondaryDepartment: branch } : {}),
+          ...(isBranchMode && !isManagedBranchMode ? { secondaryDepartment: effectiveBranch } : {}),
           // Omitted only when this HOD has exactly one department and picked
           // no sub-department - the API then falls back to that one
           // department, as before. Otherwise always sent: a parent HOD's
@@ -435,7 +484,7 @@ export default function NewSectionPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Year *</Label>
-                    <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                    <Select value={form.year} onValueChange={selectYear} disabled={!formCourse}>
                       <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                       <SelectContent>
                         {formYearOptions.map((y) => (
@@ -453,9 +502,12 @@ export default function NewSectionPage() {
                     a section letter instead of typing a free-form name. */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Branch (feeds into) *</Label>
-                    <Select value={branch} onValueChange={setBranch}>
-                      <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                    <Label>Secondary Department *</Label>
+                    <Select
+                      value={branch}
+                      onValueChange={(v) => { setBranch(v); setBranchSubDept(""); }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select secondary department" /></SelectTrigger>
                       <SelectContent>
                         {branchOptions.map((b) => (
                           <SelectItem key={b} value={b}>{b} ({branchCodeOf(b)})</SelectItem>
@@ -463,7 +515,7 @@ export default function NewSectionPage() {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Students in this section are promoted into this branch next year.
+                      Students in this section are promoted into this secondary department next year.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -480,9 +532,36 @@ export default function NewSectionPage() {
                     </p>
                   </div>
                 </div>
+                {/* Only shown once a branch with its own sub-departments is
+                    picked (e.g. ECE -> ECE-VLSI) - optional, defaults to the
+                    plain branch. Configuring the branch itself as a Secondary
+                    Department is enough for its sub-departments to show up
+                    here; nothing extra needs to be configured per
+                    specialization. */}
+                {branchSubDeptOptions.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Specialization (optional)</Label>
+                    <Select
+                      value={branchSubDept || "none"}
+                      onValueChange={(v) => setBranchSubDept(v === "none" ? "" : v)}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select specialization" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{branch} itself</SelectItem>
+                        {branchSubDeptOptions.map((d) => (
+                          <SelectItem key={d.id} value={d.name}>{d.name} ({d.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Students admitted straight into a specific specialization under {branch} - leave as
+                      &quot;{branch} itself&quot; for a plain {branchCodeOf(branch)} section.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Year *</Label>
-                  <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                  <Select value={form.year} onValueChange={selectYear} disabled={!formCourse}>
                     <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                     <SelectContent>
                       {formYearOptions.map((y) => (
@@ -512,7 +591,7 @@ export default function NewSectionPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Year *</Label>
-                  <Select value={form.year} onValueChange={(v) => setF({ year: v })} disabled={!formCourse}>
+                  <Select value={form.year} onValueChange={selectYear} disabled={!formCourse}>
                     <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                     <SelectContent>
                       {formYearOptions.map((y) => (
@@ -524,14 +603,32 @@ export default function NewSectionPage() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>Batch *</Label>
-              <Input
-                value={form.batch}
-                onChange={(e) => setF({ batch: e.target.value })}
-                placeholder="e.g. 2023-2027"
-              />
-              <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Batch *</Label>
+                <Input
+                  value={form.batch}
+                  onChange={(e) => setF({ batch: e.target.value })}
+                  placeholder="e.g. 2023-2027"
+                />
+                <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Regulation</Label>
+                <Select
+                  value={form.regulation}
+                  onValueChange={(v) => setF({ regulation: v })}
+                  disabled={!form.year || regulationOptions.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={form.year ? (regulationOptions.length ? "Select regulation" : "None assigned for this year") : "Pick a year first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Which curriculum this batch follows for its whole run through this class.</p>
+              </div>
             </div>
 
             <div className="space-y-2">

@@ -10,7 +10,7 @@ import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDial
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
-import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWindow";
+import { SUNDAY_HOLIDAY_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import type { AttendanceSummary, AttendanceRecord, AttendanceStatus } from "@/types";
 import { ATTENDANCE_STATUS_LABELS } from "@/types";
 
@@ -45,6 +45,13 @@ interface SelfAttendancePageProps {
   description: string;
 }
 
+interface TodayStatus {
+  isSunday: boolean;
+  isHoliday: boolean;
+  holidayName: string | null;
+  isOnLeave: boolean;
+}
+
 // Shared self-attendance page (face-verified check-in/out + monthly record
 // list) - byte-identical logic to hod/attendance/page.tsx and
 // panel/attendance/page.tsx (neither of which has any role-specific
@@ -60,6 +67,7 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [faceRegistered, setFaceRegistered] = useState<boolean | null>(null);
+  const [todayStatus, setTodayStatus] = useState<TodayStatus | null>(null);
   const [dialogMode, setDialogMode] = useState<"check-in" | "check-out" | "register" | null>(null);
 
   const loadFaceRegistration = useCallback(async () => {
@@ -69,6 +77,16 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
       setFaceRegistered(!!json.registered);
     } catch {
       /* non-critical - Mark Attendance will show a clear error if the check fails */
+    }
+  }, []);
+
+  const loadTodayStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/college/attendance/today-status");
+      const json = await res.json() as { isSunday?: boolean; isHoliday?: boolean; holidayName?: string | null; isOnLeave?: boolean };
+      setTodayStatus({ isSunday: !!json.isSunday, isHoliday: !!json.isHoliday, holidayName: json.holidayName ?? null, isOnLeave: !!json.isOnLeave });
+    } catch {
+      /* non-critical - Check In will show a clear error server-side if this fails to load */
     }
   }, []);
 
@@ -95,6 +113,10 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
     void (async () => { await loadFaceRegistration(); })();
   }, [loadFaceRegistration]);
 
+  useEffect(() => {
+    void (async () => { await loadTodayStatus(); })();
+  }, [loadTodayStatus]);
+
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
   const todayRecord = isCurrentMonth
     ? records.find((rec) => toDate(rec.date)?.toDateString() === now.toDateString())
@@ -118,8 +140,14 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
       {isCurrentMonth && (
         <Card>
           <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-            {isSunday(now) ? (
+            {todayStatus?.isSunday ? (
               <p className="text-sm text-muted-foreground">{SUNDAY_HOLIDAY_MESSAGE}</p>
+            ) : todayStatus?.isHoliday ? (
+              <p className="text-sm text-muted-foreground">
+                Today is a holiday{todayStatus.holidayName ? ` — ${todayStatus.holidayName}` : ""}. No attendance required.
+              </p>
+            ) : todayStatus?.isOnLeave ? (
+              <p className="text-sm text-muted-foreground">You&apos;re on approved leave today — attendance cannot be marked.</p>
             ) : faceRegistered === false ? (
               <>
                 <p className="text-sm text-muted-foreground">
@@ -241,7 +269,7 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
                       <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(rec.status)}`}>
                         {ATTENDANCE_STATUS_LABELS[rec.status]}
                       </span>
-                      {rec.status === "PRESENT" && isLateCheckIn(rec.checkIn) && (
+                      {rec.status === "PRESENT" && isLateCheckIn(rec.checkIn, rec.permittedCheckInTime) && (
                         <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
                           Late
                         </span>

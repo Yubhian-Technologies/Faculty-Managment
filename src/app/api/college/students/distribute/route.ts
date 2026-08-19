@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { sectionFeedsTarget } from "@/lib/sections/sectionLabel";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { evenSplit } from "@/lib/students/evenSplit";
 import type { Section, StudentRecord } from "@/types";
@@ -67,7 +68,12 @@ export async function POST(request: Request) {
     const targetDeptName = secondaryDeptName || deptName;
 
     // Load the chosen sections, preserving the caller's order, and validate each
-    // belongs to this exact (target department, year).
+    // actually belongs to (deptName, targetDeptName, year) - either shape (see
+    // sectionFeedsTarget's doc-comment): owned directly by targetDeptName (a
+    // managed branch), or owned by deptName itself and cross-listed to
+    // targetDeptName (a legacy secondaryDepartments section, e.g.
+    // "MATHS-AIDS-A" owned by "Maths", cross-listed to "Artificial
+    // Intelligence and Data Science").
     const sectionSnaps = await Promise.all(
       body.sectionIds.map((id) => collegeRef.collection("sections").doc(id).get())
     );
@@ -76,7 +82,7 @@ export async function POST(request: Request) {
       const snap = sectionSnaps[i];
       if (!snap.exists) return NextResponse.json({ error: `Section ${body.sectionIds[i]} not found` }, { status: 400 });
       const s = { id: snap.id, ...(snap.data() as object) } as Section;
-      if (s.department !== targetDeptName || s.year !== year) {
+      if (!sectionFeedsTarget(s, deptName, secondaryDeptName) || s.year !== year) {
         return NextResponse.json(
           { error: `Section ${s.name} is not a ${targetDeptName} Year ${year} section` },
           { status: 400 }
@@ -85,19 +91,37 @@ export async function POST(request: Request) {
       sections.push(s);
     }
 
+    // A single Distribute action targets exactly one course - the sections
+    // chosen must all share it (they already share department+year above).
+    // Without this, sections from two different courses (e.g. a B.Tech
+    // "PHYSICS-IT-A" and an M.Tech section picked together by mistake) could
+    // both receive students from a mixed cohort, silently placing some into
+    // the wrong course's roster.
+    const targetCourseIds = new Set(sections.map((s) => s.courseId).filter(Boolean));
+    if (targetCourseIds.size > 1) {
+      return NextResponse.json(
+        { error: "Selected sections belong to more than one course - choose sections from a single course" },
+        { status: 400 }
+      );
+    }
+    const targetCourseId = sections[0]?.courseId;
+
     // An HOD/Sub-HOD may only distribute within a department they own or
     // manage, and - for a managed branch reached only via `managedDepartments`
     // (e.g. Basic Science grouping CIVIL for its shared first year) - only for
     // the years that grouping actually covers. CIVIL's own years (2-4) stay
     // exclusively CIVIL's own dedicated HOD's to distribute, even though Basic
-    // Science manages CIVIL for year 1. Checked against targetDeptName (the
-    // branch actually being sectioned into), same as the section validation
-    // and student write below. Mirrors the read-side check in `college/students`
-    // GET and `college/sections` GET. `catalogId` (from the sections being
-    // distributed into, all validated above to share this department+year, so
-    // any one of them names the right course) lets a manager running more than
-    // one course resolve ownership against the right one, not always its flat
-    // years.
+    // Science manages CIVIL for year 1. Checked against each selected
+    // section's own (actual, Firestore-stored) `department` - never
+    // targetDeptName directly, since a legacy cross-listed section's real
+    // owner is deptName (e.g. "Maths"), not the branch it merely cross-lists
+    // to; targetDeptName is only the true owner for the managed-branch shape.
+    // Mirrors the read-side check in `college/students` GET, `college/sections`
+    // GET, and students/[id] PATCH (which checks targetSection.department the
+    // same way). `catalogId` (from the sections being distributed into, all
+    // validated above to share this department+year, so any one of them names
+    // the right course) lets a manager running more than one course resolve
+    // ownership against the right one, not always its flat years.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const [deptsSnap, courseSnap] = await Promise.all([
@@ -106,7 +130,9 @@ export async function POST(request: Request) {
       ]);
       const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
       const catalogId = courseSnap?.exists ? (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
-      if (!canHodEditDepartmentYear(scope, allDepts, targetDeptName, year, catalogId)) {
+      const owningDepartments = Array.from(new Set(sections.map((s) => s.department).filter(Boolean)));
+      const allOwned = owningDepartments.every((d) => canHodEditDepartmentYear(scope, allDepts, d, year, catalogId));
+      if (!allOwned) {
         return NextResponse.json({ error: "That department/year is not yours or one you manage" }, { status: 403 });
       }
     }
@@ -125,6 +151,13 @@ export async function POST(request: Request) {
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
     if (secondaryDeptName) {
       cohort = cohort.filter((s) => (s.secondaryDepartment ?? "").trim() === secondaryDeptName);
+    }
+    // Only students who either declared no course yet, or already declared
+    // this exact one - a student who declared a DIFFERENT course must not be
+    // swept into these sections just because they're also unassigned in the
+    // same department+year (see targetCourseId above).
+    if (targetCourseId) {
+      cohort = cohort.filter((s) => !s.courseId || s.courseId === targetCourseId);
     }
 
     if (cohort.length === 0) {
@@ -152,10 +185,20 @@ export async function POST(request: Request) {
         // enrolled under), so writing department here would prematurely
         // transition them before promotion (students/promote or
         // advance-year), same fix as the per-student PATCH and
-        // distribute-cohort.
+        // distribute-cohort. courseId/course DO get set here though - the
+        // student is now genuinely sitting in `section`, so its own courseId
+        // is the only correct, unambiguous value from this point on (see
+        // StudentRecord.courseId's doc-comment).
         batch.update(ref, {
           section: section.name,
           year,
+          // One-time snapshot of the section's CURRENT regulation - the
+          // student's own copy, fixed for their whole academic run regardless
+          // of what this section's own `regulation` is later edited to for a
+          // different batch (see Section.regulation's doc-comment).
+          regulation: section.regulation ?? null,
+          courseId: section.courseId,
+          course: section.courseName ?? null,
           updatedAt: now,
         });
         const history = departmentHistoryEntry(db, session.collegeId, student.id, deptName, section.name, year, now);

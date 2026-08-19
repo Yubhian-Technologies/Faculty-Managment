@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadAcademicRegulations } from "@/lib/firestore/academicRegulations";
+import { validateRegulationYears } from "@/lib/college/academicStructure";
 
 // colleges/{collegeId}/courseCatalog - the Principal's master list of course
 // definitions (canonical name + short code + duration). Departments only *select*
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
       code?: string;
       durationYears?: number;
       regulations?: string[];
+      regulationYears?: Record<string, number[]>;
     };
 
     const name = body.name?.trim();
@@ -70,6 +72,9 @@ export async function POST(request: Request) {
         );
       }
     }
+    const regulationYearsErr = validateRegulationYears(body.regulationYears, regulations, durationYears);
+    if (regulationYearsErr) return NextResponse.json({ error: regulationYearsErr }, { status: 400 });
+
     const catalogCol = db.collection("colleges").doc(session.collegeId).collection("courseCatalog");
 
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
@@ -103,6 +108,7 @@ export async function POST(request: Request) {
         code,
         durationYears,
         regulations,
+        ...(body.regulationYears ? { regulationYears: body.regulationYears } : {}),
         isActive: true,
         createdBy: session.uid,
         createdByName: actorName,

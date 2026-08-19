@@ -27,7 +27,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
 import { DESIGNATION_LABELS, ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
-import type { HiringBatch, Candidate, CandidateApplication, CandidateBioData, InterviewMode, MeetingPlatform, FacultyMember, FMSUser } from "@/types";
+import type { HiringBatch, Candidate, CandidateApplication, CandidateBioData, MeetingPlatform, FacultyMember, FMSUser } from "@/types";
 import { useAuthStore } from "@/store/authStore";
 
 // Joined view for this batch's roster: person fields come from Candidate,
@@ -43,7 +43,6 @@ type BatchCandidateView = {
   phone: string;
   resumeUrl?: string;
   hasArrived: boolean;
-  interviewMode?: InterviewMode;
   bioData?: CandidateBioData;
   certificates?: Array<{ name: string; url: string }>;
   bioDataSubmitted?: boolean;
@@ -166,7 +165,6 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
           phone: person?.phone ?? "",
           resumeUrl: person?.resumeUrl,
           hasArrived: a.hasArrived,
-          interviewMode: a.interviewMode,
           bioData: person?.bioData,
           certificates: person?.certificates,
           bioDataSubmitted: person?.bioDataSubmitted,
@@ -425,9 +423,10 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     const date = formatDate(batch.interviewDate);
     const time = batch.interviewTime || "To be notified";
     const venue = batch.interviewVenue || "To be notified";
-    const mode = candidate.interviewMode === "ONLINE" ? "Online" : "Offline";
+    const mode = batch.hiringMode === "ONLINE" ? "Online" : "Offline";
     const meetLink = batch.meetingLink || "";
-    const platform = batch.meetingPlatform ? MEETING_PLATFORM_LABELS[batch.meetingPlatform] : "";
+    const meetPlatform = batch.meetingPlatform;
+    const platform = meetPlatform ? MEETING_PLATFORM_LABELS[meetPlatform] : "";
     // Coordinator contact - best-effort; omit whichever of phone/email is
     // missing, and skip the whole block if there's no coordinator at all
     // (online batches have none, so this naturally disappears for them).
@@ -465,8 +464,6 @@ ${docs}
 
 Please complete your bio-data form and upload your certificates before the interview:
 ${candidateFormUrl(candidate)}
-
-Please confirm your availability by replying to this email.
 
 Contact Person: ${batch.hodName}
 

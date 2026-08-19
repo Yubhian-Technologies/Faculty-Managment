@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { CheckCircle2, Clock, ShieldOff, Video } from "lucide-react";
 import { MEETING_PLATFORM_LABELS } from "@/types";
-import type { HiringBatch, Candidate, CandidateApplication } from "@/types";
+import type { HiringBatch, Candidate } from "@/types";
 
 type PersonView = { name: string; email: string };
 
@@ -101,9 +101,6 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       fetch(`/api/college/hiring-batches/${batchId}`)
         .then((r) => r.json() as Promise<{ batch: HiringBatch }>)
         .then((d) => d.batch),
-      fetch(`/api/college/candidate-applications?batchId=${batchId}`)
-        .then((r) => r.json() as Promise<{ applications: CandidateApplication[] }>)
-        .then((d) => d.applications ?? []),
       fetch(`/api/college/candidates`)
         .then((r) => r.json() as Promise<{ candidates: Candidate[] }>)
         .then((d) => d.candidates ?? []),
@@ -113,13 +110,12 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
         // HOD (and other roles who can also be panelists) need this client-side filter too.
         .then((d) => (d.feedback ?? []).find((f) => f.panelUid === myUid) ?? null),
     ])
-      .then(([b, applications, candidates, mine]) => {
+      .then(([b, candidates, mine]) => {
         setBatch(b);
         setMyFeedback(mine);
-        const application = applications.find((a) => a.candidateId === candidateId);
         const candidate = candidates.find((c) => c.id === candidateId);
-        if (application || candidate) {
-          setPerson({ name: candidate?.name ?? "Unknown", email: candidate?.email ?? "" });
+        if (candidate) {
+          setPerson({ name: candidate.name ?? "Unknown", email: candidate.email ?? "" });
         }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load evaluation" }))
@@ -203,24 +199,30 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
         description={`${batch.position} - ${batch.department}`}
       />
 
-      {batch.hiringMode === "ONLINE" && batch.meetingLink && (
-        <Card className="border-blue-200 bg-blue-50/40">
-          <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 text-sm text-blue-800">
-              <Video className="h-4 w-4 shrink-0" />
-              {batch.meetingPlatform ? MEETING_PLATFORM_LABELS[batch.meetingPlatform] : "Meeting"} — join to interview {person?.name ?? "the candidate"} before scoring.
-            </div>
-            <a
-              href={batch.meetingLink}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm font-medium text-primary underline break-all"
-            >
-              {batch.meetingLink}
-            </a>
-          </CardContent>
-        </Card>
-      )}
+      {(() => {
+        const isOnline = batch.hiringMode === "ONLINE";
+        const meetingLink = batch.meetingLink;
+        const meetingPlatform = batch.meetingPlatform;
+        if (!isOnline || !meetingLink) return null;
+        return (
+          <Card className="border-blue-200 bg-blue-50/40">
+            <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 text-sm text-blue-800">
+                <Video className="h-4 w-4 shrink-0" />
+                {meetingPlatform ? MEETING_PLATFORM_LABELS[meetingPlatform] : "Meeting"} — join to interview {person?.name ?? "the candidate"} before scoring.
+              </div>
+              <a
+                href={meetingLink}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-medium text-primary underline break-all"
+              >
+                {meetingLink}
+              </a>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {!canScore ? (
         <Card className="border-dashed">

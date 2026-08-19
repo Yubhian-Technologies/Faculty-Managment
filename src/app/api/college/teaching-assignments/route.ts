@@ -6,8 +6,9 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
-import { getActiveSubstitutionsForDate } from "@/lib/leave/periodCoverage";
-import { todayISODate } from "@/lib/leave/dayCounter";
+import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
+import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { currentTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
@@ -24,6 +25,13 @@ export async function GET(request: Request) {
     const deptView = searchParams.get("dept") === "true";
     const requestedFacultyId = searchParams.get("facultyId");
     const sectionId = searchParams.get("sectionId");
+    // Optional - the Teaching Assignments and Timetable editor pages' own
+    // semester picker (see TeachingAssignment.timetableSemester) narrows the
+    // section-scoped view down to one semester's assignments; omitted keeps
+    // the previous all-assignments-for-this-section behavior unchanged for
+    // any caller that hasn't been updated to offer a picker.
+    const semesterParam = searchParams.get("semester");
+    const requestedSemester = semesterParam != null ? Number(semesterParam) : null;
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -69,15 +77,32 @@ export async function GET(request: Request) {
         .collection("timetableSlots")
         .where("facultyId", "==", facultyId)
         .get();
-      const ownSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }));
+      const rawOwnSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as TimetableSlot & { id: string }));
+      // A faculty's own slots can span several different courses/years, each
+      // with its own independent semester calendar (or none) - resolved once
+      // per distinct (courseId, year) pair here (small set for one person)
+      // rather than per slot, then used to drop a PRIOR semester's own slots
+      // from "my teaching load" the same way every other timetable read
+      // does. Keyed by the pair itself (not a joined/re-split string) since
+      // courseId is an opaque Firestore doc id that may itself contain "_".
+      const distinctCourseYears = new Map<string, { courseId: string; year: number }>();
+      for (const s of rawOwnSlots) distinctCourseYears.set(`${s.courseId} ${s.year}`, { courseId: s.courseId, year: s.year });
+      const semesterByCourseYear = new Map<string, number | null>();
+      for (const [key, { courseId, year }] of distinctCourseYears) {
+        semesterByCourseYear.set(key, await resolveSectionCurrentSemester(db, session.collegeId, courseId, year));
+      }
+      const ownSlots = rawOwnSlots.filter((s) =>
+        matchesCurrentSemester(s.semester, semesterByCourseYear.get(`${s.courseId} ${s.year}`) ?? null)
+      );
 
-      // Today's approved-leave substitutions - both directions: mark this
-      // faculty's own slots that are being covered by someone else today,
-      // and add synthetic entries for periods THEY are covering for someone
-      // else today (their own facultyId won't otherwise appear on that
-      // slot). See lib/leave/periodCoverage.ts and the same overlay in
-      // GET college/timetable-slots / college/class-leader/timetable.
-      const substitutions = await getActiveSubstitutionsForDate(db, session.collegeId, todayISODate());
+      // This week's approved-leave substitutions - both directions: mark this
+      // faculty's own slots that are being covered by someone else, and add
+      // synthetic entries for periods THEY are covering for someone else
+      // (their own facultyId won't otherwise appear on that slot). Covers
+      // every day of the currently-displayed week, not just today - see
+      // currentWeekDateKeys. See lib/leave/periodCoverage.ts and the same
+      // overlay in GET college/timetable-slots / college/class-leader/timetable.
+      const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys());
       const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
       timetableSlots = ownSlots.map((s) => {
         const sub = substitutionBySlotId.get(s.id);
@@ -115,7 +140,7 @@ export async function GET(request: Request) {
       childAssignmentQuery ? childAssignmentQuery.get() : Promise.resolve(null),
     ]);
 
-    const assignments: (TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" })[] = assignmentsSnap.docs
+    let assignments: (TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" })[] = assignmentsSnap.docs
       .map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" }));
     if (childAssignmentsSnap) {
       // "primary", not "secondary": a parent HOD owns their sub-departments and
@@ -123,6 +148,9 @@ export async function GET(request: Request) {
       for (const d of childAssignmentsSnap.docs) {
         assignments.push({ id: d.id, ...d.data(), accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" });
       }
+    }
+    if (requestedSemester != null) {
+      assignments = assignments.filter((a) => matchesCurrentSemester(a.timetableSemester, requestedSemester));
     }
     assignments.sort((a, b) => {
       const ta =
@@ -168,6 +196,11 @@ export async function POST(request: Request) {
       hoursPerWeek?: number;
       totalHoursAllotted?: number;
       slots?: { day: string; periodNumber: number; classroom?: string }[];
+      // Course/section-scoped only - which of the course-year's configured
+      // semesters (see lib/college/semester.ts) this assignment and its
+      // slots are for. Omitted when the course-year has none configured, or
+      // to fall back to whichever semester today's date resolves to.
+      timetableSemester?: number;
       isPast?: boolean;
       assignmentAcademicYear?: string;
       assignmentSemester?: string;
@@ -219,9 +252,28 @@ export async function POST(request: Request) {
         }
       }
 
-      // Conflict check: this faculty already teaching this exact section+subject?
-      // Only applies to current assignments - past ones are historical records and
-      // may legitimately repeat the same section+subject across different years.
+      // Which of the course-year's configured semesters (if any) this
+      // assignment and its slots belong to - resolved/validated once here,
+      // then stamped onto everything this request writes below, so a
+      // Semester 2 booking can never silently land under the wrong semester.
+      const semesterResult = await resolveRequestedSemester(db, session.collegeId, courseId, section.year, body.timetableSemester ?? null);
+      if (!semesterResult.ok) {
+        return NextResponse.json({ error: semesterResult.error }, { status: 400 });
+      }
+      const timetableSemester = semesterResult.semester;
+      // This session - a Section is a fixed year-slot a new cohort occupies
+      // every academic year (see Section.batch's own doc-comment), so a slot
+      // booked here has to be tagged and conflict-checked against the SAME
+      // session's own slots, never a past cohort's - see
+      // lib/college/academicSession.ts's own doc-comment.
+      const currentAcademicYear = currentTimetableAcademicYear();
+
+      // Conflict check: this faculty already teaching this exact section+subject
+      // IN THIS SAME SEMESTER? Only applies to current assignments - past ones
+      // are historical records and may legitimately repeat the same
+      // section+subject across different years. A different semester's own
+      // assignment for the same section+subject isn't a conflict - each
+      // semester is its own independent timetable (see matchesCurrentSemester).
       if (!body.isPast) {
         // Firestore's "!=" excludes docs missing the field entirely, which every
         // pre-existing current assignment does - so the isPast!==true filter has
@@ -231,7 +283,10 @@ export async function POST(request: Request) {
           .where("sectionId", "==", sectionId)
           .where("subjectId", "==", subjectId)
           .get();
-        if (existing.docs.some((d) => !(d.data() as { isPast?: boolean }).isPast)) {
+        if (existing.docs.some((d) => {
+          const data = d.data() as { isPast?: boolean; timetableSemester?: number | null };
+          return !data.isPast && matchesCurrentSemester(data.timetableSemester, timetableSemester);
+        })) {
           return NextResponse.json({ error: "This faculty is already assigned to this subject for this section" }, { status: 409 });
         }
       }
@@ -260,6 +315,7 @@ export async function POST(request: Request) {
         updatedAt: now,
         assignmentAcademicYear: body.assignmentAcademicYear ?? "",
         assignmentSemester: body.assignmentSemester ?? "",
+        ...(timetableSemester != null ? { timetableSemester } : {}),
         ...(body.isPast ? {
           isPast: true,
           ...(body.passPercentage != null ? { passPercentage: Number(body.passPercentage) } : {}),
@@ -272,28 +328,42 @@ export async function POST(request: Request) {
       const createdSlots: string[] = [];
       if (!body.isPast && body.slots?.length) {
         for (const slot of body.slots) {
-          const conflict = await collegeRef.collection("timetableSlots")
+          // Same-semester only - a different semester's own slot in this
+          // exact day/period isn't a real clash, it's a separate timetable
+          // (see matchesCurrentSemester). Fetched un-filtered by semester
+          // (day+period narrows this to at most a couple of docs already)
+          // and matched in application code for the same null-tolerant
+          // semantics used everywhere else this concept appears.
+          const conflictSnap = await collegeRef.collection("timetableSlots")
             .where("sectionId", "==", sectionId)
             .where("day", "==", slot.day)
             .where("periodNumber", "==", slot.periodNumber)
-            .limit(1)
             .get();
-          if (!conflict.empty) {
+          const conflict = conflictSnap.docs.find((d) => {
+            const data = d.data() as { semester?: number | null; academicYear?: string };
+            return matchesCurrentSemester(data.semester, timetableSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear);
+          });
+          if (conflict) {
             return NextResponse.json({
               error: `Conflict: Section ${section.name} already has a subject scheduled on ${slot.day} period ${slot.periodNumber}`,
               assignmentId: ref.id,
             }, { status: 409 });
           }
 
-          // A faculty member can't teach two classes at once - block regardless of section/year/course.
-          const facultyConflict = await collegeRef.collection("timetableSlots")
+          // A faculty member can't teach two classes at once - block regardless
+          // of section/year/course, but only within the same semester (a
+          // different semester never happens at the same real-world time).
+          const facultyConflictSnap = await collegeRef.collection("timetableSlots")
             .where("facultyId", "==", facultyId)
             .where("day", "==", slot.day)
             .where("periodNumber", "==", slot.periodNumber)
-            .limit(1)
             .get();
-          if (!facultyConflict.empty) {
-            const other = facultyConflict.docs[0].data() as { subjectName?: string };
+          const facultyConflict = facultyConflictSnap.docs.find((d) => {
+            const data = d.data() as { semester?: number | null; academicYear?: string };
+            return matchesCurrentSemester(data.semester, timetableSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear);
+          });
+          if (facultyConflict) {
+            const other = facultyConflict.data() as { subjectName?: string };
             return NextResponse.json({
               error: `Conflict: ${facultyName || "this faculty"} already teaches ${other.subjectName ?? "another class"} on ${slot.day} period ${slot.periodNumber} in a different section`,
               assignmentId: ref.id,
@@ -315,6 +385,8 @@ export async function POST(request: Request) {
             day: slot.day,
             periodNumber: slot.periodNumber,
             classroom: slot.classroom ?? null,
+            ...(timetableSemester != null ? { semester: timetableSemester } : {}),
+            academicYear: currentAcademicYear,
             createdAt: now,
             updatedAt: now,
           });

@@ -183,13 +183,14 @@ export default function NewDepartmentPage() {
 
             <YearsTaughtAndSecondaryFields
               showYears={false}
-              openYears={[]}
-              onAddYear={() => {}}
-              isAddingYear={false}
               assignedYears={[]}
               onToggleYear={() => {}}
               yearsHelperText=""
-              secondaryDepartmentOptions={departments.filter((d) => d.name !== nameValue && !d.parentDepartmentId)}
+              // A sub-department can be a valid target too (e.g. feeding
+              // "ECE-VLSI" specifically, not just plain ECE) - this new
+              // department has no children of its own yet, so nothing to
+              // additionally exclude beyond its own (in-progress) name.
+              secondaryDepartmentOptions={departments.filter((d) => d.name !== nameValue)}
               secondaryDepartments={secondaryDepartments}
               onToggleSecondaryDepartment={toggleSecondaryDepartment}
             />

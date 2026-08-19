@@ -89,6 +89,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (req.uid !== session.uid) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
+      if (req.isLateAttendancePenalty) {
+        return NextResponse.json({ error: "This is an automatic attendance-penalty deduction and cannot be cancelled" }, { status: 400 });
+      }
       const wasApproved = req.status === "APPROVED";
       if (
         req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL" &&

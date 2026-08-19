@@ -8,7 +8,8 @@ import { fillMissingDays } from "@/lib/attendance/fillMissingDays";
 import { resolveFaceRegisteredAt } from "@/lib/attendance/registration";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
-import type { AttendanceRecord, AttendanceSummary } from "@/types";
+import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
+import type { AttendanceRecord, AttendanceSummary, UserRole } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -118,6 +119,13 @@ export async function GET(request: Request) {
     await closeMissedCheckouts(db, records);
 
     const registeredAt = await resolveFaceRegisteredAt(db, session.collegeId, facultyId, facultyRole);
+    // Working Day overrides (see college-office/holidays/page.tsx) naming
+    // this person's own role - a Sunday they were required to work on
+    // synthesizes as Absent (not an excused Holiday) if they never checked
+    // in, same per-role override live check-in already enforces.
+    const workingDayDates = new Set(
+      (await getWorkingDayWeightsForRole(db, session.collegeId, monthStart, monthEnd, facultyRole as UserRole)).keys()
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to omit ref/resolvedDate from the real records
     const realRecords = records.map(({ ref: _ref, resolvedDate: _resolvedDate, ...rec }) => rec);
@@ -126,7 +134,7 @@ export async function GET(request: Request) {
       facultyId,
       facultyName,
       department,
-    });
+    }, new Date(), workingDayDates);
 
     return NextResponse.json({
       personName,

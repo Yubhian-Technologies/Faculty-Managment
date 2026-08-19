@@ -6,8 +6,9 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
 import { deriveHodScope } from "@/lib/departments/hodScope";
+import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { Department, DepartmentCourseScope } from "@/types";
 
 export async function GET(request: Request) {
@@ -32,13 +33,20 @@ export async function GET(request: Request) {
     // sections too - they own the whole department tree, same as the
     // sub-HOD who runs that sub-department day to day (see
     // assertHodOwnsSection in sections/[id]/route.ts, which mirrors this).
-    // The one case that stays genuinely "secondary" (view-only) is a section
-    // explicitly cross-listed to this department via `secondaryDepartments`
-    // (inherited from the owning Department at creation) - a different,
-    // unrelated top-level department's section, not part of this HOD's own
-    // tree. Same shape as the students route.
+    //
+    // An HOD's Sections page deliberately does NOT also pull in sections
+    // cross-listed to them via `secondaryDepartments` (a different, unrelated
+    // top-level department's section feeding this one - e.g. Physics' own
+    // year-1 sections feeding Information Technology) even read-only. That
+    // grant used to exist here (mirroring the still-present one in the
+    // students route) but conflated "years this department actually teaches"
+    // (its own assignedYears/courseScopes) with "years some other department
+    // has decided to feed it" - an HOD only ever sees sections for years
+    // their own department is actually scoped to. This is scoped to Sections
+    // specifically; the separate "Incoming Students" feature (hod/students/
+    // incoming, keyed off Student.secondaryDepartment) and Teaching
+    // Assignments' own cross-listed view are untouched.
     let childDeptQuery: FirebaseFirestore.Query | null = null;
-    let secondaryDeptQuery: FirebaseFirestore.Query | null = null;
     // A branch can be BOTH a standalone department with its own dedicated HOD
     // (its own assignedYears, e.g. CIVIL's [2,3,4]) AND grouped under a
     // sub-department for the shared first year (e.g. BS-English managing
@@ -82,12 +90,6 @@ export async function GET(request: Request) {
       hodScope = scope;
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
-        // array-contains-any (not array-contains) since this HOD may own more
-        // than one department now - Firestore caps this variant at 10 values,
-        // tighter than the 30-value `in` cap used elsewhere in this route.
-        secondaryDeptQuery = withCommonFilters(
-          sectionsColl.where("secondaryDepartments", "array-contains-any", scope.ownDepartmentNames.slice(0, 10))
-        );
       }
       // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD) are
       // both fully-owned - one `in` query covers both, tagged primary below.
@@ -115,26 +117,36 @@ export async function GET(request: Request) {
 
     primaryQuery = withCommonFilters(primaryQuery);
 
-    const [primarySnap, childDeptSnap, secondaryDeptSnap] = await Promise.all([
+    const [primarySnap, childDeptSnap] = await Promise.all([
       primaryQuery.get(),
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
-      secondaryDeptQuery ? secondaryDeptQuery.get() : Promise.resolve(null),
     ]);
 
     const seenIds = new Set<string>();
     const sections: { id: string; accessLevel: "primary" | "secondary"; [key: string]: unknown }[] = [];
     for (const d of primarySnap.docs) {
       const data = d.data();
-      // Own-department match: only actually "mine" if this year isn't claimed
-      // by whoever manages this branch elsewhere (e.g. a shared first year
-      // routed through a common department's sub-department instead).
+      // Own-department match. When this year is claimed by whoever manages the
+      // branch elsewhere (a shared first year routed through a common
+      // department's sub-department), the section still BELONGS to this
+      // department - it just isn't this HOD's to change - so it comes back
+      // read-only rather than being hidden.
+      //
+      // Hiding it was the old behaviour and left a department's own roster
+      // looking incomplete: CSE's HOD saw their 2nd/3rd/4th year sections but
+      // not the 1st year ones Basic Science runs for them, with nothing to
+      // indicate the year existed at all. Write access is unaffected - it is
+      // decided independently by assertHodOwnsSection (sections/[id]), which
+      // applies this same year-aware owner check on PATCH and DELETE, so a
+      // read-only row here cannot be edited even by calling the API directly.
+      let accessLevel: "primary" | "secondary" = "primary";
       if (hodScope && hodDepartments.length > 0) {
         const catalogId = catalogIdByCourseId.get(data.courseId as string);
         const owner = resolveBranchYearOwner(hodDepartments, data.department as string, data.year as number, catalogId);
-        if (!hodScope.ownDepartmentNames.includes(owner)) continue;
+        if (!hodScope.ownDepartmentNames.includes(owner)) accessLevel = "secondary";
       }
       seenIds.add(d.id);
-      sections.push({ id: d.id, ...data, accessLevel: "primary" });
+      sections.push({ id: d.id, ...data, accessLevel });
     }
     if (childDeptSnap) {
       for (const d of childDeptSnap.docs) {
@@ -154,13 +166,6 @@ export async function GET(request: Request) {
         sections.push({ id: d.id, ...data, accessLevel: "primary" });
       }
     }
-    if (secondaryDeptSnap) {
-      for (const d of secondaryDeptSnap.docs) {
-        if (seenIds.has(d.id)) continue;
-        seenIds.add(d.id);
-        sections.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
-      }
-    }
     sections.sort((a, b) => {
       const ya = (a.year as number | undefined) ?? 0;
       const yb = (b.year as number | undefined) ?? 0;
@@ -177,7 +182,10 @@ export async function GET(request: Request) {
     // when they're cross-listed to different branches - e.g. two "A"s under
     // Basic Science, one feeding CSE and one ECE - and without this, both
     // would be double-counted into a single merged total instead of their
-    // own real counts.
+    // own real counts. Also includes `courseId` - a department can run a
+    // same-named section under more than one course (see StudentRecord.
+    // courseId's doc-comment), and without it a student in one gets
+    // double-counted into the other's total too.
     //
     // A shared-first-year student (department = the common department or one
     // of its sub-departments, secondaryDepartment = their real branch) stays
@@ -214,8 +222,8 @@ export async function GET(request: Request) {
         for (const d of snap.docs) {
           if (countedIds.has(d.id)) continue;
           countedIds.add(d.id);
-          const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string };
-          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}`;
+          const s = d.data() as { department?: string; section?: string; year?: number; secondaryDepartment?: string; courseId?: string };
+          const key = `${s.department ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${(s.secondaryDepartment ?? "").toLowerCase()}|${s.courseId ?? ""}`;
           countMap.set(key, (countMap.get(key) ?? 0) + 1);
         }
       }
@@ -223,12 +231,12 @@ export async function GET(request: Request) {
         for (const d of snap.docs) {
           if (countedIds.has(d.id)) continue;
           countedIds.add(d.id);
-          const s = d.data() as { secondaryDepartment?: string; section?: string; year?: number };
+          const s = d.data() as { secondaryDepartment?: string; section?: string; year?: number; courseId?: string };
           // The section a shared-first-year student actually sits in is their
           // real branch's own - never itself cross-listed (see hod/sections/
           // new's managed-branch mode) - so the disambiguator stays "", same
           // as such a section's own (always-empty) secondaryDepartments.
-          const key = `${s.secondaryDepartment ?? ""}|${s.section ?? ""}|${s.year ?? 0}|`;
+          const key = `${s.secondaryDepartment ?? ""}|${s.section ?? ""}|${s.year ?? 0}|${""}|${s.courseId ?? ""}`;
           countMap.set(key, (countMap.get(key) ?? 0) + 1);
         }
       }
@@ -236,7 +244,7 @@ export async function GET(request: Request) {
       for (const sec of sections) {
         const secondaryDepts = sec.secondaryDepartments as string[] | undefined;
         const secondary = secondaryDepts?.length === 1 ? secondaryDepts[0].toLowerCase() : "";
-        const key = `${sec.department as string}|${sec.name as string}|${sec.year as number}|${secondary}`;
+        const key = `${sec.department as string}|${sec.name as string}|${sec.year as number}|${secondary}|${(sec.courseId as string | undefined) ?? ""}`;
         sec.studentCount = countMap.get(key) ?? 0;
       }
     }
@@ -267,6 +275,7 @@ export async function POST(request: Request) {
       facultyInchargeName?: string;
       departmentId?: string;
       secondaryDepartment?: string;
+      regulation?: string;
     };
 
     if (!body.courseId || !body.name?.trim() || !body.year || !body.batch?.trim()) {
@@ -281,6 +290,30 @@ export async function POST(request: Request) {
     const course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
     if (Number(body.year) < 1 || Number(body.year) > course.durationYears) {
       return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
+    }
+
+    // The batch currently occupying this year-slot's curriculum regulation -
+    // same validation Subject.regulation uses (against this course's own
+    // catalog entry, narrowed to this year), but optional: a course with no
+    // regulations assigned yet still lets a section be created (backward
+    // compatible), same leniency as everywhere else this pattern shows up.
+    const regulation = body.regulation?.trim() || null;
+    if (regulation) {
+      if (!course.catalogId) {
+        return NextResponse.json(
+          { error: "This course isn't linked to a Course Catalog entry, so it has no regulations to choose from." },
+          { status: 400 },
+        );
+      }
+      const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
+      const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulations?: string[]; regulationYears?: Record<string, number[]> }) : null;
+      const allowed = regulationsForYear(catalogItem, Number(body.year));
+      if (!allowed.includes(regulation)) {
+        return NextResponse.json(
+          { error: `"${regulation}" isn't offered for Year ${body.year} of ${course.name}. Check Settings > Course Catalog.` },
+          { status: 400 },
+        );
+      }
     }
 
     // Reject years the college hasn't opened via Academic Years. Colleges that have
@@ -427,7 +460,16 @@ export async function POST(request: Request) {
         const chosen = body.secondaryDepartment?.trim()
           || (availableSecondaryDepts.length === 1 ? availableSecondaryDepts[0] : "");
         if (chosen) {
-          if (!availableSecondaryDepts.includes(chosen)) {
+          // `chosen` may itself be a sub-department of one of the available
+          // branches (e.g. "ECE-VLSI" under "Electronics and Communication
+          // Engineering") - the branch being configured is enough, its own
+          // sub-departments don't need to be separately, individually
+          // configured too (see isNameOrChildAmong's doc-comment).
+          const chosenDoc = allDepts.find((d) => d.name === chosen);
+          const chosenParentName = chosenDoc?.parentDepartmentId
+            ? allDepts.find((d) => d.id === chosenDoc.parentDepartmentId)?.name
+            : undefined;
+          if (!isNameOrChildAmong(availableSecondaryDepts, chosen, chosenParentName)) {
             return NextResponse.json(
               { error: `"${chosen}" is not one of this department's configured secondary departments` },
               { status: 400 }
@@ -487,6 +529,7 @@ export async function POST(request: Request) {
       name: sectionName,
       year: Number(body.year),
       batch: body.batch.trim(),
+      ...(regulation ? { regulation } : {}),
       facultyInchargeUid,
       facultyInchargeName: body.facultyInchargeName ?? "",
       studentCount: body.studentCount != null ? Math.max(0, Number(body.studentCount)) : 0,

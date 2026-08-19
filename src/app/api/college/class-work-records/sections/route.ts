@@ -54,6 +54,7 @@ export async function GET() {
           department: s.department,
           sectionName: s.name,
           year: s.year,
+          courseId: s.courseId,
         }),
         department: s.department,
         courseName: s.courseName ?? "",

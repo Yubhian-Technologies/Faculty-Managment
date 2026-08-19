@@ -191,6 +191,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Students", href: "/college-office/students", iconName: "GraduationCap", roles: ["COLLEGE_OFFICE"], section: "Students" },
   { label: "Import Students", href: "/college-office/students/import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   { label: "Graduated Students", href: "/college-office/graduates", iconName: "Award", roles: ["COLLEGE_OFFICE"] },
+  { label: "Semester Timings", href: "/college-office/timings", iconName: "Clock", roles: ["COLLEGE_OFFICE"] },
   { label: "Non-Technical Staff", href: "/college-office/non-technical-staff", iconName: "UsersRound", roles: ["COLLEGE_OFFICE"], section: "Staff" },
   // Only the first item of a group carries `section` - the sidebar renders a
   // header for every item that sets one, so repeating it printed "STAFF" three
@@ -285,8 +286,6 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Webmaster
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
-  { label: "Email Requests", href: "/webmaster/requests", iconName: "AtSign", roles: ["WEBMASTER"], section: "Email Provisioning" },
-  { label: "History", href: "/webmaster/history", iconName: "History", roles: ["WEBMASTER"] },
   { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Hiring" },
   { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"], section: "Accounts" },
   { label: "My Profile", href: "/webmaster/profile", iconName: "UserCircle", roles: ["WEBMASTER"], section: "Personal" },

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { loadAcademicRegulations } from "@/lib/firestore/academicRegulations";
+import { validateRegulationYears } from "@/lib/college/academicStructure";
 
 export async function PATCH(
   request: Request,
@@ -18,6 +19,7 @@ export async function PATCH(
       durationYears?: number;
       isActive?: boolean;
       regulations?: string[];
+      regulationYears?: Record<string, number[]>;
     };
 
     const db = getAdminDb();
@@ -25,6 +27,7 @@ export async function PATCH(
     const ref = catalogCol.doc(id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const existing = snap.data() as { durationYears?: number; regulations?: string[]; regulationYears?: Record<string, number[]> };
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -72,6 +75,14 @@ export async function PATCH(
         }
       }
       updates.regulations = regulations;
+    }
+
+    if (body.regulationYears != null) {
+      const effectiveRegulations = (updates.regulations as string[] | undefined) ?? existing.regulations ?? [];
+      const effectiveDuration = (updates.durationYears as number | undefined) ?? existing.durationYears ?? 10;
+      const err = validateRegulationYears(body.regulationYears, effectiveRegulations, effectiveDuration);
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+      updates.regulationYears = body.regulationYears;
     }
 
     await ref.update(updates);

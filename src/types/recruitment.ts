@@ -239,7 +239,6 @@ export interface CandidateApplication {
   year?: number;                  // academic year within the course
   preferredSubjectIds?: string[]; // subjects the candidate is expected to teach, if known at hiring time
   preferredSubjectNames?: string[];
-  interviewMode?: InterviewMode;
   currentStage: CandidateStage;
   interviewSubStage?: InterviewSubStage;
   status: CandidateStatus;

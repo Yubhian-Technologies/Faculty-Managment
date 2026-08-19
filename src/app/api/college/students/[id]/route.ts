@@ -7,6 +7,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
 import { getAcademicStructure } from "@/lib/college/academicStructure";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
@@ -56,27 +57,40 @@ async function catalogIdForCourseId(
   return snap.exists ? (snap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
 }
 
-// StudentRecord has no courseId of its own (see findCurrentSectionDoc above) -
-// their course is only ever determined by the Section they're currently
-// sitting in.
 async function catalogIdForStudent(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
-  student: Pick<StudentRecord, "department" | "secondaryDepartment" | "section" | "year">
+  student: Pick<StudentRecord, "department" | "secondaryDepartment" | "section" | "year" | "courseId">
 ): Promise<string | undefined> {
+  // Once a student has courseId (see StudentRecord.courseId's doc-comment),
+  // resolve straight from it - no section lookup, no ambiguity, and no risk
+  // of picking the wrong one of two same-named sections under different
+  // courses. Only a legacy student without one yet falls back to the
+  // name-based (ambiguity-prone) section lookup below.
+  if (student.courseId) return catalogIdForCourseId(db, collegeId, student.courseId);
   const sectionDoc = await findCurrentSectionDoc(db, collegeId, student);
   const courseId = sectionDoc ? (sectionDoc.data() as { courseId?: string }).courseId : undefined;
   return catalogIdForCourseId(db, collegeId, courseId);
 }
 
-// Finds the Section doc a student is currently sitting in. A shared-first-
-// year student is filed under their common department (department, preserved
-// until promotion) with secondaryDepartment naming their real branch instead
-// - the section they're actually in is filed under THAT branch, not their own
+// Finds the Section doc a student is currently sitting in - only ever a
+// FALLBACK for a legacy student with no `courseId` yet (the migration that
+// backfills it couldn't resolve them confidently - see
+// scripts/backfill-student-course-id.mjs). A shared-first-year student is
+// filed under their common department (department, preserved until
+// promotion) with secondaryDepartment naming their real branch instead - the
+// section they're actually in is filed under THAT branch, not their own
 // department (see students/[id] PATCH's write further down, and
 // sections/new's managed-branch mode). Try the student's own department
 // first (covers the plain and legacy-cross-listed cases, where it's already
 // correct), then their secondaryDepartment.
+//
+// Deliberately does NOT `.limit(1)` and silently pick a winner when a
+// department+name+year search matches more than one Section (two different
+// courses each running a same-named section - see StudentRecord.courseId's
+// doc-comment) - that used to be exactly how a student could silently
+// resolve against the wrong course. Returns null (a real "current section"
+// can't be determined) instead, so callers fail closed rather than guess.
 async function findCurrentSectionDoc(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
@@ -87,17 +101,16 @@ async function findCurrentSectionDoc(
     .where("department", "==", student.department)
     .where("name", "==", student.section)
     .where("year", "==", student.year)
-    .limit(1)
     .get();
-  if (!byOwnDept.empty) return byOwnDept.docs[0];
+  if (byOwnDept.size === 1) return byOwnDept.docs[0];
+  if (byOwnDept.size > 1) return null;
   if (!student.secondaryDepartment) return null;
   const bySecondaryDept = await sectionsColl
     .where("department", "==", student.secondaryDepartment)
     .where("name", "==", student.section)
     .where("year", "==", student.year)
-    .limit(1)
     .get();
-  return bySecondaryDept.empty ? null : bySecondaryDept.docs[0];
+  return bySecondaryDept.size === 1 ? bySecondaryDept.docs[0] : null;
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -108,12 +121,62 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const body = (await request.json()) as {
       targetSectionId?: string;
+      unassign?: boolean;
       secondaryDepartment?: string | null;
       rollNumber?: string;
       status?: StudentStatus;
       /** Admission details from the Office's per-student Edit form. */
       details?: Record<string, unknown>;
     };
+
+    // Unassign: pull an already-sectioned student back to "Unassigned"
+    // (section: "") without deleting them - the missing inverse of Assign
+    // (targetSectionId from empty) and Move (targetSectionId to a different
+    // section) below. Same role tier as the roll-number/status path (this is
+    // just as much a department-structural decision), so Office and Panel
+    // Member stay excluded. Every other field - roll number, department,
+    // secondaryDepartment, courseId/course - is left untouched: courseId in
+    // particular is deliberately NOT cleared, since it's still the student's
+    // correct, best-effort intended course (StudentRecord.courseId's
+    // doc-comment) even while unassigned, and re-assigning later overwrites
+    // it from whichever real section they actually land in anyway. No data
+    // is lost, only the section placement.
+    if (body.unassign) {
+      if (!["HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN"].includes(session.role)) {
+        return NextResponse.json(
+          { error: "Only the department's HOD can unassign a student from their section" },
+          { status: 403 }
+        );
+      }
+
+      const db = getAdminDb();
+      const collegeRef = db.collection("colleges").doc(session.collegeId);
+      const studentRef = collegeRef.collection("students").doc(id);
+      const studentSnap = await studentRef.get();
+      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      const student = studentSnap.data() as StudentRecord;
+
+      if (!student.section) {
+        return NextResponse.json({ error: "This student is already unassigned" }, { status: 400 });
+      }
+
+      if (session.role === "HOD") {
+        const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+        const catalogId = await catalogIdForStudent(db, session.collegeId, student);
+        if (!inHodScope(student.department, student.year, catalogId)) {
+          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        }
+      }
+
+      const now = new Date();
+      const batch = db.batch();
+      batch.update(studentRef, { section: "", updatedAt: now });
+      const history = departmentHistoryEntry(db, session.collegeId, id, student.department, "", student.year, now);
+      batch.set(history.ref, history.data);
+      await batch.commit();
+
+      return NextResponse.json({ ok: true });
+    }
 
     // Roster-detail edit: the admission information the Office owns (the CSV
     // template's fields - course, admission no, contact details and so on).
@@ -148,6 +211,44 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
         return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
+      }
+
+      // Secondary Department, when being set to a real value (not cleared -
+      // see rosterFormToPayload's writeBlanksAsNull), must actually be one
+      // student.department cross-lists to - not just any real, differently-
+      // named department. Same rule the bulk importer's unassigned rows and
+      // the Add Student unassigned path enforce, and for the same reason:
+      // without it, a student's Secondary Department can be edited to a
+      // branch the department never configured, which then surfaces as a
+      // bogus option wherever Secondary Department values get read back
+      // (e.g. the Distribute Unassigned dialog's branch picker).
+      if (typeof updates.secondaryDepartment === "string" && updates.secondaryDepartment.trim()) {
+        const secondaryDept = updates.secondaryDepartment.trim();
+        if (secondaryDept === student.department) {
+          return NextResponse.json({ error: "Secondary Department must differ from Department" }, { status: 400 });
+        }
+        const deptSnap = await collegeRef.collection("departments").where("name", "==", student.department).limit(1).get();
+        const deptData = deptSnap.docs[0]?.data() as
+          | { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }> }
+          | undefined;
+        // `secondaryDept` may itself be a sub-department of one of the
+        // owner's configured branches (e.g. "ECE-VLSI" under "Electronics and
+        // Communication Engineering") - the branch being configured is
+        // enough, its own sub-departments don't need to be separately,
+        // individually configured too (isConfiguredSecondaryDepartmentOrChild's
+        // doc-comment).
+        const secondaryDeptSnap = await collegeRef.collection("departments").where("name", "==", secondaryDept).limit(1).get();
+        let secondaryParentName: string | undefined;
+        if (!secondaryDeptSnap.empty) {
+          const secondaryParentId = (secondaryDeptSnap.docs[0].data() as { parentDepartmentId?: string }).parentDepartmentId;
+          if (secondaryParentId) {
+            const parentSnap = await collegeRef.collection("departments").doc(secondaryParentId).get();
+            secondaryParentName = (parentSnap.data() as { name?: string } | undefined)?.name;
+          }
+        }
+        if (!deptData || !isConfiguredSecondaryDepartmentOrChild(deptData, secondaryDept, secondaryParentName)) {
+          return NextResponse.json({ error: `"${student.department}" does not cross-list to "${secondaryDept}"` }, { status: 400 });
+        }
       }
 
       await studentRef.update({ ...updates, updatedAt: new Date() });
@@ -277,10 +378,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     // Only a real roll number can clash - roll-less students (Office imports
     // before the department assigns numbers) can share a section freely.
+    // Scoped by department + courseId too, not just section name + year - a
+    // section name alone isn't unique (see StudentRecord.courseId's
+    // doc-comment: a different department, or a different course in the SAME
+    // department, can have its own same-named section), so this previously
+    // could both miss a real clash and false-positive an unrelated one.
     const roll = student.rollNumber;
     if (roll) {
       const dupSnap = await collegeRef.collection("students")
         .where("rollNumber", "==", roll)
+        .where("department", "==", targetSection.department)
+        .where("courseId", "==", targetSection.courseId)
         .where("section", "==", targetSection.name)
         .where("year", "==", targetSection.year)
         .get();
@@ -305,14 +413,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const now = new Date();
     const batch = db.batch();
     const staysInSharedDept = isSharedDept(student.department) && targetSection.department !== student.department;
+    // courseId/course always mirror the section the student is actually
+    // placed into now, regardless of which branch above ran - see
+    // StudentRecord.courseId's doc-comment. Admission-time free text never
+    // survives a real placement.
     if (staysInSharedDept) {
-      batch.update(studentRef, { section: targetSection.name, year: targetSection.year, updatedAt: now });
+      batch.update(studentRef, {
+        section: targetSection.name,
+        year: targetSection.year,
+        courseId: targetSection.courseId,
+        course: targetSection.courseName ?? null,
+        updatedAt: now,
+      });
     } else {
       batch.update(studentRef, {
         department: targetSection.department,
         section: targetSection.name,
         year: targetSection.year,
         secondaryDepartment: secondaryDept || null,
+        courseId: targetSection.courseId,
+        course: targetSection.courseName ?? null,
         updatedAt: now,
       });
     }

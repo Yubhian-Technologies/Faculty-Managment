@@ -17,7 +17,6 @@ import { downloadOfferLetterPdf } from "@/lib/pdf/downloadOfferLetter";
 import { collegeFetch } from "@/lib/api/collegeFetch";
 import { formatDate } from "@/lib/utils";
 import { DocumentUploadField } from "@/components/shared/DocumentUploadField";
-import { MarkOfferAcceptedDialog } from "@/components/hiring/MarkOfferAcceptedDialog";
 import { FACULTY_ACCOUNT_REQUEST_STATUS_LABELS, ROLE_LABELS } from "@/types";
 import type { Candidate, CandidateApplication, HiringBatch, OfferLetter, FacultyAccountRequest, CandidateStatus, CandidateStage } from "@/types";
 import { getDetailedHiringStatus, DETAILED_HIRING_STATUS_LABELS } from "@/lib/hiringPipeline";
@@ -62,7 +61,6 @@ export default function CollegeOfficeCandidateDetailPage() {
   const [notified, setNotified] = useState(false);
   const [persistedVerified, setPersistedVerified] = useState(false);
   const [accountRequestsByOfferId, setAccountRequestsByOfferId] = useState<Record<string, FacultyAccountRequest>>({});
-  const [acceptDialogOffer, setAcceptDialogOffer] = useState<OfferLetter | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   function offerKey(candidateId: string, batchId?: string) {
@@ -240,32 +238,6 @@ export default function CollegeOfficeCandidateDetailPage() {
     }
   }
 
-  async function handleOfferReject() {
-    if (!candidate) return;
-    const key = offerKey(candidate.candidateId, candidate.batchId);
-    const offer = offerByCandidate[key];
-    if (!offer) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/college/offer-letters/${offer.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "REJECTED" }),
-      });
-      if (!res.ok) throw new Error();
-      setOfferByCandidate((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      toast({ variant: "success", title: "Offer marked rejected" });
-    } catch {
-      toast({ variant: "destructive", title: "Failed to update offer status" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function fetchLetterExtras(offer: OfferLetter): Promise<{ candidateAddress?: string; candidateEmail?: string; interviewDate?: string }> {
     type CandRes = { candidate?: { email?: string; permanentAddress?: string; residenceAddress?: string } };
     type BatchRes = { batch?: { interviewDate?: Parameters<typeof formatDate>[0] } };
@@ -308,6 +280,10 @@ export default function CollegeOfficeCandidateDetailPage() {
 
   async function composeOfferEmail(offer: OfferLetter) {
     setDownloadingId(offer.id);
+    // Opened synchronously, before any await - the PDF render below takes long
+    // enough that opening the Gmail tab afterward gets silently blocked as a
+    // popup (browsers drop the "triggered by a click" trust after an async gap).
+    const mailWindow = window.open("", "_blank");
     try {
       const [{ candidateAddress, candidateEmail, interviewDate }, ccRes] = await Promise.all([
         fetchLetterExtras(offer),
@@ -315,6 +291,7 @@ export default function CollegeOfficeCandidateDetailPage() {
       ]);
       if (!candidateEmail) {
         toast({ variant: "destructive", title: "Candidate has no email on file" });
+        mailWindow?.close();
         return;
       }
 
@@ -361,8 +338,10 @@ Warm regards,
 ${institution}`;
       const cc = (ccRes.ccEmails ?? []).join(",");
       const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(candidateEmail)}&cc=${encodeURIComponent(cc)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.open(gmailUrl, "_blank");
+      if (mailWindow) mailWindow.location.href = gmailUrl;
+      else window.open(gmailUrl, "_blank");
     } catch (err) {
+      mailWindow?.close();
       toast({ variant: "destructive", title: "Failed to prepare email", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloadingId(null);
@@ -466,21 +445,24 @@ ${institution}`;
 
           {phase === "AWAITING_ACCEPTANCE" && (() => {
             const offer = offerByCandidate[offerKey(candidate.candidateId, candidate.batchId)];
+            const rejected = offer?.status === "REJECTED";
+            const respondedByStaff = !!offer?.respondedBy && offer.respondedBy !== "CANDIDATE";
             return (
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-muted-foreground flex items-center gap-1.5">
-                    <Mail className="h-3.5 w-3.5 shrink-0" />
-                    Offer sent — mark it once the candidate confirms acceptance.
-                  </span>
-                  <div className="flex gap-2 shrink-0">
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700" disabled={busy} onClick={() => setAcceptDialogOffer(offer ?? null)}>
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Mark Accepted
-                    </Button>
-                    <Button size="sm" variant="destructive" disabled={busy} onClick={() => void handleOfferReject()}>
-                      <XCircle className="h-3.5 w-3.5 mr-1.5" /> Mark Rejected
-                    </Button>
-                  </div>
+                  {rejected ? (
+                    <span className="text-sm text-destructive flex items-center gap-1.5">
+                      <XCircle className="h-3.5 w-3.5 shrink-0" />
+                      Candidate declined the offer
+                      {offer?.respondedAt ? ` on ${formatDate(offer.respondedAt as Parameters<typeof formatDate>[0])}` : ""}
+                      {respondedByStaff ? " (recorded by staff)" : " via their acceptance link"}.
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      Offer sent — waiting for the candidate to respond via their acceptance link.
+                    </span>
+                  )}
                 </div>
                 {offer && (
                   <div className="flex flex-wrap gap-2 pt-2 border-t">
@@ -490,9 +472,11 @@ ${institution}`;
                     <Button size="sm" variant="outline" loading={downloadingId === offer.id} onClick={() => void composeOfferEmail(offer)}>
                       <PenLine className="h-3.5 w-3.5 mr-1" /> Compose Email
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => copyAcceptanceLink(offer)}>
-                      <Copy className="h-3.5 w-3.5 mr-1" /> Copy Acceptance Link
-                    </Button>
+                    {!rejected && (
+                      <Button size="sm" variant="ghost" onClick={() => copyAcceptanceLink(offer)}>
+                        <Copy className="h-3.5 w-3.5 mr-1" /> Copy Acceptance Link
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -610,17 +594,6 @@ ${institution}`;
           })()}
         </CardContent>
       </Card>
-
-      {acceptDialogOffer && (
-        <MarkOfferAcceptedDialog
-          offerId={acceptDialogOffer.id}
-          candidateName={acceptDialogOffer.candidateName ?? ""}
-          defaultJoiningDate={acceptDialogOffer.joiningDate}
-          open={!!acceptDialogOffer}
-          onOpenChange={(open) => { if (!open) setAcceptDialogOffer(null); }}
-          onAccepted={() => { setAcceptDialogOffer(null); load(); }}
-        />
-      )}
     </div>
   );
 }

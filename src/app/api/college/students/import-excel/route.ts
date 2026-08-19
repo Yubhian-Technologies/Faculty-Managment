@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { buildStudentDoc, type StudentImportRow } from "@/lib/students/importRow";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode, isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import type { Section } from "@/types";
 
@@ -17,26 +18,21 @@ import type { Section } from "@/types";
 // rows registered to a core branch while sitting under Basic Science.
 type BulkImportRow = StudentImportRow & { section: string; year: number; department?: string };
 
-// Office's template asks for Department (and Secondary Department) by name,
-// but typing a full department name for every row of a whole-college roster
-// is tedious - accept the department's short Code too (e.g. "CSE"), same as
-// how faculty/staff CSV imports already resolve codes. Returns the
-// department's canonical `name` so everything downstream (section lookup,
-// `secondaryDepartment` storage) stays keyed by the same full name the rest
-// of the app uses, regardless of which form the office typed.
-function buildDepartmentResolver(
-  departmentsSnap: FirebaseFirestore.QuerySnapshot
-): (input: string) => string | undefined {
-  const byCodeOrName = new Map<string, string>();
-  for (const d of departmentsSnap.docs) {
-    const data = d.data() as { name?: string; code?: string };
-    const name = (data.name ?? "").trim();
-    if (!name) continue;
-    byCodeOrName.set(name.toLowerCase(), name);
-    const code = (data.code ?? "").trim();
-    if (code) byCodeOrName.set(code.toLowerCase(), name);
-  }
-  return (input: string) => byCodeOrName.get(input.trim().toLowerCase());
+// Roll numbers are only unique within one (department, course, section,
+// year) - a bare section name alone is NOT unique college-wide (two
+// departments can each have an "A") nor even within one department (two
+// different courses can each have a same-named section - see
+// StudentRecord.courseId's doc-comment). `courseId` is "" for an unassigned
+// student (no section yet) or a pre-backfill legacy doc that doesn't have one
+// yet - an imperfect but strictly-better-than-before fallback for that case.
+function rollDedupeKey(
+  roll: string | undefined,
+  department: string | undefined,
+  courseId: string | undefined,
+  section: string | undefined,
+  year: number | undefined
+): string {
+  return `${roll ?? ""}::${department ?? ""}::${courseId ?? ""}::${section ?? ""}::${year ?? 0}`;
 }
 
 // A department with sub-departments (e.g. "BDS" split into "BDS - Analog",
@@ -109,9 +105,10 @@ export async function POST(request: Request) {
       hodScope = await getHodDepartmentScope(db, collegeId, session.uid);
     }
 
-    const [sectionsSnap, departmentsSnap] = await Promise.all([
+    const [sectionsSnap, departmentsSnap, coursesSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("sections").get(),
       db.collection("colleges").doc(collegeId).collection("departments").get(),
+      db.collection("colleges").doc(collegeId).collection("courses").get(),
     ]);
     // Section name + year alone isn't unique college-wide - two different
     // departments can each have a "Section A, Year 1" - so every name::year
@@ -148,14 +145,82 @@ export async function POST(request: Request) {
         if (existingBySecondary) existingBySecondary.push(s); else sectionsBySecondaryDeptKey.set(secondaryKey, [s]);
       }
     }
-    const resolveDepartment = buildDepartmentResolver(departmentsSnap);
+    // Office's template asks for Department (and Secondary Department, and
+    // now Course) by name, but typing the full name for every row of a
+    // whole-college roster is tedious - accept the short Code too (e.g.
+    // "CSE", "BTECH"), same as faculty/staff CSV imports already resolve
+    // department codes. Resolves to the canonical `name` so everything
+    // downstream (section lookup, `secondaryDepartment`/`course` storage)
+    // stays keyed by the same full name the rest of the app uses, regardless
+    // of which form the office typed.
+    const plainDepartments = departmentsSnap.docs.map((d) => d.data() as { name?: string; code?: string });
+    const departmentIdByLowerName = new Map<string, string>();
+    for (const d of departmentsSnap.docs) {
+      const name = ((d.data() as { name?: string }).name ?? "").trim();
+      if (name) departmentIdByLowerName.set(name.toLowerCase(), d.id);
+    }
+    const plainCourses = coursesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as { name?: string; code?: string; departmentId?: string }) }));
+    const resolveDepartment = (input: string) => resolveDepartmentByNameOrCode(plainDepartments, input);
+    // Course is only ever resolved against the courses the row's OWN
+    // (resolved) department directly offers - no parent/feeder borrowing,
+    // since a row that names a department writes that department verbatim
+    // and a course it doesn't itself offer would be meaningless on it.
+    const resolveCourse = (departmentName: string, input: string) => {
+      const departmentId = departmentIdByLowerName.get(departmentName.trim().toLowerCase());
+      return departmentId ? resolveCourseByNameOrCode(plainCourses, departmentId, input) : undefined;
+    };
+    // The real Course doc id behind a canonical course name (as resolved by
+    // resolveCourse) within one department - a section can share its name
+    // with another under a different course (see college/sections POST's own
+    // duplicate check, scoped by courseId), so `courseId` is what actually
+    // disambiguates "which section" a placed student is in - see
+    // StudentRecord.courseId's doc-comment.
+    const resolveCourseId = (departmentName: string, canonicalCourseName: string): string | undefined => {
+      const departmentId = departmentIdByLowerName.get(departmentName.trim().toLowerCase());
+      if (!departmentId) return undefined;
+      return plainCourses.find((c) => c.departmentId === departmentId && (c.name ?? "").trim() === canonicalCourseName)?.id;
+    };
     const relatedDepartmentNames = buildRelatedNamesResolver(departmentsSnap);
+    // Full department docs (not just resolved names), keyed by canonical
+    // name, so a resolved Secondary Department can be checked against what
+    // the department actually cross-lists to - see isConfiguredSecondaryDepartment.
+    const departmentDataByName = new Map(
+      departmentsSnap.docs.map((d) => [
+        ((d.data() as { name?: string }).name ?? "").trim(),
+        d.data() as {
+          secondaryDepartments?: string[];
+          courseScopes?: Record<string, { secondaryDepartments?: string[] }>;
+          parentDepartmentId?: string;
+        },
+      ])
+    );
+    // id -> name, so a resolved Secondary Department's OWN parentDepartmentId
+    // (when it's a sub-department, e.g. "ECE-VLSI") can resolve to its
+    // parent's name - see isConfiguredSecondaryDepartmentOrChild's doc-comment.
+    const departmentNameById = new Map(
+      departmentsSnap.docs.map((d) => [d.id, ((d.data() as { name?: string }).name ?? "").trim()])
+    );
 
     const existingSnap = await db.collection("colleges").doc(collegeId).collection("students")
-      .select("rollNumber", "section", "year", "name", "department", "secondaryDepartment").get();
+      .select("rollNumber", "section", "year", "name", "department", "secondaryDepartment", "courseId").get();
+    // Placed-section roll dedupe: a section name is only unique within one
+    // department's one course (see StudentRecord.courseId's doc-comment - two
+    // different departments, or two different courses in the SAME
+    // department, can each have their own "A"/"PHYSICS-IT-A"), so this key
+    // includes `department` and `courseId` alongside the bare section name -
+    // name+year alone previously false-matched roll numbers across genuinely
+    // unrelated sections. A pre-backfill student doc with no courseId yet
+    // keys with "" for it - an imperfect (but no worse than before) fallback
+    // until the backfill migration runs.
     const existingRolls = new Set<string>();
-    // Office-imported students have no roll number yet, so they can't be
-    // de-duped by roll - key those (the section-less ones) by name+dept+year
+    // Unassigned roll dedupe is its own, separate key space: roll numbers are
+    // documented elsewhere as unique within a department+year (not
+    // per-course - the Office issues them before a student is even sectioned,
+    // let alone assigned a course), so this deliberately does NOT include
+    // courseId or section (always "" for an unassigned student anyway).
+    const existingUnassignedRolls = new Set<string>();
+    // Office-imported students have no roll number yet, so they can't always
+    // be de-duped by roll - key those (the roll-less ones) by name+dept+year
     // instead, so re-running the same file doesn't create duplicates. Indexed
     // by BOTH department and secondaryDepartment: the same real person can be
     // represented with a given branch name in either field, depending on
@@ -165,14 +230,18 @@ export async function POST(request: Request) {
     // the same student as a duplicate.
     const existingUnassignedNames = new Set<string>();
     for (const d of existingSnap.docs) {
-      const s = d.data() as { rollNumber?: string; section?: string; year?: number; name?: string; department?: string; secondaryDepartment?: string };
-      existingRolls.add(`${s.rollNumber ?? ""}::${s.section ?? ""}::${s.year ?? 0}`);
+      const s = d.data() as { rollNumber?: string; section?: string; year?: number; name?: string; department?: string; secondaryDepartment?: string; courseId?: string };
       if (!s.section) {
+        if (s.rollNumber) {
+          existingUnassignedRolls.add(`${s.rollNumber}::${s.department ?? ""}::${s.year ?? 0}`);
+        }
         const nameLower = (s.name ?? "").trim().toLowerCase();
         existingUnassignedNames.add(`${nameLower}::${(s.department ?? "").toLowerCase()}::${s.year ?? 0}`);
         if (s.secondaryDepartment) {
           existingUnassignedNames.add(`${nameLower}::${s.secondaryDepartment.trim().toLowerCase()}::${s.year ?? 0}`);
         }
+      } else {
+        existingRolls.add(rollDedupeKey(s.rollNumber, s.department, s.courseId, s.section, s.year));
       }
     }
 
@@ -239,6 +308,43 @@ export async function POST(request: Request) {
             failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Secondary Department must differ from Department" });
             continue;
           }
+          // A real department, differing from Department, is not enough on
+          // its own - it must actually be one THIS department cross-lists to
+          // (Department.secondaryDepartments or a courseScopes override).
+          // Without this, any real department name was silently accepted
+          // (e.g. "Physics" registering a student to "civil engineering",
+          // which Physics never configured as a Secondary Department) - the
+          // student saved fine, but then surfaced as a bogus, unconfigured
+          // branch option everywhere Secondary Department values get read
+          // back (the Distribute Unassigned dialog's branch picker, in
+          // particular).
+          const ownerDeptData = departmentDataByName.get(departmentName!);
+          const candidateData = departmentDataByName.get(unassignedSecondary);
+          const candidateParentName = candidateData?.parentDepartmentId
+            ? departmentNameById.get(candidateData.parentDepartmentId)
+            : undefined;
+          if (!ownerDeptData || !isConfiguredSecondaryDepartmentOrChild(ownerDeptData, unassignedSecondary, candidateParentName)) {
+            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `${departmentName} does not cross-list to "${unassignedSecondary}" - check Secondary Departments on the department` });
+            continue;
+          }
+        }
+
+        // Course accepts the department's short Code too (same as Department/
+        // Secondary Department above) and, when given, must be one this
+        // department actually offers - resolved to its catalog's canonical
+        // name so it's never stored as whatever free text was typed. Also
+        // resolves the real Course doc id (StudentRecord.courseId) - not yet
+        // placed in a real Section, but this is still the declared/intended
+        // course, and lets Distribute later narrow target sections to it.
+        let resolvedCourse: string | undefined;
+        let resolvedCourseId: string | undefined;
+        if (row.course?.trim()) {
+          resolvedCourse = resolveCourse(departmentName!, row.course);
+          if (!resolvedCourse) {
+            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Course "${row.course}" is not offered by ${departmentName}` });
+            continue;
+          }
+          resolvedCourseId = resolveCourseId(departmentName!, resolvedCourse);
         }
 
         // The Office doesn't know roll numbers yet, so they're optional here.
@@ -251,9 +357,14 @@ export async function POST(request: Request) {
         const year = Number(row.year);
         const nameKey = `${nameLower}::${departmentName!.toLowerCase()}::${year}`;
         const nameKeyViaSecondary = unassignedSecondary ? `${nameLower}::${unassignedSecondary.toLowerCase()}::${year}` : null;
-        const rollKey = `${roll}::${""}::${year}`;
-        if (roll && existingRolls.has(rollKey)) {
-          failed.push({ row: rowNum, rollNumber: roll, error: "An unassigned student with this Roll Number already exists for this year" });
+        // Department-scoped (not courseId-scoped - see existingUnassignedRolls'
+        // own comment above) - was previously department-BLIND entirely (any
+        // two departments' unassigned students with the same roll+year
+        // falsely collided), fixed alongside the courseId gap since both are
+        // the same "roll dedupe key was too loose" family of bug.
+        const rollKey = `${roll}::${departmentName}::${year}`;
+        if (roll && existingUnassignedRolls.has(rollKey)) {
+          failed.push({ row: rowNum, rollNumber: roll, error: `An unassigned student with this Roll Number already exists for ${departmentName} Year ${row.year}` });
           continue;
         }
         if (!roll && (existingUnassignedNames.has(nameKey) || (nameKeyViaSecondary && existingUnassignedNames.has(nameKeyViaSecondary)))) {
@@ -262,14 +373,14 @@ export async function POST(request: Request) {
         }
         const docRef = studentsColl.doc();
         batch.set(docRef, buildStudentDoc(
-          { collegeId, department: departmentName!, name: "", year: Number(row.year) },
-          { ...row, rollNumber: roll, secondaryDepartment: unassignedSecondary },
+          { collegeId, department: departmentName!, name: "", year: Number(row.year), courseId: resolvedCourseId },
+          { ...row, rollNumber: roll, secondaryDepartment: unassignedSecondary, course: resolvedCourse },
           now
         ));
         const history = departmentHistoryEntry(db, collegeId, docRef.id, departmentName!, "", Number(row.year), now);
         batch.set(history.ref, history.data);
         if (roll) {
-          existingRolls.add(rollKey);
+          existingUnassignedRolls.add(rollKey);
         } else {
           existingUnassignedNames.add(nameKey);
           if (nameKeyViaSecondary) existingUnassignedNames.add(nameKeyViaSecondary);
@@ -398,14 +509,38 @@ export async function POST(request: Request) {
       }
 
       const roll = row.rollNumber.trim();
-      const dedupeKey = `${roll}::${section.name}::${section.year}`;
+      const dedupeKey = rollDedupeKey(roll, section.department, section.courseId, section.name, section.year);
       if (existingRolls.has(dedupeKey)) {
         failed.push({ row: rowNum, rollNumber: roll, error: "Roll number already exists in this section" });
         continue;
       }
 
+      // Course, when given, must not just be one the department offers in
+      // general - it must be the SPECIFIC section's own course. `section` was
+      // resolved by name/department/year (+ cross-listing), independently of
+      // any Course column on the row, so the two can disagree (e.g. the row
+      // says "MTECH" but the resolved "PHYSICS-IT-A" section is actually the
+      // B.Tech one) - StudentRecord.courseId must never end up wrong just
+      // because a different, unrelated same-named section happened to match
+      // the department+name+year search first. When the row leaves Course
+      // blank, it's simply inferred from the section itself.
+      let placedCourse = section.courseName;
+      if (row.course?.trim()) {
+        const resolved = resolveCourse(section.department, row.course);
+        const resolvedId = resolved ? resolveCourseId(section.department, resolved) : undefined;
+        if (!resolved || !resolvedId) {
+          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Course "${row.course}" is not offered by ${section.department}` });
+          continue;
+        }
+        if (resolvedId !== section.courseId) {
+          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Course "${resolved}" does not match section ${section.name}'s actual course (${section.courseName ?? "unknown"}) - check this row's Section/Course columns` });
+          continue;
+        }
+        placedCourse = resolved;
+      }
+
       const docRef = studentsColl.doc();
-      batch.set(docRef, buildStudentDoc(section, { ...row, secondaryDepartment: secondaryDept || undefined }, now));
+      batch.set(docRef, buildStudentDoc(section, { ...row, secondaryDepartment: secondaryDept || undefined, course: placedCourse }, now));
       const history = departmentHistoryEntry(db, collegeId, docRef.id, section.department, section.name, section.year, now);
       batch.set(history.ref, history.data);
       existingRolls.add(dedupeKey);

@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin";
-import { generatePassword } from "@/lib/firestore/facultyProvisioning";
+
+const MIN_PASSWORD_LENGTH = 6; // Firebase Auth's own minimum
 
 // Deliberately dedicated to exactly one action (reset password) rather than
 // folded into the general PATCH /api/college/users/[uid] route - Webmaster's
@@ -12,9 +13,15 @@ import { generatePassword } from "@/lib/firestore/facultyProvisioning";
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("WEBMASTER", "SUPER_ADMIN");
-    const body = (await request.json()) as { uid?: string };
+    const body = (await request.json()) as { uid?: string; password?: string };
     if (!body.uid) {
       return NextResponse.json({ error: "uid is required" }, { status: 400 });
+    }
+    // Webmaster sets the password directly (matches the Create Credentials
+    // flow) instead of always generating one - still enforces Firebase Auth's
+    // own minimum length either way.
+    if (!body.password?.trim() || body.password.trim().length < MIN_PASSWORD_LENGTH) {
+      return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -24,9 +31,9 @@ export async function POST(request: Request) {
     }
     const target = targetSnap.data() as { role?: string; name?: string };
 
-    const generatedPassword = generatePassword();
+    const newPassword = body.password.trim();
     const auth = await getAdminAuth();
-    await auth.updateUser(body.uid, { password: generatedPassword });
+    await auth.updateUser(body.uid, { password: newPassword });
 
     const actorSnap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
     const actorName = (actorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
@@ -41,7 +48,7 @@ export async function POST(request: Request) {
       timestamp: new Date(),
     });
 
-    return NextResponse.json({ ok: true, generatedPassword });
+    return NextResponse.json({ ok: true, newPassword });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
