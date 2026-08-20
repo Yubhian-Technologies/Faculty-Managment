@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
@@ -35,12 +35,29 @@ export async function GET(request: Request) {
     // sub-HOD who runs that sub-department day to day (see
     // assertHodOwnsSection in sections/[id]/route.ts, which mirrors this).
     //
-    // An HOD ALSO sees, read-only, the sections another department cross-lists
-    // to theirs via `secondaryDepartments` (e.g. Physics' own year-1 sections
-    // feeding Information Technology) - see where crossListedQuery's results
-    // are pushed below for why that grant is back after having been removed.
+    // An HOD's Sections page also pulls in sections cross-listed to them via
+    // `secondaryDepartments` (a different, unrelated top-level department's
+    // section feeding this one - e.g. Physics' own year-1 sections feeding
+    // Information Technology), read-only - mirroring the students route's
+    // own `secondaryQuery`. This grant used to be deliberately excluded here:
+    // an earlier version trusted `Section.secondaryDepartments` array
+    // membership alone, with no per-year/per-course check, which conflated
+    // "years this department actually teaches" with "years some other
+    // department has decided to feed it" and could show a cross-listed
+    // section for a year the receiving department wasn't actually configured
+    // to be fed for. It's safe now because the merge below re-derives the
+    // relationship from the feeder DEPARTMENT's own current config
+    // (isDeclaredFeederFor - secondaryDepartments AND assignedYears, both
+    // catalog-scoped) rather than trusting the section doc's own stored
+    // array, so a stale/mismatched section can never slip through. This is
+    // scoped to Sections specifically; the separate "Incoming Students"
+    // feature (hod/students/incoming, keyed off Student.secondaryDepartment)
+    // and Teaching Assignments' own cross-listed view are untouched.
     let childDeptQuery: FirebaseFirestore.Query | null = null;
-    let crossListedQuery: FirebaseFirestore.Query | null = null;
+    // Candidate sections cross-listed to one of this HOD's own/child
+    // departments (Firestore-level filter only - see the merge loop below for
+    // the actual per-year/per-course gate via isDeclaredFeederFor).
+    let secondaryQuery: FirebaseFirestore.Query | null = null;
     // A branch can be BOTH a standalone department with its own dedicated HOD
     // (its own assignedYears, e.g. CIVIL's [2,3,4]) AND grouped under a
     // sub-department for the shared first year (e.g. BS-English managing
@@ -50,7 +67,11 @@ export async function GET(request: Request) {
     // Populated only for an HOD (this college's departments), and only used
     // when there's an actual managed-branch relationship to disambiguate.
     let hodScope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
-    let hodDepartments: DepartmentYearRow[] = [];
+    // Widened beyond DepartmentYearRow with secondaryDepartments - needed by
+    // isDeclaredFeederFor (via resolveDepartmentCourseScope) in the secondary
+    // merge below, which the other DepartmentYearRow consumers in this file
+    // don't require.
+    let hodDepartments: (DepartmentYearRow & Pick<Department, "secondaryDepartments">)[] = [];
     const catalogIdByCourseId = new Map<string, string | undefined>();
 
     // A caller with unrestricted college-wide read access (Principal/VP/Super
@@ -91,17 +112,17 @@ export async function GET(request: Request) {
       if (ownedDeptNames.length > 0) {
         childDeptQuery = withCommonFilters(sectionsColl.where("department", "in", ownedDeptNames.slice(0, 30)));
       }
-      // Sections another department owns but cross-lists to this one
-      // (Department.secondaryDepartments - e.g. Chemistry's year-1
-      // "CHEMISTRY-ECE-A" feeding ECE). Read-only, never owned.
-      if (scope.ownDepartmentNames.length > 0) {
-        crossListedQuery = withCommonFilters(
-          sectionsColl.where("secondaryDepartments", "array-contains-any", scope.ownDepartmentNames.slice(0, 30))
-        );
+      // Firestore's array-contains-any caps at 10 values, unlike the 30-item
+      // cap `in` gets elsewhere in this route - accepted as a documented
+      // limit, same as those. Only an explicit Principal multi-department
+      // assignment grows this list beyond 1-2 entries.
+      const secondaryTargets = Array.from(new Set([...scope.ownDepartmentNames, ...scope.childDepartmentNames])).slice(0, 10);
+      if (secondaryTargets.length > 0) {
+        secondaryQuery = withCommonFilters(sectionsColl.where("secondaryDepartments", "array-contains-any", secondaryTargets));
       }
       if (scope.ownDepartmentNames.length > 0) {
         const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
-        hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
+        hodDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "secondaryDepartments">)[];
         // A manager can run more than one course with different years (e.g. a
         // sub-department sharing a B.Tech's first year while also running an
         // independent course of its own) - resolveBranchYearOwner below needs
@@ -132,10 +153,10 @@ export async function GET(request: Request) {
 
     primaryQuery = withCommonFilters(primaryQuery);
 
-    const [primarySnap, childDeptSnap, crossListedSnap] = await Promise.all([
+    const [primarySnap, childDeptSnap, secondarySnap] = await Promise.all([
       primaryQuery.get(),
       childDeptQuery ? childDeptQuery.get() : Promise.resolve(null),
-      crossListedQuery ? crossListedQuery.get() : Promise.resolve(null),
+      secondaryQuery ? secondaryQuery.get() : Promise.resolve(null),
     ]);
 
     const seenIds = new Set<string>();
@@ -182,23 +203,28 @@ export async function GET(request: Request) {
         sections.push({ id: d.id, ...data, accessLevel: "primary" });
       }
     }
-    // Cross-listed last, and skipping anything already seen, so a section this
-    // HOD actually owns is never downgraded by also being cross-listed to them.
-    //
-    // This grant was removed once, on the grounds that it conflated "years this
-    // department teaches" with "years another department feeds it". The
-    // conflation was real but the fix was too broad: it left a branch's HOD
-    // unable to see their own first year at all whenever a common department
-    // runs it, with no hint the year existed. Read-only visibility says exactly
-    // that - the section feeds you, someone else runs it - and the year concern
-    // is handled by the accessLevel, not by hiding the row. It also matches how
-    // the managed-branch shape already behaves, so the two ways a college can
-    // structure a shared first year no longer disagree.
-    if (crossListedSnap) {
-      for (const d of crossListedSnap.docs) {
+    if (secondarySnap && hodScope) {
+      // Only the specific feeder departments actually present among the
+      // matched sections need resolving - hodDepartments already holds every
+      // department in the college (fetched above whenever ownDepartmentNames
+      // is non-empty, which secondaryQuery itself requires).
+      const deptByName = new Map(hodDepartments.map((d) => [d.name ?? "", d]));
+      const receivingCandidates = [...hodScope.ownDepartmentNames, ...hodScope.childDepartmentNames];
+      for (const d of secondarySnap.docs) {
         if (seenIds.has(d.id)) continue;
+        const data = d.data();
+        const feederDept = deptByName.get(data.department as string);
+        if (!feederDept) continue;
+        const catalogId = catalogIdByCourseId.get(data.courseId as string);
+        // Re-derive the relationship from the feeder's own current config
+        // (not the section doc's stored secondaryDepartments array, which
+        // may be stale) - a feeder cross-listed to several branches (e.g.
+        // Physics -> IT, ME) only counts for the ones it actually still
+        // claims for THIS section's exact year/course.
+        const isFed = receivingCandidates.some((name) => isDeclaredFeederFor(feederDept, name, data.year as number, catalogId));
+        if (!isFed) continue;
         seenIds.add(d.id);
-        sections.push({ id: d.id, ...d.data(), accessLevel: "secondary" });
+        sections.push({ id: d.id, ...data, accessLevel: "secondary" });
       }
     }
     sections.sort((a, b) => {

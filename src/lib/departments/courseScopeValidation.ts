@@ -67,10 +67,10 @@ export function validateSecondaryDepartmentNames(
   deptByName: Map<string, { parentDepartmentId?: string }>
 ): string | null {
   if (names.includes(selfName)) {
-    return "Secondary department must be different from this department";
+    return "Core department must be different from this department";
   }
   for (const secName of names) {
-    if (!deptByName.has(secName)) return `Secondary department "${secName}" not found`;
+    if (!deptByName.has(secName)) return `Core department "${secName}" not found`;
   }
   return null;
 }

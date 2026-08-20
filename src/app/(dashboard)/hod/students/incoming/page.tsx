@@ -45,7 +45,7 @@ export default function IncomingStudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="First Year Students"
-        description="Students who've pre-registered your department while primarily enrolled elsewhere (e.g. 1st years under Basic Science) - view only until they're promoted into your department"
+        description="Students who've pre-registered your department while primarily enrolled elsewhere (e.g. 1st years under a Freshman's Department like Basic Science) - view only until they're promoted into your department"
       />
 
       <Card>

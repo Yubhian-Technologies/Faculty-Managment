@@ -8,12 +8,14 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import {
   resolveScopeDepartments, buildCourseGroups, managedBranchYearsMap, yearsInScope, managerEffectiveYears,
   mergeOwnDepartmentOptions, deriveHodScope,
 } from "@/lib/departments/hodScope";
+import { getFreshmanDepartmentIds, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { SectionListItem, Course, Department } from "@/types";
 
 type SectionRow = SectionListItem;
@@ -194,14 +196,38 @@ export default function HODSectionsPage() {
   // deptOptions includes something beyond ownDept itself, fetch each of those
   // departments' courses explicitly and merge them in, so the course tabs and
   // Add Section's course list both cover every real branch in scope.
-  const needsExtraCourseFetch = deptOptions.some((d) => d.id !== ownDept?.id);
+  //
+  // A genuinely foreign feeder (e.g. "Physics" cross-listing straight to this
+  // HOD's "IT", with no sub-department/managed-branch layer at all) is never
+  // in deptOptions either - sections GET still returns its sections
+  // (accessLevel "secondary"), but without also fetching ITS Course doc, that
+  // section's catalog course never resolves to the same group as IT's own
+  // matching course, so it falls back to its raw courseId as its own group
+  // key instead of collapsing into one shared course tab.
+  const foreignFeederDeptNames = useMemo(() => {
+    const inScope = new Set(deptOptions.map((d) => d.name));
+    const names = new Set<string>();
+    for (const s of sections) {
+      if (s.accessLevel === "secondary" && s.department && !inScope.has(s.department)) names.add(s.department);
+    }
+    return names;
+  }, [sections, deptOptions]);
+  const extraCourseFetchDepts = useMemo(() => {
+    const list = deptOptions.filter((d) => d.id !== ownDept?.id);
+    for (const name of foreignFeederDeptNames) {
+      const dept = departments.find((d) => d.name === name);
+      if (dept && !list.some((d) => d.id === dept.id)) list.push(dept);
+    }
+    return list;
+  }, [deptOptions, ownDept, foreignFeederDeptNames, departments]);
+  const needsExtraCourseFetch = extraCourseFetchDepts.length > 0;
   useEffect(() => {
     if (!needsExtraCourseFetch) return;
     let cancelled = false;
     void (async () => {
       try {
         const lists = await Promise.all(
-          deptOptions.map((d) =>
+          extraCourseFetchDepts.map((d) =>
             fetch(`/api/college/courses?departmentId=${encodeURIComponent(d.id)}`)
               .then((r) => r.json() as Promise<{ courses: Course[] }>)
               .then((j) => j.courses ?? [])
@@ -218,7 +244,7 @@ export default function HODSectionsPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [needsExtraCourseFetch, deptOptions]);
+  }, [needsExtraCourseFetch, extraCourseFetchDepts]);
 
   // The HOD's Course list unions courses across every related department - a
   // department fed by another (e.g. CSE fed by Basic Science's shared first-year
@@ -361,6 +387,16 @@ export default function HODSectionsPage() {
     const m = new Map<string, Department>();
     for (const d of departments) m.set(d.name, d);
     return m;
+  }, [departments]);
+
+  // Names of every one of the college's shared/common first-year departments
+  // (there can be more than one, independent of each other - see
+  // getFreshmanDepartmentIds's own doc-comment) - used to annotate the
+  // department filter tabs the same way the per-card badge marks them
+  // (FreshmanDepartmentBadge), without re-deriving the structure per tab.
+  const freshmanDeptNames = useMemo(() => {
+    const ids = getFreshmanDepartmentIds(departments as DepartmentWithId[]);
+    return new Set(departments.filter((d) => ids.has(d.id)).map((d) => d.name));
   }, [departments]);
 
   // Each section is scoped to the years its OWN department teaches THAT
@@ -737,7 +773,7 @@ export default function HODSectionsPage() {
                     : "bg-background border-border hover:bg-muted"
                 }`}
               >
-                {d}
+                {d}{freshmanDeptNames.has(d) ? " · Freshman's Dept" : ""}
               </button>
             ))}
           </div>
@@ -823,6 +859,12 @@ export default function HODSectionsPage() {
                             )}
                             {sec.accessLevel === "secondary" && (
                               <Badge variant="secondary" className="text-xs">View only</Badge>
+                            )}
+                            {sec.department && deptByName.get(sec.department) && (
+                              <FreshmanDepartmentBadge
+                                departmentId={deptByName.get(sec.department)!.id}
+                                allDepartments={departments as DepartmentWithId[]}
+                              />
                             )}
                           </div>
                           <p className="text-sm opacity-70 mt-0.5">{sec.batch}</p>

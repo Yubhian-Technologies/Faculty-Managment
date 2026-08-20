@@ -262,8 +262,9 @@ export default function EditDepartmentPage() {
                 <div className="space-y-1">
                   <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
                   <p className="text-xs text-muted-foreground">
-                    Enable if this department splits into sub-branches (e.g. Basic Science → BS-Maths, BS-English).
-                    The HOD will get a &quot;Sub-Departments&quot; page to add sub-departments and assign sub-HODs.
+                    Enable if this department splits into sub-branches (e.g. a Freshman&apos;s Department like Basic
+                    Science → BS-Maths, BS-English). The HOD will get a &quot;Sub-Departments&quot; page to add
+                    sub-departments and assign sub-HODs.
                   </p>
                 </div>
               </div>

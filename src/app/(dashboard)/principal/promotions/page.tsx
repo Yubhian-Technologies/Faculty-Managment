@@ -534,7 +534,8 @@ export default function StudentPromotionsPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">
                       A file with Roll Number, Department, and Section columns (e.g. a counseling/branch-allotment
                       export) fills in the per-student targets below automatically - for cohorts splitting into
-                      several departments at once, like 1st year Basic Sciences students moving into their allotted branch.
+                      several departments at once, like 1st year students under a Freshman&apos;s Department (e.g.
+                      Basic Sciences) moving into their allotted branch.
                     </p>
                   </div>
                   <input ref={allotmentFileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void handleAllotmentFile(e)} />

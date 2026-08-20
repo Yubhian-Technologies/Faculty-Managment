@@ -84,7 +84,7 @@ export function YearsTaughtAndSecondaryFields({
 
       {showSecondaryDepartments ? (
         <div className="space-y-2">
-          <Label>Secondary Departments</Label>
+          <Label>Core Departments</Label>
           {secondaryDepartmentOptions.length > 0 ? (
             <div className="flex flex-wrap gap-3 border rounded-md px-3 py-2">
               {secondaryDepartmentOptions.map((d) => {
@@ -120,9 +120,9 @@ export function YearsTaughtAndSecondaryFields({
         </div>
       ) : (
         <div className="space-y-2">
-          <Label className="text-muted-foreground">Secondary Departments</Label>
+          <Label className="text-muted-foreground">Core Departments</Label>
           <p className="text-xs text-muted-foreground border rounded-md px-3 py-2">
-            {secondaryDepartmentsNote ?? "Follows this department's Secondary Departments setting (Edit Department page) - not set per course."}
+            {secondaryDepartmentsNote ?? "Follows this department's Core Departments setting (Edit Department page) - not set per course."}
           </p>
         </div>
       )}

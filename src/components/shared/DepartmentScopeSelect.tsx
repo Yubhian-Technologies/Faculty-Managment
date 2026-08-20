@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/authStore";
+import { getFreshmanDepartmentIds, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department } from "@/types";
 
 // Lets an HOD file a new section / subject / faculty member under their own
@@ -94,6 +95,15 @@ export function DepartmentScopeSelect({
 
   const ownName = ownDepartmentName ?? user?.department ?? "";
   const own = departments.find((d) => d.name === ownName) ?? null;
+  // Every department (there can be more than one - e.g. Chemistry, English,
+  // Maths and Physics each independently) that qualifies as a shared/common
+  // first-year one - annotated below the same way "(your department)"
+  // already is, so it's obvious at a glance when a listed option IS one of
+  // those structural departments.
+  const freshmanDepartmentIds = useMemo(
+    () => getFreshmanDepartmentIds(departments as DepartmentWithId[]),
+    [departments]
+  );
   const children = useMemo(
     () => (own ? departments.filter((d) => d.parentDepartmentId === own.id).sort((a, b) => a.name.localeCompare(b.name)) : []),
     [departments, own]
@@ -195,7 +205,9 @@ export function DepartmentScopeSelect({
                 caller (the sections API falls back to it when no departmentId
                 is sent), so this names the existing default instead of adding
                 a new one. */}
-            <option value="">{own.name} (your department)</option>
+            <option value="">
+              {own.name} (your department{freshmanDepartmentIds.has(own.id) ? " - Freshman's Department" : ""})
+            </option>
             {children.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
@@ -214,10 +226,10 @@ export function DepartmentScopeSelect({
             derived name (BSE-CIVIL-A) either way. */}
         {!selectedChild && rolledUpBranches.length > 0 && (
           <div className="space-y-1.5">
-            {/* "Secondary Department" is the term used for the Principal's own
+            {/* "Core Department" is the term used for the Principal's own
                 branches (CIVIL, IT, EEE …) as distinct from a sub-department
                 (BS-MATHS, BS-ENGLISH …), which is what the field above picks. */}
-            <Label htmlFor="department-scope-rollup">Secondary Department</Label>
+            <Label htmlFor="department-scope-rollup">Core Department</Label>
             <select
               id="department-scope-rollup"
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
@@ -245,7 +257,7 @@ export function DepartmentScopeSelect({
         {selectedChild && childIsGrouping && (
           <div className="space-y-1.5">
             {/* Same field as the rollup above, reached via a sub-department. */}
-            <Label htmlFor="department-scope">Secondary Department</Label>
+            <Label htmlFor="department-scope">Core Department</Label>
             <select
               id="department-scope"
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
@@ -303,7 +315,8 @@ export function DepartmentScopeSelect({
         {options.map((d) => (
           <option key={d.id} value={d.name}>
             {d.name}
-            {d.id === own.id ? " (your department)" : managedNames.has(d.name) ? " (secondary department)" : ""}
+            {d.id === own.id ? " (your department)" : managedNames.has(d.name) ? " (core department)" : ""}
+            {freshmanDepartmentIds.has(d.id) ? " - Freshman's Department" : ""}
           </option>
         ))}
       </select>

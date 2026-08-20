@@ -22,6 +22,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { CreateHodDialog } from "@/components/college/CreateHodDialog";
+import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { toast } from "@/hooks/useToast";
 import { buildManagedBranchOwner, type DepartmentWithId } from "@/lib/college/academicStructure";
@@ -390,7 +391,7 @@ export default function SubDepartmentsSettingsPage() {
                   grouped under it below.
                 </p>
                 <div className="space-y-2">
-                  <Label>Secondary Departments</Label>
+                  <Label>Core Departments</Label>
                   {(() => {
                     const options = allDepartments.filter(
                       (d) => !d.parentDepartmentId && d.name !== ownDept.name && d.name !== name
@@ -403,7 +404,7 @@ export default function SubDepartmentsSettingsPage() {
                             <label
                               key={d.id}
                               className={`flex items-center gap-1.5 text-sm ${takenBy ? "opacity-50" : ""}`}
-                              title={takenBy ? `Already a secondary department of ${takenBy}` : undefined}
+                              title={takenBy ? `Already a core department of ${takenBy}` : undefined}
                             >
                               <Checkbox
                                 disabled={!!takenBy}
@@ -490,9 +491,10 @@ export default function SubDepartmentsSettingsPage() {
                   <span><strong className="text-foreground">{sectionCount}</strong> sections</span>
                 </div>
                 {dept.managedDepartments && dept.managedDepartments.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Secondary Departments: <span className="text-foreground">{dept.managedDepartments.join(", ")}</span>
-                  </p>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Core Departments</p>
+                    <DepartmentChipList names={dept.managedDepartments} className="mt-1" />
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -552,7 +554,7 @@ export default function SubDepartmentsSettingsPage() {
                         <label
                           key={d.id}
                           className={`flex items-center gap-1.5 text-sm ${takenBy ? "opacity-50" : ""}`}
-                          title={takenBy ? `Already a secondary department of ${takenBy}` : undefined}
+                          title={takenBy ? `Already a core department of ${takenBy}` : undefined}
                         >
                           <Checkbox
                             disabled={!!takenBy}
