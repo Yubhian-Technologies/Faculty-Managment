@@ -70,33 +70,45 @@ export async function POST(request: Request) {
       sectionName = assignment.section?.trim() || "Section";
     }
 
-    // One session per (assignment, date) — a subject can be attended multiple
-    // times across the term, unlike the one-batch-per-assignment exam marks shape.
-    const id = `${assignmentId}_${date}`;
-    const ref = collegeRef.collection("studentAttendance").doc(id);
     const now = new Date();
+
+    // Resolved BEFORE the session doc id is built (not after) because the id
+    // itself is keyed by period number - see below. Also gates everything
+    // past this point (creating a session, or reconciling a DRAFT's roster)
+    // on the PUBLISHED timetable actually having this faculty member
+    // teaching this exact assignment right now, same as before. Mirrors the
+    // check the PATCH route re-runs before actually saving marks, so a
+    // request can't be replayed/crafted for a period that hasn't started yet
+    // or has already ended.
+    const windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now);
+    if (!windowCheck.ok) {
+      return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
+    }
+    const periodNumber = windowCheck.slot.periodNumber;
+
+    // One session per (assignment, date, period) — NOT just (assignment,
+    // date). The same faculty/section/subject can occupy consecutive
+    // TimetableSlot periods on the same day (e.g. Period 1 then Period 2 of
+    // the same assignment); each must be its own independent attendance
+    // record, never carried forward or shared, so the period number
+    // resolved above (the published timetable's own identifier for "which
+    // class session this is") is part of the id itself. A doc saved before
+    // this field existed sits at the old `${assignmentId}_${date}` id, which
+    // is simply never looked up again - orphaned, not migrated, same as
+    // this codebase's other doc-id scheme changes.
+    const id = `${assignmentId}_${date}_${periodNumber}`;
+    const ref = collegeRef.collection("studentAttendance").doc(id);
 
     const existingSnap = await ref.get();
 
-    // A submitted session is a locked historical record — always safe to
-    // read back (e.g. faculty reviewing it later), no window check needed
-    // since nothing gets written on this path.
+    // A submitted session is a locked historical record - safe to just read
+    // back (e.g. faculty re-polling mid-period after already submitting)
+    // without redoing the roster fetch below.
     if (existingSnap.exists) {
       const existing = existingSnap.data() as StudentAttendanceSession;
       if (existing.status === "SUBMITTED") {
         return NextResponse.json({ session: { ...existing, id } });
       }
-    }
-
-    // Everything past this point writes to Firestore (creates the session, or
-    // reconciles a DRAFT's roster) — only allowed while the PUBLISHED
-    // timetable actually has this faculty member teaching this exact
-    // assignment right now. Mirrors the check the PATCH route re-runs before
-    // actually saving marks, so a request can't be replayed/crafted for a
-    // period that hasn't started yet or has already ended.
-    const windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now);
-    if (!windowCheck.ok) {
-      return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
     }
 
     // Current roster, ordered for a stable S.No. column. Section-scoped
