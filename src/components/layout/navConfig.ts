@@ -160,6 +160,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"] },
   { label: "First Year Students", href: "/hod/students/incoming", iconName: "UserPlus", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
+  { label: "Regulations & Batches", href: "/hod/settings/regulations", iconName: "ScrollText", roles: ["HOD"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
   { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"] },

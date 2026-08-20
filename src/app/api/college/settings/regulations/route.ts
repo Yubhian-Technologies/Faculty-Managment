@@ -40,7 +40,16 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const session = await requireRole("SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL");
+    // HOD included alongside the Principal tier: an HOD maintains their own
+    // department's curriculum, so they need to keep the regulation codes and
+    // their intake batches current rather than waiting on the Principal.
+    //
+    // Note this is a COLLEGE-WIDE setting, not a per-department one - there is
+    // one list of regulations and one batch mapping for the whole college
+    // (AcademicRegulationSettings), so an edit by any HOD is visible to every
+    // department. That's inherent to where this data lives, not something the
+    // route can scope.
+    const session = await requireRole("SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
     const body = (await request.json()) as Partial<AcademicRegulationSettings> & { collegeId?: string };
 
     const collegeId = session.role === "SUPER_ADMIN" ? body.collegeId : session.collegeId;
