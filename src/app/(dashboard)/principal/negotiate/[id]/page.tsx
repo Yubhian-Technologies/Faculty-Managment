@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "@/hooks/useToast";
 import { ArrowRight, Plus, Save, CheckCircle2 } from "lucide-react";
 import type { HiringBatch, Candidate, CandidateApplication, HiringTermsTemplate } from "@/types";
@@ -110,6 +111,11 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
       toast({ variant: "destructive", title: "Enter negotiated salary and date of joining" });
       return;
     }
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (terms.dateOfJoining < todayStr) {
+      toast({ variant: "destructive", title: "Date of Joining cannot be in the past" });
+      return;
+    }
     setSavingId(applicationId);
     try {
       const selectedTerms = Object.entries(termsChecklists[applicationId] ?? {})
@@ -148,6 +154,8 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
 
   const allSaved = candidates.length > 0 && candidates.every((c) => savedIds.has(c.id) || (c.negotiatedSalary != null && c.dateOfJoining));
 
+  const todayStr = new Date().toISOString().split("T")[0];
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -155,91 +163,118 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
         description={`${batch.department} · ${candidates.length} candidate${candidates.length !== 1 ? "s" : ""} · enter salary and terms before making the final decision`}
       />
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {candidates.map((candidate) => {
           const terms = hireTerms[candidate.id] ?? emptyHireTerms;
-          const isSaved = savedIds.has(candidate.id);
+          const isSaved = savedIds.has(candidate.id) || (candidate.negotiatedSalary != null && !!candidate.dateOfJoining);
+          const hasIncompleteTerms = !terms.negotiatedSalary || !terms.dateOfJoining || terms.dateOfJoining < todayStr;
 
           return (
-            <Card key={candidate.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base">{candidate.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{candidate.email} · {candidate.phone}</p>
-                  </div>
-                  {isSaved && (
-                    <span className="text-sm text-green-600 font-medium flex items-center gap-1.5">
-                      <CheckCircle2 className="h-4 w-4" />Saved
-                    </span>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Expected Salary (₹/yr)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={terms.expectedSalary}
-                      onChange={(e) => setHireTerms((prev) => ({ ...prev, [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], expectedSalary: e.target.value } }))}
-                      placeholder="e.g. 600000"
-                      className="text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Negotiated Salary (₹/yr) *</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={terms.negotiatedSalary}
-                      onChange={(e) => setHireTerms((prev) => ({ ...prev, [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], negotiatedSalary: e.target.value } }))}
-                      placeholder="e.g. 650000"
-                      className="text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Date of Joining *</Label>
-                    <Input
-                      type="date"
-                      value={terms.dateOfJoining}
-                      onChange={(e) => setHireTerms((prev) => ({ ...prev, [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], dateOfJoining: e.target.value } }))}
-                      className="text-sm"
-                    />
-                  </div>
-                </div>
+            <Card key={candidate.id} className="overflow-hidden">
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value={candidate.id} className="border-b-0">
+                  <AccordionTrigger className="px-5 py-4 hover:no-underline flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 text-left">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-base">{candidate.name}</span>
+                          {isSaved ? (
+                            <span className="text-xs text-green-700 bg-green-50 border border-green-200 font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> Terms Set
+                            </span>
+                          ) : (
+                            <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 font-medium px-2 py-0.5 rounded-full">
+                              Pending Negotiation
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {candidate.email} · {candidate.phone}
+                        </p>
+                      </div>
+                    </div>
+                    {terms.negotiatedSalary && terms.dateOfJoining && (
+                      <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground mr-2">
+                        <span>CTC: <strong className="text-foreground">₹{Number(terms.negotiatedSalary).toLocaleString("en-IN")}/yr</strong></span>
+                        <span>Joining: <strong className="text-foreground">{terms.dateOfJoining}</strong></span>
+                      </div>
+                    )}
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 pb-5 pt-2 space-y-4 border-t bg-muted/10">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium">Expected Salary (₹/yr)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={terms.expectedSalary}
+                          onChange={(e) => setHireTerms((prev) => ({ ...prev, [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], expectedSalary: e.target.value } }))}
+                          placeholder="e.g. 600000"
+                          className="text-sm bg-background"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium">Negotiated Salary (₹/yr) <span className="text-destructive">*</span></Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={terms.negotiatedSalary}
+                          onChange={(e) => setHireTerms((prev) => ({ ...prev, [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], negotiatedSalary: e.target.value } }))}
+                          placeholder="e.g. 650000"
+                          className="text-sm bg-background"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium">Date of Joining <span className="text-destructive">*</span></Label>
+                        <Input
+                          type="date"
+                          min={todayStr}
+                          value={terms.dateOfJoining}
+                          onChange={(e) => setHireTerms((prev) => ({ ...prev, [candidate.id]: { ...emptyHireTerms, ...prev[candidate.id], dateOfJoining: e.target.value } }))}
+                          className="text-sm bg-background"
+                        />
+                      </div>
+                    </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Terms &amp; Conditions</Label>
-                  <div className="space-y-1.5">
-                    {Object.entries(termsChecklists[candidate.id] ?? {}).map(([term, checked]) => (
-                      <label key={term} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <Checkbox checked={checked} onCheckedChange={() => toggleTerm(candidate.id, term)} />
-                        {term}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      value={newTermInputs[candidate.id] ?? ""}
-                      onChange={(e) => setNewTermInputs((prev) => ({ ...prev, [candidate.id]: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTerm(candidate.id); } }}
-                      placeholder="e.g. Probationary period of one year"
-                      className="text-sm"
-                    />
-                    <Button type="button" variant="outline" size="sm" onClick={() => addTerm(candidate.id)}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium">Terms &amp; Conditions</Label>
+                      <div className="space-y-2 bg-background p-3 rounded-lg border">
+                        {Object.entries(termsChecklists[candidate.id] ?? {}).map(([term, checked]) => (
+                          <label key={term} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/40 p-1 rounded">
+                            <Checkbox checked={checked} onCheckedChange={() => toggleTerm(candidate.id, term)} />
+                            <span>{term}</span>
+                          </label>
+                        ))}
+                        <div className="flex gap-2 pt-1">
+                          <Input
+                            value={newTermInputs[candidate.id] ?? ""}
+                            onChange={(e) => setNewTermInputs((prev) => ({ ...prev, [candidate.id]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTerm(candidate.id); } }}
+                            placeholder="Add custom term (e.g. 1 year probation)..."
+                            className="text-xs bg-background"
+                          />
+                          <Button type="button" variant="outline" size="sm" onClick={() => addTerm(candidate.id)}>
+                            <Plus className="h-4 w-4 mr-1" /> Add
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
 
-                <div className="pt-2 border-t">
-                  <Button size="sm" loading={savingId === candidate.id} onClick={() => void saveCandidate(candidate.id)}>
-                    <Save className="h-4 w-4 mr-1.5" /> Save
-                  </Button>
-                </div>
-              </CardContent>
+                    <div className="flex items-center justify-between pt-2">
+                      {hasIncompleteTerms && (
+                        <p className="text-xs text-amber-600 font-medium">
+                          * Negotiated salary and a future joining date are required
+                        </p>
+                      )}
+                      <div className="ml-auto">
+                        <Button size="sm" loading={savingId === candidate.id} onClick={() => void saveCandidate(candidate.id)}>
+                          <Save className="h-4 w-4 mr-1.5" /> Save Terms
+                        </Button>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </Card>
           );
         })}

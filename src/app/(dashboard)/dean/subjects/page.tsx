@@ -30,10 +30,11 @@ export default function DeanSubjectsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  // Which intake batch (e.g. "2024-2028") each regulation code covers, set by
-  // the Principal (see RegulationSettingsCard) - shown next to the
-  // auto-resolved regulation below so the Dean sees which batch it is
-  // without needing to pick anything.
+  // Which intake batches (e.g. "2024-2028,2025-2029") each regulation code
+  // covers, set by the Principal or an HOD (see RegulationSettingsCard). Used
+  // to RESOLVE which regulation governs the selected year - not displayed: the
+  // badge below shows the code alone, since listing every batch a regulation
+  // covers says nothing about the one this particular year resolved through.
   const [regulationBatches, setRegulationBatches] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
@@ -381,7 +382,7 @@ export default function DeanSubjectsPage() {
                   ) : (
                     allowedRegulations.map((r) => (
                       <Badge key={r} variant="secondary" className="text-xs">
-                        {r}{regulationBatches[r] ? ` (${regulationBatches[r]})` : ""}
+                        {r}
                       </Badge>
                     ))
                   )}

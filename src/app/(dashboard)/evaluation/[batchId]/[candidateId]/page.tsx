@@ -14,7 +14,7 @@ import { CheckCircle2, Clock, ShieldOff, Video } from "lucide-react";
 import { MEETING_PLATFORM_LABELS } from "@/types";
 import type { HiringBatch, Candidate } from "@/types";
 
-type PersonView = { name: string; email: string };
+type PersonView = { name: string; email: string; bioDataSubmitted?: boolean };
 
 function Score1to10Selector({
   label,
@@ -113,9 +113,9 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       .then(([b, candidates, mine]) => {
         setBatch(b);
         setMyFeedback(mine);
-        const candidate = candidates.find((c) => c.id === candidateId);
+    const candidate = candidates.find((c) => c.id === candidateId);
         if (candidate) {
-          setPerson({ name: candidate.name ?? "Unknown", email: candidate.email ?? "" });
+          setPerson({ name: candidate.name ?? "Unknown", email: candidate.email ?? "", bioDataSubmitted: candidate.bioDataSubmitted });
         }
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load evaluation" }))
@@ -224,7 +224,18 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
         );
       })()}
 
-      {!canScore ? (
+      {!person?.bioDataSubmitted ? (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardContent className="p-8 text-center space-y-2">
+            <Clock className="h-8 w-8 text-amber-600 mx-auto" />
+            <p className="font-semibold text-amber-900">Bio Data Pending</p>
+            <p className="text-sm text-amber-800 max-w-md mx-auto">
+              Evaluation is blocked. <strong>{person?.name ?? "This candidate"}</strong> has not yet completed and submitted their bio data form.
+            </p>
+            <Button variant="outline" onClick={() => router.back()} className="mt-2">Back to Candidates</Button>
+          </CardContent>
+        </Card>
+      ) : !canScore ? (
         <Card className="border-dashed">
           <CardContent className="p-8 text-center space-y-2">
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />

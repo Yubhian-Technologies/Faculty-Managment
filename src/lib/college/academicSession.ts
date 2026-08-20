@@ -18,6 +18,23 @@ function parseBatchStartYear(batch: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/**
+ * Every intake year a regulation's batch field covers. One regulation commonly
+ * runs for several consecutive intakes ("2024-2028,2025-2029" - R23 governing
+ * both the 2024 and 2025 admissions), so the field is a comma-separated list
+ * and each entry contributes its own start year.
+ *
+ * Previously only the first entry was read, which meant a second batch typed
+ * after a comma was stored but never took effect - the regulation simply
+ * didn't resolve for that cohort's year.
+ */
+export function parseBatchStartYears(batch: string): number[] {
+  return batch
+    .split(",")
+    .map((part) => parseBatchStartYear(part.trim()))
+    .filter((y): y is number => y != null);
+}
+
 // Which regulation code governs ordinal course-year `courseYear` (1-based -
 // 1st Year, 2nd Year, ...) AS OF a given session, derived purely from each
 // regulation's own Batch (intake range, e.g. "2024-2028" - see
@@ -42,9 +59,11 @@ export function regulationsForCourseYearByBatch(
 ): string[] {
   const matches: string[] = [];
   for (const [code, batch] of Object.entries(regulationBatches)) {
-    const batchStartYear = parseBatchStartYear(batch);
-    if (batchStartYear == null) continue;
-    if (asOfStartYear - batchStartYear + 1 === courseYear) matches.push(code);
+    // Any one of the regulation's batches landing on this course-year is
+    // enough - they're consecutive intakes of the same regulation, so at most
+    // one of them can occupy a given year in a given session anyway.
+    const hit = parseBatchStartYears(batch).some((start) => asOfStartYear - start + 1 === courseYear);
+    if (hit) matches.push(code);
   }
   return matches;
 }

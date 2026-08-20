@@ -481,20 +481,26 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        className="flex-1"
-                        onClick={() => {
-                          if (candidate.negotiatedSalary == null || !candidate.dateOfJoining) {
-                            toast({ variant: "destructive", title: "Enter negotiated salary and date of joining before approving" });
-                            return;
-                          }
-                          setConfirmFor({ applicationId: candidate.id, action: "APPROVED" });
-                        }}
-                        disabled={!!isSaving}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                        Approve
-                      </Button>
+                      {(() => {
+                        const todayStr = new Date().toISOString().split("T")[0];
+                        const isTermsValid = candidate.negotiatedSalary != null && candidate.negotiatedSalary > 0 && candidate.dateOfJoining && candidate.dateOfJoining >= todayStr;
+                        return (
+                          <Button
+                            className="flex-1"
+                            onClick={() => {
+                              if (!isTermsValid) {
+                                toast({ variant: "destructive", title: "Enter a valid negotiated salary and future date of joining before approving" });
+                                return;
+                              }
+                              setConfirmFor({ applicationId: candidate.id, action: "APPROVED" });
+                            }}
+                            disabled={!!isSaving || !isTermsValid}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                            Approve
+                          </Button>
+                        );
+                      })()}
                       <Button
                         variant="destructive"
                         className="flex-1"

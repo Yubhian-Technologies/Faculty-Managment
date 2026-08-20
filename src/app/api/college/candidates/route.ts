@@ -87,6 +87,9 @@ export async function POST(request: Request) {
     if (!name || !email || !phone) {
       return NextResponse.json({ error: "name, email, phone required" }, { status: 400 });
     }
+    if (!/^\d{10}$/.test(phone.trim())) {
+      return NextResponse.json({ error: "Phone number must be exactly 10 digits" }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const addedByName = await getUserName(db, session.collegeId, session.uid);
