@@ -67,7 +67,12 @@ export async function PATCH(
     if (resumeUrl !== undefined) updates.resumeUrl = resumeUrl;
     if (name !== undefined) updates.name = name;
     if (email !== undefined) updates.email = email;
-    if (phone !== undefined) updates.phone = phone;
+    if (phone !== undefined) {
+      if (!/^\d{10}$/.test(phone.trim())) {
+        return NextResponse.json({ error: "Phone number must be exactly 10 digits" }, { status: 400 });
+      }
+      updates.phone = phone.trim();
+    }
 
     await db
       .collection("colleges")

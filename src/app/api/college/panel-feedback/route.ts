@@ -152,9 +152,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This batch has no candidates" }, { status: 400 });
     }
     const applicationSnaps = await Promise.all(applicationIds.map((aid) => collegeRef.collection("candidateApplications").doc(aid).get()));
-    const belongsToBatch = applicationSnaps.some((s) => s.exists && (s.data() as { candidateId?: string }).candidateId === candidateId);
-    if (!belongsToBatch) {
+    const matchingAppSnap = applicationSnaps.find((s) => s.exists && (s.data() as { candidateId?: string }).candidateId === candidateId);
+    if (!matchingAppSnap) {
       return NextResponse.json({ error: "This candidate is not part of this batch" }, { status: 400 });
+    }
+
+    // Bio Data Guardrail: Candidate MUST have completed their bio data form before evaluation
+    const candidateSnap = await collegeRef.collection("candidates").doc(candidateId).get();
+    if (!candidateSnap.exists || !(candidateSnap.data() as { bioDataSubmitted?: boolean })?.bioDataSubmitted) {
+      return NextResponse.json(
+        { error: "Candidate bio data is incomplete. Evaluation cannot proceed until the candidate completes their bio details." },
+        { status: 400 }
+      );
     }
 
     // Mirrors evaluation/[batchId]/[candidateId]/page.tsx's own canScore gate -

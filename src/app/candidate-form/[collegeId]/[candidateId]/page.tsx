@@ -201,7 +201,12 @@ export default function CandidateFormPage() {
     const errors: string[] = [];
     const currentYear = new Date().getFullYear();
 
-    if (!form.dateOfBirth) errors.push("Missing Date of Birth");
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (!form.dateOfBirth) {
+      errors.push("Missing Date of Birth");
+    } else if (form.dateOfBirth > todayStr) {
+      errors.push("Date of Birth cannot be in the future");
+    }
     if (!form.gender) errors.push("Missing Gender");
     if (!form.bloodGroup) errors.push("Missing Blood Group");
     if (!form.religion) errors.push("Missing Religion");
@@ -409,7 +414,7 @@ export default function CandidateFormPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="dateOfBirth">Date of Birth <span className="text-destructive">*</span></Label>
-                  <Input id="dateOfBirth" type="date" value={form.dateOfBirth ?? ""} onChange={(e) => updateForm({ dateOfBirth: e.target.value })} required />
+                  <Input id="dateOfBirth" type="date" max={new Date().toISOString().split("T")[0]} value={form.dateOfBirth ?? ""} onChange={(e) => updateForm({ dateOfBirth: e.target.value })} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="gender">Gender <span className="text-destructive">*</span></Label>

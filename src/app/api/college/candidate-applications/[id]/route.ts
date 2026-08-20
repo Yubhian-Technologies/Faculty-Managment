@@ -105,6 +105,24 @@ export async function PATCH(
     ) {
       return NextResponse.json({ error: "Only the Principal can set negotiation terms" }, { status: 403 });
     }
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (dateOfJoining !== undefined && dateOfJoining < todayStr) {
+      return NextResponse.json({ error: "Date of Joining cannot be in the past" }, { status: 400 });
+    }
+
+    if (status === "APPROVED") {
+      const existingData = applicationSnap.data() as { negotiatedSalary?: number; dateOfJoining?: string };
+      const effectiveSalary = negotiatedSalary !== undefined ? negotiatedSalary : existingData.negotiatedSalary;
+      const effectiveJoiningDate = dateOfJoining !== undefined ? dateOfJoining : existingData.dateOfJoining;
+
+      if (!effectiveSalary || effectiveSalary <= 0 || !effectiveJoiningDate || effectiveJoiningDate < todayStr) {
+        return NextResponse.json(
+          { error: "Candidate approval requires a valid negotiated salary and a future joining date." },
+          { status: 400 }
+        );
+      }
+    }
     if (
       (documentVerification !== undefined || joiningLetterUrl !== undefined || notifyPrincipalDocsReady) &&
       !isCollegeOfficeRole && !isPrincipalRole
