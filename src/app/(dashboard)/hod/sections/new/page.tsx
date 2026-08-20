@@ -84,7 +84,7 @@ export default function NewSectionPage() {
   // Once `branch` (a top-level department, e.g. "Electronics and
   // Communication Engineering") is picked, its own sub-departments (e.g.
   // "ECE-VLSI") become an optional further narrowing - for students admitted
-  // straight into that specialization rather than the plain branch. Reset
+  // straight into that sub-department rather than the plain branch. Reset
   // whenever `branch` itself changes (see the Select below), since a
   // different branch has a different set of sub-departments.
   const [branchSubDept, setBranchSubDept] = useState("");
@@ -313,8 +313,8 @@ export default function NewSectionPage() {
     departments.find((d) => d.name === name)?.code?.trim() || name;
   // The picked branch's own sub-departments (e.g. ECE -> ECE-VLSI) - offered
   // as an optional further narrowing once a branch with any is picked, for
-  // students admitted straight into that specialization. Configuring the
-  // parent as a Secondary Department (Edit Department page) is enough; a
+  // students admitted straight into that sub-department. Configuring the
+  // parent as a Core Department (Edit Department page) is enough; a
   // sub-department never needs to be separately, individually configured
   // there for this to work (see isConfiguredSecondaryDepartmentOrChild's own
   // doc-comment - the section/student write paths accept it either way).
@@ -498,26 +498,54 @@ export default function NewSectionPage() {
             ) : isBranchMode ? (
               <>
                 {/* Shared-first-year department (e.g. Basic Science): the section
-                    feeds one of the configured branches, so pick the branch +
-                    a section letter instead of typing a free-form name. */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    feeds one of the configured branches, so pick the branch
+                    first, then (optionally) narrow to one of its own
+                    sub-departments, before the letter/year pair. */}
+                <div className="space-y-2">
+                  <Label>Core Department *</Label>
+                  <Select
+                    value={branch}
+                    onValueChange={(v) => { setBranch(v); setBranchSubDept(""); }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select core department" /></SelectTrigger>
+                    <SelectContent>
+                      {branchOptions.map((b) => (
+                        <SelectItem key={b} value={b}>{b} ({branchCodeOf(b)})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Students in this section are promoted into this core department next year.
+                  </p>
+                </div>
+                {/* Only shown once a branch with its own sub-departments is
+                    picked (e.g. ECE -> ECE-VLSI) - optional, defaults to the
+                    plain branch. Configuring the branch itself as a Core
+                    Department is enough for its sub-departments to show up
+                    here; nothing extra needs to be configured per
+                    sub-department. */}
+                {branchSubDeptOptions.length > 0 && (
                   <div className="space-y-2">
-                    <Label>Secondary Department *</Label>
+                    <Label>Sub-Department (optional)</Label>
                     <Select
-                      value={branch}
-                      onValueChange={(v) => { setBranch(v); setBranchSubDept(""); }}
+                      value={branchSubDept || "none"}
+                      onValueChange={(v) => setBranchSubDept(v === "none" ? "" : v)}
                     >
-                      <SelectTrigger><SelectValue placeholder="Select secondary department" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select sub-department" /></SelectTrigger>
                       <SelectContent>
-                        {branchOptions.map((b) => (
-                          <SelectItem key={b} value={b}>{b} ({branchCodeOf(b)})</SelectItem>
+                        <SelectItem value="none">{branch} itself</SelectItem>
+                        {branchSubDeptOptions.map((d) => (
+                          <SelectItem key={d.id} value={d.name}>{d.name} ({d.code})</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Students in this section are promoted into this secondary department next year.
+                      Students admitted straight into a specific sub-department under {branch} - leave as
+                      &quot;{branch} itself&quot; for a plain {branchCodeOf(branch)} section.
                     </p>
                   </div>
+                )}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Section Letter *</Label>
                     <Input
@@ -531,44 +559,17 @@ export default function NewSectionPage() {
                       Section name will be {derivedName ? <strong className="text-foreground">{derivedName}</strong> : "e.g. BS-CSE-A"}
                     </p>
                   </div>
-                </div>
-                {/* Only shown once a branch with its own sub-departments is
-                    picked (e.g. ECE -> ECE-VLSI) - optional, defaults to the
-                    plain branch. Configuring the branch itself as a Secondary
-                    Department is enough for its sub-departments to show up
-                    here; nothing extra needs to be configured per
-                    specialization. */}
-                {branchSubDeptOptions.length > 0 && (
                   <div className="space-y-2">
-                    <Label>Specialization (optional)</Label>
-                    <Select
-                      value={branchSubDept || "none"}
-                      onValueChange={(v) => setBranchSubDept(v === "none" ? "" : v)}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select specialization" /></SelectTrigger>
+                    <Label>Year *</Label>
+                    <Select value={form.year} onValueChange={selectYear} disabled={!formCourse}>
+                      <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">{branch} itself</SelectItem>
-                        {branchSubDeptOptions.map((d) => (
-                          <SelectItem key={d.id} value={d.name}>{d.name} ({d.code})</SelectItem>
+                        {formYearOptions.map((y) => (
+                          <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Students admitted straight into a specific specialization under {branch} - leave as
-                      &quot;{branch} itself&quot; for a plain {branchCodeOf(branch)} section.
-                    </p>
                   </div>
-                )}
-                <div className="space-y-2">
-                  <Label>Year *</Label>
-                  <Select value={form.year} onValueChange={selectYear} disabled={!formCourse}>
-                    <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
-                    <SelectContent>
-                      {formYearOptions.map((y) => (
-                        <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
               </>
             ) : (

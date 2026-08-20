@@ -200,8 +200,8 @@ export default function NewCoursePage() {
                     <span className="font-medium">{conflictingDepartments.map((d) => d.name).join(", ")}</span>,
                     with no shared-year link to {ownDept?.name ?? "this department"}.{" "}
                     {structureRequired
-                      ? `${ownDept?.name ?? "This department"} already runs a shared-year structure elsewhere - this course will follow ${ownDept?.name ?? "this department"}'s own Secondary Departments setting, so double-check the Years Taught below are what you intend before adding.`
-                      : `Adding it here too will create a second, independent ${selected.name} program under the same catalog course - fine if that's intended (e.g. every branch runs its own), but if ${selected.name} is meant to be shared, set Secondary Departments on ${ownDept?.name ?? "this department"} (or on ${conflictingDepartments[0]?.name}'s own department) to connect them instead.`}
+                      ? `${ownDept?.name ?? "This department"} already runs a shared-year structure elsewhere - this course will follow ${ownDept?.name ?? "this department"}'s own Core Departments setting, so double-check the Years Taught below are what you intend before adding.`
+                      : `Adding it here too will create a second, independent ${selected.name} program under the same catalog course - fine if that's intended (e.g. every branch runs its own), but if ${selected.name} is meant to be shared, set Core Departments on ${ownDept?.name ?? "this department"} (or on ${conflictingDepartments[0]?.name}'s own department) to connect them instead.`}
                   </p>
                 </div>
               )}
@@ -219,7 +219,7 @@ export default function NewCoursePage() {
                   secondaryDepartmentsNote={
                     (ownDept?.secondaryDepartments?.length ?? 0) > 0
                       ? `Cross-listed with ${ownDept!.secondaryDepartments!.join(", ")} - set on ${ownDept?.name ?? "this department"}'s own page, not per course.`
-                      : `${ownDept?.name ?? "This department"} has no Secondary Departments set - edit the department to cross-list it to others.`
+                      : `${ownDept?.name ?? "This department"} has no Core Departments set - edit the department to cross-list it to others.`
                   }
                 />
               )}

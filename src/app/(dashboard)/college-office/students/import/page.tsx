@@ -124,7 +124,14 @@ export default function OfficeStudentImportPage() {
           .sort((a, b) => a.localeCompare(b))
       );
       const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean).sort((a, b) => a - b);
-      if (configured.length > 0) setYears(configured);
+      // Cap at the longest real course duration - the college-wide Academic
+      // Years list can carry more years than any course actually reaches
+      // (e.g. a stray "5th Year" with no 5-year course behind it), which
+      // would otherwise offer a Year no student in this fix dialog can ever
+      // really have. Same cap as the Students page's own Year filter/form.
+      const maxCourseDuration = loadedCourses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0);
+      const capped = maxCourseDuration > 0 ? configured.filter((y) => y <= maxCourseDuration) : configured;
+      if (capped.length > 0) setYears(capped);
     }).catch(() => { /* non-critical - the fix dialog just falls back to fewer/no options */ });
   }, []);
 

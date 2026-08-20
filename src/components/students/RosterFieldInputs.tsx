@@ -81,6 +81,17 @@ export function departmentsOfferingCourse(departments: Department[], courses: Co
  * Engineering (whose Basic Science groups CIVIL/IT/CSE/ECE/EEE through its
  * sub-departments and sets no secondaryDepartments at all) would never see
  * the field.
+ *
+ * Each raw name collected above is also expanded to its own children (e.g.
+ * configuring plain "Artificial Intelligence" as a cross-listed branch
+ * implicitly authorizes its sub-departments "AIML"/"AIDS" too, same as
+ * "Electronics and Communication Engineering" implicitly covers "ECE-VLSI") -
+ * mirrors the backend's isConfiguredSecondaryDepartmentOrChild, which already
+ * accepts a child's name typed directly (bulk CSV import, and this form's own
+ * unassigned-add submit). Without this expansion, a 1st-year admitted
+ * straight into AIML/AIDS/ECE-VLSI/Cyber Security had no dropdown option that
+ * actually named their real sub-branch - only the ambiguous parent - even
+ * though typing the child's name into a CSV cell already worked.
  */
 export function secondaryDepartmentOptions(
   departments: Department[],
@@ -95,6 +106,17 @@ export function secondaryDepartmentOptions(
   for (const n of own.managedDepartments ?? []) names.add(n);
   for (const child of departments.filter((d) => d.parentDepartmentId === own.id)) {
     for (const n of child.managedDepartments ?? []) names.add(n);
+  }
+  const childrenByParentName = new Map<string, string[]>();
+  for (const d of departments) {
+    if (!d.parentDepartmentId || !d.name) continue;
+    const parentName = departments.find((p) => p.id === d.parentDepartmentId)?.name;
+    if (!parentName) continue;
+    const arr = childrenByParentName.get(parentName);
+    if (arr) arr.push(d.name); else childrenByParentName.set(parentName, [d.name]);
+  }
+  for (const name of Array.from(names)) {
+    for (const childName of childrenByParentName.get(name) ?? []) names.add(childName);
   }
   names.delete(departmentName);
   return Array.from(names).sort((a, b) => a.localeCompare(b));

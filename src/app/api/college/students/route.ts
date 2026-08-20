@@ -336,8 +336,18 @@ export async function POST(request: Request) {
           // department's, which resolveCatalogId above is happy to fall back
           // to) - StudentRecord.courseId must always point at a course this
           // exact department offers, or a later same-named section under a
-          // different course could still be picked up ambiguously.
-          courseId = sameCourseNameDocs.find((c) => c.departmentId === deptDoc.id)?.id;
+          // different course could still be picked up ambiguously. A true
+          // sub-department (parentDepartmentId set - AIML/AIDS under AI,
+          // ECE-VLSI under ECE, Cyber Security under CSE) never owns a Course
+          // doc of its own though, same rule courseNamesForDepartment
+          // (RosterFieldInputs.tsx) already applies for the Add/Edit form's
+          // own Course dropdown - so its ONE specific parent's doc (not just
+          // any department's) is checked next, keeping this just as
+          // unambiguous as the direct match above.
+          courseId = sameCourseNameDocs.find((c) => c.departmentId === deptDoc.id)?.id
+            ?? (deptScopeDoc.parentDepartmentId
+              ? sameCourseNameDocs.find((c) => c.departmentId === deptScopeDoc.parentDepartmentId)?.id
+              : undefined);
         }
         let assignedYears = resolveDepartmentCourseScope(deptScopeDoc, catalogId).assignedYears;
         // A sub-department an HOD created carries no assignedYears/courseScopes
@@ -369,7 +379,7 @@ export async function POST(request: Request) {
         const secondaryDept = typeof body.secondaryDepartment === "string" ? body.secondaryDepartment.trim() : "";
         if (secondaryDept) {
           if (secondaryDept === dept) {
-            return NextResponse.json({ error: "Secondary Department must differ from Department" }, { status: 400 });
+            return NextResponse.json({ error: "Core Department must differ from Department" }, { status: 400 });
           }
           // `secondaryDept` may itself be a sub-department of one of `dept`'s
           // configured branches (e.g. "ECE-VLSI" under "Electronics and

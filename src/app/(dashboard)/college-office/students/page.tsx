@@ -110,7 +110,17 @@ export default function OfficeStudentsPage() {
       const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean);
       const fromStudents = Array.from(new Set(loaded.map((s) => s.year).filter(Boolean)));
       const merged = Array.from(new Set([...configured, ...fromStudents])).sort((a, b) => a - b);
-      setYears(merged.length > 0 ? merged : [1, 2, 3, 4]);
+      // The college-wide Academic Years list (Principal-managed, sequential
+      // add/remove) has no idea which years any real course actually reaches
+      // - it can carry more years than the longest course the college offers
+      // (e.g. a stray "5th Year" nothing under a 4-year B.Tech ever uses),
+      // which would otherwise sit in the Year filter and the Add/Edit form's
+      // fallback Year picker as a dead option no student can ever have. Cap
+      // at the longest real course duration - the same cap the Principal's
+      // own Years Taught editor already enforces at the source.
+      const maxCourseDuration = loadedCourses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0);
+      const capped = maxCourseDuration > 0 ? merged.filter((y) => y <= maxCourseDuration) : merged;
+      setYears(capped.length > 0 ? capped : [1, 2, 3, 4]);
     } catch {
       toast({ variant: "destructive", title: "Failed to load students" });
     } finally {

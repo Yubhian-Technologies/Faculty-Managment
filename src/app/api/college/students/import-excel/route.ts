@@ -155,30 +155,45 @@ export async function POST(request: Request) {
     // of which form the office typed.
     const plainDepartments = departmentsSnap.docs.map((d) => d.data() as { name?: string; code?: string });
     const departmentIdByLowerName = new Map<string, string>();
+    const parentDepartmentIdById = new Map<string, string | undefined>();
     for (const d of departmentsSnap.docs) {
       const name = ((d.data() as { name?: string }).name ?? "").trim();
       if (name) departmentIdByLowerName.set(name.toLowerCase(), d.id);
+      parentDepartmentIdById.set(d.id, (d.data() as { parentDepartmentId?: string }).parentDepartmentId);
     }
     const plainCourses = coursesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as { name?: string; code?: string; departmentId?: string }) }));
     const resolveDepartment = (input: string) => resolveDepartmentByNameOrCode(plainDepartments, input);
-    // Course is only ever resolved against the courses the row's OWN
-    // (resolved) department directly offers - no parent/feeder borrowing,
-    // since a row that names a department writes that department verbatim
-    // and a course it doesn't itself offer would be meaningless on it.
+    // A sub-department (parentDepartmentId set - e.g. "AIML"/"AIDS" under
+    // "Artificial Intelligence", "ECE-VLSI" under "ECE", "Cyber Security"
+    // under "CSE") never owns a Course doc of its own - same rule
+    // courseNamesForDepartment (RosterFieldInputs.tsx) already applies for the
+    // Add/Edit form's Course dropdown, so a row naming the sub-department
+    // directly must resolve Course through the parent's course catalog too,
+    // or every 2nd-4th year student admitted straight into one would be
+    // unimportable ("Course ... is not offered by <sub-department>") even
+    // though the Add/Edit form's own Course picker happily offers it. This is
+    // a true parentDepartmentId hierarchy, distinct from the feeder/
+    // Secondary-Department relationship below (Chemistry/Physics/Maths/
+    // English), which deliberately keeps NOT borrowing a course from whatever
+    // it cross-lists to - those departments already own their own course docs.
+    const effectiveCourseDepartmentId = (departmentId: string) => parentDepartmentIdById.get(departmentId) ?? departmentId;
     const resolveCourse = (departmentName: string, input: string) => {
       const departmentId = departmentIdByLowerName.get(departmentName.trim().toLowerCase());
-      return departmentId ? resolveCourseByNameOrCode(plainCourses, departmentId, input) : undefined;
+      return departmentId ? resolveCourseByNameOrCode(plainCourses, effectiveCourseDepartmentId(departmentId), input) : undefined;
     };
     // The real Course doc id behind a canonical course name (as resolved by
     // resolveCourse) within one department - a section can share its name
     // with another under a different course (see college/sections POST's own
     // duplicate check, scoped by courseId), so `courseId` is what actually
     // disambiguates "which section" a placed student is in - see
-    // StudentRecord.courseId's doc-comment.
+    // StudentRecord.courseId's doc-comment. Same parent fallback as
+    // resolveCourse above - a sub-department's own sections already store the
+    // PARENT's course doc id (there is no other one), so this must match.
     const resolveCourseId = (departmentName: string, canonicalCourseName: string): string | undefined => {
       const departmentId = departmentIdByLowerName.get(departmentName.trim().toLowerCase());
       if (!departmentId) return undefined;
-      return plainCourses.find((c) => c.departmentId === departmentId && (c.name ?? "").trim() === canonicalCourseName)?.id;
+      const effectiveId = effectiveCourseDepartmentId(departmentId);
+      return plainCourses.find((c) => c.departmentId === effectiveId && (c.name ?? "").trim() === canonicalCourseName)?.id;
     };
     const relatedDepartmentNames = buildRelatedNamesResolver(departmentsSnap);
     // Full department docs (not just resolved names), keyed by canonical
@@ -301,11 +316,11 @@ export async function POST(request: Request) {
         if (row.secondaryDepartment?.trim()) {
           unassignedSecondary = resolveDepartment(row.secondaryDepartment);
           if (!unassignedSecondary) {
-            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Secondary Department "${row.secondaryDepartment}" not found` });
+            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Core Department "${row.secondaryDepartment}" not found` });
             continue;
           }
           if (unassignedSecondary === departmentName) {
-            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Secondary Department must differ from Department" });
+            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Core Department must differ from Department" });
             continue;
           }
           // A real department, differing from Department, is not enough on
@@ -324,7 +339,7 @@ export async function POST(request: Request) {
             ? departmentNameById.get(candidateData.parentDepartmentId)
             : undefined;
           if (!ownerDeptData || !isConfiguredSecondaryDepartmentOrChild(ownerDeptData, unassignedSecondary, candidateParentName)) {
-            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `${departmentName} does not cross-list to "${unassignedSecondary}" - check Secondary Departments on the department` });
+            failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `${departmentName} does not cross-list to "${unassignedSecondary}" - check Core Departments on the department` });
             continue;
           }
         }
@@ -400,7 +415,7 @@ export async function POST(request: Request) {
       if (row.secondaryDepartment?.trim()) {
         requestedSecondaryDept = resolveDepartment(row.secondaryDepartment);
         if (!requestedSecondaryDept) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Secondary Department "${row.secondaryDepartment}" not found` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Core Department "${row.secondaryDepartment}" not found` });
           continue;
         }
       }
@@ -442,7 +457,7 @@ export async function POST(request: Request) {
           if (narrowed.length === 1) matches = narrowed;
         }
         if (matches.length > 1) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Multiple sections named "${row.section}" (Year ${row.year}) exist under ${departmentName} - add or correct this row's Secondary Department to say which one` });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Multiple sections named "${row.section}" (Year ${row.year}) exist under ${departmentName} - add or correct this row's Core Department to say which one` });
           continue;
         }
         section = matches[0];
@@ -490,11 +505,11 @@ export async function POST(request: Request) {
       if (!secondaryDept && sectionSecondaryDepts.length === 1) {
         secondaryDept = sectionSecondaryDepts[0];
       } else if (!secondaryDept && sectionSecondaryDepts.length > 1) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${section.name} is cross-listed to multiple departments (${sectionSecondaryDepts.join(", ")}) - add a Secondary Department value to this row to say which one` });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${section.name} is cross-listed to multiple departments (${sectionSecondaryDepts.join(", ")}) - add a Core Department value to this row to say which one` });
         continue;
       }
       if (secondaryDept && secondaryDept.toLowerCase() === section.department.trim().toLowerCase()) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Secondary Department cannot be the same as the section's department" });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber, error: "Core Department cannot be the same as the section's department" });
         continue;
       }
       // The section a row resolves to (by name/department/year) can be a real

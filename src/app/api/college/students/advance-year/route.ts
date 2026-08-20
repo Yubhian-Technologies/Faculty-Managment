@@ -98,7 +98,7 @@ export async function POST(request: Request) {
     if (unresolved.length > 0) {
       return NextResponse.json(
         {
-          error: `${unresolved.length} student(s) have no Secondary Department set, so their real branch can't be resolved - fix these first: `
+          error: `${unresolved.length} student(s) have no Core Department set, so their real branch can't be resolved - fix these first: `
             + unresolved.slice(0, 10).map((s) => s.name || s.id).join(", ")
             + (unresolved.length > 10 ? `, and ${unresolved.length - 10} more` : ""),
         },

@@ -111,6 +111,28 @@ export function resolveDepartmentCourseScope(
 }
 
 /**
+ * Whether `feederDept` explicitly cross-lists to `receivingDeptName` for this
+ * exact `year`/`catalogId` - the precise, per-year/per-course check that
+ * makes it safe to grant a receiving department's HOD view-only access to a
+ * feeder's sections (see sections/route.ts GET). Deliberately NOT a blanket
+ * "receivingDeptName is somewhere in feederDept.secondaryDepartments" check -
+ * that alone conflates "years/courses this feeder has actually reserved for
+ * itself" with "years the receiving department happens to be named for a
+ * totally different course", which is the exact bug this route's own history
+ * (see its block comment) warns against. Built on resolveDepartmentCourseScope
+ * so a per-course override is honored the same way every other caller of it is.
+ */
+export function isDeclaredFeederFor(
+  feederDept: Pick<Department, "assignedYears" | "secondaryDepartments" | "courseScopes">,
+  receivingDeptName: string,
+  year: number,
+  catalogId: string | undefined | null
+): boolean {
+  const scope = resolveDepartmentCourseScope(feederDept, catalogId);
+  return scope.secondaryDepartments.includes(receivingDeptName) && scope.assignedYears.includes(year);
+}
+
+/**
  * Years `department` does NOT teach itself for `catalogId`, even if its own
  * assignedYears (flat or per-course override) says nothing about them - years
  * some OTHER department has claimed as a feeder for this one
@@ -249,17 +271,44 @@ function allClaimedYears(d: Pick<Department, "assignedYears" | "courseScopes">):
 }
 
 /**
- * A department qualifies as the shared first-year department when it claims
+ * A department qualifies as A shared first-year department when it claims
  * year 1 AND acts as a shared parent - either by being split into
  * sub-departments (`hasSubDepartments`) or by cross-listing the branches it
  * feeds (`secondaryDepartments`). A plain department that merely teaches year 1
  * for its own branch matches neither and is correctly left alone.
+ *
+ * Exported - unlike the rest of this file's internals - because a college can
+ * genuinely have MORE THAN ONE such department at once, each independent of
+ * the others: e.g. Chemistry, English, Maths and Physics each separately
+ * claiming year 1 and cross-listing to different real branches, with no
+ * parent-department layer tying them together (SHRI VISHNU ENGINEERING
+ * COLLEGE FOR WOMEN's actual shape). `structureFromDepartments`'s own
+ * `commonDepartment` below picks exactly ONE of these deterministically -
+ * correct and necessary for its callers (cohort distribution, promotion),
+ * which structurally need a single department to act on - but wrong for a
+ * purely presentational "is this department one of the shared first-year
+ * ones" question, which every qualifying department should answer yes to.
+ * See getFreshmanDepartmentIds below for that latter use.
  */
-function isCommonYearDepartment(d: DepartmentWithId): boolean {
+export function isCommonYearDepartment(d: DepartmentWithId): boolean {
   if (d.isActive === false) return false;
   if (d.parentDepartmentId) return false; // sub-departments never qualify
   if (!allClaimedYears(d).includes(1)) return false;
   return Boolean(d.hasSubDepartments) || (d.secondaryDepartments ?? []).length > 0;
+}
+
+/**
+ * Every department that qualifies as A shared/common first-year department
+ * (isCommonYearDepartment) - not just the single one `structureFromDepartments`
+ * picks as `commonDepartment`. Powers the "Freshman's Department" badge
+ * (FreshmanDepartmentBadge and its inline picker annotations in
+ * DepartmentScopeSelect/hod/sections), which must mark EVERY such department,
+ * not just whichever one the deterministic tie-break happens to prefer -
+ * see isCommonYearDepartment's own doc-comment for why the two answers
+ * legitimately differ.
+ */
+export function getFreshmanDepartmentIds(allDepartments: DepartmentWithId[]): Set<string> {
+  return new Set(allDepartments.filter(isCommonYearDepartment).map((d) => d.id));
 }
 
 /** Builds the branch -> owning sub-department index from a set of departments. */
