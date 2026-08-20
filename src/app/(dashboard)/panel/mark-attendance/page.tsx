@@ -165,19 +165,24 @@ export default function MarkAttendancePage() {
   }
 
   // The active period drives which class is loaded — no manual selection.
-  // Only (re)loads when the active assignment actually changes (period
+  // Only (re)loads when the active session identity actually changes (period
   // rolled over, or a class just became active), so an in-progress poll
-  // never wipes marks the faculty is still entering for the same period.
+  // never wipes marks the faculty is still entering for the same period. Keyed
+  // by period number too (matching the API's `${assignmentId}_${date}_${periodNumber}`
+  // session id) - not just assignmentId - so consecutive periods of the same
+  // assignment (same faculty/section/subject back-to-back) are recognized as
+  // a period change and reload into a fresh, independent session rather than
+  // reusing/continuing Period 1's into Period 2.
   useEffect(() => {
-    if (!currentPeriod?.active || !currentPeriod.assignmentId) {
+    if (!currentPeriod?.active || !currentPeriod.assignmentId || currentPeriod.periodNumber == null) {
       if (attendanceSession) resetSession();
       return;
     }
-    const key = `${currentPeriod.assignmentId}_${todayStr()}`;
+    const key = `${currentPeriod.assignmentId}_${todayStr()}_${currentPeriod.periodNumber}`;
     if (attendanceSession?.id === key) return;
     void handleLoadStudents(currentPeriod.assignmentId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPeriod?.active, currentPeriod?.assignmentId]);
+  }, [currentPeriod?.active, currentPeriod?.assignmentId, currentPeriod?.periodNumber]);
 
   // Only one of the four modes is active at a time. Picking a mode fills
   // every row with that mode's default status immediately — for "Mark All

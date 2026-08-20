@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -15,9 +15,18 @@ interface ClassWorkEntry {
   classNotes: string;
 }
 interface StudentRow {
+  studentId: string;
   rollNumber: string;
   name: string;
   statusByPeriod: Record<number, StudentAttendanceMark | null>;
+}
+interface SubjectAttendance {
+  subjectId: string;
+  subjectName: string;
+  periods: number[];
+  totalClasses: number;
+  overallPercentage: number;
+  percentageByStudent: Record<string, number>;
 }
 
 /** "2026-08-18" -> "18-08-2026" */
@@ -59,6 +68,7 @@ export default function FacultyAttendanceReportDayPage() {
   const [classWork, setClassWork] = useState<ClassWorkEntry[]>([]);
   const [periods, setPeriods] = useState<number[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [subjects, setSubjects] = useState<SubjectAttendance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -73,10 +83,12 @@ export default function FacultyAttendanceReportDayPage() {
           classWork?: ClassWorkEntry[];
           periods?: number[];
           students?: StudentRow[];
+          subjects?: SubjectAttendance[];
         };
         setClassWork(json.classWork ?? []);
         setPeriods(json.periods ?? []);
         setStudents(json.students ?? []);
+        setSubjects(json.subjects ?? []);
       } catch {
         toast({ variant: "destructive", title: "Failed to load report" });
       } finally {
@@ -84,6 +96,37 @@ export default function FacultyAttendanceReportDayPage() {
       }
     })();
   }, [sectionId, year, month, date]);
+
+  // One period column belongs to exactly one subject (see the API's doc-id
+  // scheme: `${assignmentId}_${date}_${periodNumber}`), so each subject in
+  // `subjects` owns a contiguous slice of `periods` - looked up per period
+  // rather than assumed to line up 1:1, since a day can have more than one
+  // subject (or the same subject taught in two consecutive periods).
+  const subjectByPeriod = useMemo(() => {
+    const map = new Map<number, SubjectAttendance>();
+    for (const subj of subjects) for (const p of subj.periods) map.set(p, subj);
+    return map;
+  }, [subjects]);
+
+  // Interleaves one "Attendance %" column right before each subject's first
+  // period column that day - so a single-subject day (the common case) gets
+  // exactly the Attendance % + Period layout requested, while a day spanning
+  // more than one subject still gets each subject's own column rather than
+  // one column wrongly averaging across different subjects.
+  type ReportColumn = { type: "percent"; subject: SubjectAttendance } | { type: "period"; period: number };
+  const columns = useMemo<ReportColumn[]>(() => {
+    const cols: ReportColumn[] = [];
+    let lastSubjectId: string | null = null;
+    for (const p of periods) {
+      const subj = subjectByPeriod.get(p);
+      if (subj && subj.subjectId !== lastSubjectId) {
+        cols.push({ type: "percent", subject: subj });
+        lastSubjectId = subj.subjectId;
+      }
+      cols.push({ type: "period", period: p });
+    }
+    return cols;
+  }, [periods, subjectByPeriod]);
 
   return (
     <div className="space-y-6">
@@ -132,6 +175,20 @@ export default function FacultyAttendanceReportDayPage() {
             </CardContent>
           </Card>
 
+          {subjects.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {subjects.map((subj) => (
+                <div
+                  key={subj.subjectId}
+                  className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-900"
+                >
+                  Overall Attendance{subjects.length > 1 ? ` — ${subj.subjectName}` : ""}:{" "}
+                  <strong>{subj.overallPercentage}%</strong>
+                </div>
+              ))}
+            </div>
+          )}
+
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -139,9 +196,15 @@ export default function FacultyAttendanceReportDayPage() {
                   <tr>
                     <th className="px-4 py-3">Registration Number</th>
                     <th className="px-4 py-3">Name</th>
-                    {periods.map((p) => (
-                      <th key={p} className="px-4 py-3 text-center">Period {p}</th>
-                    ))}
+                    {columns.map((col) =>
+                      col.type === "percent" ? (
+                        <th key={`pct-${col.subject.subjectId}`} className="px-4 py-3 text-center">
+                          Attendance %{subjects.length > 1 ? ` (${col.subject.subjectName})` : ""}
+                        </th>
+                      ) : (
+                        <th key={`p-${col.period}`} className="px-4 py-3 text-center">Period {col.period}</th>
+                      )
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -149,11 +212,17 @@ export default function FacultyAttendanceReportDayPage() {
                     <tr key={`${s.rollNumber}-${i}`}>
                       <td className="px-4 py-2.5">{s.rollNumber}</td>
                       <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                      {periods.map((p) => (
-                        <td key={p} className="px-4 py-2.5 text-center">
-                          <AttendanceMark status={s.statusByPeriod[p]} />
-                        </td>
-                      ))}
+                      {columns.map((col) =>
+                        col.type === "percent" ? (
+                          <td key={`pct-${col.subject.subjectId}`} className="px-4 py-2.5 text-center font-semibold text-foreground">
+                            {col.subject.percentageByStudent[s.studentId] ?? 0}%
+                          </td>
+                        ) : (
+                          <td key={`p-${col.period}`} className="px-4 py-2.5 text-center">
+                            <AttendanceMark status={s.statusByPeriod[col.period]} />
+                          </td>
+                        )
+                      )}
                     </tr>
                   ))}
                 </tbody>

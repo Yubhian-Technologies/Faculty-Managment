@@ -121,7 +121,13 @@ export type PeriodWindowCheck =
   | { ok: false; reason: "NOT_SCHEDULED" }
   // The slot exists today, but the current clock time falls outside its
   // period window (too early, or the period has already ended).
-  | { ok: false; reason: "OUTSIDE_WINDOW"; startTime: string; endTime: string; phase: "BEFORE" | "AFTER" };
+  | { ok: false; reason: "OUTSIDE_WINDOW"; startTime: string; endTime: string; phase: "BEFORE" | "AFTER" }
+  // A period IS currently in session for this assignment, but it's a
+  // different period number than `expectedPeriodNumber` - e.g. this exact
+  // assignment has consecutive periods today (Period 1 then Period 2, same
+  // faculty/section/subject) and the caller is trying to save against
+  // Period 1's session while Period 2 is the one actually active right now.
+  | { ok: false; reason: "PERIOD_MISMATCH"; activePeriodNumber: number };
 
 /**
  * Server-side gate for actually writing attendance: true only when `date` is
@@ -140,6 +146,15 @@ export async function checkFacultyPeriodWindow(
   assignmentId: string,
   dateISO: string,
   now: Date = new Date(),
+  // Pass the SPECIFIC period a saved session belongs to (see
+  // StudentAttendanceSession.periodNumber) when re-validating a save against
+  // an already-created session - without this, an assignment with two
+  // consecutive periods today (same faculty/section/subject) would let a
+  // save against Period 1's session through just because SOME period of
+  // this assignment happens to be active right now, even after Period 2 has
+  // taken over. Omit when there's no session yet (creating a fresh one just
+  // wants whichever period is active right now).
+  expectedPeriodNumber?: number,
 ): Promise<PeriodWindowCheck> {
   const { date: collegeDate, day, minutes: nowMinutes } = collegeNow(now);
   if (dateISO !== collegeDate) {
@@ -175,6 +190,9 @@ export async function checkFacultyPeriodWindow(
     (r) => nowMinutes >= toMinutes(r.startTime) && nowMinutes < toMinutes(r.endTime)
   );
   if (active) {
+    if (expectedPeriodNumber != null && active.slot.periodNumber !== expectedPeriodNumber) {
+      return { ok: false, reason: "PERIOD_MISMATCH", activePeriodNumber: active.slot.periodNumber };
+    }
     return { ok: true, slot: active.slot, startTime: active.startTime, endTime: active.endTime };
   }
 
@@ -199,5 +217,7 @@ export function periodWindowMessage(check: Exclude<PeriodWindowCheck, { ok: true
       return check.phase === "BEFORE"
         ? `This period has not started yet (${check.startTime}–${check.endTime}).`
         : `Attendance period ended at ${check.endTime}.`;
+    case "PERIOD_MISMATCH":
+      return `This period has ended - Period ${check.activePeriodNumber} is now in session. Please reload to mark its attendance.`;
   }
 }

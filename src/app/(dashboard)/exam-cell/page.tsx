@@ -6,6 +6,7 @@ import { ClipboardList, CheckCircle2, Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EXAM_TYPE_LABELS } from "@/types";
 import type { Course, ExamConfiguration } from "@/types";
 
 function ordinalYear(year: number) {
@@ -105,6 +106,7 @@ export default function ExamCellDashboard() {
                     <th className="px-4 py-3">Course</th>
                     <th className="px-4 py-3">Year</th>
                     <th className="px-4 py-3">Branch</th>
+                    <th className="px-4 py-3">Exam Type</th>
                     <th className="px-4 py-3">Internal</th>
                     <th className="px-4 py-3">External</th>
                     <th className="px-4 py-3" />
@@ -116,11 +118,12 @@ export default function ExamCellDashboard() {
                       <td className="px-4 py-2.5 font-medium text-foreground">{c.courseName}</td>
                       <td className="px-4 py-2.5">{ordinalYear(c.year)}</td>
                       <td className="px-4 py-2.5">{c.department}</td>
+                      <td className="px-4 py-2.5">{c.examType ? EXAM_TYPE_LABELS[c.examType] : "—"}</td>
                       <td className="px-4 py-2.5">{c.internalMaxMarks}</td>
                       <td className="px-4 py-2.5">{c.externalMaxMarks}</td>
                       <td className="px-4 py-2.5 text-right">
                         <Button asChild variant="ghost" size="sm">
-                          <Link href={`/exam-cell/configure?courseId=${c.courseId}&year=${c.year}`}>Edit</Link>
+                          <Link href={`/exam-cell/configure?courseId=${c.courseId}&year=${c.year}${c.examType ? `&examType=${c.examType}` : ""}`}>Edit</Link>
                         </Button>
                       </td>
                     </tr>
