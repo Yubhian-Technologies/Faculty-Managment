@@ -12,7 +12,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
-import type { Course, Department, ExamConfiguration } from "@/types";
+import { EXAM_TYPE_LABELS } from "@/types";
+import type { Course, Department, ExamConfiguration, ExamType } from "@/types";
+
+const EXAM_TYPES: ExamType[] = ["THEORY", "LAB"];
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -35,6 +38,7 @@ function ExamCellConfigureForm() {
   const searchParams = useSearchParams();
   const preselectedCourseId = searchParams.get("courseId");
   const preselectedYear = searchParams.get("year");
+  const preselectedExamType = searchParams.get("examType") as ExamType | null;
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -43,6 +47,7 @@ function ExamCellConfigureForm() {
   const [courseName, setCourseName] = useState("");
   const [year, setYear] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [examType, setExamType] = useState<ExamType | "">("");
 
   const [internalMaxMarks, setInternalMaxMarks] = useState("");
   const [externalMaxMarks, setExternalMaxMarks] = useState("");
@@ -65,14 +70,18 @@ function ExamCellConfigureForm() {
         setCourses(loadedCourses);
         setDepartments(deptJson.departments ?? []);
 
-        // Pre-select everything from ?courseId=&year= (the dashboard's "Edit"
-        // links), now that this same load has the data needed to resolve it.
+        // Pre-select everything from ?courseId=&year=&examType= (the
+        // dashboard's "Edit" links), now that this same load has the data
+        // needed to resolve it.
         if (preselectedCourseId && preselectedYear) {
           const course = loadedCourses.find((c) => c.id === preselectedCourseId);
           if (course) {
             setCourseName(course.name);
             setYear(preselectedYear);
             setDepartmentId(course.departmentId);
+            if (preselectedExamType && EXAM_TYPES.includes(preselectedExamType)) {
+              setExamType(preselectedExamType);
+            }
           }
         }
       } catch {
@@ -116,6 +125,18 @@ function ExamCellConfigureForm() {
   // even with Year 3 selected. Scoped the same way Principal's Internal
   // Marks page is (resolveDepartmentCourseScope, per-course override
   // included).
+  //
+  // A department with NO explicit assignedYears (flat or per-course
+  // override) is unconfigured, not "assigned to nothing" - every other
+  // assignedYears check across the app (sections/students/subjects routes,
+  // this same page's own yearOptions fallback) treats an empty array as "no
+  // restriction, offers every year of the course" and only narrows once a
+  // department has actually set something. This memo used to skip that
+  // fallback and do a bare `.includes(yearNum)`, which silently excluded any
+  // never-explicitly-scoped department (e.g. COMPUTER SCIENCE) from every
+  // Branch list even though it structurally teaches all of that course's
+  // years - bounded by the course's own durationYears so an unconfigured
+  // department still can't offer a year beyond what the course even runs.
   const branchOptions = useMemo(() => {
     if (!courseName || !year) return [];
     const yearNum = Number(year);
@@ -125,7 +146,11 @@ function ExamCellConfigureForm() {
       .forEach((c) => {
         const dept = departmentById.get(c.departmentId);
         if (!dept) return;
-        if (!resolveDepartmentCourseScope(dept, c.catalogId).assignedYears.includes(yearNum)) return;
+        const assignedYears = resolveDepartmentCourseScope(dept, c.catalogId).assignedYears;
+        const offersYear = assignedYears.length > 0
+          ? assignedYears.includes(yearNum)
+          : yearNum >= 1 && yearNum <= c.durationYears;
+        if (!offersYear) return;
         seen.set(c.departmentId, departmentNameById.get(c.departmentId) ?? c.departmentId);
       });
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
@@ -146,24 +171,30 @@ function ExamCellConfigureForm() {
   }
 
   function resetDownstream(from: "course" | "year") {
-    if (from === "course") { setYear(""); setDepartmentId(""); resetConfigFields(); }
-    if (from === "year") { setDepartmentId(""); resetConfigFields(); }
+    if (from === "course") { setYear(""); setDepartmentId(""); setExamType(""); resetConfigFields(); }
+    if (from === "year") { setDepartmentId(""); setExamType(""); resetConfigFields(); }
   }
 
   function handleBranchChange(v: string) {
     setDepartmentId(v);
+    setExamType("");
     resetConfigFields();
   }
 
-  // Load the configuration whenever the resolved course + year changes to a
-  // real selection — this is now the FULL identity (branch is implied by
-  // courseId), no subject involved.
+  function handleExamTypeChange(v: string) {
+    setExamType(v as ExamType);
+    resetConfigFields();
+  }
+
+  // Load the configuration whenever the resolved course + year + examType
+  // changes to a real selection — this is now the FULL identity (branch is
+  // implied by courseId), no subject involved.
   useEffect(() => {
-    if (!resolvedCourse || !year) return;
+    if (!resolvedCourse || !year || !examType) return;
     void (async () => {
       setIsLoadingConfig(true);
       try {
-        const res = await fetch(`/api/college/exam-configurations?courseId=${resolvedCourse.id}&year=${year}`);
+        const res = await fetch(`/api/college/exam-configurations?courseId=${resolvedCourse.id}&year=${year}&examType=${examType}`);
         const json = (await res.json()) as { configuration?: ExamConfiguration | null };
         if (json.configuration) {
           const cfg = json.configuration;
@@ -187,7 +218,13 @@ function ExamCellConfigureForm() {
         setIsLoadingConfig(false);
       }
     })();
-  }, [resolvedCourse, year]);
+  }, [resolvedCourse, year, examType]);
+
+  // A configuration already saved for this exact course+year+branch+examType
+  // is locked to view-only - Exam Cell can look at it but never edit/re-save
+  // it (see the POST route's matching 409 guard), so re-saving the same
+  // identity can never silently overwrite what's there.
+  const isViewOnly = existingConfig !== null;
 
   function updateComponent(id: string, patch: Partial<ComponentForm>) {
     setComponents((list) => list.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -207,7 +244,7 @@ function ExamCellConfigureForm() {
   const breakdownMatches = hasNamedComponent && internalMax > 0 && breakdownTotal === internalMax;
 
   async function handleSave() {
-    if (!resolvedCourse || !year) return;
+    if (!resolvedCourse || !year || !examType || isViewOnly) return;
     const cleanComponents = components.filter((c) => c.name.trim());
     if (cleanComponents.length === 0) {
       toast({ variant: "destructive", title: "Add at least one internal marks component" });
@@ -230,6 +267,7 @@ function ExamCellConfigureForm() {
           courseName: resolvedCourse.name,
           department: branchName,
           year: Number(year),
+          examType,
           internalMaxMarks: internalMax,
           externalMaxMarks: Number(externalMaxMarks) || 0,
           components: cleanComponents.map((c, i) => ({
@@ -262,7 +300,7 @@ function ExamCellConfigureForm() {
 
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <div className="space-y-2">
               <Label>Course</Label>
               <Select value={courseName} onValueChange={(v) => { setCourseName(v); resetDownstream("course"); }} disabled={isLoadingData}>
@@ -295,35 +333,48 @@ function ExamCellConfigureForm() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Exam Type</Label>
+              <Select value={examType} onValueChange={handleExamTypeChange} disabled={!departmentId}>
+                <SelectTrigger><SelectValue placeholder="Select exam type" /></SelectTrigger>
+                <SelectContent>
+                  {EXAM_TYPES.map((t) => <SelectItem key={t} value={t}>{EXAM_TYPE_LABELS[t]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {departmentId && (
+      {departmentId && examType && (
         isLoadingConfig ? (
           <div className="h-72 rounded-lg border bg-muted/30 animate-pulse" />
         ) : (
           <>
+            {isViewOnly && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                Configuration already done.
+              </div>
+            )}
+
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
-                  Examination Configuration — {courseName} · {ordinalYear(Number(year))} · {branchName}
-                  {existingConfig && (
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">(editing existing configuration)</span>
-                  )}
+                  Examination Configuration — {courseName} · {ordinalYear(Number(year))} · {branchName} · {EXAM_TYPE_LABELS[examType as ExamType]}
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  This single configuration applies to every subject taught under {courseName} · {ordinalYear(Number(year))} · {branchName}.
+                  This single configuration applies to every {EXAM_TYPE_LABELS[examType as ExamType].toLowerCase()} subject taught under {courseName} · {ordinalYear(Number(year))} · {branchName}.
                 </p>
               </CardHeader>
               <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Internal Maximum Marks</Label>
-                  <Input type="number" min={0} value={internalMaxMarks} onChange={(e) => setInternalMaxMarks(e.target.value)} placeholder="e.g. 30" />
+                  <Input type="number" min={0} value={internalMaxMarks} onChange={(e) => setInternalMaxMarks(e.target.value)} placeholder="e.g. 30" disabled={isViewOnly} />
                 </div>
                 <div className="space-y-2">
                   <Label>External Maximum Marks</Label>
-                  <Input type="number" min={0} value={externalMaxMarks} onChange={(e) => setExternalMaxMarks(e.target.value)} placeholder="e.g. 70" />
+                  <Input type="number" min={0} value={externalMaxMarks} onChange={(e) => setExternalMaxMarks(e.target.value)} placeholder="e.g. 70" disabled={isViewOnly} />
                 </div>
                 {(internalMax > 0 || Number(externalMaxMarks) > 0) && (
                   <p className="sm:col-span-2 text-xs text-muted-foreground">
@@ -346,6 +397,7 @@ function ExamCellConfigureForm() {
                           value={c.name}
                           onChange={(e) => updateComponent(c.id, { name: e.target.value })}
                           placeholder="Component name (e.g. Quizzes)"
+                          disabled={isViewOnly}
                         />
                         <Input
                           type="number"
@@ -353,19 +405,21 @@ function ExamCellConfigureForm() {
                           value={c.maxMarks}
                           onChange={(e) => updateComponent(c.id, { maxMarks: e.target.value })}
                           placeholder="Maximum marks"
+                          disabled={isViewOnly}
                         />
                         <Input
                           value={c.description}
                           onChange={(e) => updateComponent(c.id, { description: e.target.value })}
                           placeholder="Description (optional)"
+                          disabled={isViewOnly}
                         />
                       </div>
                       <div className="flex items-center gap-3">
                         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Checkbox checked={c.isActive} onCheckedChange={(v) => updateComponent(c.id, { isActive: v === true })} />
+                          <Checkbox checked={c.isActive} onCheckedChange={(v) => updateComponent(c.id, { isActive: v === true })} disabled={isViewOnly} />
                           Active
                         </label>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeComponent(c.id)} disabled={components.length === 1}>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeComponent(c.id)} disabled={isViewOnly || components.length === 1}>
                           <Trash2 className="h-3.5 w-3.5 text-destructive" />
                         </Button>
                       </div>
@@ -373,7 +427,7 @@ function ExamCellConfigureForm() {
                   ))}
                 </div>
 
-                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addComponent}>
+                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addComponent} disabled={isViewOnly}>
                   <Plus className="h-3.5 w-3.5" /> Add Component
                 </Button>
 
@@ -394,7 +448,7 @@ function ExamCellConfigureForm() {
             </Card>
 
             <div className="flex justify-end">
-              <Button onClick={() => void handleSave()} loading={saving} disabled={!breakdownMatches || saving}>
+              <Button onClick={() => void handleSave()} loading={saving} disabled={isViewOnly || !breakdownMatches || saving}>
                 <Save className="h-4 w-4" /> Save Configuration
               </Button>
             </div>

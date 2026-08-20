@@ -3,8 +3,13 @@ import type { Timestamp } from "firebase/firestore";
 // ─── Student Attendance (Faculty marks present/absent for a class session) ───
 // Faculty (PANEL_MEMBER) marks attendance for a section+subject they're
 // currently assigned to teach (see teachingAssignments), for one calendar
-// date. Unlike internalExamMarks (one batch per assignment, ever), a session
-// exists per (assignment, date) — doc id: `${assignmentId}_${date}`.
+// date AND one specific published-timetable period. Unlike internalExamMarks
+// (one batch per assignment, ever), a session exists per (assignment, date,
+// period) — doc id: `${assignmentId}_${date}_${periodNumber}`. Consecutive
+// periods for the same assignment on the same day (e.g. Period 1 then
+// Period 2 of the same faculty/section/subject) are two independent
+// sessions - each is its own fresh roster/marks/submission, never carried
+// forward from the other (see /api/college/student-attendance).
 
 export type StudentAttendanceMark = "PRESENT" | "ABSENT";
 
@@ -23,7 +28,7 @@ export interface StudentAttendanceEntry {
 }
 
 export interface StudentAttendanceSession {
-  id: string; // `${assignmentId}_${date}`
+  id: string; // `${assignmentId}_${date}_${periodNumber}`
   collegeId: string;
   department: string;
   // The source teachingAssignments doc — teaching assignments come in two

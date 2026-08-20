@@ -44,9 +44,13 @@ export async function PATCH(
     // assignment has fallen outside its period window, even if the session
     // itself is still a DRAFT (e.g. a request replayed after the period
     // ended, or one crafted directly against an old/completed period).
+    // `existing.periodNumber` is also passed through so that a still-DRAFT
+    // Period 1 session can't be saved once Period 2 (same assignment) has
+    // taken over - "some period of this assignment is active right now"
+    // isn't enough; it must be THIS session's own period.
     const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
     const windowCheck = await checkFacultyPeriodWindow(
-      db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date
+      db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, new Date(), existing.periodNumber
     );
     if (!windowCheck.ok) {
       return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });

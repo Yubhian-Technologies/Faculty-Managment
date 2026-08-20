@@ -155,6 +155,7 @@ export async function GET(request: Request) {
       });
 
       const studentMap = new Map<string, {
+        studentId: string;
         rollNumber: string;
         name: string;
         statusByPeriod: Record<number, StudentAttendanceMark | null>;
@@ -164,7 +165,7 @@ export async function GET(request: Request) {
         for (const e of r.entries) {
           let row = studentMap.get(e.studentId);
           if (!row) {
-            row = { rollNumber: e.rollNumber, name: e.name, statusByPeriod: {} };
+            row = { studentId: e.studentId, rollNumber: e.rollNumber, name: e.name, statusByPeriod: {} };
             studentMap.set(e.studentId, row);
           }
           row.statusByPeriod[p] = e.status;
@@ -173,7 +174,54 @@ export async function GET(request: Request) {
       const students = [...studentMap.values()]
         .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
-      return NextResponse.json({ classWork, periods, students });
+      // Subject-wise attendance percentage - one group per distinct
+      // assignmentId among today's periods (== one per subject, since a
+      // section+subject+faculty combo is exactly one assignmentId). Computed
+      // from this faculty's FULL submission history for that assignment
+      // (`all`, loaded above before any year/month/date filtering was
+      // applied), not just this date/month - "classes conducted" for a
+      // subject is every SUBMITTED session doc for its assignmentId (doc id
+      // `${assignmentId}_${date}_${periodNumber}`, one per class PERIOD - two
+      // consecutive periods of the same assignment on one day are two
+      // separate classes, each independently attended/absent), matching what
+      // the Faculty actually taught, never a hard-coded period count.
+      const assignmentIds = Array.from(new Set(periods.map((p) => byPeriod.get(p)!.assignmentId)));
+      const subjects = assignmentIds.map((assignmentId) => {
+        const sessionsForAssignment = all.filter(
+          (r) => r.assignmentId === assignmentId && r.sectionId === sectionIdParam
+        );
+        const samplePeriod = periods.find((p) => byPeriod.get(p)!.assignmentId === assignmentId)!;
+        const sample = byPeriod.get(samplePeriod)!;
+        const subjectPeriods = periods.filter((p) => byPeriod.get(p)!.assignmentId === assignmentId);
+
+        const totalClasses = sessionsForAssignment.length;
+        const totalPresentMarks = sessionsForAssignment.reduce((sum, s) => sum + s.presentCount, 0);
+        const totalPossibleMarks = sessionsForAssignment.reduce((sum, s) => sum + s.totalStudents, 0);
+        const overallPercentage = totalPossibleMarks > 0 ? Math.round((totalPresentMarks / totalPossibleMarks) * 100) : 0;
+
+        const presentByStudent = new Map<string, number>();
+        for (const s of sessionsForAssignment) {
+          for (const e of s.entries) {
+            if (e.status === "PRESENT") presentByStudent.set(e.studentId, (presentByStudent.get(e.studentId) ?? 0) + 1);
+          }
+        }
+        const percentageByStudent: Record<string, number> = {};
+        for (const row of students) {
+          percentageByStudent[row.studentId] =
+            totalClasses > 0 ? Math.round(((presentByStudent.get(row.studentId) ?? 0) / totalClasses) * 100) : 0;
+        }
+
+        return {
+          subjectId: sample.subjectId,
+          subjectName: sample.subjectName,
+          periods: subjectPeriods,
+          totalClasses,
+          overallPercentage,
+          percentageByStudent,
+        };
+      });
+
+      return NextResponse.json({ classWork, periods, students, subjects });
     }
 
     // HOD's Monthly Records daily view - unchanged.
