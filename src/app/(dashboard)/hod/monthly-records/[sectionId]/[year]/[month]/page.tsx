@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
 import type { StudentAttendanceMark } from "@/types";
 
@@ -21,6 +23,7 @@ interface SubjectColumn {
   subjectCode: string;
 }
 interface StudentRow {
+  id: string;
   rollNumber: string;
   name: string;
   statusBySubject: Record<string, StudentAttendanceMark | null>;
@@ -29,6 +32,18 @@ interface ClassworkEntry {
   subjectId: string;
   subjectName: string;
   classNotes: string;
+}
+interface SubjectMonthlyStats {
+  weeks: (number | null)[];
+  monthPresent: number;
+  monthTotal: number;
+  monthPercent: number | null;
+}
+interface StudentMonthlyRow {
+  id: string;
+  rollNumber: string;
+  name: string;
+  bySubject: Record<string, SubjectMonthlyStats>;
 }
 
 function toDateStr(y: number, m: number, d: number) {
@@ -57,6 +72,11 @@ function AttendanceMark({ status }: { status: StudentAttendanceMark | null | und
     );
   }
   return <span className="text-muted-foreground">—</span>;
+}
+
+function PercentCell({ value }: { value: number | null }) {
+  if (value == null) return <span className="text-muted-foreground">—</span>;
+  return <span className={value < 75 ? "font-semibold text-red-600" : "text-foreground"}>{value}%</span>;
 }
 
 // Step 4: a Sun-Sat month calendar (browsable with prev/next, independent of
@@ -90,6 +110,39 @@ export default function HodAttendanceReportPage() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [classwork, setClasswork] = useState<ClassworkEntry[]>([]);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
+
+  // "Day-wise" is the original calendar + single-date pivot below; "Month
+  // Report" is the new subject-wise weekly/monthly percentage view - fetched
+  // lazily (only once this tab is actually opened) and refetched whenever
+  // the day-wise calendar navigates to a different month, so both tabs
+  // always agree on which month they're showing.
+  const [activeView, setActiveView] = useState<"day" | "month">("day");
+  const [monthSubjects, setMonthSubjects] = useState<SubjectColumn[]>([]);
+  const [monthStudents, setMonthStudents] = useState<StudentMonthlyRow[]>([]);
+  const [isLoadingMonthReport, setIsLoadingMonthReport] = useState(false);
+
+  useEffect(() => {
+    if (activeView !== "month") return;
+    void (async () => {
+      setIsLoadingMonthReport(true);
+      try {
+        const res = await fetch(
+          `/api/college/section-attendance-report?sectionId=${encodeURIComponent(sectionId)}&year=${displayYear}&month=${displayMonth}&summary=true`
+        );
+        if (!res.ok) throw new Error("Failed to load month report");
+        const json = (await res.json()) as {
+          subjects?: SubjectColumn[];
+          students?: StudentMonthlyRow[];
+        };
+        setMonthSubjects(json.subjects ?? []);
+        setMonthStudents(json.students ?? []);
+      } catch {
+        toast({ variant: "destructive", title: "Failed to load month report" });
+      } finally {
+        setIsLoadingMonthReport(false);
+      }
+    })();
+  }, [sectionId, displayYear, displayMonth, activeView]);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -156,6 +209,17 @@ export default function HodAttendanceReportPage() {
         }
       />
 
+      <SegmentedTabs
+        value={activeView}
+        onChange={(v) => setActiveView(v as "day" | "month")}
+        options={[
+          { key: "day", label: "Day-wise" },
+          { key: "month", label: "Month Report" },
+        ]}
+      />
+
+      {activeView === "day" && (
+      <>
       {isCalendarOpen ? (
         <Card className="w-full max-w-xs overflow-hidden">
           <div className="flex items-center justify-between bg-primary px-1 py-1.5">
@@ -250,7 +314,14 @@ export default function HodAttendanceReportPage() {
               <tbody className="divide-y">
                 {students.map((s, i) => (
                   <tr key={`${s.rollNumber}-${i}`}>
-                    <td className="px-4 py-2.5">{s.rollNumber}</td>
+                    <td className="px-4 py-2.5">
+                      <Link
+                        href={`/hod/students/${s.id}/attendance?name=${encodeURIComponent(s.name)}&mode=monthly&year=${displayYear}&month=${displayMonth}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {s.rollNumber}
+                      </Link>
+                    </td>
                     <td className="px-4 py-2.5 font-medium">{s.name}</td>
                     {subjects.map((sub) => (
                       <td key={sub.subjectId} className="px-4 py-2.5 text-center">
@@ -275,6 +346,63 @@ export default function HodAttendanceReportPage() {
             </table>
           </div>
         </Card>
+      )}
+      </>
+      )}
+
+      {activeView === "month" && (
+        isLoadingMonthReport ? (
+          <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />
+        ) : monthSubjects.length === 0 || monthStudents.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              No attendance records for {sectionLabel} in {monthLabel} {displayYear}.
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Registration No.</th>
+                    <th className="px-4 py-3">Name</th>
+                    <th className="px-4 py-3 text-center">Month %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {monthStudents.map((s, i) => {
+                    // Overall for the month, across every subject combined -
+                    // per-subject Held/Attend/% (and the weekly breakdown)
+                    // live on the student's own Attendance History page,
+                    // reached via the Registration No. link - this table
+                    // stays a scannable one-number-per-student overview.
+                    const subjectStats = Object.values(s.bySubject);
+                    const monthTotal = subjectStats.reduce((a, v) => a + v.monthTotal, 0);
+                    const monthPresent = subjectStats.reduce((a, v) => a + v.monthPresent, 0);
+                    const overallPercent = monthTotal > 0 ? Math.round((monthPresent / monthTotal) * 10000) / 100 : null;
+                    return (
+                      <tr key={`${s.rollNumber}-${i}`}>
+                        <td className="px-4 py-2.5">
+                          <Link
+                            href={`/hod/students/${s.id}/attendance?name=${encodeURIComponent(s.name)}&mode=monthly&year=${displayYear}&month=${displayMonth}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {s.rollNumber}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2.5 font-medium">{s.name}</td>
+                        <td className="px-4 py-2.5 text-center font-medium">
+                          <PercentCell value={overallPercent} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )
       )}
     </div>
   );

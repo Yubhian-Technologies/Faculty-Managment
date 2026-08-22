@@ -1,84 +1,83 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ChevronRight, CalendarRange } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
+import { currentAcademicStartYear, academicSessionLabel } from "@/lib/college/academicSession";
 
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 
-// Step 2-3: Year pills + Month tiles, scoped to the one section picked in
-// step 1 - aggregated across every faculty/subject assigned to it (see
-// /api/college/section-attendance-report). Picking a month moves on to the
-// report itself (step 4), which has its own date selector.
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
+
+// A session (e.g. "2026-27") runs April of its start year through March of
+// the next - so "January" picked under "2026-27" actually means January
+// 2027, not 2026. This resolves the dropdown pair back to the plain
+// calendar year the report route itself works in.
+function calendarYearForMonth(academicStartYear: number, month: number): number {
+  return month >= 4 ? academicStartYear : academicStartYear + 1;
+}
+
+// Step 2-3: Monthly / Period / Till now, scoped to the one section picked in
+// step 1 - mirrors the per-student Attendance History picker. Monthly
+// resolves an academic-year + month pair to a plain calendar year/month and
+// moves on to the day-wise/weekly report (step 4, its own date selector);
+// Period and Till now instead go straight to a range summary (every
+// student x every subject's Held/Attend/%, no weekly breakdown - a range
+// spanning more than one month has no single calendar grid to align weeks
+// against).
 export default function HodAttendanceReportYearMonthPage() {
   const router = useRouter();
   const { sectionId } = useParams<{ sectionId: string }>();
   const searchParams = useSearchParams();
   const sectionLabel = searchParams.get("label") || "Section";
-  const currentYear = new Date().getFullYear();
 
-  const [years, setYears] = useState<number[] | null>(null);
-  const [isLoadingYears, setIsLoadingYears] = useState(true);
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const currentStart = currentAcademicStartYear();
+  const academicYearOptions = [currentStart + 1, currentStart, currentStart - 1, currentStart - 2];
 
-  const [months, setMonths] = useState<number[] | null>(null);
-  const [isLoadingMonths, setIsLoadingMonths] = useState(false);
+  const [mode, setMode] = useState<"monthly" | "period" | "tillnow">("monthly");
+  const [academicStartYear, setAcademicStartYear] = useState(currentStart);
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
-  useEffect(() => {
-    void (async () => {
-      setIsLoadingYears(true);
-      try {
-        const res = await fetch(`/api/college/section-attendance-report?sectionId=${encodeURIComponent(sectionId)}`);
-        if (!res.ok) throw new Error("Failed to load years");
-        const json = (await res.json()) as { years?: number[] };
-        const fetched = json.years ?? [];
-        setYears(fetched);
-        setSelectedYear(fetched.includes(currentYear) ? currentYear : (fetched[0] ?? currentYear));
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load years" });
-        setYears([]);
-        setSelectedYear(currentYear);
-      } finally {
-        setIsLoadingYears(false);
+  function viewReport() {
+    if (mode === "monthly") {
+      const year = calendarYearForMonth(academicStartYear, month);
+      router.push(`/hod/monthly-records/${sectionId}/${year}/${month}?label=${encodeURIComponent(sectionLabel)}`);
+      return;
+    }
+    if (mode === "period") {
+      if (!from || !to) {
+        toast({ variant: "destructive", title: "Pick both a From and To date" });
+        return;
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionId]);
-
-  useEffect(() => {
-    if (selectedYear == null) return;
-    void (async () => {
-      setIsLoadingMonths(true);
-      try {
-        const res = await fetch(
-          `/api/college/section-attendance-report?sectionId=${encodeURIComponent(sectionId)}&year=${selectedYear}`
-        );
-        if (!res.ok) throw new Error("Failed to load months");
-        const json = (await res.json()) as { months?: number[] };
-        setMonths(json.months ?? []);
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load months" });
-        setMonths([]);
-      } finally {
-        setIsLoadingMonths(false);
+      // "YYYY-MM-DD" strings sort chronologically, so a plain string
+      // comparison is enough - no Date parsing needed.
+      if (from > to) {
+        toast({ variant: "destructive", title: "From date must be before the To date" });
+        return;
       }
-    })();
-  }, [sectionId, selectedYear]);
-
-  const yearOptions = Array.from(new Set([...(years ?? []), currentYear])).sort((a, b) => b - a);
+      router.push(`/hod/monthly-records/${sectionId}/range?label=${encodeURIComponent(sectionLabel)}&from=${from}&to=${to}`);
+      return;
+    }
+    router.push(`/hod/monthly-records/${sectionId}/range?label=${encodeURIComponent(sectionLabel)}&allTime=true`);
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={sectionLabel}
-        description="Pick a year, then a month, to view this section's attendance report."
+        description="Pick a month, a custom date range, or this section's entire history, to view its attendance report."
         actions={
           <Button variant="outline" onClick={() => router.push("/hod/monthly-records")}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
@@ -86,58 +85,59 @@ export default function HodAttendanceReportYearMonthPage() {
         }
       />
 
-      {isLoadingYears ? (
-        <div className="h-10 w-64 rounded-lg bg-muted/30 animate-pulse" />
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {yearOptions.map((y) => (
-            <Button
-              key={y}
-              size="sm"
-              variant={selectedYear === y ? "default" : "outline"}
-              onClick={() => setSelectedYear(y)}
-            >
-              {y}
-            </Button>
-          ))}
-        </div>
-      )}
+      <Card>
+        <CardContent className="p-4 space-y-4">
+          <SegmentedTabs
+            value={mode}
+            onChange={(v) => setMode(v as "monthly" | "period" | "tillnow")}
+            options={[
+              { key: "monthly", label: "Monthly" },
+              { key: "period", label: "Period" },
+              { key: "tillnow", label: "Till now" },
+            ]}
+          />
 
-      {!isLoadingYears && (
-        isLoadingMonths ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => <div key={i} className="h-20 rounded-lg border bg-muted/30 animate-pulse" />)}
-          </div>
-        ) : !months || months.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              No attendance records for {selectedYear} yet.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {months.map((m) => (
-              <Card
-                key={m}
-                className="cursor-pointer transition-colors hover:border-primary/50"
-                onClick={() =>
-                  router.push(
-                    `/hod/monthly-records/${sectionId}/${selectedYear}/${m}?label=${encodeURIComponent(sectionLabel)}`
-                  )
-                }
-              >
-                <CardContent className="p-4 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <CalendarRange className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <p className="font-semibold text-sm">{MONTH_LABELS[m - 1]}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )
-      )}
+          {mode === "monthly" && (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="w-40 space-y-1.5">
+                <label className="text-sm font-medium">Academic Year</label>
+                <select
+                  className={selectClass}
+                  value={academicStartYear}
+                  onChange={(e) => setAcademicStartYear(Number(e.target.value))}
+                >
+                  {academicYearOptions.map((start) => (
+                    <option key={start} value={start}>{academicSessionLabel(start)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-40 space-y-1.5">
+                <label className="text-sm font-medium">Month</label>
+                <select className={selectClass} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+                  {MONTH_LABELS.map((label, i) => (
+                    <option key={label} value={i + 1}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {mode === "period" && (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="w-44 space-y-1.5">
+                <label className="text-sm font-medium">From</label>
+                <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+              </div>
+              <div className="w-44 space-y-1.5">
+                <label className="text-sm font-medium">To</label>
+                <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          <Button onClick={viewReport}>View Report</Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

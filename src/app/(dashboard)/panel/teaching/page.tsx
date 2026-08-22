@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/useToast";
+import { formatDMY, currentWeekDates } from "@/lib/utils";
+import { isoDateKey } from "@/lib/leave/dayCounter";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
+import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { TeachingAssignment, TimetableSlot, DayOfWeek, CourseYearTiming, PeriodTiming } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -40,13 +43,18 @@ export default function TeachingLoadPage() {
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
   const [timings, setTimings] = useState<CourseYearTiming[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Monday of the week currently on screen - navigable via WeekNavigator,
+  // defaulting to this calendar week. weekDates pairs positionally with
+  // DAYS above, labelling each column with its actual date.
+  const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
+  const weekDates = useMemo(() => currentWeekDates(weekStart), [weekStart]);
 
   useEffect(() => {
     void (async () => {
       setIsLoading(true);
       try {
         const [assignRes, timingsRes] = await Promise.all([
-          fetch("/api/college/teaching-assignments"),
+          fetch(`/api/college/teaching-assignments?week=${isoDateKey(weekStart)}`),
           // No courseId filter - a faculty's own slots can span several
           // courses/years, so this needs every course-year's timing to
           // resolve clock times cell by cell (see periodTimeFor below).
@@ -69,7 +77,7 @@ export default function TeachingLoadPage() {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [weekStart]);
 
   const totalHoursPerWeek = assignments.reduce((sum, a) => sum + (a.hoursPerWeek ?? 0), 0);
   const subjectCount = assignments.length;
@@ -143,13 +151,16 @@ export default function TeachingLoadPage() {
           No timetable slots have been published for you yet.
         </div>
       ) : (
+        <>
+        <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-muted/50">
                 <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-24">Period</th>
-                {DAYS.map((d) => (
+                {DAYS.map((d, i) => (
                   <th key={d} className="p-2.5 text-left font-medium text-muted-foreground border-b min-w-35">
+                    <p className="text-[10px] font-normal whitespace-nowrap">{formatDMY(weekDates[i])}</p>
                     {DAY_LABELS[d]}
                   </th>
                 ))}
@@ -183,9 +194,13 @@ export default function TeachingLoadPage() {
                             )}
                             <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
                             {slot.substituteFacultyName ? (
-                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Covered by {slot.substituteFacultyName}</p>
+                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">
+                                Covered by {slot.substituteFacultyName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
+                              </p>
                             ) : slot.substituteForName ? (
-                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">Substituting for {slot.substituteForName}</p>
+                              <p className="text-[11px] font-medium text-amber-700 mt-0.5">
+                                Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
+                              </p>
                             ) : (
                               subline && <p className="text-[11px] text-muted-foreground mt-0.5">{subline}</p>
                             )}
@@ -202,6 +217,7 @@ export default function TeachingLoadPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

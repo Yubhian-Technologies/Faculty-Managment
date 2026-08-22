@@ -38,6 +38,34 @@ export function formatDate(timestamp: Timestamp | Date | FirestoreTimestampLike 
   });
 }
 
+// "17-08-2026" (dd-mm-yyyy) - the weekly timetable grid's own date style,
+// used both for a column's header date and inline next to a cross-week
+// substitution's "Substituting for X" label (see TimetableSlot.substituteDate)
+// so the two read consistently. Accepts either a Date (header) or a plain
+// "YYYY-MM-DD" key (substituteDate is stored as one, not a Firestore
+// Timestamp).
+export function formatDMY(input: Date | string | null | undefined): string {
+  const date = input instanceof Date ? input : toDate(input);
+  if (!date) return "";
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  return `${dd}-${mm}-${date.getFullYear()}`;
+}
+
+// Monday..Saturday Date objects for the calendar week containing `today` -
+// pairs positionally with a `DAYS: DayOfWeek[] = ["MON", ..., "SAT"]` array
+// so a weekly timetable grid can label each column with its actual date
+// (e.g. "Thursday 20") and show the week's own From/To range in its header.
+// Client-side display only (plain browser `now`, not IST-anchored like the
+// server's todayISODate) - fine since the page already renders in the
+// viewer's own timezone; never used for any query, write, or date matching.
+export function currentWeekDates(today: Date = new Date()): Date[] {
+  const day = today.getDay(); // 0=Sun..6=Sat
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + mondayOffset);
+  return Array.from({ length: 6 }, (_, i) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i));
+}
+
 export function formatDateTime(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): string {
   const date = toDate(timestamp);
   if (!date) return "-";

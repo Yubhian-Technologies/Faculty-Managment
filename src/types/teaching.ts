@@ -254,6 +254,13 @@ export interface TimetableSlot {
   substituteFacultyId?: string;
   substituteFacultyName?: string;
   substituteForName?: string; // the regularly-scheduled faculty's name, on leave that day
+  // The actual calendar date (YYYY-MM-DD) this substitution applies to - the
+  // overlay window now looks past the current week (see
+  // getActiveSubstitutionsForDates), so this may be a future date rather
+  // than "today's occurrence of this weekday"; the UI shows it so a
+  // heads-up for next week's Tuesday, say, isn't mistaken for a permanent
+  // reassignment of every Tuesday.
+  substituteDate?: string;
 }
 
 // ─── Timetable Rules ──────────────────────────────────────────────────────────
