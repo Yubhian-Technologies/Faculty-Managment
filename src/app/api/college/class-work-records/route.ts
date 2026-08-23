@@ -7,7 +7,8 @@ import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { DAY_BY_JS_DAY } from "@/lib/timetable/currentPeriod";
 import { loadDepartmentCodes, formatSectionLabel } from "@/lib/attendance/sectionLabel";
-import type { StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } from "@/types";
+import { fetchSectionStudents } from "@/lib/students/sectionRoster";
+import type { Section, StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } from "@/types";
 
 // Drill-down reader over the "Record of the Class Work" already saved on
 // each SUBMITTED student-attendance session (see student-attendance/route.ts) -
@@ -31,9 +32,21 @@ import type { StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } f
 //   ?year=Y&month=M                       -> { records: DailyRecord[] }        (HOD Monthly Records - unchanged)
 //   ?year=Y&month=M&sectionId=S           -> { days: number[] }                (Faculty Attendance Report calendar)
 //   ?year=Y&month=M&sectionId=S&date=YYYY-MM-DD -> { classWork, periods, students } (Faculty Attendance Report day view)
+//   ?sectionId=S&summary=true&year=Y&month=M    -> { subjects, students }      (Period/Till Now's own Monthly-range shape)
+//   ?sectionId=S&summary=true&from=&to=         -> { subjects, students }      ("Period")
+//   ?sectionId=S&summary=true&allTime=true      -> { subjects, students }      ("Till now")
 // `sectionId` (a real Section doc id) also scopes the years/months levels to
 // just that section - see /api/college/class-work-records/sections for the
 // Faculty's own section tiles this is driven from.
+//
+// `summary=true` is a separate, self-contained mode (checked before the
+// year/month/date drill chain, never combined with it beyond reusing `year`/
+// `month` for its own "whole month" range) - every student in the section x
+// this faculty's OWN subject(s) there (usually exactly one, but a faculty
+// teaching e.g. both a subject and its lab to the same section gets one
+// table per assignmentId), Held/Attend/% across the requested range. No
+// weekly breakdown, no calendar/day-view - that's what the unchanged Monthly
+// drill above still offers, class notes included.
 
 interface DailyRecord {
   section: string;
@@ -51,6 +64,16 @@ export async function GET(request: Request) {
     const monthParam = searchParams.get("month");
     const sectionIdParam = searchParams.get("sectionId");
     const dateParam = searchParams.get("date");
+    const summaryParam = searchParams.get("summary") === "true";
+    const fromParam = searchParams.get("from");
+    const toParam = searchParams.get("to");
+    const allTimeParam = searchParams.get("allTime") === "true";
+    if (summaryParam && !sectionIdParam) {
+      return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    }
+    if (fromParam && toParam && fromParam > toParam) {
+      return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -81,6 +104,62 @@ export async function GET(request: Request) {
       .get();
     const all = recordsSnap.docs.map((d) => d.data() as StudentAttendanceSession);
     const filtered = sectionIdParam ? all.filter((r) => r.sectionId === sectionIdParam) : all;
+
+    if (summaryParam) {
+      const monthStr = monthParam ? String(Number(monthParam)).padStart(2, "0") : null;
+      const inRange = filtered.filter((r) => {
+        if (yearParam && monthStr) return r.date.slice(0, 4) === yearParam && r.date.slice(5, 7) === monthStr;
+        if (fromParam && toParam) return r.date >= fromParam && r.date <= toParam;
+        return allTimeParam;
+      });
+
+      // One column-group per subject this faculty actually taught this
+      // section in range (usually exactly one - a faculty teaching both a
+      // subject and its lab to the same section gets one per assignmentId,
+      // same convention the day-view above uses).
+      const subjectsMap = new Map<string, { subjectId: string; subjectName: string }>();
+      for (const r of inRange) {
+        if (!subjectsMap.has(r.assignmentId)) subjectsMap.set(r.assignmentId, { subjectId: r.subjectId, subjectName: r.subjectName });
+      }
+      const subjects = Array.from(subjectsMap.entries()).map(([assignmentId, v]) => ({ assignmentId, ...v }));
+
+      const sessionsByAssignment = new Map<string, StudentAttendanceSession[]>();
+      for (const r of inRange) {
+        const arr = sessionsByAssignment.get(r.assignmentId) ?? [];
+        arr.push(r);
+        sessionsByAssignment.set(r.assignmentId, arr);
+      }
+
+      const sectionSnap = await collegeRef.collection("sections").doc(sectionIdParam!).get();
+      if (!sectionSnap.exists) {
+        return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      }
+      const section = sectionSnap.data() as Section;
+      const roster = await fetchSectionStudents(collegeRef, {
+        department: section.department,
+        sectionName: section.name,
+        year: section.year,
+        courseId: section.courseId,
+      });
+
+      const students = roster
+        .map((stu) => {
+          const bySubject: Record<string, { held: number; attend: number; percent: number | null }> = {};
+          for (const sub of subjects) {
+            let held = 0;
+            let attend = 0;
+            for (const r of sessionsByAssignment.get(sub.assignmentId) ?? []) {
+              held += 1;
+              if (r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT") attend += 1;
+            }
+            bySubject[sub.assignmentId] = { held, attend, percent: held > 0 ? Math.round((attend / held) * 10000) / 100 : null };
+          }
+          return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, bySubject };
+        })
+        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+
+      return NextResponse.json({ subjects, students });
+    }
 
     if (!yearParam) {
       const years = Array.from(new Set(filtered.map((r) => Number(r.date.slice(0, 4))))).sort((a, b) => b - a);
