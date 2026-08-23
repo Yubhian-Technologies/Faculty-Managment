@@ -24,6 +24,12 @@ export default function NewDepartmentPage() {
   const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubDepartments, setHasSubDepartments] = useState(false);
+  // Only meaningful when hasSubDepartments is true - see
+  // Department.parentRunsOwnSections's own doc-comment (src/types/core.ts).
+  // Defaults true: a brand-new department that never touches this checkbox
+  // gets the same unrestricted behavior every department had before this
+  // field existed.
+  const [parentRunsOwnSections, setParentRunsOwnSections] = useState(true);
 
   useEffect(() => {
     fetch("/api/college/users?role=HOD")
@@ -76,6 +82,7 @@ export default function NewDepartmentPage() {
         hodUid: data.hodUid ?? "",
         hodName: selectedHod?.name ?? "",
         hasSubDepartments,
+        ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments: secondaryDepartments.length > 0 ? secondaryDepartments : undefined,
       };
       const res = await fetch("/api/college/departments", {
@@ -195,20 +202,45 @@ export default function NewDepartmentPage() {
               onToggleSecondaryDepartment={toggleSecondaryDepartment}
             />
 
-            <div className="flex items-start gap-2 rounded-md border p-3">
-              <Checkbox
-                id="dept-has-subdepts"
-                checked={hasSubDepartments}
-                onCheckedChange={(v) => setHasSubDepartments(v === true)}
-              />
-              <div className="space-y-1">
-                <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
-                <p className="text-xs text-muted-foreground">
-                  Enable if this department splits into sub-branches (e.g. a Freshman&apos;s Department like Basic
-                  Science → BS-Maths, BS-English). The HOD will get a &quot;Sub-Departments&quot; page to add
-                  sub-departments and assign sub-HODs.
-                </p>
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="dept-has-subdepts"
+                  checked={hasSubDepartments}
+                  onCheckedChange={(v) => setHasSubDepartments(v === true)}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Enable if this department splits into sub-branches (e.g. a Freshman&apos;s Department like Basic
+                    Science → BS-Maths, BS-English). The HOD will get a &quot;Sub-Departments&quot; page to add
+                    sub-departments and assign sub-HODs.
+                  </p>
+                </div>
               </div>
+
+              {hasSubDepartments && (
+                <div className="flex items-start gap-2 ml-6 pt-3 border-t">
+                  <Checkbox
+                    id="dept-parent-runs-own-sections"
+                    checked={parentRunsOwnSections}
+                    onCheckedChange={(v) => setParentRunsOwnSections(v === true)}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="dept-parent-runs-own-sections" className="font-normal">
+                      This department also has its own sections/students, separate from its sub-departments
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Turn this OFF if this department exists only to organize its sub-departments and never
+                      enrolls students directly on its own - e.g. a &quot;Basic Science&quot; department whose
+                      sub-departments (Maths, Physics, Chemistry, English) are the only place 1st-year students
+                      actually sit. Leave it ON if this department itself also runs real sections in addition
+                      to its sub-departments - e.g. an &quot;ECE&quot; department that has its own ECE sections
+                      AND a further specialized &quot;ECE-VLSI&quot; sub-department with sections of its own.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

@@ -311,6 +311,90 @@ export function getFreshmanDepartmentIds(allDepartments: DepartmentWithId[]): Se
   return new Set(allDepartments.filter(isCommonYearDepartment).map((d) => d.id));
 }
 
+/**
+ * The department NAMES a Year-1 student may be filed directly under, for a
+ * college that runs a shared/common first year - every qualifying freshman
+ * department itself (the STANDALONE shape: Chemistry/Physics/Maths/English
+ * each independently claiming year 1 and cross-listing branches via their own
+ * `secondaryDepartments` - e.g. SHRI VISHNU ENGINEERING COLLEGE FOR WOMEN),
+ * plus every actual sub-department of one (the PARENT-with-sub-departments
+ * shape: "Basic Science" split into "Basic Science - Chemistry" etc via
+ * `parentDepartmentId` - e.g. VISHNU INSTITUTE OF TECHNOLOGY). A real branch
+ * (IT, CSBS, ...) is deliberately excluded even though it's a perfectly valid
+ * Department for years 2-4 - a 1st year's real branch belongs in
+ * `secondaryDepartment` ("Core Department") instead, set once and promoted
+ * out of after year 1 (see students/route.ts POST and the bulk importer's
+ * unassigned rows, which both enforce this against the raw text a caller
+ * supplies).
+ *
+ * Empty for a college with no shared first year at all (isCommonYearDepartment
+ * never matches) - callers should treat an empty set as "no restriction",
+ * matching how every other check in this file infers structure from the data
+ * rather than a stored flag (see this file's own top-of-file doc-comment).
+ */
+export function freshmanLandingDepartmentNames(allDepartments: DepartmentWithId[]): Set<string> {
+  const freshmanIds = getFreshmanDepartmentIds(allDepartments);
+  const names = new Set<string>();
+  for (const d of allDepartments) {
+    if (!d.name) continue;
+    if (d.parentDepartmentId && freshmanIds.has(d.parentDepartmentId)) {
+      // A child of a qualifying parent is always a valid landing name,
+      // unconditionally - it's the one place a 1st-year genuinely sits,
+      // regardless of whether the parent itself also does.
+      names.add(d.name);
+    } else if (freshmanIds.has(d.id)) {
+      // The department qualifies as freshman on its own. Include its own
+      // name UNLESS it's explicitly flagged as a pure organizing container
+      // with no sections of its own (parentRunsOwnSections === false, the
+      // VISHNU "BASIC SCIENCE" shape) - see that field's own doc-comment
+      // (src/types/core.ts). Unset/true keeps today's behavior (the
+      // STANDALONE shape, and any parent that genuinely does run its own
+      // sections alongside its children).
+      if (d.parentRunsOwnSections !== false) {
+        names.add(d.name);
+      }
+    }
+  }
+  return names;
+}
+
+/**
+ * The real children of `name`, when `name` is a "no own sections" shared-
+ * first-year parent - a pure organizing container (parentRunsOwnSections
+ * === false, see that field's own doc-comment in src/types/core.ts) that
+ * itself never houses a student or section. Returns null for every other
+ * department (a plain branch, a standalone freshman department with no
+ * parent, or a hasSubDepartments parent that DOES run its own sections) -
+ * the single place this flag is actually consulted, so both the write-time
+ * remap (resolveFreshmanLandingDepartment, managedBranches.ts) and the
+ * read-time rollup (expandDepartmentNameForRollup below) agree on exactly
+ * which departments this applies to.
+ */
+export function noOwnSectionsChildren(allDepartments: DepartmentWithId[], name: string): DepartmentWithId[] | null {
+  const parent = allDepartments.find((d) => d.name === name);
+  if (!parent || !parent.hasSubDepartments || parent.parentRunsOwnSections !== false) return null;
+  return allDepartments.filter((d) => d.parentDepartmentId === parent.id);
+}
+
+/**
+ * Expands a single filter/export/query department NAME into the full set of
+ * names to actually match against - `name` itself, plus (when `name` is a
+ * "no own sections" shared-first-year parent - see noOwnSectionsChildren)
+ * every one of its real children too, since no student is ever filed
+ * directly under such a parent. Deliberately ADDITIVE (always keeps `name`
+ * itself) rather than narrowing, so a stray pre-migration document is never
+ * hidden by this expansion. A no-op (`[name]`) for every other department -
+ * a plain branch, a standalone freshman department, or a parent that
+ * genuinely does run its own sections - so filtering/exporting by one of
+ * those behaves exactly as it always has.
+ */
+export function expandDepartmentNameForRollup(allDepartments: DepartmentWithId[], name: string): string[] {
+  if (!name) return [];
+  const children = noOwnSectionsChildren(allDepartments, name);
+  if (!children) return [name];
+  return Array.from(new Set([name, ...children.map((c) => c.name)]));
+}
+
 /** Builds the branch -> owning sub-department index from a set of departments. */
 export function buildManagedBranchOwner(departments: DepartmentWithId[]): Map<string, string> {
   const owner = new Map<string, string>();

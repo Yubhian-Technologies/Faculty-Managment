@@ -6,10 +6,10 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { canHodEditDepartmentYear, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
-import { getAcademicStructure } from "@/lib/college/academicStructure";
+import { getAcademicStructure, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Section, StudentRecord, StudentStatus } from "@/types";
 
 // Move a single student to a different section (roster-management fix-up -
@@ -195,6 +195,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (Object.keys(updates).length === 0) {
         return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
       }
+      // Course is required (ROSTER_FIELDS) the same as Name/Department/Year -
+      // an edit can change it to another real course, but can't clear it back
+      // to blank the way an optional field's null (rosterFormToPayload's
+      // writeBlanksAsNull) is otherwise allowed to.
+      if (updates.course === null) {
+        return NextResponse.json({ error: "Course is required" }, { status: 400 });
+      }
 
       const db = getAdminDb();
       const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -228,8 +235,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           return NextResponse.json({ error: "Core Department must differ from Department" }, { status: 400 });
         }
         const deptSnap = await collegeRef.collection("departments").where("name", "==", student.department).limit(1).get();
-        const deptData = deptSnap.docs[0]?.data() as
-          | { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }> }
+        const deptDoc = deptSnap.docs[0];
+        const deptData = deptDoc?.data() as
+          | { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }>; managedDepartments?: string[] }
           | undefined;
         // `secondaryDept` may itself be a sub-department of one of the
         // owner's configured branches (e.g. "ECE-VLSI" under "Electronics and
@@ -246,8 +254,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             secondaryParentName = (parentSnap.data() as { name?: string } | undefined)?.name;
           }
         }
-        if (!deptData || !isConfiguredSecondaryDepartmentOrChild(deptData, secondaryDept, secondaryParentName)) {
+        // The owner department's own sub-departments (if it's a parent) also
+        // count via THEIR managedDepartments - same fold-in the client's
+        // dropdown already does (secondaryDepartmentOptions, RosterFieldInputs.tsx).
+        const childDepts = deptDoc
+          ? (await collegeRef.collection("departments").where("parentDepartmentId", "==", deptDoc.id).get())
+              .docs.map((d) => d.data() as { managedDepartments?: string[] })
+          : [];
+        if (!deptData || !isConfiguredSecondaryDepartmentOrChild(deptData, secondaryDept, secondaryParentName, childDepts)) {
           return NextResponse.json({ error: `"${student.department}" does not cross-list to "${secondaryDept}"` }, { status: 400 });
+        }
+
+        // A "no own sections" shared-first-year parent (e.g. VISHNU
+        // INSTITUTE OF TECHNOLOGY's "BASIC SCIENCE") never itself houses a
+        // student - if student.department is one, remap it too, to whichever
+        // child actually manages the newly-set Core Department, or this edit
+        // would leave the student filed under the wrong sibling forever. A
+        // no-op for every other department (see
+        // resolveFreshmanLandingDepartment's own doc-comment).
+        const allDeptsSnap = await collegeRef.collection("departments").get();
+        const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
+        const remappedDepartment = resolveFreshmanLandingDepartment(allDepts, student.department, secondaryDept);
+        if (remappedDepartment !== student.department) {
+          updates.department = remappedDepartment;
+          const now = new Date();
+          const history = departmentHistoryEntry(db, session.collegeId, id, remappedDepartment, student.section ?? "", student.year, now);
+          const batch = db.batch();
+          batch.update(studentRef, { ...updates, updatedAt: now });
+          batch.set(history.ref, history.data);
+          await batch.commit();
+          return NextResponse.json({ ok: true });
         }
       }
 

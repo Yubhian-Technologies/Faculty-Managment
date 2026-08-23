@@ -50,9 +50,9 @@ export async function GET(request: Request) {
     // (isDeclaredFeederFor - secondaryDepartments AND assignedYears, both
     // catalog-scoped) rather than trusting the section doc's own stored
     // array, so a stale/mismatched section can never slip through. This is
-    // scoped to Sections specifically; the separate "Incoming Students"
-    // feature (hod/students/incoming, keyed off Student.secondaryDepartment)
-    // and Teaching Assignments' own cross-listed view are untouched.
+    // scoped to Sections specifically; the students route's own equivalent
+    // `secondaryQuery` (keyed off Student.secondaryDepartment) and Teaching
+    // Assignments' own cross-listed view are untouched.
     let childDeptQuery: FirebaseFirestore.Query | null = null;
     // Candidate sections cross-listed to one of this HOD's own/child
     // departments (Firestore-level filter only - see the merge loop below for
@@ -470,7 +470,7 @@ export async function POST(request: Request) {
     if (dept) {
       const allDeptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
       const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as
-        (DepartmentYearRow & { name?: string; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope> })[];
+        (DepartmentYearRow & { name?: string; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>; managedDepartments?: string[] })[];
       const deptDoc = allDepts.find((d) => d.name === dept);
       if (deptDoc) {
         const deptScope = resolveDepartmentCourseScope(deptDoc, course.catalogId);
@@ -517,6 +517,22 @@ export async function POST(request: Request) {
         if (availableSecondaryDepts.length === 0 && deptDoc.parentDepartmentId) {
           const parent = allDepts.find((d) => d.id === deptDoc.parentDepartmentId);
           availableSecondaryDepts = parent ? resolveDepartmentCourseScope(parent, course.catalogId).secondaryDepartments : [];
+        }
+        // Also fold in whatever this department (or, for a parent, one of its
+        // own sub-departments) fully manages via managedDepartments - the
+        // "grouped/managed branches" model expresses the same cross-listing
+        // relationship through a different field than secondaryDepartments
+        // (see isConfiguredSecondaryDepartment's doc-comment) - without this,
+        // a sub-department that groups branches purely via managedDepartments
+        // (no secondaryDepartments of its own) could never actually set a
+        // Secondary Department its own dropdown (secondaryDepartmentOptions,
+        // RosterFieldInputs.tsx) already offers.
+        const ownManaged = deptDoc.managedDepartments ?? [];
+        const childManaged = allDepts
+          .filter((d) => d.parentDepartmentId === deptDoc.id)
+          .flatMap((d) => d.managedDepartments ?? []);
+        if (ownManaged.length > 0 || childManaged.length > 0) {
+          availableSecondaryDepts = Array.from(new Set([...availableSecondaryDepts, ...ownManaged, ...childManaged]));
         }
         const chosen = body.secondaryDepartment?.trim()
           || (availableSecondaryDepts.length === 1 ? availableSecondaryDepts[0] : "");

@@ -6,11 +6,21 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { normalizeRosterDetails } from "@/lib/students/rosterFields";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
-import { isConfiguredSecondaryDepartmentOrChild } from "@/lib/departments/codeOrNameResolver";
+import { resolveBranchYearOwner, resolveFreshmanLandingDepartment, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { isConfiguredSecondaryDepartmentOrChild, resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getFacultyIdCandidates } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope, resolveCatalogId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { fetchStudentsPage, fetchMatchingStudentIds, fetchStudentsForExport } from "@/lib/students/paginatedList";
+import { isLikelySameUnassignedStudent } from "@/lib/students/duplicateDetection";
+import { validateYearForCourseDuration, validateYearSemesterConsistency } from "@/lib/students/rosterValidation";
 import type { Course, Section, StudentRecord, StudentStatus, DepartmentCourseScope } from "@/types";
+
+const PAGE_SIZES = [10, 20, 30, 50];
+
+// Roles that already see the whole college unscoped (no HOD/PANEL_MEMBER
+// fan-out - see the role branching below) - the only ones server-side
+// pagination is offered to.
+const UNSCOPED_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"];
 
 // Sections a PANEL_MEMBER (faculty) is in charge of - students are only visible/
 // editable within these. Returns [] if the faculty isn't assigned to any section.
@@ -37,7 +47,68 @@ export async function GET(request: Request) {
     const yearFilter = searchParams.get("year");
 
     const db = getAdminDb();
-    const studentsColl = db.collection("colleges").doc(session.collegeId).collection("students");
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const studentsColl = collegeRef.collection("students");
+
+    // ── Server-side paginated listing (College Office / Principal-tier
+    // Students page) ────────────────────────────────────────────────────────
+    // Opted into only when `page`, `idsOnly`, or `export` is present, so
+    // every other existing caller of this endpoint (HOD/PANEL_MEMBER
+    // dashboards, section rosters, promotions - none of which send any of
+    // these) keeps getting the original, unpaginated `{ students }` shape
+    // unchanged.
+    if ((searchParams.has("page") || searchParams.has("idsOnly") || searchParams.has("export")) && UNSCOPED_ROLES.includes(session.role)) {
+      const search = (searchParams.get("search") ?? "").trim().toLowerCase();
+
+      if (searchParams.get("export") === "1") {
+        // Multi-value, comma-separated - unlike the single-value pagination
+        // filters above, an export can combine several departments/courses/
+        // years at once (e.g. "every 1st and 2nd year B.Tech student across
+        // these 3 departments"). An empty/absent param means "no filter on
+        // that dimension", not "match nothing".
+        const parseList = (name: string) => (searchParams.get(name) ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+        const pickedDepartments = parseList("departments");
+        const courses = parseList("courses");
+        const years = parseList("years").map(Number).filter((n) => Number.isFinite(n));
+        // A "no own sections" shared-first-year parent (e.g. VISHNU's "BASIC
+        // SCIENCE") never itself houses a student - expand each picked name
+        // to include its children too, or exporting by that parent would
+        // return nothing (see expandDepartmentNameForRollup's own
+        // doc-comment). A no-op for every other department name.
+        let departments = pickedDepartments;
+        if (pickedDepartments.length > 0) {
+          const allDeptsSnap = await collegeRef.collection("departments").get();
+          const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
+          departments = Array.from(new Set(pickedDepartments.flatMap((d) => expandDepartmentNameForRollup(allDepts, d))));
+        }
+        const { students, total, truncated } = await fetchStudentsForExport(studentsColl, { search, departments, courses, years });
+        return NextResponse.json({ students, total, truncated });
+      }
+
+      const pickedDepartment = (searchParams.get("department") ?? "").trim();
+      const course = (searchParams.get("course") ?? "").trim();
+      const yearParam = searchParams.get("year");
+      const year = yearParam ? Number(yearParam) : null;
+
+      let departments: string[] = [];
+      if (pickedDepartment) {
+        const allDeptsSnap = await collegeRef.collection("departments").get();
+        const allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
+        departments = expandDepartmentNameForRollup(allDepts, pickedDepartment);
+      }
+
+      if (searchParams.get("idsOnly") === "1") {
+        const ids = await fetchMatchingStudentIds(studentsColl, { departments, course, year, search });
+        return NextResponse.json({ ids, total: ids.length });
+      }
+
+      const page = Math.max(1, Number(searchParams.get("page")) || 1);
+      const pageSizeRaw = Number(searchParams.get("pageSize"));
+      const pageSize = PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : 20;
+      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, course, year });
+      return NextResponse.json({ students, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
+    }
+
     const withCommonFilters = (q: FirebaseFirestore.Query): FirebaseFirestore.Query => {
       let out = q;
       if (sectionFilter) out = out.where("section", "==", sectionFilter);
@@ -269,6 +340,12 @@ export async function POST(request: Request) {
     let dept = "";
     let sectionName = "";
     let courseId: string | undefined;
+    // Populated only for an unassigned add (fetched once below) and reused
+    // both to resolve `body.department` name/code-insensitively (matching
+    // how the bulk importer already resolves department text -
+    // resolveDepartmentByNameOrCode) and, right after, for the
+    // freshman-landing remap.
+    let allDepts: DepartmentWithId[] = [];
 
     if (body.section?.trim()) {
       const sectionsSnap = await collegeRef
@@ -285,18 +362,32 @@ export async function POST(request: Request) {
       sectionName = sectionDoc.name;
       courseId = sectionDoc.courseId;
     } else {
-      // Unassigned add - resolve the department by id or name.
+      // Unassigned add - resolve the department by id or name/code.
+      const allDeptsSnap = await collegeRef.collection("departments").get();
+      allDepts = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentWithId[];
       if (body.departmentId) {
-        const deptSnap = await collegeRef.collection("departments").doc(body.departmentId).get();
-        if (!deptSnap.exists) return NextResponse.json({ error: "Department not found" }, { status: 400 });
-        dept = (deptSnap.data() as { name?: string }).name ?? "";
+        const found = allDepts.find((d) => d.id === body.departmentId);
+        if (!found) return NextResponse.json({ error: "Department not found" }, { status: 400 });
+        dept = found.name;
       } else if (body.department?.trim()) {
-        const deptSnap = await collegeRef.collection("departments").where("name", "==", body.department.trim()).limit(1).get();
-        if (deptSnap.empty) return NextResponse.json({ error: "Department not found" }, { status: 400 });
-        dept = (deptSnap.docs[0].data() as { name?: string }).name ?? body.department.trim();
+        const resolvedName = resolveDepartmentByNameOrCode(allDepts, body.department);
+        if (!resolvedName) return NextResponse.json({ error: "Department not found" }, { status: 400 });
+        dept = resolvedName;
       } else {
         return NextResponse.json({ error: "Provide a section, or a department for an unassigned student" }, { status: 400 });
       }
+    }
+
+    // A "no own sections" shared-first-year parent (Department.
+    // parentRunsOwnSections === false - e.g. VISHNU INSTITUTE OF TECHNOLOGY's
+    // "BASIC SCIENCE") never itself houses a student - remap it to whichever
+    // of its children actually manages the given Core Department before
+    // anything else runs, so the HOD-scope check right below (and every
+    // check after it) sees the real, correct landing department rather than
+    // the parent's name. A no-op for every other department (see
+    // resolveFreshmanLandingDepartment's own doc-comment).
+    if (!sectionName && dept) {
+      dept = resolveFreshmanLandingDepartment(allDepts, dept, typeof body.secondaryDepartment === "string" ? body.secondaryDepartment.trim() : undefined);
     }
 
     // An HOD/Sub-HOD may only add into a department they own or manage.
@@ -319,16 +410,59 @@ export async function POST(request: Request) {
     // validated against at creation (sections POST), so this only needs to
     // apply to the unassigned path.
     if (!sectionName && dept) {
+      // Course is required for every unassigned add, not just when the
+      // client's own Course dropdown happens to be filled - mirrors the
+      // bulk importer's identical requirement (import-excel/route.ts) and
+      // the ROSTER_FIELDS `required` flag the Add/Edit form (and the import
+      // page's Fix Row dialog, which posts here too) already shows an
+      // asterisk for. Checked unconditionally (not just once the department
+      // doc is re-looked-up below) so it's never skippable.
+      if (!(typeof body.course === "string" && body.course.trim())) {
+        return NextResponse.json({ error: "Course is required" }, { status: 400 });
+      }
+
+      // 1st-year students at a college that runs a shared/common first year
+      // must land under one of that structure's Basic Science (Freshman)
+      // departments, never directly under a real branch - the branch they're
+      // headed for belongs in Core Department (secondaryDepartment) instead,
+      // set once and promoted out of after year 1. A college with no such
+      // shared-first-year structure at all (freshmanNames empty) is left
+      // unrestricted - see freshmanLandingDepartmentNames's own doc-comment
+      // for why this is inferred from the department data rather than a
+      // stored flag. Checked before anything else in this block so a
+      // misconfigured real branch's own (possibly stale) assignedYears can
+      // never mask this more specific rule.
+      if (Number(body.year) === 1) {
+        const freshmanNames = freshmanLandingDepartmentNames(allDepts);
+        if (freshmanNames.size > 0 && !freshmanNames.has(dept)) {
+          return NextResponse.json(
+            { error: `"${dept}" is a real branch - 1st Year students must be added under one of this college's Basic Science (Freshman) departments instead. Set "${dept}" as the Core Department.` },
+            { status: 400 }
+          );
+        }
+        // A student landed correctly under a Freshman department must still
+        // say which real branch they're headed for - without Core Department,
+        // they're stuck unpromotable and invisible to any branch's own HOD.
+        const secondaryDeptForYear1 = typeof body.secondaryDepartment === "string" ? body.secondaryDepartment.trim() : "";
+        if (freshmanNames.size > 0 && !secondaryDeptForYear1) {
+          return NextResponse.json(
+            { error: "Core Department is required for 1st Year students - name the branch this student will be promoted into." },
+            { status: 400 }
+          );
+        }
+      }
+
       const deptScopeSnap = await collegeRef.collection("departments").where("name", "==", dept).limit(1).get();
       if (!deptScopeSnap.empty) {
         const deptDoc = deptScopeSnap.docs[0];
         const deptScopeDoc = deptDoc.data() as {
           assignedYears?: number[]; secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>;
-          parentDepartmentId?: string;
+          parentDepartmentId?: string; managedDepartments?: string[];
         };
-        const courseName = typeof body.course === "string" ? body.course : undefined;
+        // Guaranteed non-empty by the check at the top of this block.
+        const courseName = (body.course as string).trim();
         let catalogId: string | undefined;
-        if (courseName) {
+        {
           const coursesSnap = await collegeRef.collection("courses").where("name", "==", courseName).get();
           const sameCourseNameDocs = coursesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Course[];
           catalogId = resolveCatalogId(sameCourseNameDocs, deptDoc.id, courseName);
@@ -348,6 +482,39 @@ export async function POST(request: Request) {
             ?? (deptScopeDoc.parentDepartmentId
               ? sameCourseNameDocs.find((c) => c.departmentId === deptScopeDoc.parentDepartmentId)?.id
               : undefined);
+          // A course name that doesn't resolve to a real Course doc THIS
+          // department (or its parent) actually owns must reject, not just
+          // silently save with no courseId - same check the bulk importer
+          // already makes (import-excel/route.ts's identical resolveCourse
+          // failure).
+          if (!courseId) {
+            return NextResponse.json({ error: `Course "${courseName}" is not offered by ${dept}` }, { status: 400 });
+          }
+          // Academic Year must fall within this specific course's own
+          // configured duration (e.g. 1-4 for a B.Tech, 1-2 for an M.Tech) -
+          // the same ceiling the Year dropdown itself already enforces
+          // client-side (yearOptionsForCourse, RosterFieldInputs.tsx), now
+          // backed up server-side too, mirroring the bulk importer's
+          // identical check (import-excel/route.ts). Generic - reads
+          // whatever durationYears this course was actually configured
+          // with, never a hardcoded per-course-name table.
+          const resolvedCourseDoc = sameCourseNameDocs.find((c) => c.id === courseId);
+          const yearDurationError = validateYearForCourseDuration(Number(body.year), resolvedCourseDoc?.durationYears, courseName);
+          if (yearDurationError) {
+            return NextResponse.json({ error: yearDurationError }, { status: 400 });
+          }
+        }
+        // Basic Year <-> Semester sanity check - mirrors the bulk importer's
+        // identical check (import-excel/route.ts). Semester is free text
+        // everywhere it's entered (including the Fix Row dialog, which can
+        // pre-fill it from a failed import row's raw text), so this can't
+        // rely on a dropdown constraining it the way Gender/Scholarship etc.
+        // already do.
+        if (typeof body.semester === "string" && body.semester.trim()) {
+          const semesterError = validateYearSemesterConsistency(Number(body.year), Number(body.semester.match(/\d+/)?.[0]));
+          if (semesterError) {
+            return NextResponse.json({ error: semesterError }, { status: 400 });
+          }
         }
         let assignedYears = resolveDepartmentCourseScope(deptScopeDoc, catalogId).assignedYears;
         // A sub-department an HOD created carries no assignedYears/courseScopes
@@ -387,17 +554,74 @@ export async function POST(request: Request) {
           // enough, its own sub-departments don't need to be separately,
           // individually configured too (isConfiguredSecondaryDepartmentOrChild's
           // doc-comment).
-          const secondaryDeptSnap = await collegeRef.collection("departments").where("name", "==", secondaryDept).limit(1).get();
+          const secondaryDeptDoc = allDepts.find((d) => d.name.trim().toLowerCase() === secondaryDept.toLowerCase());
           let secondaryParentName: string | undefined;
-          if (!secondaryDeptSnap.empty) {
-            const secondaryParentId = (secondaryDeptSnap.docs[0].data() as { parentDepartmentId?: string }).parentDepartmentId;
-            if (secondaryParentId) {
-              const parentSnap = await collegeRef.collection("departments").doc(secondaryParentId).get();
-              secondaryParentName = (parentSnap.data() as { name?: string } | undefined)?.name;
-            }
+          if (secondaryDeptDoc?.parentDepartmentId) {
+            secondaryParentName = allDepts.find((d) => d.id === secondaryDeptDoc.parentDepartmentId)?.name;
           }
-          if (!isConfiguredSecondaryDepartmentOrChild(deptScopeDoc, secondaryDept, secondaryParentName)) {
+          // `dept`'s own sub-departments (if it's a parent) also count via
+          // THEIR managedDepartments - same fold-in isConfiguredSecondary
+          // Department does for the client's dropdown.
+          const childDeptsSnap = await collegeRef.collection("departments").where("parentDepartmentId", "==", deptDoc.id).get();
+          const childDepts = childDeptsSnap.docs.map((d) => d.data() as { managedDepartments?: string[] });
+          if (!isConfiguredSecondaryDepartmentOrChild(deptScopeDoc, secondaryDept, secondaryParentName, childDepts)) {
             return NextResponse.json({ error: `"${dept}" does not cross-list to "${secondaryDept}"` }, { status: 400 });
+          }
+        }
+      }
+    }
+
+    // De-dupe an unassigned add against an existing unassigned student who's
+    // actually the same person - mirrors the bulk importer's own check
+    // (import-excel/route.ts) so a row it rejected, then "fixed" here via the
+    // import page's Fix Row dialog (which posts to this same endpoint)
+    // without actually changing anything, is rejected the same way instead
+    // of silently creating a real duplicate. A shared name alone never
+    // counts (see isLikelySameUnassignedStudent's own doc-comment) - two
+    // different students who happen to share a name, with nothing else in
+    // common on file, can both be added.
+    if (!sectionName && dept) {
+      const roll = typeof body.rollNumber === "string" ? body.rollNumber.trim() : "";
+      const yearNum = Number(body.year);
+      if (roll) {
+        const rollDupSnap = await collegeRef.collection("students")
+          .where("department", "==", dept).where("year", "==", yearNum)
+          .where("rollNumber", "==", roll).where("section", "==", "").limit(1).get();
+        if (!rollDupSnap.empty) {
+          return NextResponse.json(
+            { error: `An unassigned student with this Roll Number already exists for ${dept} Year ${body.year}` },
+            { status: 409 }
+          );
+        }
+      } else {
+        // Same real person can be represented with a given branch name in
+        // either `department` or `secondaryDepartment`, depending on which
+        // convention was used at the time (see import-excel's identical
+        // by-both-fields indexing) - checked in both directions, against
+        // both this row's own department and its Core Department.
+        const secondaryDeptTrim = typeof body.secondaryDepartment === "string" ? body.secondaryDepartment.trim() : "";
+        const lookupNames = Array.from(new Set([dept, ...(secondaryDeptTrim ? [secondaryDeptTrim] : [])]));
+        const candidateSnaps = await Promise.all(
+          lookupNames.flatMap((name) => [
+            collegeRef.collection("students").where("department", "==", name).where("year", "==", yearNum).get(),
+            collegeRef.collection("students").where("secondaryDepartment", "==", name).where("year", "==", yearNum).get(),
+          ])
+        );
+        const nameLower = body.name.trim().toLowerCase();
+        const seen = new Set<string>();
+        for (const snap of candidateSnaps) {
+          for (const doc of snap.docs) {
+            if (seen.has(doc.id)) continue;
+            seen.add(doc.id);
+            const existing = doc.data() as Record<string, unknown> & { section?: string; name?: string };
+            if (existing.section) continue; // only unassigned candidates count
+            if (String(existing.name ?? "").trim().toLowerCase() !== nameLower) continue;
+            if (isLikelySameUnassignedStudent(body, existing)) {
+              return NextResponse.json(
+                { error: `"${body.name.trim()}" already exists as an unassigned ${dept} Year ${body.year} student with matching details` },
+                { status: 409 }
+              );
+            }
           }
         }
       }
