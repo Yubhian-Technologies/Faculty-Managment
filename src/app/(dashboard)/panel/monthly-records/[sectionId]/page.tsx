@@ -46,7 +46,19 @@ export default function FacultyAttendanceReportYearMonthPage() {
   const sectionLabel = searchParams.get("label") || "Section";
   const now = new Date();
 
-  const [mode, setMode] = useState<"monthly" | "period" | "tillnow">("monthly");
+  const [mode, setMode] = useState<"monthly" | "period" | "tillnow" | "semester">("monthly");
+
+  // This section's configured semester numbers (course-year's
+  // CourseYearTiming) - empty when none are set up, which keeps the
+  // Semester tab hidden below.
+  const [availableSemesters, setAvailableSemesters] = useState<number[]>([]);
+  const [semester, setSemester] = useState<number | null>(null);
+  useEffect(() => {
+    fetch(`/api/college/class-work-records?sectionId=${sectionId}&optionsOnly=true`)
+      .then((r) => r.json() as Promise<{ availableSemesters?: number[] }>)
+      .then((json) => setAvailableSemesters(json.availableSemesters ?? []))
+      .catch(() => { /* Semester tab just stays hidden */ });
+  }, [sectionId]);
 
   // ── Monthly ───────────────────────────────────────────────────────────────
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -78,24 +90,33 @@ export default function FacultyAttendanceReportYearMonthPage() {
         setHasLoadedRange(false);
         return;
       }
+      if (mode === "semester" && semester == null) {
+        setRangeSubjects([]);
+        setRangeStudents([]);
+        setHasLoadedRange(false);
+        return;
+      }
       setIsLoadingRange(true);
       setRangeError(null);
       try {
         const params = new URLSearchParams({ sectionId, summary: "true" });
         if (mode === "tillnow") {
           params.set("allTime", "true");
+        } else if (mode === "semester") {
+          params.set("semester", String(semester));
         } else {
           params.set("from", fromDate);
           params.set("to", toDate);
         }
         const res = await fetch(`/api/college/class-work-records?${params.toString()}`);
-        const json = (await res.json()) as { subjects?: SubjectColumn[]; students?: SubjectRangeStudentRow[]; error?: string };
+        const json = (await res.json()) as { subjects?: SubjectColumn[]; students?: SubjectRangeStudentRow[]; availableSemesters?: number[]; error?: string };
         if (!res.ok) {
           setRangeError(json.error ?? "Failed to load report");
           return;
         }
         setRangeSubjects(json.subjects ?? []);
         setRangeStudents(json.students ?? []);
+        if (json.availableSemesters) setAvailableSemesters(json.availableSemesters);
         setHasLoadedRange(true);
       } catch {
         setRangeError("Failed to load report");
@@ -103,9 +124,9 @@ export default function FacultyAttendanceReportYearMonthPage() {
         setIsLoadingRange(false);
       }
     })();
-  }, [mode, sectionId, fromDate, toDate, periodRangeReady]);
+  }, [mode, sectionId, fromDate, toDate, periodRangeReady, semester]);
 
-  function handleModeChange(next: "monthly" | "period" | "tillnow") {
+  function handleModeChange(next: "monthly" | "period" | "tillnow" | "semester") {
     setMode(next);
     setRangeError(null);
   }
@@ -124,10 +145,11 @@ export default function FacultyAttendanceReportYearMonthPage() {
 
       <SegmentedTabs
         value={mode}
-        onChange={(v) => handleModeChange(v as "monthly" | "period" | "tillnow")}
+        onChange={(v) => handleModeChange(v as "monthly" | "period" | "tillnow" | "semester")}
         options={[
           { key: "monthly", label: "Monthly" },
           { key: "period", label: "Period" },
+          ...(availableSemesters.length > 0 ? [{ key: "semester", label: "Semester" }] : []),
           { key: "tillnow", label: "Till now" },
         ]}
       />
@@ -187,6 +209,46 @@ export default function FacultyAttendanceReportYearMonthPage() {
             <Card>
               <CardContent className="py-12 text-center text-sm text-muted-foreground">
                 No attendance record for {sectionLabel} between {formatDateDDMMYYYY(fromDate)} and {formatDateDDMMYYYY(toDate)}.
+              </CardContent>
+            </Card>
+          ) : hasLoadedRange ? (
+            <SubjectRangeSummaryTables subjects={rangeSubjects} students={rangeStudents} />
+          ) : null}
+        </div>
+      )}
+
+      {mode === "semester" && (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="flex flex-wrap items-end gap-3 pt-6">
+              <div className="w-40 space-y-1.5">
+                <label className="text-sm font-medium">Semester</label>
+                <select
+                  className={selectClass}
+                  value={semester ?? ""}
+                  onChange={(e) => setSemester(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select</option>
+                  {availableSemesters.map((s) => <option key={s} value={s}>Semester {s}</option>)}
+                </select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {semester == null ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                Select a semester to view attendance for that range.
+              </CardContent>
+            </Card>
+          ) : isLoadingRange ? (
+            <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />
+          ) : rangeError ? (
+            <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">{rangeError}</CardContent></Card>
+          ) : hasLoadedRange && (rangeSubjects.length === 0 || rangeStudents.length === 0) ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                No attendance record for {sectionLabel} in Semester {semester}.
               </CardContent>
             </Card>
           ) : hasLoadedRange ? (

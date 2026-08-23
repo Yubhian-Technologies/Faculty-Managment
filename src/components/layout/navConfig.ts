@@ -501,6 +501,16 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     // { label: "Leaves", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL"] },
     // { label: "Payroll", href: "/principal/payslips", iconName: "Wallet", roles: ["PRINCIPAL"] },
   ],
+  // Dead at runtime - session/client role is normalized to PRINCIPAL for
+  // College Admin (see src/app/api/auth/session/route.ts, src/hooks/useAuth.ts),
+  // so getNavItemsForRole/BOTTOM_NAV_ITEMS lookups always resolve via the
+  // PRINCIPAL key above. Kept only to satisfy Record<UserRole, ...>.
+  COLLEGE_ADMIN: [
+    { label: "Home", href: "/principal", iconName: "LayoutDashboard", roles: ["COLLEGE_ADMIN"] },
+    { label: "Vacancies", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["COLLEGE_ADMIN"] },
+    { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["COLLEGE_ADMIN"] },
+    { label: "Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["COLLEGE_ADMIN"] },
+  ],
   HOD: [
     { label: "Home", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
     { label: "Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"] },

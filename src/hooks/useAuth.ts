@@ -118,6 +118,14 @@ export function useAuth() {
               profile = await getUserById(collegeId, firebaseUser.uid);
             } catch { /* blocked by security rules - use fallback below */ }
           }
+          // College Admin behaves exactly like Principal - the Firestore doc
+          // keeps its real role (so it still shows up as its own staff entry),
+          // but auth/UI treats it as Principal everywhere. /api/auth/session
+          // does the same normalization server-side; this covers the direct
+          // Firestore read path used once custom claims are already set.
+          if (profile && (profile.role as string) === "COLLEGE_ADMIN") {
+            profile = { ...profile, role: "PRINCIPAL" };
+          }
           setUser(
             profile ?? {
               uid: firebaseUser.uid,

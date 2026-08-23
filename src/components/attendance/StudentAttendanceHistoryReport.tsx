@@ -85,15 +85,22 @@ export function StudentAttendanceHistoryReport({
   const monthParam = searchParams.get("month");
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
+  const semesterParam = searchParams.get("semester");
 
   const now = new Date();
-  const [mode, setMode] = useState<"monthly" | "period" | "tillnow">(
-    modeParam === "period" || modeParam === "tillnow" ? modeParam : "monthly"
+  const [mode, setMode] = useState<"monthly" | "period" | "tillnow" | "semester">(
+    modeParam === "period" || modeParam === "tillnow" || modeParam === "semester" ? modeParam : "monthly"
   );
   const [month, setMonth] = useState(monthParam ? Number(monthParam) : now.getMonth() + 1);
   const [year, setYear] = useState(yearParam ? Number(yearParam) : now.getFullYear());
   const [from, setFrom] = useState(fromParam ?? "");
   const [to, setTo] = useState(toParam ?? "");
+  // This student's configured semester numbers (course-year's
+  // CourseYearTiming) - empty when none are set up, which keeps the
+  // Semester tab hidden below, same convention as the Teaching Assignments
+  // page's own semester picker.
+  const [availableSemesters, setAvailableSemesters] = useState<number[]>([]);
+  const [semester, setSemester] = useState<number | null>(semesterParam ? Number(semesterParam) : null);
 
   // Arriving with an explicit mode (from a report's Registration No. link)
   // already answers "which range" - showing the Monthly/Period/Till now
@@ -127,6 +134,10 @@ export function StudentAttendanceHistoryReport({
         return;
       }
     }
+    if (mode === "semester" && semester == null) {
+      toast({ variant: "destructive", title: "Pick a semester" });
+      return;
+    }
     setIsLoading(true);
     setHasShown(true);
     try {
@@ -139,21 +150,33 @@ export function StudentAttendanceHistoryReport({
         params.set("from", from);
         params.set("to", to);
         setShownRangeLabel(`${ddmmyyyy(from)} to ${ddmmyyyy(to)}`);
+      } else if (mode === "semester") {
+        params.set("semester", String(semester));
+        setShownRangeLabel(`Semester ${semester}`);
       } else {
         setShownRangeLabel("entire history");
       }
       const res = await fetch(`/api/college/student-attendance-history?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load attendance history");
-      const json = (await res.json()) as { student?: StudentInfo; subjects?: SubjectRow[]; total?: TotalRow };
+      const json = (await res.json()) as { student?: StudentInfo; subjects?: SubjectRow[]; total?: TotalRow; availableSemesters?: number[] };
       setStudent(json.student ?? null);
       setSubjects(json.subjects ?? []);
       setTotal(json.total ?? null);
+      if (json.availableSemesters) setAvailableSemesters(json.availableSemesters);
     } catch {
       toast({ variant: "destructive", title: "Failed to load attendance history" });
     } finally {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    fetch(`/api/college/student-attendance-history?studentId=${studentId}&optionsOnly=true`)
+      .then((r) => r.json() as Promise<{ availableSemesters?: number[] }>)
+      .then((json) => setAvailableSemesters(json.availableSemesters ?? []))
+      .catch(() => { /* Semester tab just stays hidden */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId]);
 
   useEffect(() => {
     if (!modeParam) return;
@@ -183,10 +206,11 @@ export function StudentAttendanceHistoryReport({
           <CardContent className="p-4 space-y-4">
             <SegmentedTabs
               value={mode}
-              onChange={(v) => setMode(v as "monthly" | "period" | "tillnow")}
+              onChange={(v) => setMode(v as "monthly" | "period" | "tillnow" | "semester")}
               options={[
                 { key: "monthly", label: "Monthly" },
                 { key: "period", label: "Period" },
+                ...(availableSemesters.length > 0 ? [{ key: "semester", label: "Semester" }] : []),
                 { key: "tillnow", label: "Till now" },
               ]}
             />
@@ -218,6 +242,20 @@ export function StudentAttendanceHistoryReport({
                   <label className="text-sm font-medium">To</label>
                   <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
                 </div>
+              </div>
+            )}
+
+            {mode === "semester" && (
+              <div className="w-40 space-y-1.5">
+                <label className="text-sm font-medium">Semester</label>
+                <select
+                  className={selectClass}
+                  value={semester ?? ""}
+                  onChange={(e) => setSemester(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select</option>
+                  {availableSemesters.map((s) => <option key={s} value={s}>Semester {s}</option>)}
+                </select>
               </div>
             )}
 

@@ -17,7 +17,8 @@ import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
 import { resolveUserDepartment } from "@/lib/budget/departmentScope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { validatePeriodSubstitutions, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
-import type { LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
+import { buildAdjustmentRequests, notifyAdjustmentAssignees, resolvePostAcceptanceStatus } from "@/lib/leave/adjustmentRequests";
+import type { AdjustmentRequest, LeaveRequest, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 import type { UserRole } from "@/types/core";
 
 // Sorts newest-first in memory instead of chaining .orderBy() onto a
@@ -142,6 +143,7 @@ export async function POST(request: Request) {
       reason?: string;
       extendsRequestId?: string;
       periodSubstitutions?: PeriodSubstitutionInput[];
+      handoverToUid?: string;
     };
 
     if (!body.fromDate || !body.toDate || !body.reason?.trim()) {
@@ -166,7 +168,8 @@ export async function POST(request: Request) {
     // server is the actual guard - see LeaveProfileView.tsx).
     const hasPendingRequest = existingSnap.docs.some((d) => {
       const status = (d.data() as LeaveRequest).status;
-      return status === "PENDING_HOD" || status === "PENDING_PRINCIPAL" || status === "PENDING_MANAGEMENT";
+      return status === "PENDING_ACCEPTANCE" || status === "PENDING_HOD" ||
+        status === "PENDING_PRINCIPAL" || status === "PENDING_MANAGEMENT";
     });
     if (hasPendingRequest) {
       return NextResponse.json(
@@ -305,6 +308,22 @@ export async function POST(request: Request) {
       if (result.resolved.length > 0) periodSubstitutions = result.resolved;
     }
 
+    // Optional handover/point-of-contact pick - any requester, teaching or
+    // not, same-department only (mirrors how substitutes are restricted).
+    let handover: { uid: string; name: string } | null = null;
+    if (body.handoverToUid) {
+      if (body.handoverToUid === session.uid) {
+        return NextResponse.json({ error: "You can't hand over to yourself" }, { status: 400 });
+      }
+      const handoverSnap = await db.collection("colleges").doc(session.collegeId)
+        .collection("users").doc(body.handoverToUid).get();
+      const handoverData = handoverSnap.data() as { name?: string; department?: string } | undefined;
+      if (!handoverSnap.exists || !identity.department || handoverData?.department !== identity.department) {
+        return NextResponse.json({ error: "Pick a handover contact from your own department" }, { status: 400 });
+      }
+      handover = { uid: body.handoverToUid, name: handoverData?.name ?? "Unknown" };
+    }
+
     const now = new Date();
     // Faculty (PANEL_MEMBER - covers both Teaching and Technical designations)
     // always report to their department's HOD. Supporting Staff (COLLEGE_STAFF,
@@ -317,9 +336,17 @@ export async function POST(request: Request) {
     // else within the college to decide it, so it goes straight to the
     // global MANAGEMENT role instead (see /api/management/leave-approvals).
     const reportsToHod = session.role === "PANEL_MEMBER" || (session.role === "COLLEGE_STAFF" && !!identity.department);
-    const initialStatus = session.role === "PRINCIPAL"
-      ? "PENDING_MANAGEMENT"
-      : reportsToHod ? "PENDING_HOD" : "PENDING_PRINCIPAL";
+    const postAcceptanceStatus = resolvePostAcceptanceStatus(session.role, reportsToHod);
+
+    // Every named substitute/handover person must accept before this can
+    // reach postAcceptanceStatus's actual approver - see types/leave.ts's
+    // PENDING_ACCEPTANCE. Skipped entirely (starts straight at
+    // postAcceptanceStatus, exactly as before this feature existed) when
+    // there's nothing to accept.
+    const adjustmentRequests: AdjustmentRequest[] = await buildAdjustmentRequests(
+      db, session.collegeId, periodSubstitutions, handover
+    );
+    const initialStatus = adjustmentRequests.length > 0 ? "PENDING_ACCEPTANCE" : postAcceptanceStatus;
 
     const newRequest: Omit<LeaveRequest, "id"> = {
       collegeId: session.collegeId,
@@ -330,6 +357,8 @@ export async function POST(request: Request) {
       isOtherRequest: body.isOtherRequest || false,
       ...(body.extendsRequestId ? { extendsRequestId: body.extendsRequestId } : {}),
       ...(periodSubstitutions ? { periodSubstitutions } : {}),
+      ...(handover ? { handoverToUid: handover.uid, handoverToName: handover.name } : {}),
+      ...(adjustmentRequests.length > 0 ? { adjustmentRequests, postAcceptanceStatus } : {}),
       fromDate: fromDate as unknown as LeaveRequest["fromDate"],
       toDate: toDate as unknown as LeaveRequest["toDate"],
       totalDays,
@@ -342,6 +371,9 @@ export async function POST(request: Request) {
     };
 
     const ref = await REQUESTS_COL(session.collegeId, db).add(newRequest);
+    if (adjustmentRequests.length > 0) {
+      await notifyAdjustmentAssignees(db, session.collegeId, newRequest);
+    }
 
     // Balance is only committed on final approval (see [id]/route.ts) - a
     // pending/unapproved request never reduces the visible remaining count.

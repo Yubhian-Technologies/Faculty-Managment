@@ -167,6 +167,24 @@ export function LeaveApprovalQueue() {
                     substituteFacultyId: picks[`${p.date}|${p.timetableSlotId}`],
                   }))
               : undefined;
+      // A period pick that's actually NEW/CHANGED here needs that substitute's
+      // own acceptance before this can go any further - see
+      // PROPOSE_COVERAGE in applications/[id]/route.ts. Sent as a separate
+      // call first: if it finds nothing genuinely new (everything already
+      // matches what's on record, e.g. the requester's own unchanged picks),
+      // the follow-up APPROVE/forward below proceeds immediately, same as
+      // before. If it does find changes, APPROVE is rejected with a clear
+      // "awaiting acceptance" error instead of silently going through.
+      if (periodSubstitutions?.length) {
+        const proposeRes = await fetch(`/api/leave/applications/${r.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "PROPOSE_COVERAGE", periodSubstitutions }),
+        });
+        const proposeData = (await proposeRes.json()) as { error?: string };
+        if (!proposeRes.ok) throw new Error(proposeData.error ?? "Failed to update coverage");
+      }
+
       const res = await fetch(`/api/leave/applications/${r.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -175,7 +193,6 @@ export function LeaveApprovalQueue() {
           remarks: remarksById[r.id],
           isPaidLeave: needsPaidLeaveDecision ? paidById[r.id] : undefined,
           otherLeaveCategory: isPrincipalOtherDecision ? categoryById[r.id] : undefined,
-          periodSubstitutions,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -188,6 +205,11 @@ export function LeaveApprovalQueue() {
       setExpandedId((prev) => (prev === r.id ? null : prev));
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Action failed" });
+      // A PROPOSE_COVERAGE that found real changes leaves this request with a
+      // new pending acceptance even though the APPROVE call right after it
+      // failed - reload so the queue reflects that instead of showing stale
+      // picks that look like nothing happened.
+      void load();
     } finally {
       setActingId(null);
     }

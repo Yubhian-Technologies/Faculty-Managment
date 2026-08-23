@@ -66,6 +66,12 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
   const [substituteByPeriod, setSubstituteByPeriod] = useState<Record<string, string>>({});
+  // Optional handover/point-of-contact - any requester, teaching or not, can
+  // name a same-department colleague to handle other responsibilities while
+  // they're out. Separate from and in addition to period substitutes above -
+  // see types/leave.ts's handoverToUid.
+  const [handoverCandidates, setHandoverCandidates] = useState<{ uid: string; name: string }[]>([]);
+  const [handoverToUid, setHandoverToUid] = useState("");
   // College Office's declared Summer Vacation range (see the Holidays page's
   // "Summer Vacation" section) - whichever one hasn't fully ended yet, soonest
   // first. Selecting "Summer Vacation" below locks From/To to this exact
@@ -258,6 +264,13 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   }, [leaveTypeCode, fromDate, toDate]);
 
   useEffect(() => {
+    fetch("/api/leave/handover-candidates")
+      .then((r) => r.json() as Promise<{ candidates?: { uid: string; name: string }[] }>)
+      .then((d) => setHandoverCandidates(d.candidates ?? []))
+      .catch(() => { /* Handover picker just stays empty - it's optional */ });
+  }, []);
+
+  useEffect(() => {
     fetch("/api/leave/balances")
       .then((r) => r.json() as Promise<{ leaveTypes: BalanceEntry[] }>)
       .then((data) => setTypes(data.leaveTypes ?? []))
@@ -331,6 +344,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
           reason: reason.trim(),
           extendsRequestId: extendId ?? undefined,
+          handoverToUid: handoverToUid || undefined,
           periodSubstitutions: periods.length > 0
             ? periods.map((p) => ({
                 date: p.date,
@@ -513,6 +527,24 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {handoverCandidates.length > 0 && (
+            <div className="space-y-2">
+              <Label>Handover / point of contact (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Name a colleague to handle anything else you look after while you&rsquo;re out - separate from any classes above.
+              </p>
+              <Select value={handoverToUid || "NONE"} onValueChange={(v) => setHandoverToUid(v === "NONE" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">None</SelectItem>
+                  {handoverCandidates.map((c) => (
+                    <SelectItem key={c.uid} value={c.uid}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

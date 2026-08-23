@@ -183,10 +183,7 @@ export default function HODFacultyPage() {
             <div className="flex items-center gap-1.5">
               <p className="font-medium leading-tight">{row.name as string}</p>
             </div>
-            {(row.collegeEmail as string) && (
-              <p className="text-xs text-muted-foreground">{row.collegeEmail as string}</p>
-            )}
-            <p className="text-xs text-muted-foreground">{row.email as string}</p>
+            <p className="text-xs text-muted-foreground">{(row.collegeEmail as string) || (row.email as string)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
             <p className="text-xs text-muted-foreground">{joiningLabel(row.status)}: {fmtDate(row.joiningDate)}</p>
           </div>

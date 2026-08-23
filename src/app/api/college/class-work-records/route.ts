@@ -8,7 +8,12 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { DAY_BY_JS_DAY } from "@/lib/timetable/currentPeriod";
 import { loadDepartmentCodes, formatSectionLabel } from "@/lib/attendance/sectionLabel";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
-import type { Section, StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } from "@/types";
+import type { CourseYearTiming, Section, StudentAttendanceMark, StudentAttendanceSession, TimetableSlot } from "@/types";
+
+function toDateStr(v: unknown): string {
+  const d = (v as { toDate?: () => Date })?.toDate ? (v as { toDate: () => Date }).toDate() : new Date(v as string);
+  return d.toISOString().slice(0, 10);
+}
 
 // Drill-down reader over the "Record of the Class Work" already saved on
 // each SUBMITTED student-attendance session (see student-attendance/route.ts) -
@@ -68,7 +73,12 @@ export async function GET(request: Request) {
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
     const allTimeParam = searchParams.get("allTime") === "true";
-    if (summaryParam && !sectionIdParam) {
+    const semesterParam = searchParams.get("semester");
+    // Metadata-only call - just this section's configured semester numbers,
+    // for the Faculty Attendance Report's Semester tab. Skipped ahead of the
+    // full attendance scan below.
+    const optionsOnlyParam = searchParams.get("optionsOnly") === "true";
+    if ((summaryParam || optionsOnlyParam) && !sectionIdParam) {
       return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
     }
     if (fromParam && toParam && fromParam > toParam) {
@@ -77,6 +87,44 @@ export async function GET(request: Request) {
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
+
+    // This section's configured semester numbers (from its course-year's
+    // CourseYearTiming), plus - when a specific one was requested - the date
+    // range to filter attendance sessions by. A course-year with no
+    // semesters configured has none to offer; the Semester tab stays hidden
+    // client-side in that case. Resolved up front since both the metadata-only
+    // call and `summary` mode below need it.
+    let semesterOptions: number[] = [];
+    let semesterFrom: string | null = null;
+    let semesterTo: string | null = null;
+    let summarySection: Section | null = null;
+    if (summaryParam || optionsOnlyParam) {
+      const sectionSnap = await collegeRef.collection("sections").doc(sectionIdParam!).get();
+      if (!sectionSnap.exists) {
+        return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      }
+      const section = sectionSnap.data() as Section;
+      summarySection = section;
+      if (section.courseId) {
+        const timingSnap = await collegeRef
+          .collection("courseYearTimings")
+          .doc(`${section.courseId}_year${section.year}`)
+          .get();
+        const timing = timingSnap.exists ? (timingSnap.data() as CourseYearTiming) : null;
+        semesterOptions = (timing?.semesters ?? []).map((s) => s.semester).sort((a, b) => a - b);
+        if (semesterParam) {
+          const match = timing?.semesters?.find((s) => s.semester === Number(semesterParam));
+          if (!match) {
+            return NextResponse.json({ error: "That semester isn't configured for this section's course-year" }, { status: 400 });
+          }
+          semesterFrom = toDateStr(match.startDate);
+          semesterTo = toDateStr(match.endDate);
+        }
+      }
+      if (optionsOnlyParam) {
+        return NextResponse.json({ availableSemesters: semesterOptions });
+      }
+    }
 
     let facultyId: string;
     if (session.role === "HOD") {
@@ -108,6 +156,7 @@ export async function GET(request: Request) {
     if (summaryParam) {
       const monthStr = monthParam ? String(Number(monthParam)).padStart(2, "0") : null;
       const inRange = filtered.filter((r) => {
+        if (semesterFrom && semesterTo) return r.date >= semesterFrom && r.date <= semesterTo;
         if (yearParam && monthStr) return r.date.slice(0, 4) === yearParam && r.date.slice(5, 7) === monthStr;
         if (fromParam && toParam) return r.date >= fromParam && r.date <= toParam;
         return allTimeParam;
@@ -130,11 +179,7 @@ export async function GET(request: Request) {
         sessionsByAssignment.set(r.assignmentId, arr);
       }
 
-      const sectionSnap = await collegeRef.collection("sections").doc(sectionIdParam!).get();
-      if (!sectionSnap.exists) {
-        return NextResponse.json({ error: "Section not found" }, { status: 404 });
-      }
-      const section = sectionSnap.data() as Section;
+      const section = summarySection!;
       const roster = await fetchSectionStudents(collegeRef, {
         department: section.department,
         sectionName: section.name,
@@ -158,7 +203,7 @@ export async function GET(request: Request) {
         })
         .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
 
-      return NextResponse.json({ subjects, students });
+      return NextResponse.json({ subjects, students, availableSemesters: semesterOptions });
     }
 
     if (!yearParam) {

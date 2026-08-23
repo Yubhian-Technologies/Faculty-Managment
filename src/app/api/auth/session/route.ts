@@ -44,6 +44,13 @@ export async function POST(request: Request) {
       }
     }
 
+    // College Admin behaves exactly like Principal (same dashboard, same
+    // permissions) - normalize here so the session cookie, custom claims, and
+    // the profile below all read "PRINCIPAL" everywhere auth is checked. The
+    // Firestore user doc itself keeps its real "COLLEGE_ADMIN" role so it still
+    // shows up as its own entry in staff lists.
+    if (role === "COLLEGE_ADMIN") role = "PRINCIPAL";
+
     // Backfill Firebase Auth custom claims so client-side Firestore rules work.
     // Only write when claims were missing from the token (avoid redundant writes).
     if (!claimsWereSet && role !== "UNKNOWN") {
@@ -86,6 +93,7 @@ export async function POST(request: Request) {
           .get();
         if (userSnap.exists) {
           profile = { uid: userSnap.id, ...userSnap.data() };
+          if (profile.role === "COLLEGE_ADMIN") profile.role = "PRINCIPAL";
         }
       } catch { /* non-fatal */ }
     }

@@ -14,6 +14,12 @@ export type UserRole =
   // College-scoped
   | "PRINCIPAL"
   | "VICE_PRINCIPAL"
+  // College Admin mirrors Principal's authority end-to-end (same dashboard,
+  // same permissions) - normalized to "PRINCIPAL" for auth purposes in
+  // src/app/api/auth/session/route.ts and src/hooks/useAuth.ts, so it stays
+  // out of the ~130 file-by-file role===PRINCIPAL checks. Created by the
+  // Principal via /principal/staff/new, alongside the non-technical/office roles.
+  | "COLLEGE_ADMIN"
   | "HOD"
   | "COLLEGE_OFFICE"
   | "COLLEGE_STAFF"
@@ -42,6 +48,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   LOCATION_DEPT_HEAD: "Dept Head",
   PRINCIPAL: "Principal",
   VICE_PRINCIPAL: "Vice Principal",
+  COLLEGE_ADMIN: "College Admin",
   HOD: "Head of Department",
   COLLEGE_OFFICE: "College Office",
   COLLEGE_STAFF: "College Staff",
@@ -71,6 +78,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   LOCATION_DEPT_HEAD: "/location-dept-head",
   PRINCIPAL: "/principal",
   VICE_PRINCIPAL: "/vice-principal",
+  COLLEGE_ADMIN: "/principal",
   HOD: "/hod",
   COLLEGE_OFFICE: "/college-office",
   COLLEGE_STAFF: "/college-staff",
@@ -110,6 +118,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   ACCOUNTS: 2,
   PRINCIPAL: 3,
   VICE_PRINCIPAL: 3,
+  COLLEGE_ADMIN: 3,
   HOD: 4,
   COLLEGE_OFFICE: 4,
   COLLEGE_STAFF: 4,
@@ -155,6 +164,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   ACCOUNTS: "LOCATION",
   PRINCIPAL: "COLLEGE",
   VICE_PRINCIPAL: "COLLEGE",
+  COLLEGE_ADMIN: "COLLEGE",
   HOD: "COLLEGE",
   COLLEGE_OFFICE: "COLLEGE",
   COLLEGE_STAFF: "COLLEGE",

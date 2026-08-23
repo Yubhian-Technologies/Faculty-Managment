@@ -68,7 +68,23 @@ export default function PrincipalAttendanceHistoryStudentsPage() {
 
   const columns: Column<StudentRow>[] = [
     { key: "rollNumber", header: "Roll No", render: (r) => <span className="font-medium">{r.rollNumber || "—"}</span> },
-    { key: "name", header: "Name" },
+    {
+      key: "name",
+      header: "Name",
+      // Section names aren't unique college-wide (see the fetch effect's own
+      // comment) - a first-year student physically enrolled under a
+      // different department (e.g. Basic Science) but pre-registered to this
+      // one can share this exact section name/year and turn up here. Flag it
+      // so it doesn't read as this department's own student.
+      render: (r) => (
+        <span>
+          {r.name}
+          {r.department && r.department !== deptLabel && (
+            <span className="ml-1.5 text-xs text-muted-foreground">({r.department})</span>
+          )}
+        </span>
+      ),
+    },
     {
       key: "actions",
       header: "",

@@ -24,7 +24,7 @@ import type { Department, UserRole } from "@/types";
 // Staff lists. Non-teaching staff must be added via the Supporting Staff
 // modules (HOD for Technical, "Add Non-Technical Staff" for Non-Technical),
 // which create both the login and the profile record.
-const BASE_CREATABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ACCOUNTS"];
+const BASE_CREATABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "COLLEGE_ACCOUNTS"];
 
 export default function NewStaffPage() {
   const router = useRouter();
@@ -55,7 +55,7 @@ export default function NewStaffPage() {
       .catch(() => { /* only needed for the HOD department picker */ });
   }, []);
 
-  const isValid = !!name.trim() && !!email.trim() && !!password.trim() && !!role && !!dateOfJoining &&
+  const isValid = !!name.trim() && !!collegeEmail.trim() && !!password.trim() && !!role && !!dateOfJoining &&
     (role !== "HOD" || !!department);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -68,11 +68,11 @@ export default function NewStaffPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          email: email.trim(),
+          collegeEmail: collegeEmail.trim(),
           password,
           role,
           dateOfJoining,
-          ...(collegeEmail.trim() ? { collegeEmail: collegeEmail.trim() } : {}),
+          ...(email.trim() ? { email: email.trim() } : {}),
           ...(employeeId.trim() ? { employeeId: employeeId.trim() } : {}),
           ...(phone.trim() ? { phone: phone.trim() } : {}),
           ...(role === "HOD" ? { department } : {}),
@@ -140,12 +140,12 @@ export default function NewStaffPage() {
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
               </div>
               <div className="space-y-2">
-                <Label>Email <span className="text-destructive">*</span></Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
+                <Label>College Email <span className="text-destructive">*</span></Label>
+                <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="user@vishnu.edu.in" />
               </div>
               <div className="space-y-2">
-                <Label>College Email</Label>
-                <Input type="email" value={collegeEmail} onChange={(e) => setCollegeEmail(e.target.value)} placeholder="Optional" />
+                <Label>Personal Email</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Optional" />
               </div>
               <div className="space-y-2">
                 <Label>Employee ID</Label>
