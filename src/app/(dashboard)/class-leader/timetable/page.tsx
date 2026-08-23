@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Coffee, Utensils } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "@/hooks/useToast";
+import { formatDMY, currentWeekDates } from "@/lib/utils";
+import { isoDateKey } from "@/lib/leave/dayCounter";
 import { buildRows } from "@/lib/timetable/buildGrid";
+import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { Course, Section, CourseYearTiming, TimetableSlot, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -29,10 +32,15 @@ export default function ClassLeaderTimetablePage() {
   const [timing, setTiming] = useState<CourseYearTiming | null>(null);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Monday of the week currently on screen - navigable via WeekNavigator,
+  // defaulting to this calendar week. weekDates pairs positionally with
+  // DAYS above, labelling each column with its actual date.
+  const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
+  const weekDates = useMemo(() => currentWeekDates(weekStart), [weekStart]);
 
   useEffect(() => {
     setIsLoading(true);
-    fetch("/api/college/class-leader/timetable")
+    fetch(`/api/college/class-leader/timetable?week=${isoDateKey(weekStart)}`)
       .then((r) => r.json() as Promise<{ course?: Course; section?: Section; timing?: CourseYearTiming; slots?: TimetableSlot[]; error?: string }>)
       .then((d) => {
         setCourse(d.course ?? null);
@@ -42,7 +50,7 @@ export default function ClassLeaderTimetablePage() {
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load timetable" }))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [weekStart]);
 
   const rows = timing ? buildRows(timing) : [];
 
@@ -68,13 +76,16 @@ export default function ClassLeaderTimetablePage() {
           Timings haven&rsquo;t been configured for {course?.name} - {ordinalYear(section.year)} yet.
         </div>
       ) : (
+        <>
+        <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-muted/50">
                 <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-24">Period</th>
-                {DAYS.map((d) => (
+                {DAYS.map((d, i) => (
                   <th key={d} className="p-2.5 text-left font-medium text-muted-foreground border-b min-w-[140px]">
+                    <p className="text-[10px] font-normal whitespace-nowrap">{formatDMY(weekDates[i])}</p>
                     {DAY_LABELS[d]}
                   </th>
                 ))}
@@ -116,7 +127,9 @@ export default function ClassLeaderTimetablePage() {
                               {slot.substituteFacultyName ? (
                                 <>
                                   <p className="text-[11px] font-medium text-amber-700 mt-0.5">{slot.substituteFacultyName}</p>
-                                  <p className="text-[10px] text-muted-foreground">Substituting for {slot.substituteForName}</p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
+                                  </p>
                                 </>
                               ) : (
                                 <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
@@ -135,6 +148,7 @@ export default function ClassLeaderTimetablePage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

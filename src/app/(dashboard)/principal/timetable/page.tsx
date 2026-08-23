@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Coffee, Utensils } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "@/hooks/useToast";
+import { formatDMY, currentWeekDates } from "@/lib/utils";
+import { isoDateKey } from "@/lib/leave/dayCounter";
 import { buildRows } from "@/lib/timetable/buildGrid";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
 import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { WeekNavigator } from "@/components/timetable/WeekNavigator";
 import type { Course, Department, Section, CourseYearTiming, TimetableSlot, DayOfWeek } from "@/types";
 import { DAY_LABELS } from "@/types";
 
@@ -50,6 +53,11 @@ export default function PrincipalTimetablePage() {
   // the fetch effect would be a cascading render (react-hooks/set-state-in-effect).
   const [loadedFor, setLoadedFor] = useState("");
   const isLoadingGrid = Boolean(sectionId) && loadedFor !== sectionId;
+  // Monday of the week currently on screen - navigable via WeekNavigator,
+  // defaulting to this calendar week. weekDates pairs positionally with
+  // DAYS above, labelling each column with its actual date.
+  const [weekStart, setWeekStart] = useState<Date>(() => currentWeekDates()[0]);
+  const weekDates = useMemo(() => currentWeekDates(weekStart), [weekStart]);
 
   /** Cascading selects clear their downstream state here, not inside an effect. */
   function resetBelowCourse() {
@@ -167,7 +175,7 @@ export default function PrincipalTimetablePage() {
     let cancelled = false;
     void (async () => {
       try {
-        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}`)
+        const d = await fetch(`/api/college/timetable-slots?sectionId=${encodeURIComponent(sectionId)}&week=${isoDateKey(weekStart)}`)
           .then((r) => r.json() as Promise<{ slots: TimetableSlot[] }>);
         if (cancelled) return;
         setSlots(d.slots ?? []);
@@ -178,7 +186,7 @@ export default function PrincipalTimetablePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [sectionId]);
+  }, [sectionId, weekStart]);
 
   const rows = timing ? buildRows(timing) : [];
   const selectClass =
@@ -269,13 +277,16 @@ export default function PrincipalTimetablePage() {
           No timetable has been published for this section yet. The HOD builds and publishes it from their Timetable page.
         </div>
       ) : (
+        <>
+        <WeekNavigator weekStart={weekStart} onChange={setWeekStart} />
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-muted/50">
                 <th className="p-2.5 text-left font-medium text-muted-foreground border-b w-24">Period</th>
-                {DAYS.map((d) => (
+                {DAYS.map((d, i) => (
                   <th key={d} className="p-2.5 text-left font-medium text-muted-foreground border-b min-w-35">
+                    <p className="text-[10px] font-normal whitespace-nowrap">{formatDMY(weekDates[i])}</p>
                     {DAY_LABELS[d]}
                   </th>
                 ))}
@@ -316,7 +327,9 @@ export default function PrincipalTimetablePage() {
                               {slot.substituteFacultyName ? (
                                 <>
                                   <p className="text-[11px] font-medium text-amber-700 mt-0.5">{slot.substituteFacultyName}</p>
-                                  <p className="text-[10px] text-muted-foreground">Substituting for {slot.substituteForName}</p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
+                                  </p>
                                 </>
                               ) : (
                                 <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
@@ -335,6 +348,7 @@ export default function PrincipalTimetablePage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
