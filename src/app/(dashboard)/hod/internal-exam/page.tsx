@@ -17,9 +17,11 @@ export default function HodInternalExamPage() {
   const [batches, setBatches] = useState<(InternalExamMarksBatch & { id: string })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [facultyFilter, setFacultyFilter] = useState(ALL);
-  const [sectionFilter, setSectionFilter] = useState(ALL);
-  const [subjectFilter, setSubjectFilter] = useState(ALL);
+  const [courseFilter, setCourseFilter] = useState(ALL); // courseId
+  const [yearFilter, setYearFilter] = useState(ALL);
+  const [facultyFilter, setFacultyFilter] = useState(ALL); // facultyId
+  const [sectionFilter, setSectionFilter] = useState(ALL); // sectionId ?? sectionName
+  const [subjectFilter, setSubjectFilter] = useState(ALL); // subjectId
 
   const [selectedBatch, setSelectedBatch] = useState<(InternalExamMarksBatch & { id: string }) | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<ExamConfiguration | null>(null);
@@ -41,16 +43,84 @@ export default function HodInternalExamPage() {
     })();
   }, []);
 
-  const facultyOptions = useMemo(() => [...new Set(batches.map((b) => b.facultyName).filter(Boolean))].sort(), [batches]);
-  const sectionOptions = useMemo(() => [...new Set(batches.map((b) => b.sectionName).filter(Boolean))].sort(), [batches]);
-  const subjectOptions = useMemo(() => [...new Set(batches.map((b) => b.subjectName).filter(Boolean))].sort(), [batches]);
+  // Cascading Course → Year → Faculty → Section → Subject, each level's
+  // options scoped to every level above it and sourced entirely from the
+  // already-loaded batches (which denormalize courseId/year/facultyId/
+  // sectionId/subjectId at creation time — see InternalExamMarksBatch) so no
+  // extra fetch is needed. Keyed by id (not display name) so two courses/
+  // faculty/sections/subjects that happen to share a name never collide.
+  const courseOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const b of batches) if (b.courseId) seen.set(b.courseId, b.courseName ?? b.courseId);
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [batches]);
 
-  const visibleBatches = batches.filter(
-    (b) =>
-      (facultyFilter === ALL || b.facultyName === facultyFilter) &&
-      (sectionFilter === ALL || b.sectionName === sectionFilter) &&
-      (subjectFilter === ALL || b.subjectName === subjectFilter)
+  const afterCourse = useMemo(
+    () => batches.filter((b) => courseFilter === ALL || b.courseId === courseFilter),
+    [batches, courseFilter]
   );
+  const yearOptions = useMemo(
+    () => [...new Set(afterCourse.map((b) => b.year).filter((y): y is number => y != null))].sort((a, b) => a - b),
+    [afterCourse]
+  );
+
+  const afterYear = useMemo(
+    () => afterCourse.filter((b) => yearFilter === ALL || b.year === Number(yearFilter)),
+    [afterCourse, yearFilter]
+  );
+  const facultyOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const b of afterYear) if (b.facultyId) seen.set(b.facultyId, b.facultyName || b.facultyId);
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [afterYear]);
+
+  const afterFaculty = useMemo(
+    () => afterYear.filter((b) => facultyFilter === ALL || b.facultyId === facultyFilter),
+    [afterYear, facultyFilter]
+  );
+  const sectionOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const b of afterFaculty) {
+      const key = b.sectionId ?? b.sectionName;
+      if (key) seen.set(key, b.sectionName || key);
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [afterFaculty]);
+
+  const afterSection = useMemo(
+    () => afterFaculty.filter((b) => sectionFilter === ALL || (b.sectionId ?? b.sectionName) === sectionFilter),
+    [afterFaculty, sectionFilter]
+  );
+  const subjectOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const b of afterSection) if (b.subjectId) seen.set(b.subjectId, b.subjectName || b.subjectId);
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [afterSection]);
+
+  const visibleBatches = afterSection.filter((b) => subjectFilter === ALL || b.subjectId === subjectFilter);
+
+  function handleCourseChange(v: string) {
+    setCourseFilter(v);
+    setYearFilter(ALL);
+    setFacultyFilter(ALL);
+    setSectionFilter(ALL);
+    setSubjectFilter(ALL);
+  }
+  function handleYearChange(v: string) {
+    setYearFilter(v);
+    setFacultyFilter(ALL);
+    setSectionFilter(ALL);
+    setSubjectFilter(ALL);
+  }
+  function handleFacultyChange(v: string) {
+    setFacultyFilter(v);
+    setSectionFilter(ALL);
+    setSubjectFilter(ALL);
+  }
+  function handleSectionChange(v: string) {
+    setSectionFilter(v);
+    setSubjectFilter(ALL);
+  }
 
   async function openBatch(batch: InternalExamMarksBatch & { id: string }) {
     setSelectedBatch(batch);
@@ -168,34 +238,54 @@ export default function HodInternalExamPage() {
         <>
           <Card>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="space-y-2">
+                  <Label>Course</Label>
+                  <Select value={courseFilter} onValueChange={handleCourseChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>All Courses</SelectItem>
+                      {courseOptions.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Year</Label>
+                  <Select value={yearFilter} onValueChange={handleYearChange} disabled={courseFilter === ALL}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>All Years</SelectItem>
+                      {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label>Faculty</Label>
-                  <Select value={facultyFilter} onValueChange={setFacultyFilter}>
+                  <Select value={facultyFilter} onValueChange={handleFacultyChange} disabled={yearFilter === ALL}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL}>All Faculty</SelectItem>
-                      {facultyOptions.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                      {facultyOptions.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Section</Label>
-                  <Select value={sectionFilter} onValueChange={setSectionFilter}>
+                  <Select value={sectionFilter} onValueChange={handleSectionChange} disabled={facultyFilter === ALL}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL}>All Sections</SelectItem>
-                      {sectionOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {sectionOptions.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Subject</Label>
-                  <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+                  <Select value={subjectFilter} onValueChange={setSubjectFilter} disabled={sectionFilter === ALL}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL}>All Subjects</SelectItem>
-                      {subjectOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {subjectOptions.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

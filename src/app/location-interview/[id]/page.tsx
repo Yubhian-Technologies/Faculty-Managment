@@ -137,7 +137,7 @@ export default function CandidateBioDataPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Date of Birth <span className="text-destructive">*</span></Label>
-                  <Input type="date" value={form.dob} onChange={(e) => setForm((f) => ({ ...f, dob: e.target.value }))} required />
+                  <Input type="date" max={new Date().toISOString().split("T")[0]} value={form.dob} onChange={(e) => setForm((f) => ({ ...f, dob: e.target.value }))} required />
                 </div>
               </div>
               <div className="space-y-2">

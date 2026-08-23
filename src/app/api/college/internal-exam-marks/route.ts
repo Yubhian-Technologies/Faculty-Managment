@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { countEntered, examConfigId } from "@/lib/exams/internalExamMarks";
+import { countEntered, examConfigId, resolveExamTypeForSubject } from "@/lib/exams/internalExamMarks";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getHodDepartmentScope, editableDepartmentNames } from "@/lib/departments/scope";
 import type { ExamConfiguration, InternalExamMarkEntry, InternalExamMarksBatch, Section, StudentRecord, TeachingAssignment } from "@/types";
@@ -127,7 +127,8 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
-    const configSnap = await collegeRef.collection("examConfigurations").doc(examConfigId(assignment.courseId, year)).get();
+    const examType = await resolveExamTypeForSubject(collegeRef, assignment.subjectId);
+    const configSnap = await collegeRef.collection("examConfigurations").doc(examConfigId(assignment.courseId, year, examType)).get();
     if (!configSnap.exists) {
       return NextResponse.json(
         { error: "This course/year/branch's internal exam has not been configured yet. Contact your Exam Cell." },

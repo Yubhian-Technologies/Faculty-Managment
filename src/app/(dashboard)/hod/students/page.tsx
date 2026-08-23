@@ -19,7 +19,7 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { disambiguateSectionLabels, sectionFeedsTarget } from "@/lib/sections/sectionLabel";
-import type { StudentListItem, Section, Department, Course } from "@/types";
+import type { StudentListItem, Section, Department, Course, AcademicYear } from "@/types";
 
 type StudentRow = Record<string, unknown> & StudentListItem;
 type SectionRow = Section & { id: string; accessLevel?: "primary" | "secondary" };
@@ -45,8 +45,14 @@ export default function HodStudentsPage() {
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deptFilter, setDeptFilter] = useState("all");
+  // Matches the College Office Students page's own filter row (Course/
+  // Department/Year) - this table previously only offered Department, with no
+  // way to narrow a large mixed roster down to one course or year at a glance.
+  const [courseFilter, setCourseFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState("all");
 
   const [cohortOpen, setCohortOpen] = useState(false);
   const [cohortResult, setCohortResult] = useState<CohortBranchResult[] | null>(null);
@@ -87,16 +93,18 @@ export default function HodStudentsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const [studentsRes, sectionsRes, deptsRes, coursesRes] = await Promise.all([
+      const [studentsRes, sectionsRes, deptsRes, coursesRes, yearsRes] = await Promise.all([
         fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentRow[] }>),
         fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: SectionRow[] }>),
         fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
+        fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears?: AcademicYear[] }>).catch(() => ({ academicYears: [] })),
       ]);
       setStudents(studentsRes.students ?? []);
       setSections(sectionsRes.sections ?? []);
       setDepartments(deptsRes.departments ?? []);
       setCourses(coursesRes.courses ?? []);
+      setAcademicYears(yearsRes.academicYears ?? []);
     } catch {
       toast({ variant: "destructive", title: "Failed to load students" });
     } finally {
@@ -209,11 +217,43 @@ export default function HodStudentsPage() {
     return distCohortByYear.filter((s) => !effectiveDistCourseId || !s.courseId || s.courseId === effectiveDistCourseId).length;
   }, [distCohortByYear, distCohortCourseIds.length, distCourseId, effectiveDistCourseId]);
 
+  // Distinct programme names this HOD's departments actually offer - same
+  // "distinct names of the raw Course docs" reduction the Office Students
+  // page uses for its own Course filter.
+  const courseNames = useMemo(
+    () => Array.from(new Set(courses.map((c) => c.name?.trim()).filter(Boolean) as string[]))
+      .sort((a, b) => a.localeCompare(b)),
+    [courses]
+  );
+  // Configured academic years, same fallback chain as the Office Students
+  // page: prefer what the college has configured, fall back to whatever years
+  // already appear on students, then to 1-4 so the filter is never empty.
+  const yearOptions = useMemo(() => {
+    const configured = academicYears.map((y) => y.yearNumber).filter(Boolean);
+    const fromStudents = Array.from(new Set(students.map((s) => s.year).filter(Boolean)));
+    const merged = Array.from(new Set([...configured, ...fromStudents])).sort((a, b) => a - b);
+    // The college-wide Academic Years list (Principal-managed, sequential
+    // add/remove) has no idea which years any real course actually reaches -
+    // it can carry more years than the longest course this HOD's departments
+    // offer (e.g. a stray "5th Year" nothing under BTech's 4-year span ever
+    // uses), which would otherwise sit in this filter as a dead option that
+    // can never match a student. `courses` is already scoped to this HOD's
+    // own departments (see /api/college/courses's HOD handling), so its
+    // longest `durationYears` is the real ceiling here - the same cap the
+    // Principal's own Years Taught editor already enforces at the source.
+    const maxCourseDuration = courses.reduce((max, c) => Math.max(max, Number(c.durationYears) || 0), 0);
+    const capped = maxCourseDuration > 0 ? merged.filter((y) => y <= maxCourseDuration) : merged;
+    return capped.length > 0 ? capped : [1, 2, 3, 4];
+  }, [academicYears, students, courses]);
+
   const filtered = useMemo(
-    () => (deptFilter === "all" ? students : students.filter(
-      (s) => s.department === deptFilter || s.secondaryDepartment === deptFilter
-    )),
-    [students, deptFilter]
+    () => students.filter((s) => {
+      if (deptFilter !== "all" && s.department !== deptFilter && s.secondaryDepartment !== deptFilter) return false;
+      if (courseFilter !== "all" && s.course !== courseFilter) return false;
+      if (yearFilter !== "all" && s.year !== Number(yearFilter)) return false;
+      return true;
+    }),
+    [students, deptFilter, courseFilter, yearFilter]
   );
 
   // Sections a single student can be assigned into - their real branch's (if
@@ -419,7 +459,7 @@ export default function HodStudentsPage() {
     },
     {
       key: "secondaryDepartment",
-      header: "Secondary Dept",
+      header: "Core Dept",
       hideOnMobile: true,
       // Only ever set for a shared-first-year student pre-registered to their
       // real branch (e.g. "cse" under "BS-Mathematics") - a plain department's
@@ -438,6 +478,14 @@ export default function HodStudentsPage() {
           : <Badge variant="outline" className="text-amber-600 border-amber-300">Unassigned</Badge>,
     },
     { key: "year", header: "Year", hideOnMobile: true, render: (r) => <span>{r.year}</span> },
+    {
+      key: "semester",
+      header: "Semester",
+      hideOnMobile: true,
+      render: (r) => r.semester
+        ? <span className="text-sm text-muted-foreground">{r.semester}</span>
+        : <span className="text-sm text-muted-foreground/40">—</span>,
+    },
     {
       key: "status",
       header: "Status",
@@ -577,7 +625,7 @@ export default function HodStudentsPage() {
                       to Year, unchanged from before. */}
                   {distBranches.length > 0 ? (
                     <div className="space-y-2">
-                      <Label>Secondary Department</Label>
+                      <Label>Core Department</Label>
                       <Select
                         value={distBranch}
                         onValueChange={(v) => { setDistBranch(v); setDistYear(""); setDistCourseId(""); setDistSectionIds([]); }}
@@ -695,13 +743,29 @@ export default function HodStudentsPage() {
         emptyTitle="No students yet"
         emptyDescription="Once the College Office imports your branches' students, they show up here to be sectioned."
         filterComponent={
-          <Select value={deptFilter} onValueChange={setDeptFilter}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All departments</SelectItem>
-              {departmentNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <>
+            <Select value={courseFilter} onValueChange={setCourseFilter}>
+              <SelectTrigger className="w-44"><SelectValue placeholder="All courses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All courses</SelectItem>
+                {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={deptFilter} onValueChange={setDeptFilter}>
+              <SelectTrigger className="w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All departments</SelectItem>
+                {departmentNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={yearFilter} onValueChange={setYearFilter}>
+              <SelectTrigger className="w-36"><SelectValue placeholder="All years" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All years</SelectItem>
+                {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{yearOrdinalLabel(y)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </>
         }
       />
 

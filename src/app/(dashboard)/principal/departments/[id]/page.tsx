@@ -10,7 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
+import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
+import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { toast } from "@/hooks/useToast";
 import type { Department, Course, CourseYearTiming, CourseAcademicYear } from "@/types";
 
@@ -223,6 +225,14 @@ export default function DepartmentDetailPage() {
         }
       />
 
+      {department && (
+        <FreshmanDepartmentBadge
+          departmentId={department.id}
+          allDepartments={allDepartments as DepartmentWithId[]}
+          className="-mt-4"
+        />
+      )}
+
       {isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-lg border bg-muted/30 animate-pulse" />)}
@@ -257,6 +267,17 @@ export default function DepartmentDetailPage() {
                       </p>
                     ) : (
                       <p className="mt-1.5 text-xs text-orange-500">No HOD assigned</p>
+                    )}
+                    {/* Which real branches (e.g. IT, CSBS) this sub-department's
+                        Sub-HOD fully manages - set on the HOD's own
+                        Sub-Departments settings page, shown here read-only so
+                        the Principal doesn't have to open each sub-department
+                        just to see who's grouped where. */}
+                    {sub.managedDepartments && sub.managedDepartments.length > 0 && (
+                      <div className="mt-1.5">
+                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Core Departments</p>
+                        <DepartmentChipList names={sub.managedDepartments} className="mt-1" />
+                      </div>
                     )}
                     <p className="mt-2 text-xs text-primary">Open &amp; add courses →</p>
                   </button>
@@ -333,9 +354,10 @@ export default function DepartmentDetailPage() {
                             </p>
                           )}
                           {scope.secondaryDepartments.length > 0 && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Cross-listed with <span className="text-foreground">{scope.secondaryDepartments.join(", ")}</span>
-                            </p>
+                            <div className="mt-1">
+                              <p className="text-xs text-muted-foreground">Cross-listed with</p>
+                              <DepartmentChipList names={scope.secondaryDepartments} className="mt-1" />
+                            </div>
                           )}
                         </div>
                         {!isSubDepartment && (
@@ -443,7 +465,7 @@ export default function DepartmentDetailPage() {
               secondaryDepartmentsNote={
                 (department?.secondaryDepartments?.length ?? 0) > 0
                   ? `Cross-listed with ${department!.secondaryDepartments!.join(", ")} - set on ${department?.name ?? "this department"}'s own page, not per course.`
-                  : `${department?.name ?? "This department"} has no Secondary Departments set - edit the department to cross-list it to others.`
+                  : `${department?.name ?? "This department"} has no Core Departments set - edit the department to cross-list it to others.`
               }
             />
           </div>

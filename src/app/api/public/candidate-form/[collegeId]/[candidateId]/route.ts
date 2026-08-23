@@ -75,6 +75,18 @@ export async function PATCH(
     }
 
     const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+
+    const bio = body.bioData;
+    if (bio) {
+      if (bio.emergencyContactPhone && !/^\d{10}$/.test(bio.emergencyContactPhone.trim())) {
+        return NextResponse.json({ error: "Emergency contact phone must be exactly 10 digits" }, { status: 400 });
+      }
+      if (bio.dateOfBirth && bio.dateOfBirth > todayStr) {
+        return NextResponse.json({ error: "Date of Birth cannot be in the future" }, { status: 400 });
+      }
+    }
+
     await ref.update({
       bioData: body.bioData ?? {},
       certificates: body.certificates ?? [],

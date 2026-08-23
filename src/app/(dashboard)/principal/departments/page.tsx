@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ManageHodDepartmentsDialog } from "@/components/college/ManageHodDepartmentsDialog";
+import { FreshmanDepartmentBadge } from "@/components/shared/FreshmanDepartmentBadge";
+import { DepartmentChipList } from "@/components/shared/DepartmentChipList";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Course, Department, FMSUser } from "@/types";
 
 export default function DepartmentsPage() {
@@ -129,6 +131,7 @@ export default function DepartmentsPage() {
                         {dept.code}
                       </Badge>
                       {!dept.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
+                      <FreshmanDepartmentBadge departmentId={dept.id} allDepartments={departments as DepartmentWithId[]} />
                     </div>
                     <p className="font-semibold text-sm leading-tight">{dept.name}</p>
                     {dept.hodName && dept.hodUid ? (
@@ -170,19 +173,19 @@ export default function DepartmentsPage() {
                       // yet falls back to the flat fields as a general preview.
                       if (deptCourses.length > 0) {
                         return (
-                          <div className="mt-1.5 space-y-1">
+                          <div className="mt-1.5 space-y-1.5">
                             {deptCourses.map((c) => {
                               const scope = resolveDepartmentCourseScope(dept, c.catalogId);
                               return (
-                                <p key={c.id} className="text-xs text-muted-foreground">
+                                <div key={c.id} className="text-xs text-muted-foreground">
                                   <span className="text-foreground font-medium">{c.name}:</span>{" "}
                                   {scope.assignedYears.length > 0
                                     ? scope.assignedYears.map(yearOrdinalLabel).join(", ")
                                     : "No years assigned yet"}
                                   {scope.secondaryDepartments.length > 0 && (
-                                    <> · Cross-listed with <span className="text-foreground">{scope.secondaryDepartments.join(", ")}</span></>
+                                    <DepartmentChipList names={scope.secondaryDepartments} className="mt-1" />
                                   )}
-                                </p>
+                                </div>
                               );
                             })}
                           </div>
@@ -200,9 +203,10 @@ export default function DepartmentsPage() {
                             <p className="text-xs text-muted-foreground mt-1.5">No years assigned yet</p>
                           )}
                           {dept.secondaryDepartments && dept.secondaryDepartments.length > 0 && (
-                            <p className="text-xs text-muted-foreground mt-1.5">
-                              Cross-listed with <span className="text-foreground">{dept.secondaryDepartments.join(", ")}</span>
-                            </p>
+                            <div className="mt-1.5">
+                              <p className="text-xs text-muted-foreground">Cross-listed with</p>
+                              <DepartmentChipList names={dept.secondaryDepartments} className="mt-1" />
+                            </div>
                           )}
                         </>
                       );

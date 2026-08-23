@@ -225,7 +225,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (typeof updates.secondaryDepartment === "string" && updates.secondaryDepartment.trim()) {
         const secondaryDept = updates.secondaryDepartment.trim();
         if (secondaryDept === student.department) {
-          return NextResponse.json({ error: "Secondary Department must differ from Department" }, { status: 400 });
+          return NextResponse.json({ error: "Core Department must differ from Department" }, { status: 400 });
         }
         const deptSnap = await collegeRef.collection("departments").where("name", "==", student.department).limit(1).get();
         const deptData = deptSnap.docs[0]?.data() as

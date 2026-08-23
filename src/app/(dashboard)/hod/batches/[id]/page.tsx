@@ -750,9 +750,16 @@ ${institution}`;
             </p>
             <div className="space-y-2">
               {candidates.map((c) => (
-                <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border bg-white">
+                <div key={c.id} className={`flex items-center justify-between p-3 rounded-lg border ${!c.bioDataSubmitted ? "bg-amber-50/30 border-amber-200" : "bg-white"}`}>
                   <div>
-                    <p className="font-medium text-sm">{c.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-sm">{c.name}</p>
+                      {!c.bioDataSubmitted ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">Bio Pending</span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-medium">Bio Submitted</span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">{c.email}</p>
                   </div>
                   {c.bioDataSubmitted ? (

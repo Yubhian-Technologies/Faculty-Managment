@@ -7,6 +7,34 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
 import type { Section, StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// The section's CURRENT teaching-assignment subject list (every subject an
+// HOD has actually assigned a faculty to teach this section, any faculty) -
+// shared by every mode below. A Subject only reaches teachingAssignments
+// once it's part of the Dean Academics-defined curriculum for that
+// Course+Year (subjects.courseId/year), so this is already exactly "the
+// subjects assigned to that Section/Year by Dean Academics", not a separate
+// query - and it's the stable, date-independent column set for every
+// report mode (Monthly, Period, Till Now alike).
+async function currentSectionSubjects(
+  collegeRef: FirebaseFirestore.DocumentReference,
+  sectionId: string
+): Promise<{ subjectId: string; subjectName: string; subjectCode: string }[]> {
+  const assignmentsSnap = await collegeRef.collection("teachingAssignments")
+    .where("sectionId", "==", sectionId)
+    .get();
+  const bySubject = new Map<string, TeachingAssignment>();
+  for (const doc of assignmentsSnap.docs) {
+    const a = doc.data() as TeachingAssignment;
+    if (a.isPast) continue;
+    if (!bySubject.has(a.subjectId)) bySubject.set(a.subjectId, a);
+  }
+  return Array.from(bySubject.values())
+    .map((a) => ({ subjectId: a.subjectId, subjectName: a.subjectName, subjectCode: a.subjectCode }))
+    .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+}
+
 // "Attendance Reports": Section -> Year -> Month -> Date, aggregated across
 // EVERY subject and faculty assigned to that section - unlike the Faculty
 // Attendance Report (see /api/college/class-work-records), which is scoped
@@ -20,13 +48,27 @@ import type { Section, StudentAttendanceMark, StudentAttendanceSession, Teaching
 // unchanged from before Principal support was added.
 //
 // Drill levels, selected by which query params are present:
-//   sectionId only                     -> { years: number[] }
-//   sectionId + year                   -> { months: number[] }
-//   sectionId + year + month           -> { dates: string[] }, newest first
-//   sectionId + year + month + summary -> { subjects, weekLabels, students } (see below)
-//   sectionId + year + month + date    -> { subjects, students, classwork }
-//   sectionId + summary + from/to      -> { subjects, students } - "Period"
-//   sectionId + summary + allTime      -> { subjects, students } - "Till now"
+//   sectionId only                       -> { years: number[] }
+//   sectionId + year                     -> { months: number[] }
+//   sectionId + year + month             -> { dates: string[] }, newest first
+//   sectionId + year + month + summary   -> { subjects, weekLabels, students } (see below) - "Month Report"
+//   sectionId + year + month + date      -> { subjects, students, classwork }        (Monthly - unchanged)
+//   sectionId + summary + from/to        -> { subjects, students } - "Period" (hod/monthly-records's own
+//                                            Period tab - subjects derived from whatever sessions actually
+//                                            fall in range, so a since-retired subject still shows up)
+//   sectionId + summary + allTime        -> { subjects, students } - "Till now" (same page/shape as above)
+//   sectionId + from + to (no summary)   -> { subjects, students, summary }          (a second, independently
+//   sectionId + tillNow=true                built Period/Till-Now consumer - subjects instead fixed to the
+//                                            section's CURRENT teaching-assignment roster, and each student
+//                                            additionally carries `overall`, plus a section-wide `summary`
+//                                            footer. Kept alongside the mode above rather than merged into
+//                                            it since the two disagree on subject scope and response shape;
+//                                            distinguished by the presence of `summary=true`, which this
+//                                            mode never sends.)
+// The `from`/`to`/`tillNow`/`summary` modes are all checked BEFORE the
+// year/month/date drill chain and are mutually exclusive with it (the
+// Monthly flow never sends them), so the existing Monthly behavior below is
+// untouched either way.
 //
 // `subjects` is the section's CURRENT teaching-assignment roster (every
 // subject an HOD has actually assigned to it, any faculty) - stable across
@@ -52,13 +94,17 @@ export async function GET(request: Request) {
     const yearParam = searchParams.get("year");
     const monthParam = searchParams.get("month");
     const dateParam = searchParams.get("date");
+    // "Period"/"Till now" summary - see the two branches right after
+    // `allSessions` below. Independent of the year/month drill levels
+    // above; `allTime`/`tillNow` with neither `from` nor `to` means the
+    // section's entire history. `summaryParam` distinguishes which of the
+    // two independently-built Period/Till-Now modes a `from`/`to` pair
+    // belongs to - see the drill-levels comment above.
     const summaryParam = searchParams.get("summary") === "true";
-    // "Period"/"Till now" summary - see the branch right after `allSessions`
-    // below. Independent of the year/month drill levels above; `allTime`
-    // with neither `from` nor `to` means the section's entire history.
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
     const allTimeParam = searchParams.get("allTime") === "true";
+    const tillNow = searchParams.get("tillNow") === "true";
 
     if (!sectionId) {
       return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
@@ -91,24 +137,6 @@ export async function GET(request: Request) {
       }
     }
 
-    // Every subject currently assigned to this section, any faculty - the
-    // report's stable column set, shared by the summary and single-date
-    // branches below (only actually queried once either needs it).
-    async function loadSubjects() {
-      const assignmentsSnap = await collegeRef.collection("teachingAssignments")
-        .where("sectionId", "==", sectionId)
-        .get();
-      const bySubject = new Map<string, TeachingAssignment>();
-      for (const doc of assignmentsSnap.docs) {
-        const a = doc.data() as TeachingAssignment;
-        if (a.isPast) continue;
-        if (!bySubject.has(a.subjectId)) bySubject.set(a.subjectId, a);
-      }
-      return Array.from(bySubject.values())
-        .map((a) => ({ subjectId: a.subjectId, subjectName: a.subjectName, subjectCode: a.subjectCode }))
-        .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
-    }
-
     const sessionsSnap = await collegeRef.collection("studentAttendance")
       .where("sectionId", "==", sectionId)
       .where("status", "==", "SUBMITTED")
@@ -120,12 +148,15 @@ export async function GET(request: Request) {
     // /api/college/student-attendance-history's own range logic but for the
     // whole section at once. Subjects are derived from whatever sessions
     // actually fall in range - not the CURRENT teaching-assignment roster
-    // (see loadSubjects, used by the month-scoped summary/date branches
-    // below) - so a subject from an earlier semester/session still appears
-    // in a long-enough Period or a Till-now report instead of silently
-    // vanishing once teaching assignments move on. No weekly breakdown
-    // (unlike the month summary below) - a range spanning more than one
-    // month has no single calendar grid to align weeks against.
+    // (see currentSectionSubjects, used by the month-scoped summary/date
+    // branches below) - so a subject from an earlier semester/session still
+    // appears in a long-enough Period or a Till-now report instead of
+    // silently vanishing once teaching assignments move on. No weekly
+    // breakdown (unlike the month summary below) - a range spanning more
+    // than one month has no single calendar grid to align weeks against.
+    // Gated on `summary=true` specifically so it never collides with the
+    // independently-built Period/Till-Now mode right after it, which never
+    // sends that flag.
     if (summaryParam && (fromParam || toParam || allTimeParam)) {
       const inRange = allSessions.filter((r) => {
         if (fromParam && r.date < fromParam) return false;
@@ -180,6 +211,86 @@ export async function GET(request: Request) {
       return NextResponse.json({ subjects, students });
     }
 
+    // A second, independently built Period/Till Now mode (bare `from`/`to`,
+    // or `tillNow=true`, never `summary=true`) - attendance % per subject
+    // (and overall) per student, computed from every SUBMITTED session (any
+    // date, any period) in range - not scoped to one calendar day like the
+    // Monthly drill-down below, and never carrying forward/merging periods
+    // (each submitted session is already one independently-held period -
+    // see types/studentAttendance.ts's doc id). Kept alongside the mode
+    // above rather than merged into it: this one fixes its subject list to
+    // the section's CURRENT teaching-assignment roster (via
+    // currentSectionSubjects) rather than deriving it from sessions in
+    // range, and shapes each student's per-subject stats and the response's
+    // own section-wide `summary` footer differently.
+    if (tillNow || (fromParam && toParam)) {
+      if (!tillNow && (!DATE_RE.test(fromParam!) || !DATE_RE.test(toParam!))) {
+        return NextResponse.json({ error: "from and to must be valid dates (YYYY-MM-DD)" }, { status: 400 });
+      }
+      const rangeSessions = tillNow
+        ? allSessions
+        : allSessions.filter((r) => r.date >= fromParam! && r.date <= toParam!);
+
+      const subjects = await currentSectionSubjects(collegeRef, sectionId);
+      const sessionsBySubject = new Map<string, StudentAttendanceSession[]>();
+      for (const r of rangeSessions) {
+        if (!sessionsBySubject.has(r.subjectId)) sessionsBySubject.set(r.subjectId, []);
+        sessionsBySubject.get(r.subjectId)!.push(r);
+      }
+
+      const roster = await fetchSectionStudents(collegeRef, {
+        department: section.department,
+        sectionName: section.name,
+        year: section.year,
+        courseId: section.courseId,
+      });
+
+      const students = roster
+        .map((stu) => {
+          let overallHeld = 0;
+          let overallAttended = 0;
+          const bySubject: Record<string, { held: number; attended: number; percentage: number }> = {};
+          for (const s of subjects) {
+            const sessionsForSubject = sessionsBySubject.get(s.subjectId) ?? [];
+            const held = sessionsForSubject.length;
+            const attended = sessionsForSubject.filter(
+              (r) => r.entries.find((e) => e.studentId === stu.id)?.status === "PRESENT"
+            ).length;
+            const percentage = held > 0 ? Math.round((attended / held) * 100) : 0;
+            bySubject[s.subjectId] = { held, attended, percentage };
+            overallHeld += held;
+            overallAttended += attended;
+          }
+          const overallPercentage = overallHeld > 0 ? Math.round((overallAttended / overallHeld) * 100) : 0;
+          return {
+            studentId: stu.id,
+            rollNumber: stu.rollNumber,
+            name: stu.name,
+            bySubject,
+            overall: { held: overallHeld, attended: overallAttended, percentage: overallPercentage },
+          };
+        })
+        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+
+      // Section-wide summary for the "Total Attendance" footer - Held is a
+      // period count (sum of every subject's held sessions, same for every
+      // student); Attended/Percentage are marks-based (sum of presentCount /
+      // totalStudents across every session in range, using each session's
+      // own stored roster size rather than today's roster - robust to
+      // students joining/leaving mid-range, same approach as the Faculty
+      // Attendance Report's subject-percentage feature).
+      const totalPeriodsHeld = subjects.reduce((sum, s) => sum + (sessionsBySubject.get(s.subjectId)?.length ?? 0), 0);
+      const totalPresentMarks = rangeSessions.reduce((sum, r) => sum + r.presentCount, 0);
+      const totalPossibleMarks = rangeSessions.reduce((sum, r) => sum + r.totalStudents, 0);
+      const summary = {
+        totalPeriodsHeld,
+        totalPeriodsAttended: totalPresentMarks,
+        overallPercentage: totalPossibleMarks > 0 ? Math.round((totalPresentMarks / totalPossibleMarks) * 100) : 0,
+      };
+
+      return NextResponse.json({ subjects, students, summary });
+    }
+
     if (!yearParam) {
       const years = Array.from(new Set(allSessions.map((r) => Number(r.date.slice(0, 4))))).sort((a, b) => b - a);
       return NextResponse.json({ years });
@@ -197,7 +308,7 @@ export async function GET(request: Request) {
     const inMonth = inYear.filter((r) => r.date.slice(5, 7) === monthStr);
 
     if (summaryParam && !dateParam) {
-      const subjects = await loadSubjects();
+      const subjects = await currentSectionSubjects(collegeRef, sectionId);
 
       // Sun-Sat calendar-row week boundaries for this month, matching the
       // month-picker grid on the page that consumes this - week 0 starts
@@ -267,7 +378,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ dates });
     }
 
-    const subjects = await loadSubjects();
+    // Every subject currently assigned to this section, any faculty - the
+    // report's stable column set.
+    const subjects = await currentSectionSubjects(collegeRef, sectionId);
 
     const dayRecords = inMonth.filter((r) => r.date === dateParam);
     const sessionBySubject = new Map<string, StudentAttendanceSession>();
