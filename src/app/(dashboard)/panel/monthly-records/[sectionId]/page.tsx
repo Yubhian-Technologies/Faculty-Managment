@@ -8,6 +8,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import {
+  SubjectRangeSummaryTables, type SubjectColumn, type SubjectRangeStudentRow,
+} from "@/components/attendance/SubjectRangeSummaryTables";
 
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
@@ -16,28 +19,6 @@ const MONTH_LABELS = [
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
-
-interface SubjectColumn {
-  assignmentId: string;
-  subjectId: string;
-  subjectName: string;
-}
-interface SubjectStat {
-  held: number;
-  attend: number;
-  percent: number | null;
-}
-interface StudentRow {
-  id: string;
-  rollNumber: string;
-  name: string;
-  bySubject: Record<string, SubjectStat>;
-}
-
-function PercentCell({ value }: { value: number | null }) {
-  if (value == null) return <span className="text-muted-foreground">—</span>;
-  return <span className={value < 75 ? "font-semibold text-red-600" : "text-foreground"}>{value.toFixed(2)}</span>;
-}
 
 /** "2026-08-18" -> "18-08-2026" - display only. */
 function formatDateDDMMYYYY(dateStr: string) {
@@ -80,7 +61,7 @@ export default function FacultyAttendanceReportYearMonthPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [rangeSubjects, setRangeSubjects] = useState<SubjectColumn[]>([]);
-  const [rangeStudents, setRangeStudents] = useState<StudentRow[]>([]);
+  const [rangeStudents, setRangeStudents] = useState<SubjectRangeStudentRow[]>([]);
   const [isLoadingRange, setIsLoadingRange] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [hasLoadedRange, setHasLoadedRange] = useState(false);
@@ -108,7 +89,7 @@ export default function FacultyAttendanceReportYearMonthPage() {
           params.set("to", toDate);
         }
         const res = await fetch(`/api/college/class-work-records?${params.toString()}`);
-        const json = (await res.json()) as { subjects?: SubjectColumn[]; students?: StudentRow[]; error?: string };
+        const json = (await res.json()) as { subjects?: SubjectColumn[]; students?: SubjectRangeStudentRow[]; error?: string };
         if (!res.ok) {
           setRangeError(json.error ?? "Failed to load report");
           return;
@@ -209,7 +190,7 @@ export default function FacultyAttendanceReportYearMonthPage() {
               </CardContent>
             </Card>
           ) : hasLoadedRange ? (
-            <RangeSummaryTables subjects={rangeSubjects} students={rangeStudents} />
+            <SubjectRangeSummaryTables subjects={rangeSubjects} students={rangeStudents} />
           ) : null}
         </div>
       )}
@@ -226,54 +207,9 @@ export default function FacultyAttendanceReportYearMonthPage() {
             </CardContent>
           </Card>
         ) : (
-          <RangeSummaryTables subjects={rangeSubjects} students={rangeStudents} />
+          <SubjectRangeSummaryTables subjects={rangeSubjects} students={rangeStudents} />
         )
       )}
-    </div>
-  );
-}
-
-// One flat Registration No/Name x Held/Attend/% table per subject this
-// faculty actually teaches this section (almost always exactly one - a
-// second only appears if the same faculty also has a separate assignment
-// here, e.g. a lab alongside the lecture).
-function RangeSummaryTables({ subjects, students }: { subjects: SubjectColumn[]; students: StudentRow[] }) {
-  return (
-    <div className="space-y-4">
-      {subjects.map((sub) => (
-        <Card key={sub.assignmentId} className="overflow-hidden">
-          <p className="border-b bg-muted/50 px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-foreground">
-            {sub.subjectName}
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Registration No.</th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3 text-center">Held</th>
-                  <th className="px-4 py-3 text-center">Attend</th>
-                  <th className="px-4 py-3 text-center">%</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {students.map((s) => {
-                  const stat = s.bySubject[sub.assignmentId];
-                  return (
-                    <tr key={s.id}>
-                      <td className="px-4 py-2.5">{s.rollNumber}</td>
-                      <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                      <td className="px-4 py-2.5 text-center">{stat?.held ?? 0}</td>
-                      <td className="px-4 py-2.5 text-center">{stat?.attend ?? 0}</td>
-                      <td className="px-4 py-2.5 text-center"><PercentCell value={stat?.percent ?? null} /></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ))}
     </div>
   );
 }

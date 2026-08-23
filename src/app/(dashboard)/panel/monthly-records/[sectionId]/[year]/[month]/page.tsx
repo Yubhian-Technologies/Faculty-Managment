@@ -6,7 +6,11 @@ import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
+import {
+  SubjectRangeSummaryTables, type SubjectColumn, type SubjectRangeStudentRow,
+} from "@/components/attendance/SubjectRangeSummaryTables";
 
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
@@ -31,10 +35,17 @@ export default function FacultyAttendanceReportCalendarPage() {
   const searchParams = useSearchParams();
   const sectionLabel = searchParams.get("label") || "Section";
 
+  // "Day-wise" is this calendar, picking one date's own class-work record;
+  // "Month" is a whole-month Held/Attend/% summary for this faculty's own
+  // subject(s) here (see /api/college/class-work-records's summary mode) -
+  // no calendar/date picking, just the month already chosen on step 2-3.
+  const [activeView, setActiveView] = useState<"daywise" | "month">("daywise");
+
   const [days, setDays] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (activeView !== "daywise") return;
     void (async () => {
       setIsLoading(true);
       try {
@@ -51,7 +62,35 @@ export default function FacultyAttendanceReportCalendarPage() {
         setIsLoading(false);
       }
     })();
-  }, [sectionId, year, month]);
+  }, [activeView, sectionId, year, month]);
+
+  const [monthSubjects, setMonthSubjects] = useState<SubjectColumn[]>([]);
+  const [monthStudents, setMonthStudents] = useState<SubjectRangeStudentRow[]>([]);
+  const [isLoadingMonth, setIsLoadingMonth] = useState(false);
+  const [monthError, setMonthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeView !== "month") return;
+    void (async () => {
+      setIsLoadingMonth(true);
+      setMonthError(null);
+      try {
+        const params = new URLSearchParams({ sectionId, summary: "true", year, month });
+        const res = await fetch(`/api/college/class-work-records?${params.toString()}`);
+        const json = (await res.json()) as { subjects?: SubjectColumn[]; students?: SubjectRangeStudentRow[]; error?: string };
+        if (!res.ok) {
+          setMonthError(json.error ?? "Failed to load report");
+          return;
+        }
+        setMonthSubjects(json.subjects ?? []);
+        setMonthStudents(json.students ?? []);
+      } catch {
+        setMonthError("Failed to load report");
+      } finally {
+        setIsLoadingMonth(false);
+      }
+    })();
+  }, [activeView, sectionId, year, month]);
 
   const yearNum = Number(year);
   const monthNum = Number(month);
@@ -87,7 +126,7 @@ export default function FacultyAttendanceReportCalendarPage() {
     <div className="space-y-6">
       <PageHeader
         title={`${sectionLabel} — ${monthLabel} ${year}`}
-        description="Pick a date to view that day's attendance and class-work record."
+        description="Day-wise picks one date's attendance and class-work record; Month is a whole-month Held/Attend/% summary."
         actions={
           <Button
             variant="outline"
@@ -98,49 +137,76 @@ export default function FacultyAttendanceReportCalendarPage() {
         }
       />
 
-      {isLoading ? (
-        <div className="h-72 w-full max-w-xs rounded-xl border bg-muted/30 animate-pulse" />
-      ) : days.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            No attendance records for {monthLabel} {year}.
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="w-full max-w-xs overflow-hidden">
-          <div className="bg-primary px-3 py-2 text-center">
-            <p className="text-sm font-bold uppercase tracking-widest text-primary-foreground">{monthLabel}</p>
-          </div>
-          <CardContent className="p-3">
-            <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {WEEKDAY_LABELS.map((w, i) => (
-                <div key={w} className={i >= 5 ? "text-destructive" : ""}>{w}</div>
-              ))}
+      <SegmentedTabs
+        value={activeView}
+        onChange={(v) => setActiveView(v as "daywise" | "month")}
+        options={[
+          { key: "daywise", label: "Day-wise" },
+          { key: "month", label: "Month" },
+        ]}
+      />
+
+      {activeView === "daywise" && (
+        isLoading ? (
+          <div className="h-72 w-full max-w-xs rounded-xl border bg-muted/30 animate-pulse" />
+        ) : days.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              No attendance records for {monthLabel} {year}.
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="w-full max-w-xs overflow-hidden">
+            <div className="bg-primary px-3 py-2 text-center">
+              <p className="text-sm font-bold uppercase tracking-widest text-primary-foreground">{monthLabel}</p>
             </div>
-            <div className="mt-1 grid grid-cols-7 gap-0.5">
-              {cells.map((c, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={!c.inMonth || !c.hasRecord}
-                  onClick={() => goToDate(c.day)}
-                  className={[
-                    "aspect-square rounded-md text-xs flex items-center justify-center transition-colors",
-                    !c.inMonth
-                      ? "text-muted-foreground/30"
-                      : c.hasRecord
-                        ? "cursor-pointer bg-primary/10 font-semibold text-primary hover:bg-primary/20"
-                        : c.isWeekend
-                          ? "text-destructive/50"
-                          : "text-muted-foreground/60",
-                  ].join(" ")}
-                >
-                  {c.day}
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+            <CardContent className="p-3">
+              <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {WEEKDAY_LABELS.map((w, i) => (
+                  <div key={w} className={i >= 5 ? "text-destructive" : ""}>{w}</div>
+                ))}
+              </div>
+              <div className="mt-1 grid grid-cols-7 gap-0.5">
+                {cells.map((c, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={!c.inMonth || !c.hasRecord}
+                    onClick={() => goToDate(c.day)}
+                    className={[
+                      "aspect-square rounded-md text-xs flex items-center justify-center transition-colors",
+                      !c.inMonth
+                        ? "text-muted-foreground/30"
+                        : c.hasRecord
+                          ? "cursor-pointer bg-primary/10 font-semibold text-primary hover:bg-primary/20"
+                          : c.isWeekend
+                            ? "text-destructive/50"
+                            : "text-muted-foreground/60",
+                    ].join(" ")}
+                  >
+                    {c.day}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      )}
+
+      {activeView === "month" && (
+        isLoadingMonth ? (
+          <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />
+        ) : monthError ? (
+          <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">{monthError}</CardContent></Card>
+        ) : monthSubjects.length === 0 || monthStudents.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              No attendance records for {sectionLabel} in {monthLabel} {year}.
+            </CardContent>
+          </Card>
+        ) : (
+          <SubjectRangeSummaryTables subjects={monthSubjects} students={monthStudents} />
+        )
       )}
     </div>
   );
