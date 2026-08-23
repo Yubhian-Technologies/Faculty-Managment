@@ -2,21 +2,29 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ChevronRight, CalendarRange } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { toast } from "@/hooks/useToast";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { currentAcademicStartYear, academicSessionLabel } from "@/lib/college/academicSession";
 
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 
-type ReportMode = "MONTHLY" | "PERIOD" | "TILLNOW";
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
+
+// A session (e.g. "2026-27") runs April of its start year through March of
+// the next - so "January" picked under "2026-27" actually means January
+// 2027, not 2026. This resolves the dropdown pair back to the plain
+// calendar year the report route itself works in.
+function calendarYearForMonth(academicStartYear: number, month: number): number {
+  return month >= 4 ? academicStartYear : academicStartYear + 1;
+}
 
 interface SubjectColumn {
   subjectId: string;
@@ -126,78 +134,38 @@ function RangeReportTable({ subjects, students, summary }: {
   );
 }
 
-// Step 2 of the HOD's Attendance Reports: a Monthly / Period / Till Now
-// mode switch, scoped to the one section picked in step 1.
-//   - Monthly keeps the pre-existing Year pills + Month tiles flow exactly
-//     as before, unmodified - it just leads on to /[year]/[month] same as
-//     always.
-//   - Period and Till Now are new: both hit the same
-//     /api/college/section-attendance-report range mode (Till Now = every
-//     SUBMITTED session ever recorded for the section, no explicit dates)
-//     and render the same Subject x (Held/Attended/%) pivot, aggregated
-//     across every faculty/subject assigned to this section - never scoped
-//     to one calendar day like Monthly's per-date report.
+// Step 2-3: Monthly / Period / Till now, scoped to the one section picked in
+// step 1.
+//   - Monthly resolves an academic-year + month pair (dropdowns, not the
+//     original year-pills/month-tiles) to a plain calendar year/month and
+//     moves on to the day-wise/weekly report (step 4, its own date
+//     selector).
+//   - Period and Till Now render inline on this same page (no further
+//     navigation): both hit the same /api/college/section-attendance-report
+//     range mode (Till Now = every SUBMITTED session ever recorded for the
+//     section, no explicit dates) and render the same Subject x
+//     (Held/Attended/%) + Overall pivot, aggregated across every
+//     faculty/subject assigned to this section - never scoped to one
+//     calendar day like Monthly's per-date report.
 export default function HodAttendanceReportYearMonthPage() {
   const router = useRouter();
   const { sectionId } = useParams<{ sectionId: string }>();
   const searchParams = useSearchParams();
   const sectionLabel = searchParams.get("label") || "Section";
-  const currentYear = new Date().getFullYear();
 
-  const [mode, setMode] = useState<ReportMode>("MONTHLY");
+  const currentStart = currentAcademicStartYear();
+  const academicYearOptions = [currentStart + 1, currentStart, currentStart - 1, currentStart - 2];
 
-  // ── Monthly (unchanged) ────────────────────────────────────────────────
-  const [years, setYears] = useState<number[] | null>(null);
-  const [isLoadingYears, setIsLoadingYears] = useState(true);
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [mode, setMode] = useState<"monthly" | "period" | "tillnow">("monthly");
+  const [academicStartYear, setAcademicStartYear] = useState(currentStart);
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
 
-  const [months, setMonths] = useState<number[] | null>(null);
-  const [isLoadingMonths, setIsLoadingMonths] = useState(false);
+  function viewMonthlyReport() {
+    const year = calendarYearForMonth(academicStartYear, month);
+    router.push(`/hod/monthly-records/${sectionId}/${year}/${month}?label=${encodeURIComponent(sectionLabel)}`);
+  }
 
-  useEffect(() => {
-    void (async () => {
-      setIsLoadingYears(true);
-      try {
-        const res = await fetch(`/api/college/section-attendance-report?sectionId=${encodeURIComponent(sectionId)}`);
-        if (!res.ok) throw new Error("Failed to load years");
-        const json = (await res.json()) as { years?: number[] };
-        const fetched = json.years ?? [];
-        setYears(fetched);
-        setSelectedYear(fetched.includes(currentYear) ? currentYear : (fetched[0] ?? currentYear));
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load years" });
-        setYears([]);
-        setSelectedYear(currentYear);
-      } finally {
-        setIsLoadingYears(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionId]);
-
-  useEffect(() => {
-    if (selectedYear == null) return;
-    void (async () => {
-      setIsLoadingMonths(true);
-      try {
-        const res = await fetch(
-          `/api/college/section-attendance-report?sectionId=${encodeURIComponent(sectionId)}&year=${selectedYear}`
-        );
-        if (!res.ok) throw new Error("Failed to load months");
-        const json = (await res.json()) as { months?: number[] };
-        setMonths(json.months ?? []);
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load months" });
-        setMonths([]);
-      } finally {
-        setIsLoadingMonths(false);
-      }
-    })();
-  }, [sectionId, selectedYear]);
-
-  const yearOptions = Array.from(new Set([...(years ?? []), currentYear])).sort((a, b) => b - a);
-
-  // ── Period / Till Now ───────────────────────────────────────────────────
+  // ── Period / Till Now ────────────────────────────────────────────────────
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [rangeSubjects, setRangeSubjects] = useState<SubjectColumn[]>([]);
@@ -207,16 +175,16 @@ export default function HodAttendanceReportYearMonthPage() {
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [hasLoadedRange, setHasLoadedRange] = useState(false);
 
-  const periodRangeReady = mode === "PERIOD" && !!fromDate && !!toDate && fromDate <= toDate;
-  const periodRangeInvalid = mode === "PERIOD" && !!fromDate && !!toDate && fromDate > toDate;
+  const periodRangeReady = mode === "period" && !!fromDate && !!toDate && fromDate <= toDate;
+  const periodRangeInvalid = mode === "period" && !!fromDate && !!toDate && fromDate > toDate;
 
   useEffect(() => {
     // Wrapped so setState calls aren't reachable synchronously from the
     // effect body (react-hooks/set-state-in-effect) - including the "not
     // ready yet" reset branch, not just the fetch.
     void (async () => {
-      if (mode === "MONTHLY") return;
-      if (mode === "PERIOD" && !periodRangeReady) {
+      if (mode === "monthly") return;
+      if (mode === "period" && !periodRangeReady) {
         setRangeSubjects([]);
         setRangeStudents([]);
         setRangeSummary(null);
@@ -227,7 +195,7 @@ export default function HodAttendanceReportYearMonthPage() {
       setRangeError(null);
       try {
         const params = new URLSearchParams({ sectionId });
-        if (mode === "TILLNOW") {
+        if (mode === "tillnow") {
           params.set("tillNow", "true");
         } else {
           params.set("from", fromDate);
@@ -256,7 +224,7 @@ export default function HodAttendanceReportYearMonthPage() {
     })();
   }, [mode, sectionId, fromDate, toDate, periodRangeReady]);
 
-  function handleModeChange(next: ReportMode) {
+  function handleModeChange(next: "monthly" | "period" | "tillnow") {
     setMode(next);
     setRangeError(null);
   }
@@ -265,7 +233,7 @@ export default function HodAttendanceReportYearMonthPage() {
     <div className="space-y-6">
       <PageHeader
         title={sectionLabel}
-        description="Pick Monthly, Period, or Till Now to view this section's attendance report."
+        description="Pick a month, a custom date range, or this section's entire history, to view its attendance report."
         actions={
           <Button variant="outline" onClick={() => router.push("/hod/monthly-records")}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
@@ -273,89 +241,55 @@ export default function HodAttendanceReportYearMonthPage() {
         }
       />
 
-      <RadioGroup value={mode} onValueChange={(v) => handleModeChange(v as ReportMode)} className="flex flex-row flex-wrap gap-6">
-        <label htmlFor="mode-monthly" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-          <RadioGroupItem value="MONTHLY" id="mode-monthly" />
-          Monthly
-        </label>
-        <label htmlFor="mode-period" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-          <RadioGroupItem value="PERIOD" id="mode-period" />
-          Period
-        </label>
-        <label htmlFor="mode-tillnow" className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-          <RadioGroupItem value="TILLNOW" id="mode-tillnow" />
-          Till Now
-        </label>
-      </RadioGroup>
+      <SegmentedTabs
+        value={mode}
+        onChange={(v) => handleModeChange(v as "monthly" | "period" | "tillnow")}
+        options={[
+          { key: "monthly", label: "Monthly" },
+          { key: "period", label: "Period" },
+          { key: "tillnow", label: "Till now" },
+        ]}
+      />
 
-      {mode === "MONTHLY" && (
-        <>
-          {isLoadingYears ? (
-            <div className="h-10 w-64 rounded-lg bg-muted/30 animate-pulse" />
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {yearOptions.map((y) => (
-                <Button
-                  key={y}
-                  size="sm"
-                  variant={selectedYear === y ? "default" : "outline"}
-                  onClick={() => setSelectedYear(y)}
-                >
-                  {y}
-                </Button>
-              ))}
-            </div>
-          )}
-
-          {!isLoadingYears && (
-            isLoadingMonths ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {[1, 2, 3].map((i) => <div key={i} className="h-20 rounded-lg border bg-muted/30 animate-pulse" />)}
-              </div>
-            ) : !months || months.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                  No attendance records for {selectedYear} yet.
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {months.map((m) => (
-                  <Card
-                    key={m}
-                    className="cursor-pointer transition-colors hover:border-primary/50"
-                    onClick={() =>
-                      router.push(
-                        `/hod/monthly-records/${sectionId}/${selectedYear}/${m}?label=${encodeURIComponent(sectionLabel)}`
-                      )
-                    }
-                  >
-                    <CardContent className="p-4 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <CalendarRange className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <p className="font-semibold text-sm">{MONTH_LABELS[m - 1]}</p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    </CardContent>
-                  </Card>
+      {mode === "monthly" && (
+        <Card>
+          <CardContent className="p-4 flex flex-wrap items-end gap-3">
+            <div className="w-40 space-y-1.5">
+              <label className="text-sm font-medium">Academic Year</label>
+              <select
+                className={selectClass}
+                value={academicStartYear}
+                onChange={(e) => setAcademicStartYear(Number(e.target.value))}
+              >
+                {academicYearOptions.map((start) => (
+                  <option key={start} value={start}>{academicSessionLabel(start)}</option>
                 ))}
-              </div>
-            )
-          )}
-        </>
+              </select>
+            </div>
+            <div className="w-40 space-y-1.5">
+              <label className="text-sm font-medium">Month</label>
+              <select className={selectClass} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+                {MONTH_LABELS.map((label, i) => (
+                  <option key={label} value={i + 1}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={viewMonthlyReport}>View Report</Button>
+          </CardContent>
+        </Card>
       )}
 
-      {mode === "PERIOD" && (
+      {mode === "period" && (
         <>
           <Card>
             <CardContent className="flex flex-wrap items-end gap-3 pt-6">
               <div className="space-y-2">
-                <Label htmlFor="period-from">From Date</Label>
-                <Input id="period-from" type="date" value={fromDate} max={toDate || todayStr()} onChange={(e) => setFromDate(e.target.value)} className="w-44" />
+                <label className="text-sm font-medium">From Date</label>
+                <Input type="date" value={fromDate} max={toDate || todayStr()} onChange={(e) => setFromDate(e.target.value)} className="w-44" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="period-to">To Date</Label>
-                <Input id="period-to" type="date" value={toDate} min={fromDate || undefined} max={todayStr()} onChange={(e) => setToDate(e.target.value)} className="w-44" />
+                <label className="text-sm font-medium">To Date</label>
+                <Input type="date" value={toDate} min={fromDate || undefined} max={todayStr()} onChange={(e) => setToDate(e.target.value)} className="w-44" />
               </div>
             </CardContent>
           </Card>
@@ -388,7 +322,7 @@ export default function HodAttendanceReportYearMonthPage() {
         </>
       )}
 
-      {mode === "TILLNOW" && (
+      {mode === "tillnow" && (
         isLoadingRange ? (
           <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />
         ) : rangeError ? (

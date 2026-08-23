@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
+import { formatDMY } from "@/lib/utils";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
@@ -712,7 +713,9 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
                               {pSlot?.substituteFacultyName ? (
                                 <>
                                   <p className="text-[11px] font-medium text-amber-700 mt-0.5">{pSlot.substituteFacultyName}</p>
-                                  <p className="text-[10px] text-muted-foreground">Substituting for {pSlot.substituteForName}</p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Substituting for {pSlot.substituteForName}{pSlot.substituteDate ? ` (${formatDMY(pSlot.substituteDate)})` : ""}
+                                  </p>
                                 </>
                               ) : (
                                 <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>

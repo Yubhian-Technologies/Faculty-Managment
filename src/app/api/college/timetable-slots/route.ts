@@ -28,6 +28,11 @@ export async function GET(request: Request) {
     // every academic year - see Section.batch). Omitted keeps the previous
     // "this session" default.
     const academicYearParam = searchParams.get("academicYear");
+    // Optional - the grid's own calendar picker, browsing a week other than
+    // the current one. Any date within the target week works (see
+    // currentWeekDateKeys, which resolves it back to that week's Monday).
+    // Omitted keeps the previous "this calendar week" default.
+    const weekParam = searchParams.get("week");
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -63,17 +68,20 @@ export async function GET(request: Request) {
         (isBrowsingPastYear ? s.academicYear === requestedAcademicYear : matchesCurrentAcademicYear(s.academicYear, requestedAcademicYear))
       );
 
-    // Overlay this week's approved-leave substitutions, if any - who's
-    // actually taking a period on a given day instead of the regular weekly
-    // assignment (see lib/leave/periodCoverage.ts). Covers every day of the
-    // currently-displayed week, not just today - see currentWeekDateKeys.
-    // Never changes the underlying record, just what this read returns.
-    const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys());
+    // Overlay the displayed week's approved-leave substitutions, if any -
+    // who's actually taking a period on a given day instead of the regular
+    // weekly assignment (see lib/leave/periodCoverage.ts). Covers every day
+    // of that week, not just today - see currentWeekDateKeys. Only ever the
+    // week actually being viewed (weekParam, defaulting to this week) - a
+    // substitution dated for a different week simply isn't in this set, so
+    // it never shows up under the wrong day. Never changes the underlying
+    // record, just what this read returns.
+    const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys(weekParam ?? undefined));
     const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
     const slots = rawSlots.map((s) => {
       const sub = substitutionBySlotId.get((s as { id: string }).id);
       return sub
-        ? { ...s, substituteFacultyId: sub.substituteFacultyId, substituteFacultyName: sub.substituteFacultyName, substituteForName: sub.requesterName }
+        ? { ...s, substituteFacultyId: sub.substituteFacultyId, substituteFacultyName: sub.substituteFacultyName, substituteForName: sub.requesterName, substituteDate: sub.date }
         : s;
     });
 

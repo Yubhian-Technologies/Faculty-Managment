@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Shuffle, Pencil, Layers, ArrowRightLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Shuffle, Pencil, Layers, ArrowRightLeft, CalendarCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "des
 };
 
 export default function HodStudentsPage() {
+  const router = useRouter();
   const myDepartments = useMyDepartments();
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [sections, setSections] = useState<SectionRow[]>([]);
@@ -689,6 +691,14 @@ export default function HodStudentsPage() {
         // stopPropagation - the row itself opens the full read-only profile
         // on click (onRowClick below), which these actions must not trigger.
         <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push(`/hod/students/${r.id}/attendance?name=${encodeURIComponent(r.name)}`)}
+            title="View attendance history"
+          >
+            <CalendarCheck className="h-3.5 w-3.5" />
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
             <ArrowRightLeft className="h-3.5 w-3.5" />
           </Button>

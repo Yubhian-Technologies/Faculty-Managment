@@ -17,11 +17,16 @@ import type { CourseYearTiming, TimetableSlot } from "@/types";
 // would let a Class Leader query any OTHER section's assignments too. Reads
 // live on every request (no caching layer) so any reassignment HOD makes via
 // the Teaching Assignments editor shows up here immediately.
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember("CLASS_LEADER");
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
+    // Optional - the timetable page's own calendar picker, browsing a week
+    // other than the current one. Any date within the target week works
+    // (see currentWeekDateKeys, which resolves it back to that week's
+    // Monday). Omitted keeps the previous "this calendar week" default.
+    const weekParam = new URL(request.url).searchParams.get("week");
 
     const userSnap = await collegeRef.collection("users").doc(session.uid).get();
     const sectionId = (userSnap.data() as { sectionId?: string } | undefined)?.sectionId;
@@ -55,16 +60,17 @@ export async function GET() {
       .filter((s) => matchesCurrentSemester(s.semester, currentSemester));
     const assignments = assignmentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    // Overlay this week's approved-leave substitutions, covering every day
-    // of the displayed week (not just today) - see
-    // lib/leave/periodCoverage.ts and the same overlay in
-    // GET college/timetable-slots.
-    const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys());
+    // Overlay the displayed week's approved-leave substitutions, covering
+    // every day of that week (not just today) - see lib/leave/periodCoverage.ts
+    // and the same overlay in GET college/timetable-slots. Only ever the
+    // week actually being viewed (weekParam, defaulting to this week) - a
+    // substitution dated for a different week simply isn't in this set.
+    const substitutions = await getActiveSubstitutionsForDates(db, session.collegeId, currentWeekDateKeys(weekParam ?? undefined));
     const substitutionBySlotId = new Map(substitutions.map((s) => [s.timetableSlotId, s]));
     const slots = rawSlots.map((s) => {
       const sub = substitutionBySlotId.get((s as { id: string }).id);
       return sub
-        ? { ...s, substituteFacultyId: sub.substituteFacultyId, substituteFacultyName: sub.substituteFacultyName, substituteForName: sub.requesterName }
+        ? { ...s, substituteFacultyId: sub.substituteFacultyId, substituteFacultyName: sub.substituteFacultyName, substituteForName: sub.requesterName, substituteDate: sub.date }
         : s;
     });
 

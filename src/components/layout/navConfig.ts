@@ -168,6 +168,7 @@ export const NAV_ITEMS: NavItem[] = [
   // then scheduled here.
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"] },
   { label: "Attendance Reports", href: "/hod/monthly-records", iconName: "CalendarRange", roles: ["HOD"] },
+  { label: "Attendance History", href: "/hod/attendance-history", iconName: "CalendarCheck", roles: ["HOD"] },
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
   { label: "Faculty Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },

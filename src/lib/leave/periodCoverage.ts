@@ -3,8 +3,34 @@ import { isTeachingDesignation } from "@/lib/designations/config";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { notify } from "@/lib/notify";
 import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
+import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
+import { currentTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import type { CollegeType, DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
 import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
+
+// Resolves, for a batch of TimetableSlots spanning possibly many course-years,
+// which ones belong to the currently-live semester/session - the same "no
+// stale history" rule every actual timetable read already applies (see
+// timetable-slots/route.ts), needed here too since a section that reused the
+// same day/period/subject placement in an earlier semester/session would
+// otherwise let that OLD slot's id shadow the current one below.
+async function filterToCurrentSlots(
+  db: Firestore,
+  collegeId: string,
+  slots: (TimetableSlot & { id: string })[]
+): Promise<(TimetableSlot & { id: string })[]> {
+  const currentAcademicYear = currentTimetableAcademicYear();
+  const distinctCourseYears = new Map<string, { courseId: string; year: number }>();
+  for (const s of slots) distinctCourseYears.set(`${s.courseId} ${s.year}`, { courseId: s.courseId, year: s.year });
+  const semesterByCourseYear = new Map<string, number | null>();
+  for (const [key, { courseId, year }] of distinctCourseYears) {
+    semesterByCourseYear.set(key, await resolveSectionCurrentSemester(db, collegeId, courseId, year));
+  }
+  return slots.filter((s) =>
+    matchesCurrentAcademicYear(s.academicYear, currentAcademicYear) &&
+    slotMatchesCurrentSemester(s.semester, semesterByCourseYear.get(`${s.courseId} ${s.year}`) ?? null)
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bridges the Leave module to the Timetable module (see CLAUDE.md's "College
@@ -21,8 +47,9 @@ function dayOfWeekFromDate(d: Date): DayOfWeek | null {
   return map[d.getDay()] ?? null; // Sunday (0) never appears - enumerateWorkingDates already excludes it
 }
 
-// The Monday..Saturday date keys of the week containing `today` - feeds the
-// weekly timetable grid's substitution overlay (see getActiveSubstitutionsForDates
+// The Monday..Saturday date keys of the week containing `anchorISO`, plus
+// the same six days of the `extraWeeks` weeks that follow - feeds the weekly
+// timetable grid's substitution overlay (see getActiveSubstitutionsForDates
 // and its 3 callers: teaching-assignments, timetable-slots, class-leader/
 // timetable routes). Each TimetableSlot occurs on exactly one fixed weekday,
 // so within a single week it maps to exactly one calendar date - a Wednesday
@@ -32,8 +59,18 @@ function dayOfWeekFromDate(d: Date): DayOfWeek | null {
 // onto today's own cell but left every OTHER day of that same week (already
 // past, or still to come, within an approved leave/extension spanning
 // several days) silently showing the original faculty instead.
-export function currentWeekDateKeys(todayISO: string = todayISODate()): string[] {
-  // Parsed as Y/M/D rather than run through `new Date(todayISO)` (which
+//
+// Every timetable grid now offers date navigation (a calendar picker, see
+// the pages under src/app/(dashboard)/**/timetable*), so `anchorISO`
+// defaults to today but a caller can pass whichever date the viewer has
+// navigated to - and `extraWeeks` defaults to 0 (this exact week only): a
+// substitution shows only on the day it's actually dated for, never
+// borrowed from a later week and displayed under the wrong date. A caller
+// that still wants the old "peek ahead" behavior (none currently do) can
+// pass extraWeeks > 0 - getActiveSubstitutionsForDates would then pick the
+// SOONEST matching date per slot if more than one week's worth is passed in.
+export function currentWeekDateKeys(anchorISO: string = todayISODate(), extraWeeks = 0): string[] {
+  // Parsed as Y/M/D rather than run through `new Date(anchorISO)` (which
   // reads an unqualified "YYYY-MM-DD" as UTC midnight) and NEVER defaulted
   // to a bare `new Date()` here - todayISODate() is already anchored to
   // Asia/Kolkata specifically to dodge the bug this file's own dayCounter.ts
@@ -41,14 +78,16 @@ export function currentWeekDateKeys(todayISO: string = todayISODate()): string[]
   // day for the first ~5.5h of every India day, which would silently pick
   // the wrong Monday and misalign this week's dates against the ones
   // already stored on approved PeriodSubstitutions.
-  const [y, m, d] = todayISO.split("-").map(Number);
-  const today = new Date(y, m - 1, d);
-  const day = today.getDay(); // 0=Sun..6=Sat
+  const [y, m, d] = anchorISO.split("-").map(Number);
+  const anchor = new Date(y, m - 1, d);
+  const day = anchor.getDay(); // 0=Sun..6=Sat
   const mondayOffset = day === 0 ? -6 : 1 - day;
-  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + mondayOffset);
+  const monday = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + mondayOffset);
   const keys: string[] = [];
-  for (let i = 0; i < 6; i++) {
-    keys.push(isoDateKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)));
+  for (let w = 0; w <= extraWeeks; w++) {
+    for (let i = 0; i < 6; i++) {
+      keys.push(isoDateKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + w * 7 + i)));
+    }
   }
   return keys;
 }
@@ -94,7 +133,9 @@ async function resolveRequiredPeriods(
   const collegeRef = db.collection("colleges").doc(collegeId);
   const slotsSnap = await collegeRef.collection("timetableSlots").where("facultyId", "==", facultyMemberId).get();
   if (slotsSnap.empty) return [];
-  const slots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot);
+  const rawSlots = slotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string });
+  const slots = await filterToCurrentSlots(db, collegeId, rawSlots);
+  if (slots.length === 0) return [];
 
   const slotsByDay = new Map<DayOfWeek, TimetableSlot[]>();
   for (const s of slots) {
@@ -276,10 +317,13 @@ function chunk<T>(items: T[], size: number): T[][] {
 // class leader view, a faculty's own Teaching Load grid) to show who's
 // actually covering a period on a given day instead of the regular weekly
 // assignment. Since a TimetableSlot only ever has one fixed weekday, it
-// occurs on exactly one calendar date within any single week passed in here
-// (see currentWeekDateKeys) - so a caller can still key results by
-// `timetableSlotId` alone to override "who teaches this," and/or filter by
-// `substituteFacultyId` to find what a given faculty member is covering.
+// occurs on exactly one calendar date within any single WEEK of the dates
+// passed in here (see currentWeekDateKeys) - but that window now spans
+// several weeks, so the result is deduped down to one entry per slot before
+// returning (soonest date wins - see below) and a caller can still key
+// results by `timetableSlotId` alone to override "who teaches this," and/or
+// filter by `substituteFacultyId` to find what a given faculty member is
+// covering.
 //
 // A substitution is pinned to the timetableSlot doc that existed at the
 // moment the HOD/applicant picked it - but publish/route.ts deletes and
@@ -314,23 +358,44 @@ export async function getActiveSubstitutionsForDates(
   const slotsSnaps = await Promise.all(
     chunk(sectionIds, 30).map((ids) => collegeRef.collection("timetableSlots").where("sectionId", "in", ids).get())
   );
-  const currentSlotIdByPlacement = new Map<string, string>();
+  const rawSlots: (TimetableSlot & { id: string })[] = [];
   for (const slotsSnap of slotsSnaps) {
-    for (const doc of slotsSnap.docs) {
-      const s = doc.data() as TimetableSlot;
-      currentSlotIdByPlacement.set(`${s.sectionId}|${s.day}|${s.periodNumber}|${s.subjectId}`, doc.id);
+    for (const doc of slotsSnap.docs) rawSlots.push({ id: doc.id, ...doc.data() } as TimetableSlot & { id: string });
+  }
+  // A section can reuse the same day/period/subject placement across
+  // semesters/sessions (e.g. the same subject continuing next semester) - if
+  // an earlier semester's/session's now-historical slot doc happened to win
+  // this map below, the substitution would resolve to an id nobody currently
+  // sees on the grid instead of the live one. Restrict to current slots only,
+  // same as every actual timetable read.
+  const currentSlots = await filterToCurrentSlots(db, collegeId, rawSlots);
+  const currentSlotIdByPlacement = new Map<string, string>();
+  for (const s of currentSlots) {
+    currentSlotIdByPlacement.set(`${s.sectionId}|${s.day}|${s.periodNumber}|${s.subjectId}`, s.id);
+  }
+
+  // `dateISOs` now spans several weeks (see currentWeekDateKeys), so the same
+  // weekly slot can turn up more than once here - e.g. a leave approved today
+  // that crosses from this week into the next still has an entry for each
+  // week it touches. Keep only the soonest date per resolved slot (ISO date
+  // strings sort chronologically): this week's own date wins whenever one
+  // exists, exactly as before extending the window, and a later week's is
+  // only surfaced when this week's slot has no substitution recorded at all.
+  const bestByResolvedId = new Map<string, { req: LeaveRequest; sub: PeriodSubstitution; resolvedId: string }>();
+  for (const { req, sub } of active) {
+    const resolvedId = currentSlotIdByPlacement.get(`${sub.sectionId}|${sub.day}|${sub.periodNumber}|${sub.subjectId}`) ?? sub.timetableSlotId;
+    const existing = bestByResolvedId.get(resolvedId);
+    if (!existing || sub.date < existing.sub.date) {
+      bestByResolvedId.set(resolvedId, { req, sub, resolvedId });
     }
   }
 
-  return active.map(({ req: r, sub: p }) => {
-    const currentId = currentSlotIdByPlacement.get(`${p.sectionId}|${p.day}|${p.periodNumber}|${p.subjectId}`);
-    return {
-      date: p.date, timetableSlotId: currentId ?? p.timetableSlotId, day: p.day, periodNumber: p.periodNumber,
-      sectionName: p.sectionName, subjectName: p.subjectName,
-      substituteFacultyId: p.substituteFacultyId, substituteFacultyName: p.substituteFacultyName,
-      requesterUid: r.uid, requesterName: r.employeeName,
-    };
-  });
+  return Array.from(bestByResolvedId.values()).map(({ req: r, sub: p, resolvedId }) => ({
+    date: p.date, timetableSlotId: resolvedId, day: p.day, periodNumber: p.periodNumber,
+    sectionName: p.sectionName, subjectName: p.subjectName,
+    substituteFacultyId: p.substituteFacultyId, substituteFacultyName: p.substituteFacultyName,
+    requesterUid: r.uid, requesterName: r.employeeName,
+  }));
 }
 
 // Notifies each assigned substitute once - called only when a leave request
