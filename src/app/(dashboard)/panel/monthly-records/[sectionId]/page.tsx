@@ -8,12 +8,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
-import { toast } from "@/hooks/useToast";
 
 const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none";
 
 interface SubjectColumn {
   assignmentId: string;
@@ -45,75 +47,34 @@ function formatDateDDMMYYYY(dateStr: string) {
 
 // Step 2-3: Monthly / Period / Till now, scoped to the one section picked in
 // step 1.
-//   - Monthly keeps the pre-existing Year pills + Month tiles flow exactly
-//     as before, unmodified - it leads on to the day-view calendar (step 4),
-//     which still shows Class Work notes alongside attendance, something a
-//     range summary has no single date to attach to.
-//   - Period and Till Now are new: both render inline on this page, no
-//     further navigation - Registration No/Name x this faculty's own
-//     subject(s) in this section (Held/Attend/%), aggregated across every
-//     submitted session in range. Never any OTHER faculty's subjects in the
-//     same section (see /api/college/class-work-records's summary mode,
-//     already scoped to the caller's own facultyId).
+//   - Monthly is a Month + Year dropdown pair (every month always offered,
+//     not just ones with existing records) - picking "View Report" leads on
+//     to the day-view calendar (step 4), which still shows Class Work notes
+//     alongside attendance, something a range summary has no single date to
+//     attach to.
+//   - Period and Till Now render inline on this page, no further
+//     navigation - Registration No/Name x this faculty's own subject(s) in
+//     this section (Held/Attend/%), aggregated across every submitted
+//     session in range. Never any OTHER faculty's subjects in the same
+//     section (see /api/college/class-work-records's summary mode, already
+//     scoped to the caller's own facultyId).
 export default function FacultyAttendanceReportYearMonthPage() {
   const router = useRouter();
   const { sectionId } = useParams<{ sectionId: string }>();
   const searchParams = useSearchParams();
   const sectionLabel = searchParams.get("label") || "Section";
-  const currentYear = new Date().getFullYear();
+  const now = new Date();
 
   const [mode, setMode] = useState<"monthly" | "period" | "tillnow">("monthly");
 
-  // ── Monthly (unchanged) ───────────────────────────────────────────────────
-  const [years, setYears] = useState<number[] | null>(null);
-  const [isLoadingYears, setIsLoadingYears] = useState(true);
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const [months, setMonths] = useState<number[] | null>(null);
-  const [isLoadingMonths, setIsLoadingMonths] = useState(false);
+  // ── Monthly ───────────────────────────────────────────────────────────────
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const yearOptions = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2, now.getFullYear() - 3];
 
-  useEffect(() => {
-    if (mode !== "monthly") return;
-    void (async () => {
-      setIsLoadingYears(true);
-      try {
-        const res = await fetch(`/api/college/class-work-records?sectionId=${encodeURIComponent(sectionId)}`);
-        if (!res.ok) throw new Error("Failed to load years");
-        const json = (await res.json()) as { years?: number[] };
-        const fetched = json.years ?? [];
-        setYears(fetched);
-        setSelectedYear(fetched.includes(currentYear) ? currentYear : (fetched[0] ?? currentYear));
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load years" });
-        setYears([]);
-        setSelectedYear(currentYear);
-      } finally {
-        setIsLoadingYears(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, sectionId]);
-
-  useEffect(() => {
-    if (mode !== "monthly" || selectedYear == null) return;
-    void (async () => {
-      setIsLoadingMonths(true);
-      try {
-        const res = await fetch(
-          `/api/college/class-work-records?sectionId=${encodeURIComponent(sectionId)}&year=${selectedYear}`
-        );
-        if (!res.ok) throw new Error("Failed to load months");
-        const json = (await res.json()) as { months?: number[] };
-        setMonths(json.months ?? []);
-      } catch {
-        toast({ variant: "destructive", title: "Failed to load months" });
-        setMonths([]);
-      } finally {
-        setIsLoadingMonths(false);
-      }
-    })();
-  }, [mode, sectionId, selectedYear]);
-
-  const yearOptions = Array.from(new Set([...(years ?? []), currentYear])).sort((a, b) => b - a);
+  function viewMonthlyReport() {
+    router.push(`/panel/monthly-records/${sectionId}/${selectedYear}/${selectedMonth}?label=${encodeURIComponent(sectionLabel)}`);
+  }
 
   // ── Period / Till Now ────────────────────────────────────────────────────
   const [fromDate, setFromDate] = useState("");
@@ -191,56 +152,25 @@ export default function FacultyAttendanceReportYearMonthPage() {
       />
 
       {mode === "monthly" && (
-        <>
-          {isLoadingYears ? (
-            <div className="h-10 w-64 rounded-lg bg-muted/30 animate-pulse" />
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {yearOptions.map((y) => (
-                <Button
-                  key={y}
-                  size="sm"
-                  variant={selectedYear === y ? "default" : "outline"}
-                  onClick={() => setSelectedYear(y)}
-                >
-                  {y}
-                </Button>
-              ))}
-            </div>
-          )}
-
-          {!isLoadingYears && (
-            isLoadingMonths ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {[1, 2, 3].map((i) => <div key={i} className="h-20 rounded-lg border bg-muted/30 animate-pulse" />)}
-              </div>
-            ) : !months || months.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                  No attendance records for {selectedYear} yet.
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {months.map((m) => (
-                  <Card
-                    key={m}
-                    className="cursor-pointer transition-colors hover:border-primary/50"
-                    onClick={() =>
-                      router.push(
-                        `/panel/monthly-records/${sectionId}/${selectedYear}/${m}?label=${encodeURIComponent(sectionLabel)}`
-                      )
-                    }
-                  >
-                    <CardContent className="p-4 flex items-center justify-between gap-2">
-                      <p className="font-semibold text-sm">{MONTH_LABELS[m - 1]}</p>
-                    </CardContent>
-                  </Card>
+        <Card>
+          <CardContent className="p-4 flex flex-wrap items-end gap-3">
+            <div className="w-40 space-y-1.5">
+              <label className="text-sm font-medium">Month</label>
+              <select className={selectClass} value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))}>
+                {MONTH_LABELS.map((label, i) => (
+                  <option key={label} value={i + 1}>{label}</option>
                 ))}
-              </div>
-            )
-          )}
-        </>
+              </select>
+            </div>
+            <div className="w-32 space-y-1.5">
+              <label className="text-sm font-medium">Year</label>
+              <select className={selectClass} value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
+                {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            <Button onClick={viewMonthlyReport}>View Report</Button>
+          </CardContent>
+        </Card>
       )}
 
       {mode === "period" && (
