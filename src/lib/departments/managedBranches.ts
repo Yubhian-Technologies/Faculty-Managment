@@ -9,7 +9,7 @@
 // Shared by the create and update paths in college/departments/route.ts, which
 // each already hold a full read of the departments collection.
 
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, noOwnSectionsChildren, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { DepartmentCourseScope } from "@/types";
 
 export interface DepartmentClaimRow {
@@ -162,6 +162,43 @@ export function resolveBranchYearOwner<T extends DepartmentYearRow & { name?: st
  * first year, with no common parent department involved at all) resolves
  * correctly.
  */
+/**
+ * Resolves the department a student should actually be STORED under, when
+ * `resolvedDepartmentName` might be a "no own sections" shared-first-year
+ * parent (Department.parentRunsOwnSections === false - see its own
+ * doc-comment, src/types/core.ts - e.g. VISHNU INSTITUTE OF TECHNOLOGY's
+ * "BASIC SCIENCE") and `coreDepartmentName` names the real branch a 1st-year
+ * is headed for. Such a parent never itself houses a student - the real
+ * landing spot is whichever of its children actually manages that branch
+ * (Department.managedDepartments) - so this remaps the parent's name to that
+ * child's, e.g. "BASIC SCIENCE" + Core Department "AIDS" -> "Basic Science -
+ * Maths". A caller may submit either the bare parent or an already-correct
+ * child directly; both produce the same, correct final name.
+ *
+ * Returns `resolvedDepartmentName` unchanged when there's no Core Department
+ * given, when it isn't a no-own-sections parent (noOwnSectionsChildren
+ * returns null - a plain branch, a standalone freshman department, or a
+ * parent that genuinely runs its own sections, e.g. SHRI VISHNU ENGINEERING
+ * COLLEGE FOR WOMEN's "ECE"), or when none of its children actually manage
+ * `coreDepartmentName`. That last case is deliberately a no-op, not an error
+ * - isConfiguredSecondaryDepartmentOrChild (codeOrNameResolver.ts), run
+ * independently by every caller right after this, is the single source of
+ * truth for whether a Core Department is valid at all; this resolver never
+ * duplicates that check, only acts on a relationship it already knows how to
+ * validate.
+ */
+export function resolveFreshmanLandingDepartment(
+  allDepartments: DepartmentWithId[],
+  resolvedDepartmentName: string,
+  coreDepartmentName: string | undefined
+): string {
+  if (!coreDepartmentName) return resolvedDepartmentName;
+  const children = noOwnSectionsChildren(allDepartments, resolvedDepartmentName);
+  if (!children) return resolvedDepartmentName;
+  const manager = findBranchManager(children, coreDepartmentName);
+  return manager ? manager.department.name : resolvedDepartmentName;
+}
+
 export function canHodEditDepartmentYear<T extends DepartmentYearRow & { name?: string }>(
   scope: { ownDepartmentNames: string[]; childDepartmentNames: string[]; managedDepartmentNames: string[] },
   departments: T[],

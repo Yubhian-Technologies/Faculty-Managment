@@ -105,13 +105,19 @@ export async function POST(request: Request) {
     // A manager can run more than one course with different years, so
     // canHodEditDepartmentYear below needs each branch's own course to
     // resolve ownership against the right one, not always the manager's flat
-    // years. Fetched once (only when actually needed - an HOD scope exists),
-    // not per-branch.
-    let catalogIdByCourseId = new Map<string, string | undefined>();
-    if (scope) {
-      const coursesSnap = await collegeRef.collection("courses").get();
-      catalogIdByCourseId = new Map(coursesSnap.docs.map((c) => [c.id, (c.data() as { catalogId?: string }).catalogId]));
-    }
+    // years. Also used further below to recognize a cohort student's own
+    // courseId as "this same programme" even when it points at a DIFFERENT
+    // Course document than the branch's own sections do - every real branch
+    // owns its own Course document for a programme it runs (see
+    // StudentRecord.courseId's doc-comment), so a shared-first-year
+    // student's courseId (resolved through their landing department's - or
+    // its parent's - own copy at import/add time) never equals the branch's
+    // own copy, even for the exact same programme; only catalogId is shared
+    // across every department's own copy. Fetched once, unconditionally (not
+    // just for HOD callers - the course-matching use below needs it
+    // regardless of role), not per-branch.
+    const coursesSnap = await collegeRef.collection("courses").get();
+    const catalogIdByCourseId = new Map(coursesSnap.docs.map((c) => [c.id, (c.data() as { catalogId?: string }).catalogId]));
 
     const now = new Date();
     const batch = new ChunkedBatch(db);
@@ -149,7 +155,19 @@ export async function POST(request: Request) {
         continue;
       }
       const branchCourseId = sections[0]?.courseId;
-      const branchStudents = branchCourseId ? students.filter((s) => !s.courseId || s.courseId === branchCourseId) : students;
+      // Compared by catalogId, not the raw courseId - see the fetch above's
+      // own comment for why the two can legitimately differ for the exact
+      // same programme. Only a genuinely different catalogId (a real
+      // different programme, e.g. M.Tech instead of B.Tech) excludes a
+      // student here.
+      const branchCatalogId = branchCourseId ? catalogIdByCourseId.get(branchCourseId) : undefined;
+      const branchStudents = branchCourseId
+        ? students.filter((s) =>
+            !s.courseId
+            || s.courseId === branchCourseId
+            || (!!branchCatalogId && catalogIdByCourseId.get(s.courseId) === branchCatalogId)
+          )
+        : students;
       if (branchStudents.length === 0) {
         perBranch.push({ ...base, skippedReason: "No students declared for this branch's course" });
         continue;

@@ -243,15 +243,30 @@ export async function PATCH(
         const ownerName = (updates.department as string | undefined) ?? sectionDept;
         const ownerSnap = await db.collection("colleges").doc(session.collegeId)
           .collection("departments").where("name", "==", ownerName).limit(1).get();
-        const ownerData = ownerSnap.empty
-          ? undefined
-          : (ownerSnap.docs[0].data() as { secondaryDepartments?: string[]; parentDepartmentId?: string });
+        const ownerDoc = ownerSnap.empty ? undefined : ownerSnap.docs[0];
+        const ownerData = ownerDoc?.data() as
+          | { secondaryDepartments?: string[]; parentDepartmentId?: string; managedDepartments?: string[] }
+          | undefined;
         // Own configured branches, or a sub-department's inherited parent branches.
         let available = ownerData?.secondaryDepartments ?? [];
         if (available.length === 0 && ownerData?.parentDepartmentId) {
           const parentSnap = await db.collection("colleges").doc(session.collegeId)
             .collection("departments").doc(ownerData.parentDepartmentId).get();
           available = (parentSnap.data() as { secondaryDepartments?: string[] } | undefined)?.secondaryDepartments ?? [];
+        }
+        // Also fold in whatever the owner department (or, for a parent, one of
+        // its own sub-departments) fully manages via managedDepartments - same
+        // fold-in the POST validation in sections/route.ts and the client's
+        // dropdown (secondaryDepartmentOptions, RosterFieldInputs.tsx) already
+        // do - see isConfiguredSecondaryDepartment's doc-comment.
+        if (ownerDoc) {
+          const childSnap = await db.collection("colleges").doc(session.collegeId)
+            .collection("departments").where("parentDepartmentId", "==", ownerDoc.id).get();
+          const childManaged = childSnap.docs.flatMap((d) => (d.data() as { managedDepartments?: string[] }).managedDepartments ?? []);
+          const ownManaged = ownerData?.managedDepartments ?? [];
+          if (ownManaged.length > 0 || childManaged.length > 0) {
+            available = Array.from(new Set([...available, ...ownManaged, ...childManaged]));
+          }
         }
         // `chosen` may itself be a sub-department of one of the available
         // branches (e.g. "ECE-VLSI" under "Electronics and Communication

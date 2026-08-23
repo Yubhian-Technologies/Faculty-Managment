@@ -16,6 +16,7 @@ import { toCSV, parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, rea
 import { ROSTER_FIELDS, EDITABLE_ROSTER_FIELDS, rosterFormToPayload } from "@/lib/students/rosterFields";
 import { RosterFormFields } from "@/components/students/RosterFieldInputs";
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode } from "@/lib/departments/codeOrNameResolver";
+import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
 import type { Department, Course, AcademicYear } from "@/types";
 
 // When arriving from a section card's "Add Students" button, the section is
@@ -61,10 +62,10 @@ const COLUMNS = ROSTER_FIELDS.map((f) => ({
 }));
 
 const HINTS = [
-  "Only the basic details you know at admission are needed - Name, Department (branch) and Academic Year are required; everything else is optional.",
+  "Only the basic details you know at admission are needed - Name, Course, Department (branch) and Academic Year are required; everything else is optional.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then. Roll No, if you already have a provisional one, is accepted but not checked for uniqueness until the department assigns the real one.",
   "Department accepts either the full name (e.g. \"Information Technology\") or the short Code (e.g. \"IT\") - a \"Branch\" column in your sheet is read the same way.",
-  "Course is the programme (e.g. \"Bachelor of Technology\" or its short Code \"BTECH\") and is optional - but if given, it must be a course the row's Department actually offers, or the row is skipped. It is separate from Department: put the branch in Department, not here.",
+  "Course is the programme (e.g. \"Bachelor of Technology\" or its short Code \"BTECH\") and is required - it must be a course the row's Department actually offers, or the row is skipped. It is separate from Department: put the branch in Department, not here.",
   "A single file may mix multiple departments and years",
   "Gender: Male, Female, Other. Scholarship / Hosteller / Physically Handicapped: Yes or No.",
   "If Yes (Handicapped) accepts H (Hearing), V (Visual) or O (Other).",
@@ -163,8 +164,24 @@ export default function OfficeStudentImportPage() {
     if (!fixTarget) return;
     const form = fixTarget.form;
     if (!form.name?.trim()) { setFixError("Name is required"); return; }
+    if (!form.course) { setFixError("Course is required"); return; }
     if (!form.department) { setFixError("Department is required"); return; }
     if (!form.year) { setFixError("Academic Year is required"); return; }
+    // 1st-year rows at a college that runs a shared first year must land
+    // under a Basic Science (Freshman) department with a Core Department
+    // named - same rule the main Students page's Add form checks and the
+    // server enforces on submit.
+    if (form.year === "1") {
+      const freshmanNames = freshmanLandingDepartmentNames(departments as DepartmentWithId[]);
+      if (freshmanNames.size > 0 && !freshmanNames.has(form.department)) {
+        setFixError(`"${form.department}" is a real branch - set it as Core Department instead of Department for a 1st Year student`);
+        return;
+      }
+      if (freshmanNames.size > 0 && !form.secondaryDepartment) {
+        setFixError("Core Department is required for 1st Year students");
+        return;
+      }
+    }
     setFixSaving(true);
     setFixError("");
     try {

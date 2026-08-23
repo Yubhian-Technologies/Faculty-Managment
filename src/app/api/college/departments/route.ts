@@ -95,6 +95,7 @@ export async function POST(request: Request) {
       hodUid?: string;
       hodName?: string;
       hasSubDepartments?: boolean;
+      parentRunsOwnSections?: boolean;
       parentDepartmentId?: string;
       secondaryDepartments?: string[];
       managedDepartments?: string[];
@@ -242,6 +243,12 @@ export async function POST(request: Request) {
       isActive: true,
       ...(parentDepartmentId ? { parentDepartmentId } : {}),
       ...(session.role !== "HOD" && body.hasSubDepartments ? { hasSubDepartments: true } : {}),
+      // Only meaningful alongside hasSubDepartments - same tier/pattern
+      // (Principal/VP/SUPER_ADMIN only). See Department.parentRunsOwnSections's
+      // own doc-comment (src/types/core.ts) for why unset defaults to true.
+      ...(session.role !== "HOD" && body.hasSubDepartments && typeof body.parentRunsOwnSections === "boolean"
+        ? { parentRunsOwnSections: body.parentRunsOwnSections }
+        : {}),
       // Years taught and the shared-first-year period are Principal/VP territory,
       // exactly as they are on PATCH - an HOD creating a sub-department here
       // can set its Sub-HOD and grouping, nothing that redefines the academic
@@ -512,6 +519,11 @@ export async function PATCH(request: Request) {
       code?: string;
       assignedYears?: number[];
       hasSubDepartments?: boolean;
+      // Only meaningful alongside hasSubDepartments - same tier as it
+      // (Principal/VP/Super Admin only, deliberately NOT added to the
+      // HOD-restricted allowlist below). See Department.
+      // parentRunsOwnSections's own doc-comment (src/types/core.ts).
+      parentRunsOwnSections?: boolean;
       secondaryDepartments?: string[];
       managedDepartments?: string[];
       // Clearing this (empty string or null) promotes a sub-department back

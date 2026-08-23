@@ -105,6 +105,22 @@ export async function POST(request: Request) {
       );
     }
     const targetCourseId = sections[0]?.courseId;
+    // The catalog-level identity behind targetCourseId (e.g. "Bachelor of
+    // Technology") - every real branch owns its OWN Course document for a
+    // programme it runs (see StudentRecord.courseId's doc-comment), so this
+    // section's own courseId is never the same DOCUMENT a shared-first-year
+    // student's courseId points at (resolved through their landing
+    // department's - or its parent's - own copy at import/add time), even
+    // when it's the exact same programme. catalogId is the field that's
+    // actually shared across every department's own copy - used below both
+    // for HOD-scope ownership (already needed it) and, further down, to
+    // recognize a cohort student as "this same programme" even though their
+    // stored courseId points at a different Course document entirely.
+    let targetCatalogId: string | undefined;
+    if (targetCourseId) {
+      const courseSnap = await collegeRef.collection("courses").doc(targetCourseId).get();
+      targetCatalogId = courseSnap.exists ? (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
+    }
 
     // An HOD/Sub-HOD may only distribute within a department they own or
     // manage, and - for a managed branch reached only via `managedDepartments`
@@ -124,14 +140,10 @@ export async function POST(request: Request) {
     // ownership against the right one, not always its flat years.
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      const [deptsSnap, courseSnap] = await Promise.all([
-        collegeRef.collection("departments").get(),
-        sections[0]?.courseId ? collegeRef.collection("courses").doc(sections[0].courseId).get() : Promise.resolve(null),
-      ]);
+      const deptsSnap = await collegeRef.collection("departments").get();
       const allDepts = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as DepartmentYearRow[];
-      const catalogId = courseSnap?.exists ? (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId : undefined;
       const owningDepartments = Array.from(new Set(sections.map((s) => s.department).filter(Boolean)));
-      const allOwned = owningDepartments.every((d) => canHodEditDepartmentYear(scope, allDepts, d, year, catalogId));
+      const allOwned = owningDepartments.every((d) => canHodEditDepartmentYear(scope, allDepts, d, year, targetCatalogId));
       if (!allOwned) {
         return NextResponse.json({ error: "That department/year is not yours or one you manage" }, { status: 403 });
       }
@@ -153,11 +165,30 @@ export async function POST(request: Request) {
       cohort = cohort.filter((s) => (s.secondaryDepartment ?? "").trim() === secondaryDeptName);
     }
     // Only students who either declared no course yet, or already declared
-    // this exact one - a student who declared a DIFFERENT course must not be
-    // swept into these sections just because they're also unassigned in the
-    // same department+year (see targetCourseId above).
+    // this exact PROGRAMME - a student who declared a genuinely DIFFERENT
+    // programme (a different catalogId - e.g. M.Tech instead of B.Tech) must
+    // not be swept into these sections just because they're also unassigned
+    // in the same department+year (see targetCourseId/targetCatalogId
+    // above). Compared by catalogId, not the raw courseId: a shared-
+    // first-year student's own courseId was resolved through their landing
+    // department's (or its parent's) own Course document, which is a
+    // DIFFERENT document from the target section's real branch's own copy of
+    // the exact same programme - comparing the raw ids directly would wrongly
+    // exclude every such student from ever being distributable.
     if (targetCourseId) {
-      cohort = cohort.filter((s) => !s.courseId || s.courseId === targetCourseId);
+      const cohortCourseIds = Array.from(new Set(cohort.map((s) => s.courseId).filter((c): c is string => !!c)));
+      const catalogIdByCourseId = new Map<string, string | undefined>();
+      if (targetCatalogId && cohortCourseIds.length > 0) {
+        const courseSnaps = await Promise.all(cohortCourseIds.map((id) => collegeRef.collection("courses").doc(id).get()));
+        courseSnaps.forEach((snap, i) => {
+          catalogIdByCourseId.set(cohortCourseIds[i], snap.exists ? (snap.data() as { catalogId?: string } | undefined)?.catalogId : undefined);
+        });
+      }
+      cohort = cohort.filter((s) => {
+        if (!s.courseId) return true;
+        if (s.courseId === targetCourseId) return true;
+        return !!targetCatalogId && catalogIdByCourseId.get(s.courseId) === targetCatalogId;
+      });
     }
 
     if (cohort.length === 0) {

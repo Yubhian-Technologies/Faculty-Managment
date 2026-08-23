@@ -50,7 +50,7 @@ export interface RosterField {
 export const ROSTER_FIELDS: RosterField[] = [
   { key: "sno", label: "S.No", kind: "text", sample: "1", primary: true, sheetOnly: true },
   { key: "name", label: "Name", kind: "text", sample: "P. Sai Kumar", required: true, primary: true, aliases: ["Student Name", "Full Name"], placeholder: "P. Sai Kumar" },
-  { key: "course", label: "Course", kind: "text", sample: "", primary: true, aliases: ["Programme", "Program"], placeholder: "B.Tech" },
+  { key: "course", label: "Course", kind: "text", sample: "", required: true, primary: true, aliases: ["Programme", "Program"], placeholder: "B.Tech" },
   { key: "department", label: "Department", kind: "select", sample: "IT", required: true, primary: true, aliases: ["Dept", "Department Code", "Branch"] },
   { key: "secondaryDepartment", label: "Core Department", kind: "select", sample: "", primary: true,
     aliases: ["Secondary Department", "Secondary Dept", "Core Branch"] },

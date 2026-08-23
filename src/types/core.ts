@@ -464,6 +464,25 @@ export interface Department {
   // One level deep only — child departments never set `hasSubDepartments`.
   parentDepartmentId?: string;
   hasSubDepartments?: boolean;
+  // Only meaningful when hasSubDepartments is true: does THIS department also
+  // enroll students / run sections directly under its own name, in addition
+  // to its sub-departments? True for e.g. an "ECE" that has real ECE sections
+  // AND a further-specialized "ECE-VLSI" sub-department with sections of its
+  // own. False for a department that exists only to organize its
+  // sub-departments and never houses a student directly - e.g. a "Basic
+  // Science" whose sub-departments (Maths, Physics, Chemistry, English) are
+  // the only place a 1st-year student actually sits, with the real branch
+  // they're headed for named via that student's own secondaryDepartment
+  // instead (see freshmanLandingDepartmentNames's own doc-comment,
+  // src/lib/college/academicStructure.ts). The two shapes are structurally
+  // IDENTICAL otherwise (both hasSubDepartments:true, both can have a parent
+  // that claims year 1 with real children) - not inferable from any other
+  // field, so this is a deliberate, Principal-set exception to this file's
+  // usual "infer everything, never store a flag" rule. UNSET is treated as
+  // `true` everywhere it's read - the behavior every department had before
+  // this field existed - so no already-configured department's behavior
+  // changes until a Principal explicitly unchecks it for one specific parent.
+  parentRunsOwnSections?: boolean;
   // Cross-listing: other departments whose HODs each get automatic view-only
   // access to every section (and its roster/faculty) created under this
   // department — set once here by Principal/VP instead of being re-picked

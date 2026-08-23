@@ -10,7 +10,6 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useAssignedInterviews } from "@/hooks/useAssignedInterviews";
 import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
-import { useIncomingStudents } from "@/hooks/useIncomingStudents";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { useCollegeType } from "@/hooks/useCollegeType";
@@ -48,17 +47,12 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   const pathname = usePathname();
   const { hasInterviews } = useAssignedInterviews();
   const { coordinatorBatchId } = useAssignedCoordinator();
-  const { hasIncomingStudents } = useIncomingStudents();
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const { collegeType } = useCollegeType();
 
   if (!user) return null;
 
-  // "First Year Students" is only ever relevant once the office has actually
-  // pre-registered a student to this department while enrolling them
-  // elsewhere - hide the link entirely until there's at least one, instead
-  // of leaving a permanently-empty page in every HOD's sidebar.
   // "Sub-Departments" is hidden unless the HOD's own department both isn't
   // itself a sub-department and has sub-departments enabled by the Principal
   // - see useIsSubDepartmentHod for why either gap makes the page a dead end.
@@ -66,7 +60,6 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // Technical split (School) - HOD has nothing to manage there, it's all
   // centrally owned by Principal (see hasSupportingStaffSplit).
   const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
-    .filter((item) => hasIncomingStudents || item.href !== "/hod/students/incoming")
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
     .filter((item) => hasSupportingStaffSplit(collegeType) || item.href !== "/hod/supporting-staff");
 
