@@ -9,7 +9,7 @@ import {
   EDITABLE_ROSTER_FIELDS, PRIMARY_ROSTER_FIELDS, DETAIL_ROSTER_FIELDS,
   rosterFieldDisplay, type RosterField,
 } from "@/lib/students/rosterFields";
-import { resolveDepartmentCourseScope, resolveCatalogId } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
 import type { Department, StudentRecord, Course } from "@/types";
 
@@ -139,6 +139,21 @@ export function secondaryDepartmentOptions(
  * every college-configured year only when NEITHER the department nor its
  * parent has anything set, so a genuinely unconfigured department isn't
  * locked out entirely.
+ *
+ * When `courseName` is blank (no course chosen yet - e.g. the Students list's
+ * own filter bar with "All courses" still selected), catalogId can't be
+ * resolved at all - and since Years Taught is now decided PER COURSE
+ * (courseScopes), resolving with an undefined catalogId only ever sees the
+ * legacy flat field, which most departments (every HOD-created
+ * sub-department, in particular) never carry. Left unhandled, that silently
+ * fell all the way to `fallbackYears` - every year up to the longest course
+ * duration anywhere in scope - for any such department, which is exactly what
+ * let a Freshman's Department showing only Year 1 students still offer a
+ * "2nd/3rd/4th Year" option once no course was picked. Instead, union this
+ * department's own Years Taught across EVERY course it (or, for a
+ * sub-department that owns no Course docs of its own, its parent) actually
+ * has a catalog entry for, so its real configured years show up regardless of
+ * which course ends up chosen.
  */
 export function yearOptionsForDepartment(
   departments: Department[],
@@ -149,9 +164,56 @@ export function yearOptionsForDepartment(
 ): number[] {
   const dept = departments.find((d) => d.name === departmentName);
   if (!dept) return fallbackYears;
-  const catalogId = resolveCatalogId(courses, dept.id, courseName);
-  const assigned = managerEffectiveYears(dept, departments, catalogId);
-  return assigned.length > 0 ? [...assigned].sort((a, b) => a - b) : fallbackYears;
+
+  if (courseName) {
+    const catalogId = resolveCatalogId(courses, dept.id, courseName);
+    const assigned = managerEffectiveYears(dept, departments, catalogId);
+    return assigned.length > 0 ? [...assigned].sort((a, b) => a - b) : fallbackYears;
+  }
+
+  const effectiveId = dept.parentDepartmentId ?? dept.id;
+  const catalogIds = Array.from(new Set(
+    courses.filter((c) => c.departmentId === effectiveId).map((c) => c.catalogId).filter((c): c is string => !!c)
+  ));
+  if (catalogIds.length === 0) {
+    // No catalog-scoped course at all (a legacy, pre-catalog department) -
+    // fall back to the flat-field-only resolution, unchanged from before.
+    const assigned = managerEffectiveYears(dept, departments, undefined);
+    return assigned.length > 0 ? [...assigned].sort((a, b) => a - b) : fallbackYears;
+  }
+  const union = new Set<number>();
+  for (const catalogId of catalogIds) {
+    for (const y of managerEffectiveYears(dept, departments, catalogId)) union.add(y);
+  }
+  return union.size > 0 ? Array.from(union).sort((a, b) => a - b) : fallbackYears;
+}
+
+/**
+ * The years a course can register a student into before any department has
+ * been chosen yet - capped at the course's own Years Taught duration (set by
+ * the Principal when the course was created, Course.durationYears). Once a
+ * department IS chosen, yearOptionsForDepartment above already respects this
+ * same ceiling (a department can never be configured with a year beyond its
+ * course's duration - see courses/route.ts POST/PATCH's own validation), so
+ * this is only needed for the gap where a course is picked but its
+ * department isn't (or isn't known) yet - e.g. the Students list's Course
+ * filter with "All departments" still selected. A course can be offered by
+ * more than one department (each with its own Course doc for the same
+ * programme name); the longest of their durations is used as the cap, so
+ * this never excludes a year some department genuinely offers - the
+ * department-specific narrowing above still applies once one is picked.
+ * Falls back to every college-configured year when the course name is blank
+ * or unrecognised, matching yearOptionsForDepartment's own fallback shape.
+ */
+export function yearOptionsForCourse(courses: Course[], courseName: string | undefined, fallbackYears: number[]): number[] {
+  if (!courseName) return fallbackYears;
+  const durations = courses
+    .filter((c) => c.name === courseName)
+    .map((c) => Number(c.durationYears) || 0)
+    .filter((n) => n > 0);
+  if (durations.length === 0) return fallbackYears;
+  const maxDuration = Math.max(...durations);
+  return fallbackYears.filter((y) => y <= maxDuration);
 }
 
 interface FormProps {
@@ -198,11 +260,14 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
   }
 
   if (field.key === "course") {
-    // Once a department is chosen, only ITS OWN programmes are offered - not
-    // every course name in the college - so a department that was never given
-    // a Master of Technology can't be paired with one. Unfiltered (every
-    // course name college-wide) until a department is picked, same "don't
-    // block a field before the other is chosen" rule the Year field uses.
+    // Course is required and comes FIRST in the flow - Department and Year
+    // (below) both stay empty/disabled until it's picked, so a student can
+    // never be added/imported without one (see ROSTER_FIELDS' `required`
+    // flag and the server-side checks in college/students POST and
+    // import-excel that back this up). Once a department IS picked (e.g. via
+    // the Fix Row dialog's best-effort pre-resolve of a failed row, which can
+    // land a department before a still-unresolved course), only ITS OWN
+    // programmes are offered - not every course name in the college.
     const currentDeptId = departments.find((d) => d.name === values.department)?.id;
     const options = values.department ? courseNamesForDepartment(courses, departments, currentDeptId) : courseNames;
     return (
@@ -213,13 +278,23 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
           onValueChange={(v) => {
             const courseName = v === NONE ? "" : v;
             onChange(field.key, courseName);
+            if (!courseName) {
+              // Nothing downstream is valid without a course chosen - Department
+              // and Year both gate on it (see their own field blocks below) and
+              // must be cleared, not just hidden, so a previously-picked value
+              // can't silently survive un-rendered.
+              onChange("department", "");
+              onChange("secondaryDepartment", "");
+              onChange("year", "");
+              return;
+            }
             // An already-chosen department that turns out not to offer the
             // new course (reachable when Course is changed to something only
             // some OTHER department owns, before Department is touched again)
             // can't stay paired with it - carrying it over would silently
             // register the student into a programme that department doesn't
             // run. Mirrors the Department field clearing Course the other way.
-            const deptStillOffersIt = !courseName || !values.department
+            const deptStillOffersIt = !values.department
               || courseNamesForDepartment(courses, departments, currentDeptId).includes(courseName);
             const nextDepartment = deptStillOffersIt ? values.department : "";
             if (!deptStillOffersIt) {
@@ -228,7 +303,7 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             }
             const allowedYears = nextDepartment
               ? yearOptionsForDepartment(departments, courses, nextDepartment, courseName, years)
-              : years;
+              : yearOptionsForCourse(courses, courseName, years);
             if (values.year && !allowedYears.includes(Number(values.year))) onChange("year", "");
           }}
         >
@@ -243,17 +318,40 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
   }
 
   if (field.key === "department") {
-    // Symmetric with the Course field above: once a course is chosen, only
-    // the department(s) actually offering it are selectable - e.g. Master of
-    // Technology narrows this to just the department(s) the Principal added
-    // it to, so a college-wide "any department" picker never suggests a pairing
-    // that doesn't exist as a real Course doc.
-    const options = values.course ? departmentsOfferingCourse(departments, courses, values.course) : departments;
+    // Course comes FIRST (it's required - see the Course field's own note):
+    // Department has nothing valid to offer until one is picked - a
+    // department is only ever chosen from among the ones that actually run
+    // the chosen course - so it stays empty and disabled instead of
+    // defaulting to "every department in the college".
+    let options = values.course ? departmentsOfferingCourse(departments, courses, values.course) : [];
+    // At a college that runs a shared/common first year, a 1st-year student
+    // must land under one of its Basic Science (Freshman) departments, never
+    // directly under a real branch - see freshmanLandingDepartmentNames's own
+    // doc-comment. Narrowing the picker itself (rather than only rejecting on
+    // submit) is what keeps this in sync with the Add Student form's own
+    // behaviour, which the bulk importer's "fix failed row" dialog reuses
+    // verbatim (RosterFormFields).
+    const freshmanNames = freshmanLandingDepartmentNames(departments);
+    if (values.year === "1" && freshmanNames.size > 0) {
+      options = options.filter((d) => freshmanNames.has(d.name));
+    }
+    // A value already on the form (e.g. the Fix Row dialog's best-effort
+    // pre-resolve of a failed row's raw Department text, done before Course
+    // is even known) must still be visible even if it falls outside the
+    // options above - otherwise it looks like the field silently forgot the
+    // department that's actually still sitting in the form's own state. The
+    // Select stays disabled below regardless, so this can't be used to pick
+    // anything else without a valid course first.
+    if (value && !options.some((d) => d.name === value)) {
+      const current = departments.find((d) => d.name === value);
+      if (current) options = [...options, current];
+    }
     return (
       <div className="space-y-2">
         <Label>{label}</Label>
         <Select
           value={value}
+          disabled={!values.course}
           onValueChange={(v) => {
             onChange(field.key, v);
             // The branch list is the new department's, so a choice made under
@@ -271,11 +369,15 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             // teach it for the (possibly just-cleared) course (e.g. switching
             // to a shared-first-year grouping sub-department like
             // BS-CHEMISTRY, which only teaches Year 1).
-            const allowedYears = yearOptionsForDepartment(departments, courses, v, nextCourse, years);
+            let allowedYears = yearOptionsForDepartment(departments, courses, v, nextCourse, years);
+            // Nor Year 1 specifically, if `v` is a real branch at a college
+            // that runs a shared first year - even if this department's own
+            // (possibly stale) assignedYears still lists it.
+            if (freshmanNames.size > 0 && !freshmanNames.has(v)) allowedYears = allowedYears.filter((y) => y !== 1);
             if (values.year && !allowedYears.includes(Number(values.year))) onChange("year", "");
           }}
         >
-          <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder={values.course ? "Select department" : "Select a course first"} /></SelectTrigger>
           <SelectContent>
             {options.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
           </SelectContent>
@@ -292,9 +394,16 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
       ? secondaryDepartmentOptions(departments, courses, values.department, values.course ?? "")
       : [];
     if (branches.length === 0) return null;
+    // Required (not just offered) once a 1st-year student is correctly
+    // landed under a Basic Science (Freshman) department - without it they're
+    // stuck unpromotable. Mirrors the same rule the server enforces on submit
+    // (college/students POST and the bulk importer's unassigned rows).
+    const isRequiredNow = values.year === "1" && values.department
+      ? freshmanLandingDepartmentNames(departments).has(values.department)
+      : false;
     return (
       <div className="space-y-2">
-        <Label>{label}</Label>
+        <Label>{field.label}{isRequiredNow ? " *" : ""}</Label>
         <Select value={value || NONE} onValueChange={(v) => onChange(field.key, v === NONE ? "" : v)}>
           <SelectTrigger><SelectValue placeholder="Not specified" /></SelectTrigger>
           <SelectContent>
@@ -303,24 +412,60 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          The branch this student is registered to and will be promoted into.
+          {isRequiredNow
+            ? "Required for a 1st Year student: the real branch they'll be promoted into."
+            : "The branch this student is registered to and will be promoted into."}
         </p>
       </div>
     );
   }
 
   if (field.key === "year") {
-    // Scoped to the chosen department's own "Years Taught" for the chosen
-    // course once a department is picked - otherwise every college-configured
-    // year, so the field isn't blocked before a department is even chosen.
-    const options = values.department
-      ? yearOptionsForDepartment(departments, courses, values.department, values.course ?? "", years)
-      : years;
+    // Course comes FIRST (it's required - see the Course field's own note):
+    // Year has nothing valid to offer until one is picked, same as
+    // Department above. Once it is, scoped to the chosen department's own
+    // "Years Taught" for that course once a department is ALSO picked;
+    // before that, capped by just the course's own duration
+    // (yearOptionsForCourse).
+    let options = !values.course
+      ? []
+      : values.department
+        ? yearOptionsForDepartment(departments, courses, values.department, values.course, years)
+        : yearOptionsForCourse(courses, values.course, years);
+    // Year 1 is never valid for a real branch once the college runs a shared
+    // first year - even if that branch's own (possibly stale) assignedYears
+    // still lists it - see freshmanLandingDepartmentNames's own doc-comment.
+    const freshmanNames = freshmanLandingDepartmentNames(departments);
+    if (values.department && freshmanNames.size > 0 && !freshmanNames.has(values.department)) {
+      options = options.filter((y) => y !== 1);
+    }
+    // Keep a value already on the form visible even if it falls outside the
+    // options above (e.g. the Fix Row dialog seeding Year from a failed
+    // row's raw text before a course is even chosen) - same reasoning as the
+    // Department field's own fallback above. Still disabled below without a
+    // course, so this can't be used to pick anything else.
+    if (value && !options.includes(Number(value))) {
+      options = [...options, Number(value)].sort((a, b) => a - b);
+    }
     return (
       <div className="space-y-2">
         <Label>{label}</Label>
-        <Select value={value} onValueChange={(v) => onChange(field.key, v)}>
-          <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+        <Select
+          value={value}
+          disabled={!values.course}
+          onValueChange={(v) => {
+            onChange(field.key, v);
+            // The department picked before Year 1 was chosen may itself be a
+            // real branch, invalid now that Year 1 is selected - clear it
+            // (and whatever Core Department went with it) rather than leave
+            // an invalid pairing the submit will just reject.
+            if (v === "1" && values.department && freshmanNames.size > 0 && !freshmanNames.has(values.department)) {
+              onChange("department", "");
+              onChange("secondaryDepartment", "");
+            }
+          }}
+        >
+          <SelectTrigger><SelectValue placeholder={values.course ? "Select year" : "Select a course first"} /></SelectTrigger>
           <SelectContent>
             {options.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
           </SelectContent>

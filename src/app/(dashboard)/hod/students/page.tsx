@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Shuffle, Pencil, Layers, ArrowRightLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { structureFromDepartments, type DepartmentWithId } from "@/lib/college/academicStructure";
+import { RosterDetailView, yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
+import { structureFromDepartments, noOwnSectionsChildren, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { disambiguateSectionLabels, sectionFeedsTarget } from "@/lib/sections/sectionLabel";
 import type { StudentListItem, Section, Department, Course, AcademicYear } from "@/types";
@@ -51,6 +52,16 @@ export default function HodStudentsPage() {
   // way to narrow a large mixed roster down to one course or year at a glance.
   const [courseFilter, setCourseFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState("all");
+  // "none" = the normal, manageable roster below (this HOD's own students -
+  // accessLevel "primary"). Any other value is one of the Freshman's
+  // Departments currently holding students pre-registered toward one of this
+  // HOD's own departments (Core Dept) - switches the table to a READ-ONLY
+  // view of just those. Same data the old, separate "First Year Students"
+  // page showed; folded in here as an explicit view switch instead of its own
+  // route, and still deliberately view-only (no Assign/Edit) - these aren't
+  // this HOD's students to manage until they're actually distributed/
+  // promoted into one of their own real sections.
+  const [freshmanView, setFreshmanView] = useState("none");
 
   const [cohortOpen, setCohortOpen] = useState(false);
   const [cohortResult, setCohortResult] = useState<CohortBranchResult[] | null>(null);
@@ -76,6 +87,11 @@ export default function HodStudentsPage() {
   const [editRoll, setEditRoll] = useState("");
   const [editStatus, setEditStatus] = useState("REGULAR");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Full read-only profile (every roster field, same RosterDetailView the
+  // College Office Students page already shows) - opened by clicking a row,
+  // same as Office's own table.
+  const [viewTarget, setViewTarget] = useState<StudentRow | null>(null);
 
   // Per-student section assignment - the same move the bulk Distribute dialog
   // does for a whole cohort, but for one student at a time (e.g. placing the
@@ -123,14 +139,80 @@ export default function HodStudentsPage() {
     () => sections.filter((s) => s.accessLevel !== "secondary"),
     [sections]
   );
-  // Includes each student's secondaryDepartment too - a real branch that a
-  // shared-first-year student is pre-registered to (but hasn't been promoted
-  // into yet) would otherwise never appear as a filter option at all.
-  const departmentNames = useMemo(
-    () => Array.from(new Set(
-      students.flatMap((s) => [s.department, s.secondaryDepartment]).filter((d): d is string => !!d)
-    )).sort(),
+  // Every real branch owns its own Course document for a programme it runs
+  // (see StudentRecord.courseId's doc-comment) - a shared-first-year
+  // section's own courseId is picked ad hoc by whoever created it (some use
+  // the common department's Course doc, some use the real branch's own -
+  // both legitimate), so two sections of the EXACT SAME programme can easily
+  // carry different courseId values without being a genuine course mismatch
+  // at all. catalogId is the field that's actually shared across every
+  // department's own copy - used below (Distribute and Assign) to recognize
+  // that case instead of wrongly treating "different Course document" as
+  // "different course" and hiding a real, correct section. Mirrors the
+  // identical fix in distribute/route.ts and distribute-cohort/route.ts.
+  const catalogIdByCourseId = useMemo(
+    () => new Map(courses.map((c) => [c.id, c.catalogId])),
+    [courses]
+  );
+  const sameProgramme = useCallback((a: string | undefined, b: string | undefined): boolean => {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const catA = catalogIdByCourseId.get(a);
+    return !!catA && catA === catalogIdByCourseId.get(b);
+  }, [catalogIdByCourseId]);
+  // Restricted to departments this HOD actually structurally has - built from
+  // students they own/manage (accessLevel !== "secondary" - a merely
+  // cross-listed, view-only student's OWN department belongs to whoever
+  // really runs it, not this HOD) and their OWN `department` field, never
+  // `secondaryDepartment` ("Core Dept"). Core Dept is a different, forward-
+  // looking dimension - which real branch a shared-first-year student is
+  // eventually headed for, not where they currently, structurally sit -  and
+  // used to be folded in here too, which let this list roll in every
+  // downstream branch ANY visible shared-year cohort happens to be pre-
+  // registered toward (e.g. AIML, CIVIL, another sub-department's own managed
+  // branch this HOD has no real relationship to) as if it were one of this
+  // HOD's own departments. Also synthesizes in a "no own sections"
+  // shared-first-year parent (e.g. VISHNU's "BASIC SCIENCE") whenever any of
+  // its children already appear - such a parent never itself shows up in
+  // student data (it never houses a student directly), so without this it
+  // could never be picked at all even though `filtered` below already handles
+  // it correctly as a rollup target.
+  const departmentNames = useMemo(() => {
+    const names = new Set(
+      students.filter((s) => s.accessLevel !== "secondary").map((s) => s.department).filter((d): d is string => !!d)
+    );
+    const allDepts = departments as DepartmentWithId[];
+    for (const d of allDepts) {
+      if (!d.name) continue;
+      const children = noOwnSectionsChildren(allDepts, d.name);
+      if (children && children.some((c) => names.has(c.name))) names.add(d.name);
+    }
+    return Array.from(names).sort();
+  }, [students, departments]);
+  // Students currently held by some OTHER (Freshman's) department who are
+  // pre-registered toward one of THIS HOD's own departments - accessLevel
+  // "secondary" (students/route.ts's own secondaryQuery: secondaryDepartment
+  // matches one of this HOD's own/child department names). View-only: they
+  // aren't this HOD's to edit/assign until distributed/promoted into one of
+  // their own real sections - drives the Freshman's Department selector
+  // below rather than being mixed into the manageable roster.
+  const incomingStudents = useMemo(
+    () => students.filter((s) => s.accessLevel === "secondary"),
     [students]
+  );
+  // Which Freshman's Department(s) are actually holding any such students -
+  // a college can run more than one, independent of the others (see
+  // getFreshmanDepartmentIds's own doc-comment), so this lets the selector
+  // below only ever offer ones that actually have someone pre-registered
+  // toward this HOD right now.
+  const freshmanDeptOptions = useMemo(
+    () => Array.from(new Set(incomingStudents.map((s) => s.department).filter(Boolean))).sort(),
+    [incomingStudents]
+  );
+  const isFreshmanView = freshmanView !== "none";
+  const incomingFiltered = useMemo(
+    () => (isFreshmanView ? incomingStudents.filter((s) => s.department === freshmanView) : []),
+    [incomingStudents, freshmanView, isFreshmanView]
   );
   // Unassigned students this HOD can actually section - excludes view-only
   // ("secondary") cross-listed students, e.g. someone else's branch merely
@@ -188,18 +270,53 @@ export default function HodStudentsPage() {
     () => Array.from(new Set(distCohortByYear.map((s) => s.courseId).filter((c): c is string => !!c))),
     [distCohortByYear]
   );
-  // Automatic when the cohort is uniform (0 or 1 distinct course declared),
-  // otherwise whatever was explicitly picked via the Course selector below.
-  const effectiveDistCourseId = distCohortCourseIds.length === 1 ? distCohortCourseIds[0] : distCourseId;
-  const distTargetSections = useMemo(
-    () => managedSections
-      .filter((s) =>
-        sectionFeedsTarget(s, distDept, distBranches.length > 0 ? distBranch : "")
-        && String(s.year) === distYear
-        && (!effectiveDistCourseId || s.courseId === effectiveDistCourseId))
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    [managedSections, distDept, distBranch, distBranches.length, distYear, effectiveDistCourseId]
+  // Whether this cohort is genuinely mixed-PROGRAMME, not just spread across
+  // more than one Course document of the exact same programme (see
+  // catalogIdByCourseId's own doc-comment above) - the thing that actually
+  // needs an explicit pick below.
+  const distCohortCatalogIds = useMemo(
+    () => Array.from(new Set(distCohortCourseIds.map((id) => catalogIdByCourseId.get(id)).filter((c): c is string => !!c))),
+    [distCohortCourseIds, catalogIdByCourseId]
   );
+  // One representative courseId per genuinely distinct programme, for the
+  // Course picker below - without this, two courseIds of the exact same
+  // programme (see catalogIdByCourseId's own doc-comment) would show as two
+  // identically-labeled "Bachelor of Technology" options.
+  const distCohortProgrammeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: string[] = [];
+    for (const cid of distCohortCourseIds) {
+      const key = catalogIdByCourseId.get(cid) ?? cid;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      options.push(cid);
+    }
+    return options;
+  }, [distCohortCourseIds, catalogIdByCourseId]);
+  // Automatic when the cohort is uniform (0 or 1 distinct PROGRAMME declared -
+  // any one of its actual courseIds works, since sameProgramme treats them as
+  // interchangeable below), otherwise whatever was explicitly picked via the
+  // Course selector.
+  const effectiveDistCourseId = distCohortCatalogIds.length <= 1 ? distCohortCourseIds[0] : distCourseId;
+  const distTargetSections = useMemo(() => {
+    const base = managedSections.filter((s) =>
+      sectionFeedsTarget(s, distDept, distBranches.length > 0 ? distBranch : "")
+      && String(s.year) === distYear
+    );
+    // Same softened rule as the per-student Assign dialog's assignTargetSections
+    // (see its own comment) - the cohort's declared courseId only disambiguates
+    // when the matching sections themselves actually span more than one
+    // genuinely different PROGRAMME (catalogId); it must never be able to hide
+    // a real section just because it happens to use a different Course
+    // document of the exact same programme than however the cohort's own
+    // courseId was resolved (see catalogIdByCourseId's own doc-comment).
+    const distinctCatalogIds = new Set(base.map((s) => catalogIdByCourseId.get(s.courseId ?? "")).filter(Boolean));
+    if (effectiveDistCourseId && distinctCatalogIds.size > 1) {
+      const narrowed = base.filter((s) => sameProgramme(s.courseId, effectiveDistCourseId));
+      if (narrowed.length > 0) return narrowed.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return base.sort((a, b) => a.name.localeCompare(b.name));
+  }, [managedSections, distDept, distBranch, distBranches.length, distYear, effectiveDistCourseId, catalogIdByCourseId, sameProgramme]);
   // A department can run the same section name under more than one course
   // (e.g. "IT-A" under both B.Tech and M.Tech) - this list isn't scoped to a
   // single course, so identical-looking checkboxes need the course name added
@@ -209,11 +326,13 @@ export default function HodStudentsPage() {
     [distTargetSections, departments]
   );
   const unassignedCount = useMemo(() => {
-    // A mixed cohort with no course picked yet isn't actionable - showing
-    // "everyone" here would overcount (some belong to a different course).
-    if (distCohortCourseIds.length > 1 && !distCourseId) return 0;
-    return distCohortByYear.filter((s) => !effectiveDistCourseId || !s.courseId || s.courseId === effectiveDistCourseId).length;
-  }, [distCohortByYear, distCohortCourseIds.length, distCourseId, effectiveDistCourseId]);
+    // A mixed-PROGRAMME cohort with no course picked yet isn't actionable -
+    // showing "everyone" here would overcount (some belong to a different
+    // course). Not triggered merely by more than one Course DOCUMENT being
+    // present, same distinction as distTargetSections above.
+    if (distCohortCatalogIds.length > 1 && !distCourseId) return 0;
+    return distCohortByYear.filter((s) => !effectiveDistCourseId || !s.courseId || sameProgramme(s.courseId, effectiveDistCourseId)).length;
+  }, [distCohortByYear, distCohortCatalogIds.length, distCourseId, effectiveDistCourseId, sameProgramme]);
 
   // Distinct programme names this HOD's departments actually offer - same
   // "distinct names of the raw Course docs" reduction the Office Students
@@ -223,10 +342,11 @@ export default function HodStudentsPage() {
       .sort((a, b) => a.localeCompare(b)),
     [courses]
   );
-  // Configured academic years, same fallback chain as the Office Students
-  // page: prefer what the college has configured, fall back to whatever years
-  // already appear on students, then to 1-4 so the filter is never empty.
-  const yearOptions = useMemo(() => {
+  // Fallback years for when neither Department nor Course narrows things
+  // down yet - same fallback chain as the Office Students page: prefer what
+  // the college has configured, fall back to whatever years already appear
+  // on students, then to 1-4 so the filter is never empty.
+  const fallbackYears = useMemo(() => {
     const configured = academicYears.map((y) => y.yearNumber).filter(Boolean);
     const fromStudents = Array.from(new Set(students.map((s) => s.year).filter(Boolean)));
     const merged = Array.from(new Set([...configured, ...fromStudents])).sort((a, b) => a - b);
@@ -244,37 +364,90 @@ export default function HodStudentsPage() {
     return capped.length > 0 ? capped : [1, 2, 3, 4];
   }, [academicYears, students, courses]);
 
+  // Department -> Year cascade, same one the Office Students page's own
+  // filter bar uses (yearOptionsForDepartment/yearOptionsForCourse) - a
+  // department only offers the years it's actually assigned to teach for the
+  // chosen course (managerEffectiveYears), so picking a Freshman's Department
+  // like "Basic Science - Maths" narrows Year down to just 1st Year instead
+  // of still offering every year this HOD's *other*, non-freshman departments
+  // happen to reach. Without this, the filter fell back to fallbackYears
+  // unconditionally - capped only by the longest course duration anywhere in
+  // this HOD's scope, so a pure Freshman's-Department HOD (whose students
+  // never leave Year 1) still saw a dead "2nd/3rd/4th Year" option that could
+  // never match anything.
+  const yearFilterOptions = useMemo(() => {
+    if (deptFilter !== "all") {
+      return yearOptionsForDepartment(departments, courses, deptFilter, courseFilter === "all" ? "" : courseFilter, fallbackYears);
+    }
+    return yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, fallbackYears);
+  }, [deptFilter, courseFilter, departments, courses, fallbackYears]);
+
+  // A "no own sections" shared-first-year parent (e.g. VISHNU's "BASIC
+  // SCIENCE") never itself houses a student - picking it as a filter rolls
+  // up to match its children's students too (see
+  // expandDepartmentNameForRollup's own doc-comment). A no-op for every
+  // other department, same exact-match behaviour as before.
+  const deptFilterRollupNames = useMemo(
+    () => (deptFilter !== "all" ? expandDepartmentNameForRollup(departments as DepartmentWithId[], deptFilter) : null),
+    [departments, deptFilter]
+  );
+
   const filtered = useMemo(
     () => students.filter((s) => {
-      if (deptFilter !== "all" && s.department !== deptFilter && s.secondaryDepartment !== deptFilter) return false;
+      // The manage table is this HOD's OWN roster only - a merely
+      // cross-listed (accessLevel "secondary") student, pre-registered toward
+      // one of this HOD's departments while still held by a Freshman's
+      // Department elsewhere, isn't theirs to edit/assign yet. Surfaced
+      // separately, view-only, via the Freshman's Department selector below
+      // (incomingStudents/incomingFiltered).
+      if (s.accessLevel === "secondary") return false;
+      if (deptFilterRollupNames && !deptFilterRollupNames.includes(s.department)) return false;
       if (courseFilter !== "all" && s.course !== courseFilter) return false;
       if (yearFilter !== "all" && s.year !== Number(yearFilter)) return false;
       return true;
     }),
-    [students, deptFilter, courseFilter, yearFilter]
+    [students, deptFilterRollupNames, courseFilter, yearFilter]
   );
 
   // Sections a single student can be assigned into - their real branch's (if
   // pre-registered to one via secondaryDepartment) or their own department's,
-  // for their own year. Same resolution the bulk Distribute dialog uses. Also
-  // scoped to the student's own `courseId` when they have one (see
-  // StudentRecord.courseId's doc-comment) - a department can run a
-  // same-named section under more than one course, so without this a student
-  // could be offered (and placed into) a section belonging to the wrong one.
-  // A student with no declared course yet imposes no such filter.
+  // for their own year. Same resolution the bulk Distribute dialog uses.
+  //
+  // The student's own `courseId` (StudentRecord.courseId) is used to
+  // disambiguate ONLY when the matching sections themselves actually span
+  // more than one distinct course (e.g. a department running both a B.Tech
+  // and an independent M.Tech) - never as a hard, unconditional filter. It's
+  // merely a best-effort "declared intent" for a student who was never
+  // placed into a real section yet (see the field's own doc-comment), and a
+  // shared-first-year section's OWN course doc is picked ad hoc by whoever
+  // created it (some use the common department's, some use the real
+  // branch's own - both are legitimate, and nothing keeps them in sync with
+  // however a given student's courseId was resolved at import/add time).
+  // Filtering on it unconditionally could silently hide every real,
+  // correctly-department/year-matching section a student should actually be
+  // assignable to, showing "no sections yet" even though several exist.
   const assignTargetSections = useMemo(() => {
     if (!assignTarget) return [];
-    return managedSections
-      .filter((s) =>
-        sectionFeedsTarget(s, assignTarget.department, assignTarget.secondaryDepartment ?? "")
-        && s.year === assignTarget.year
-        && (!assignTarget.courseId || s.courseId === assignTarget.courseId)
-        // Exclude the section the student is already sitting in - listing it
-        // as a "Move" target read as "already in this section" and picking
-        // it would just be a no-op re-assign.
-        && s.name !== assignTarget.section)
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [assignTarget, managedSections]);
+    const base = managedSections.filter((s) =>
+      sectionFeedsTarget(s, assignTarget.department, assignTarget.secondaryDepartment ?? "")
+      && s.year === assignTarget.year
+      // Exclude the section the student is already sitting in - listing it
+      // as a "Move" target read as "already in this section" and picking
+      // it would just be a no-op re-assign.
+      && s.name !== assignTarget.section
+    );
+    // Disambiguates only when the matching sections actually span more than
+    // one genuinely different PROGRAMME (catalogId), not merely more than
+    // one Course document of the exact same programme - see
+    // catalogIdByCourseId's own doc-comment above for why those two docs can
+    // legitimately differ for a shared-first-year section.
+    const distinctCatalogIds = new Set(base.map((s) => catalogIdByCourseId.get(s.courseId ?? "")).filter(Boolean));
+    if (assignTarget.courseId && distinctCatalogIds.size > 1) {
+      const narrowed = base.filter((s) => sameProgramme(s.courseId, assignTarget.courseId));
+      if (narrowed.length > 0) return narrowed.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return base.sort((a, b) => a.name.localeCompare(b.name));
+  }, [assignTarget, managedSections, catalogIdByCourseId, sameProgramme]);
   const assignSectionLabels = useMemo(
     () => disambiguateSectionLabels(assignTargetSections, departments),
     [assignTargetSections, departments]
@@ -323,6 +496,26 @@ export default function HodStudentsPage() {
     } finally {
       setIsDistributingCohort(false);
     }
+  }
+
+  // Mirrors the Office Students page's own onCourseFilterChange/
+  // onDeptFilterChange: dropping a previously-picked Year that no longer
+  // applies once Department/Course narrows the cascade, rather than leaving
+  // a stale value selected that can now match nothing.
+  function onCourseFilterChange(value: string) {
+    const nextYearOptions = deptFilter !== "all"
+      ? yearOptionsForDepartment(departments, courses, deptFilter, value === "all" ? "" : value, fallbackYears)
+      : yearOptionsForCourse(courses, value === "all" ? undefined : value, fallbackYears);
+    if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
+    setCourseFilter(value);
+  }
+
+  function onDeptFilterChange(value: string) {
+    const nextYearOptions = value !== "all"
+      ? yearOptionsForDepartment(departments, courses, value, courseFilter === "all" ? "" : courseFilter, fallbackYears)
+      : yearOptionsForCourse(courses, courseFilter === "all" ? undefined : courseFilter, fallbackYears);
+    if (yearFilter !== "all" && !nextYearOptions.includes(Number(yearFilter))) setYearFilter("all");
+    setDeptFilter(value);
   }
 
   function toggleDistSection(id: string, checked: boolean) {
@@ -493,7 +686,9 @@ export default function HodStudentsPage() {
       key: "actions",
       header: "",
       render: (r) => (
-        <div className="flex items-center justify-end">
+        // stopPropagation - the row itself opens the full read-only profile
+        // on click (onRowClick below), which these actions must not trigger.
+        <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
           <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
             <ArrowRightLeft className="h-3.5 w-3.5" />
           </Button>
@@ -510,7 +705,7 @@ export default function HodStudentsPage() {
       <PageHeader
         title="Students"
         description="Your department's students, plus every branch grouped under it. Divide unassigned students evenly across sections in full-name order."
-        actions={
+        actions={!isFreshmanView && (
           <>
           {isCommonYearHod && (
             <Dialog open={cohortOpen} onOpenChange={(open) => { setCohortOpen(open); if (!open) setCohortResult(null); }}>
@@ -657,9 +852,12 @@ export default function HodStudentsPage() {
 
                 {/* Only shown when this (department, branch, year) cohort
                     itself has unassigned students declared for more than one
-                    course - the common case (one course, or none declared)
-                    skips straight to Target Sections. */}
-                {distDept && (distBranches.length === 0 || distBranch) && distYear && distCohortCourseIds.length > 1 && (
+                    genuinely different PROGRAMME - the common case (one
+                    programme, or none declared, even if spread across more
+                    than one Course document of that same programme - see
+                    catalogIdByCourseId's own doc-comment) skips straight to
+                    Target Sections. */}
+                {distDept && (distBranches.length === 0 || distBranch) && distYear && distCohortCatalogIds.length > 1 && (
                   <div className="space-y-2">
                     <Label>Course</Label>
                     <Select
@@ -668,7 +866,7 @@ export default function HodStudentsPage() {
                     >
                       <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
                       <SelectContent>
-                        {distCohortCourseIds.map((cid) => (
+                        {distCohortProgrammeOptions.map((cid) => (
                           <SelectItem key={cid} value={cid}>{courses.find((c) => c.id === cid)?.name ?? cid}</SelectItem>
                         ))}
                       </SelectContent>
@@ -679,7 +877,7 @@ export default function HodStudentsPage() {
                   </div>
                 )}
 
-                {distDept && (distBranches.length === 0 || distBranch) && distYear && (distCohortCourseIds.length <= 1 || distCourseId) && (
+                {distDept && (distBranches.length === 0 || distBranch) && distYear && (distCohortCatalogIds.length <= 1 || distCourseId) && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Target Sections</Label>
@@ -720,28 +918,56 @@ export default function HodStudentsPage() {
             </DialogContent>
           </Dialog>
           </>
-        }
+        )}
       />
 
+      {/* Freshman's Department view switch - only shown once there's actually
+          someone pre-registered toward this HOD to view. Picking one swaps
+          the table below to a read-only preview of just that department's
+          held students; "My Students" returns to the normal, manageable
+          roster. */}
+      {freshmanDeptOptions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-3">
+          <span className="text-xs font-medium text-muted-foreground shrink-0">Freshman&apos;s Department:</span>
+          <Select value={freshmanView} onValueChange={setFreshmanView}>
+            <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">My Students</SelectItem>
+              {freshmanDeptOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {isFreshmanView && (
+            <span className="text-xs text-muted-foreground">
+              Students pre-registered to your department(s) while still held by {freshmanView} - view only until distributed/promoted.
+            </span>
+          )}
+        </div>
+      )}
+
       <DataTable
-        data={filtered}
-        columns={columns}
+        data={isFreshmanView ? incomingFiltered : filtered}
+        columns={isFreshmanView ? columns.filter((c) => c.key !== "actions") : columns}
+        onRowClick={setViewTarget}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
         searchPlaceholder="Search by roll number or name..."
         searchKeys={["rollNumber", "name"] as (keyof StudentRow)[]}
-        emptyTitle="No students yet"
-        emptyDescription="Once the College Office imports your branches' students, they show up here to be sectioned."
-        filterComponent={
+        emptyTitle={isFreshmanView ? "No incoming students here" : "No students yet"}
+        emptyDescription={
+          isFreshmanView
+            ? `No students are currently held by ${freshmanView} and pre-registered to your department(s).`
+            : "Once the College Office imports your branches' students, they show up here to be sectioned."
+        }
+        filterComponent={isFreshmanView ? undefined : (
           <>
-            <Select value={courseFilter} onValueChange={setCourseFilter}>
+            <Select value={courseFilter} onValueChange={onCourseFilterChange}>
               <SelectTrigger className="w-44"><SelectValue placeholder="All courses" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All courses</SelectItem>
                 {courseNames.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={deptFilter} onValueChange={setDeptFilter}>
+            <Select value={deptFilter} onValueChange={onDeptFilterChange}>
               <SelectTrigger className="w-48"><SelectValue placeholder="All departments" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All departments</SelectItem>
@@ -752,12 +978,49 @@ export default function HodStudentsPage() {
               <SelectTrigger className="w-36"><SelectValue placeholder="All years" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All years</SelectItem>
-                {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{yearOrdinalLabel(y)}</SelectItem>)}
+                {yearFilterOptions.map((y) => <SelectItem key={y} value={String(y)}>{yearOrdinalLabel(y)}</SelectItem>)}
               </SelectContent>
             </Select>
           </>
-        }
+        )}
       />
+
+      {/* ── Student detail (full profile, same as College Office sees) ── */}
+      <Dialog open={!!viewTarget} onOpenChange={(open) => { if (!open) setViewTarget(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewTarget?.name}</DialogTitle>
+          </DialogHeader>
+
+          {viewTarget && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Section:</span>
+              {viewTarget.section
+                ? <Badge variant="secondary" className="text-xs">{viewTarget.section}</Badge>
+                : <span className="italic text-muted-foreground">Unassigned</span>}
+              <span className="text-muted-foreground ml-3">Status:</span>
+              <Badge variant="secondary" className="text-xs">{viewTarget.status}</Badge>
+              {viewTarget.accessLevel === "secondary" && (
+                <Badge variant="outline" className="text-xs">View only</Badge>
+              )}
+            </div>
+          )}
+
+          {viewTarget && <RosterDetailView student={viewTarget} />}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewTarget(null)}>Close</Button>
+            {/* Not offered for a merely cross-listed (view-only) row - see the
+                Freshman's Department selector above; only this HOD's own
+                students (accessLevel "primary") are theirs to edit. */}
+            {viewTarget && viewTarget.accessLevel !== "secondary" && (
+              <Button onClick={() => { openEdit(viewTarget); setViewTarget(null); }}>
+                <Pencil className="h-4 w-4 mr-2" />Edit
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
         <DialogContent>

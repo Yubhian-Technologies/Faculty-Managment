@@ -60,26 +60,45 @@ export function resolveCourseByNameOrCode(
 
 /**
  * True when `candidate` is actually one of `department`'s configured
- * Secondary Departments - its flat `secondaryDepartments`, OR any per-course
+ * Secondary Departments - its flat `secondaryDepartments`, any per-course
  * override's `secondaryDepartments` (Department.courseScopes - a department
- * can cross-list differently per course). Case/whitespace-insensitive, same
- * as every other department-name comparison (college/departments already
- * enforces name uniqueness case-insensitively, so this can never conflate
- * two different real departments).
+ * can cross-list differently per course), OR a real branch it (or, for a
+ * parent, one of `children`) fully manages via `managedDepartments` (the
+ * "grouped/managed branches" model - see Department.managedDepartments' own
+ * doc-comment). Both fields express the same "a student/section placed here
+ * really belongs to that other, real department" relationship, just through
+ * different mechanisms a college can pick between - a check that only knows
+ * about `secondaryDepartments` will reject exactly what the client's own
+ * dropdown (secondaryDepartmentOptions, RosterFieldInputs.tsx - which already
+ * folds both in) just offered as a valid choice, e.g. a Basic Science
+ * sub-department that groups real branches purely via `managedDepartments`
+ * and has no `secondaryDepartments` of its own at all. `children` is
+ * `department`'s own sub-departments (each one's `managedDepartments` also
+ * counts, same as the client) - pass `[]`/omit when `department` has none or
+ * the caller hasn't loaded them. Case/whitespace-insensitive, same as every
+ * other department-name comparison (college/departments already enforces
+ * name uniqueness case-insensitively, so this can never conflate two
+ * different real departments).
  *
  * Every write path that accepts a free-typed or otherwise client-supplied
  * Secondary Department (bulk student import's unassigned rows, the manual
- * Add Student unassigned path, and the roster-details edit path) must check
- * this - without it, a student can be saved cross-listed to a branch the
- * department never actually configured (e.g. "Physics" registering a student
- * to "civil engineering", which Physics doesn't cross-list to at all), and
- * that bogus value then surfaces as a real-looking option everywhere
- * Secondary Department values get read back out of existing students (e.g.
- * the Distribute Unassigned dialog's branch picker).
+ * Add Student unassigned path, the roster-details edit path, and section
+ * creation's own Secondary Department) must check this - without it, a
+ * student can be saved cross-listed to a branch the department never
+ * actually configured (e.g. "Physics" registering a student to "civil
+ * engineering", which Physics doesn't cross-list to at all), and that bogus
+ * value then surfaces as a real-looking option everywhere Secondary
+ * Department values get read back out of existing students (e.g. the
+ * Distribute Unassigned dialog's branch picker).
  */
 export function isConfiguredSecondaryDepartment(
-  department: { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }> },
-  candidate: string
+  department: {
+    secondaryDepartments?: string[];
+    courseScopes?: Record<string, { secondaryDepartments?: string[] }>;
+    managedDepartments?: string[];
+  },
+  candidate: string,
+  children: { managedDepartments?: string[] }[] = []
 ): boolean {
   const target = candidate.trim().toLowerCase();
   if (!target) return false;
@@ -87,6 +106,10 @@ export function isConfiguredSecondaryDepartment(
   if (matches(department.secondaryDepartments)) return true;
   for (const scope of Object.values(department.courseScopes ?? {})) {
     if (matches(scope.secondaryDepartments)) return true;
+  }
+  if (matches(department.managedDepartments)) return true;
+  for (const child of children) {
+    if (matches(child.managedDepartments)) return true;
   }
   return false;
 }
@@ -105,12 +128,17 @@ export function isConfiguredSecondaryDepartment(
  * rather than here (this file stays pure - no DB access).
  */
 export function isConfiguredSecondaryDepartmentOrChild(
-  department: { secondaryDepartments?: string[]; courseScopes?: Record<string, { secondaryDepartments?: string[] }> },
+  department: {
+    secondaryDepartments?: string[];
+    courseScopes?: Record<string, { secondaryDepartments?: string[] }>;
+    managedDepartments?: string[];
+  },
   candidate: string,
-  candidateParentName?: string
+  candidateParentName?: string,
+  children: { managedDepartments?: string[] }[] = []
 ): boolean {
-  if (isConfiguredSecondaryDepartment(department, candidate)) return true;
-  if (candidateParentName) return isConfiguredSecondaryDepartment(department, candidateParentName);
+  if (isConfiguredSecondaryDepartment(department, candidate, children)) return true;
+  if (candidateParentName) return isConfiguredSecondaryDepartment(department, candidateParentName, children);
   return false;
 }
 

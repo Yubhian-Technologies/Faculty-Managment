@@ -8,8 +8,10 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
+import { RosterDetailView } from "@/components/students/RosterFieldInputs";
 import { toast } from "@/hooks/useToast";
 import type { SectionListItem, StudentRecord, Subject, TeachingAssignment } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
@@ -40,6 +42,10 @@ export default function SectionRosterPage() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Full read-only profile (every roster field, same RosterDetailView the
+  // College Office Students page already shows) - opened by clicking a
+  // roster row below.
+  const [viewTarget, setViewTarget] = useState<StudentRecord | null>(null);
 
   useEffect(() => {
     // isLoading already starts true, so nothing is set synchronously here -
@@ -230,7 +236,11 @@ export default function SectionRosterPage() {
                 </thead>
                 <tbody className="divide-y">
                   {students.map((s) => (
-                    <tr key={s.id}>
+                    <tr
+                      key={s.id}
+                      onClick={() => setViewTarget(s)}
+                      className="cursor-pointer hover:bg-muted/40 transition-colors"
+                    >
                       <td className="px-4 py-2.5 font-mono">{s.rollNumber}</td>
                       <td className="px-4 py-2.5 font-medium">{s.name}</td>
                       {students.some((st) => st.secondaryDepartment) && (
@@ -256,6 +266,30 @@ export default function SectionRosterPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Student detail (full profile, same as College Office sees) ── */}
+      <Dialog open={!!viewTarget} onOpenChange={(open) => { if (!open) setViewTarget(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewTarget?.name}</DialogTitle>
+          </DialogHeader>
+
+          {viewTarget && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Section:</span>
+              <Badge variant="secondary" className="text-xs">{section.name}</Badge>
+              <span className="text-muted-foreground ml-3">Status:</span>
+              <Badge variant="secondary" className="text-xs">{viewTarget.status}</Badge>
+            </div>
+          )}
+
+          {viewTarget && <RosterDetailView student={viewTarget} />}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewTarget(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
