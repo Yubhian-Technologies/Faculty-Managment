@@ -48,7 +48,7 @@ export async function syncTeachingAssignments(
           sectionId: row.sectionId,
           subjectId: row.subjectId,
           hoursPerWeek: row.hoursPerWeek,
-          slots: row.slots.map((s) => ({ day: s.day, periodNumber: s.periodNumber })),
+          slots: row.slots.map((s) => ({ day: s.day, periodNumber: s.periodNumber, ...(s.allowSplit ? { allowSplit: true } : {}) })),
           assignmentAcademicYear: row.assignmentAcademicYear ?? "",
           assignmentSemester: row.assignmentSemester ?? "",
           ...(row.isPast ? {
@@ -116,7 +116,10 @@ export async function syncTeachingAssignments(
       const res = await fetch("/api/college/timetable-slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignmentId: row.id, day: slot.day, periodNumber: slot.periodNumber }),
+        body: JSON.stringify({
+          assignmentId: row.id, day: slot.day, periodNumber: slot.periodNumber,
+          ...(slot.allowSplit ? { allowSplit: true } : {}),
+        }),
       });
       if (!res.ok) errors.push(`Scheduling ${row.subjectName} on ${slot.day} period ${slot.periodNumber}: ${await parseError(res)}`);
     }

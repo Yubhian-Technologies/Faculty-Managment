@@ -8,7 +8,7 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
-import { currentTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { TeachingAssignment, TimetableSlot } from "@/types";
 
@@ -213,7 +213,11 @@ export async function POST(request: Request) {
       section?: string;
       hoursPerWeek?: number;
       totalHoursAllotted?: number;
-      slots?: { day: string; periodNumber: number; classroom?: string }[];
+      // allowSplit - explicit per-slot opt-in for a split period (two+
+      // subjects/faculty sharing one section+day+period). Only set by a
+      // deliberate "add another subject to this period" action; omitted
+      // (the default) keeps today's section-conflict rejection below.
+      slots?: { day: string; periodNumber: number; classroom?: string; allowSplit?: boolean }[];
       // Course/section-scoped only - which of the course-year's configured
       // semesters (see lib/college/semester.ts) this assignment and its
       // slots are for. Omitted when the course-year has none configured, or
@@ -294,7 +298,10 @@ export async function POST(request: Request) {
       // booked here has to be tagged and conflict-checked against the SAME
       // session's own slots, never a past cohort's - see
       // lib/college/academicSession.ts's own doc-comment.
-      const currentAcademicYear = currentTimetableAcademicYear();
+      const sessionSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+      const currentAcademicYear = resolveTimetableAcademicYear(
+        sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
+      );
 
       // Conflict check: this faculty already teaching this exact section+subject
       // IN THIS SAME SEMESTER? Only applies to current assignments - past ones
@@ -362,12 +369,14 @@ export async function POST(request: Request) {
           // (day+period narrows this to at most a couple of docs already)
           // and matched in application code for the same null-tolerant
           // semantics used everywhere else this concept appears.
-          const conflictSnap = await collegeRef.collection("timetableSlots")
+          // Skipped entirely when this specific slot opts into a split
+          // period (see slots' own allowSplit doc-comment above).
+          const conflictSnap = slot.allowSplit ? null : await collegeRef.collection("timetableSlots")
             .where("sectionId", "==", sectionId)
             .where("day", "==", slot.day)
             .where("periodNumber", "==", slot.periodNumber)
             .get();
-          const conflict = conflictSnap.docs.find((d) => {
+          const conflict = conflictSnap?.docs.find((d) => {
             const data = d.data() as { semester?: number | null; academicYear?: string };
             return matchesCurrentSemester(data.semester, timetableSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear);
           });

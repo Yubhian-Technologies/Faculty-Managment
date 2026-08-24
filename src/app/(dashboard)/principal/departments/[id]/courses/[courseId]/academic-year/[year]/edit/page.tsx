@@ -6,10 +6,10 @@ import { CalendarClock } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
-import { resolveCurrentAcademicYear } from "@/lib/college/academicSession";
+import { resolveCurrentAcademicYear, recentAcademicYearOptions } from "@/lib/college/academicSession";
 import type { AcademicSession, Course, CourseAcademicYear } from "@/types";
 
 // "2025-2026" -> "2026-2027"; falls back to blank if the label isn't in that shape.
@@ -33,6 +33,19 @@ export default function CourseAcademicYearPage() {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Advancing an existing, well-formed label has exactly one sane next value
+  // (suggestNextLabel) - the field is locked to it rather than left freely
+  // editable. A legacy label that doesn't parse has no "next" to suggest, so
+  // that case (and first-time setup) instead offers the same small,
+  // well-formed option list every other session picker in the app uses,
+  // pre-selected on the college's real current session - it's never left as
+  // a blank free-text box.
+  const suggestedNext = existing ? suggestNextLabel(existing.label) : "";
+  const isLocked = !!existing && !!suggestedNext;
+  const labelOptions = isLocked
+    ? [suggestedNext]
+    : Array.from(new Set([collegeYear, ...recentAcademicYearOptions()].filter(Boolean)));
+
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -53,8 +66,11 @@ export default function CourseAcademicYearPage() {
         setExisting(found);
         // First-time setup takes the college's current year rather than an empty
         // box. An advance still suggests one on from whatever this course-year
-        // is actually on, which isn't necessarily the college's current year.
-        setLabel(found ? suggestNextLabel(found.label) : current);
+        // is actually on, which isn't necessarily the college's current year -
+        // unless that existing label doesn't parse at all (legacy free text),
+        // in which case there's nothing to suggest and this falls back to the
+        // same college-current default first-time setup uses.
+        setLabel(found ? (suggestNextLabel(found.label) || current) : current);
       } catch {
         toast({ variant: "destructive", title: "Failed to load academic year" });
       } finally {
@@ -136,11 +152,12 @@ export default function CourseAcademicYearPage() {
             )}
             <div className="space-y-2">
               <Label>Academic Year Label</Label>
-              <Input
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="e.g. 2025-2026"
-              />
+              <Select value={label} onValueChange={setLabel} disabled={isLocked}>
+                <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
+                <SelectContent>
+                  {labelOptions.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

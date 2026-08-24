@@ -541,10 +541,10 @@ export interface CourseCatalogItem {
   name: string; // canonical name, e.g. "Bachelor of Technology"
   code: string; // "BTECH"
   durationYears: number; // e.g. 4, 2
-  // Subset of the college's declared AcademicRegulationSettings.regulations
-  // (colleges/{collegeId}/settings/academicRegulations) that this course
-  // actually uses (e.g. B.Tech -> R20/R23, B.Pharm -> R19/R22) - a different
-  // course can have an entirely different set. Empty/absent until the
+  // Curriculum regulation codes (e.g. R20, R23) this course uses - a different
+  // course can have an entirely different set. Created directly here (typing a
+  // new code registers it, typing an existing one reuses it - no separate
+  // college-wide "declare a regulation" step). Empty/absent until the
   // Principal assigns at least one here, which blocks the Dean from adding
   // subjects to any Course created from this catalog entry (see
   // api/college/subjects POST) until it's set.
@@ -720,28 +720,6 @@ export interface FacultyNorms {
   // must complete before converting into their vacation/non-vacation leave
   // category - see src/lib/leave/categoryEngine.ts.
   newJoiningYears: number;
-  updatedAt?: Timestamp;
-  updatedByName?: string;
-}
-
-// ─── Academic Regulations ─────────────────────────────────────────────────────
-// A college's curriculum "regulation" (e.g. R20, R23) usually changes only for
-// incoming batches, so the 1st through 4th year of study can each be running a
-// different regulation at the same time. The Principal maintains the college-
-// wide list of regulation codes in use here; WHICH of them apply to a given
-// course, and to which of that course's own years, is set per-course on its
-// Course Catalog entry instead (CourseCatalogItem.regulations/regulationYears,
-// see lib/college/academicStructure.ts's regulationsForYear) - not here, since
-// different courses can legitimately run different regulations at once.
-export interface AcademicRegulationSettings {
-  regulations: string[];
-  // Human-readable intake range each regulation code covers (e.g.
-  // "R23" -> "2024-2028") - purely descriptive, keyed by regulation code, one
-  // batch per regulation. Shown wherever the regulation itself is shown (see
-  // RegulationSettingsCard) so a Dean reading a course-year's auto-resolved
-  // regulation (see regulationsForYear in lib/college/academicStructure.ts)
-  // also sees which batch it belongs to, without picking it manually.
-  regulationBatches?: Record<string, string>;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }

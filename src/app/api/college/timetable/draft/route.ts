@@ -96,6 +96,12 @@ function validatePlacement(
     // periods with breaks allowed once the plain check rejects them for
     // that reason alone. Omitted uses the college's own configured rule.
     allowAcrossBreaks?: boolean;
+    // Explicit opt-in for a split period (two+ subjects/faculty sharing one
+    // section+day+period) - only ever set by the manual "add" action below
+    // when a human deliberately chose to add another subject to an already-
+    // occupied cell, never by the auto-generator. Skips ONLY the
+    // already-occupied check; pinned/faculty-busy/daily-cap still apply.
+    allowSplit?: boolean;
   },
 ): string | null {
   const { timing, rules } = ctx;
@@ -123,7 +129,7 @@ function validatePlacement(
     const p = startPeriod + i;
     const key = cellKey(day, p);
     if (pinned.has(key)) return `Period ${p} on ${day} holds a pinned slot.`;
-    if (occupied.has(key)) return `This section already has a subject at ${day} period ${p}.`;
+    if (occupied.has(key) && !opts.allowSplit) return `This section already has a subject at ${day} period ${p}.`;
     if (facultyBusy.has(key)) {
       return `${facultyName} is already teaching another section at ${day} period ${p}.`;
     }
@@ -442,6 +448,9 @@ export async function PATCH(request: Request) {
       toDay?: string;
       toPeriod?: number;
       semester?: number;
+      // "add" only - explicit opt-in for a split period (see validatePlacement's
+      // own doc-comment). Ignored for "move"/"remove".
+      allowSplit?: boolean;
     };
 
     const { sectionId, assignmentId } = body;
@@ -527,6 +536,7 @@ export async function PATCH(request: Request) {
         startPeriod: placeAt,
         blockSize,
         ignore: new Set<string>(),
+        allowSplit: body.allowSplit,
       };
       const problem = validatePlacement(ctx, draft, placementOpts);
       if (problem) {

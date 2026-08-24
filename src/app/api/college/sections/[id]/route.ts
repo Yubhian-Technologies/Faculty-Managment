@@ -9,6 +9,7 @@ import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { parseBatchStartYear, deriveBatch } from "@/lib/college/academicSession";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { DepartmentCourseScope } from "@/types";
 
@@ -296,7 +297,24 @@ export async function PATCH(
 
     if (body.name != null) updates.name = body.name.trim().toUpperCase();
     if (body.year != null) updates.year = Number(body.year);
-    if (body.batch != null) updates.batch = body.batch.trim();
+    if (body.batch != null) {
+      // Same normalization as create (sections/route.ts POST): a parseable
+      // admission year is rewritten against this course's own durationYears
+      // rather than trusting whatever end year the client sent; anything
+      // that doesn't parse is kept as-is.
+      const parsedBatchStart = parseBatchStartYear(body.batch.trim());
+      if (parsedBatchStart != null) {
+        if (!course) {
+          const batchCourseId = courseId ?? "";
+          const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(batchCourseId).get();
+          if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+          course = courseSnap.data() as { name: string; durationYears: number; departmentId?: string; catalogId?: string };
+        }
+        updates.batch = deriveBatch(parsedBatchStart, course.durationYears);
+      } else {
+        updates.batch = body.batch.trim();
+      }
+    }
     if (body.studentCount != null) updates.studentCount = Math.max(0, Number(body.studentCount));
     if ("facultyInchargeUid" in body) {
       // See sections/route.ts POST - the picker supplies a FacultyMember doc

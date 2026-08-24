@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
-import { currentTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import type { DayOfWeek, TimetableSlot } from "@/types";
 
@@ -44,7 +44,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: semesterResult.error }, { status: 400 });
     }
     const currentSemester = semesterResult.semester;
-    const currentAcademicYear = currentTimetableAcademicYear();
+    const currentSessionSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+    const currentAcademicYear = resolveTimetableAcademicYear(
+      currentSessionSnap.empty ? undefined : (currentSessionSnap.docs[0].data() as { label?: string }).label
+    );
     const requestedAcademicYear = academicYearParam || currentAcademicYear;
     // Explicitly browsing an OLDER session (Timetable History) needs strict
     // equality, not the usual null-tolerant match - an untagged/legacy slot
@@ -103,6 +106,12 @@ export async function POST(request: Request) {
       day: DayOfWeek;
       periodNumber: number;
       classroom?: string;
+      // Explicit opt-in for a split period (two+ subjects/faculty sharing
+      // one section+day+period, e.g. half the section in an English Lab and
+      // half in a Chemistry Lab at once) - only set by a deliberate "add
+      // another subject to this period" action, never inferred, so an
+      // ordinary double-booking still gets rejected below by default.
+      allowSplit?: boolean;
     };
 
     const { assignmentId, day, periodNumber } = body;
@@ -148,22 +157,27 @@ export async function POST(request: Request) {
     const assignmentSemester = assignment.timetableSemester
       ?? await resolveSectionCurrentSemester(db, session.collegeId, assignment.courseId, assignment.year);
     // This session - same reasoning as teaching-assignments/route.ts POST.
-    const currentAcademicYear = currentTimetableAcademicYear();
+    const sessionSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+    const currentAcademicYear = resolveTimetableAcademicYear(
+      sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
+    );
 
-    const conflictSnap = await collegeRef.collection("timetableSlots")
-      .where("sectionId", "==", assignment.sectionId)
-      .where("day", "==", day)
-      .where("periodNumber", "==", Number(periodNumber))
-      .get();
-    const conflict = conflictSnap.docs.some((d) => {
-      const data = d.data() as TimetableSlot;
-      return matchesCurrentSemester(data.semester, assignmentSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear);
-    });
-    if (conflict) {
-      return NextResponse.json(
-        { error: `Conflict: this section already has a subject scheduled on ${day} period ${periodNumber}` },
-        { status: 409 }
-      );
+    if (!body.allowSplit) {
+      const conflictSnap = await collegeRef.collection("timetableSlots")
+        .where("sectionId", "==", assignment.sectionId)
+        .where("day", "==", day)
+        .where("periodNumber", "==", Number(periodNumber))
+        .get();
+      const conflict = conflictSnap.docs.some((d) => {
+        const data = d.data() as TimetableSlot;
+        return matchesCurrentSemester(data.semester, assignmentSemester) && matchesCurrentAcademicYear(data.academicYear, currentAcademicYear);
+      });
+      if (conflict) {
+        return NextResponse.json(
+          { error: `Conflict: this section already has a subject scheduled on ${day} period ${periodNumber}` },
+          { status: 409 }
+        );
+      }
     }
 
     // A faculty member can't teach two classes at once - block regardless of

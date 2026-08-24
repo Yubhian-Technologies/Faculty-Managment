@@ -511,7 +511,25 @@ export async function POST(request: Request) {
         // rely on a dropdown constraining it the way Gender/Scholarship etc.
         // already do.
         if (typeof body.semester === "string" && body.semester.trim()) {
-          const semesterError = validateYearSemesterConsistency(Number(body.year), Number(body.semester.match(/\d+/)?.[0]));
+          // Widths default to 2/year unless this course-year actually has a
+          // CourseYearTiming doc configuring a different semester count -
+          // see validateYearSemesterConsistency's own doc-comment for why
+          // this is looked up per-year rather than assumed uniform.
+          const timingsSnap = await collegeRef
+            .collection("courseYearTimings")
+            .where("courseId", "==", courseId)
+            .where("year", "<=", Number(body.year))
+            .get();
+          const semesterCountsByYear: Record<number, number> = {};
+          for (const d of timingsSnap.docs) {
+            const t = d.data() as { year: number; semesters?: unknown[] };
+            semesterCountsByYear[t.year] = (t.semesters ?? []).length;
+          }
+          const semesterError = validateYearSemesterConsistency(
+            Number(body.year),
+            Number(body.semester.match(/\d+/)?.[0]),
+            semesterCountsByYear
+          );
           if (semesterError) {
             return NextResponse.json({ error: semesterError }, { status: 400 });
           }

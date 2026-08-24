@@ -45,11 +45,11 @@ export interface Subject {
   // created before this field existed or via the HOD's own Subjects page.
   academicYear?: string;
   // The curriculum regulation this subject's syllabus follows (e.g. "R20",
-  // "R23") - one of the college's declared AcademicRegulationSettings.regulations
-  // (colleges/{collegeId}/settings/academicRegulations). Different batches of
+  // "R23") - one of the owning course's own Course Catalog regulations
+  // (CourseCatalogItem.regulations/regulationYears). Different batches of
   // the same year-of-study can be on different regulations at once (e.g. a
   // transition year), so this is set per-subject rather than inherited from
-  // Settings' one-regulation-per-year default. Required for course/year-scoped
+  // a single default. Required for course/year-scoped
   // subjects going forward (enforced in POST); absent on semester-scoped
   // subjects (no course/year link to hang a regulation off of) and on subjects
   // created before this field existed, until backfilled - see

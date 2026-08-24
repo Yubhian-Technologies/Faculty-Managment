@@ -16,6 +16,10 @@ export interface StagedSlot {
   id?: string;
   day: DayOfWeek;
   periodNumber: number;
+  // Set when this slot was deliberately placed onto a cell another subject
+  // already occupies (a split period) - see toggleSlot below and
+  // syncTeachingAssignments.ts, which forwards it to the create-slot APIs.
+  allowSplit?: boolean;
 }
 
 export interface StagedTeachingRow {
@@ -189,12 +193,12 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
     });
   }
 
-  function toggleSlot(row: StagedTeachingRow, day: DayOfWeek, periodNumber: number) {
+  function toggleSlot(row: StagedTeachingRow, day: DayOfWeek, periodNumber: number, allowSplit = false) {
     const exists = row.slots.find((s) => s.day === day && s.periodNumber === periodNumber);
     if (!exists && row.slots.length >= row.hoursPerWeek) return; // cap reached - hours/week defines the slot count
     const slots = exists
       ? row.slots.filter((s) => !(s.day === day && s.periodNumber === periodNumber))
-      : [...row.slots, { localId: newLocalId(), day, periodNumber }];
+      : [...row.slots, { localId: newLocalId(), day, periodNumber, ...(allowSplit ? { allowSplit: true } : {}) }];
     updateRow(row.localId, { slots });
   }
 
@@ -439,26 +443,30 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                               const sectionConflict = occupied.some(
                                 (s) => s.day === d && s.periodNumber === p && s.assignmentId !== row.id
                               );
+                              // A section conflict is still selectable - it's a split period (two+
+                              // subjects/faculty sharing this cell), a deliberate choice, not an
+                              // error - only a genuine faculty double-booking hard-blocks below.
                               const selfConflict = !selected && facultyBusyElsewhere.has(`${d}_${p}`);
-                              const takenByOther = sectionConflict || selfConflict;
                               const capReached = !selected && row.slots.length >= row.hoursPerWeek;
-                              const disabled = takenByOther || capReached;
+                              const disabled = selfConflict || capReached;
                               return (
                                 <td key={d} className="p-1">
                                   <button
                                     type="button"
                                     disabled={disabled}
-                                    onClick={() => toggleSlot(row, d, p)}
+                                    onClick={() => toggleSlot(row, d, p, sectionConflict)}
                                     className={`h-6 w-10 rounded border text-[10px] transition-colors ${
                                       selected
                                         ? "bg-primary text-primary-foreground border-primary"
                                         : disabled
                                           ? "bg-muted text-muted-foreground cursor-not-allowed"
-                                          : "bg-background hover:bg-muted border-border"
+                                          : sectionConflict
+                                            ? "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+                                            : "bg-background hover:bg-muted border-border"
                                     }`}
                                     title={
                                       sectionConflict
-                                        ? "Already occupied for this section"
+                                        ? "Another subject already occupies this period - selecting it creates a split period"
                                         : selfConflict
                                           ? "This faculty already teaches another class at this time (different section/year)"
                                           : capReached
@@ -466,7 +474,7 @@ export function TeachingAssignmentsEditor({ value, onChange }: Props) {
                                             : undefined
                                     }
                                   >
-                                    {selected ? "✓" : takenByOther ? "✕" : ""}
+                                    {selected ? "✓" : selfConflict ? "✕" : sectionConflict ? "⚡" : ""}
                                   </button>
                                 </td>
                               );

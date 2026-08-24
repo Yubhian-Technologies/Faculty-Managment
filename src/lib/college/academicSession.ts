@@ -13,59 +13,21 @@ export function academicSessionLabel(startYear: number): string {
 }
 
 /** "2024-2028" -> 2024 (the intake/start year). Null if the label doesn't start with a 4-digit year. */
-function parseBatchStartYear(batch: string): number | null {
+export function parseBatchStartYear(batch: string): number | null {
   const m = batch.match(/^(\d{4})/);
   return m ? Number(m[1]) : null;
 }
 
-/**
- * Every intake year a regulation's batch field covers. One regulation commonly
- * runs for several consecutive intakes ("2024-2028,2025-2029" - R23 governing
- * both the 2024 and 2025 admissions), so the field is a comma-separated list
- * and each entry contributes its own start year.
- *
- * Previously only the first entry was read, which meant a second batch typed
- * after a comma was stored but never took effect - the regulation simply
- * didn't resolve for that cohort's year.
- */
-export function parseBatchStartYears(batch: string): number[] {
-  return batch
-    .split(",")
-    .map((part) => parseBatchStartYear(part.trim()))
-    .filter((y): y is number => y != null);
+// The intake year a course-year sits in AS OF a given session - e.g. a 2nd
+// Year course-year in session-start 2026 was admitted in 2025. Feeds
+// deriveBatch below for Section.batch derivation.
+export function admissionStartYearForCourseYear(asOfStartYear: number, courseYear: number): number {
+  return asOfStartYear - courseYear + 1;
 }
 
-// Which regulation code governs ordinal course-year `courseYear` (1-based -
-// 1st Year, 2nd Year, ...) AS OF a given session, derived purely from each
-// regulation's own Batch (intake range, e.g. "2024-2028" - see
-// AcademicRegulationSettings.regulationBatches) versus that session, with no
-// per-course configuration needed at all. A batch starting in year Y sits in
-// ordinal year `asOfStartYear - Y + 1` for the session starting `asOfStartYear`;
-// this returns every regulation whose batch computes to exactly `courseYear`
-// for that session - normally exactly one, since each admission year has its
-// own regulation, but callers should treat more than one as "ambiguous, ask
-// the Principal to fix the batches" rather than silently picking the first.
-// `asOfStartYear` defaults to the real current session (unchanged from
-// before this param existed) - dean/subjects/page.tsx passes its own
-// Academic Year selector's session instead, so a Dean can browse which
-// regulation covered a year in a past or future session, not just today's.
-// Used by dean/subjects/page.tsx only - other pages (HOD Subjects, Sections)
-// still use the older, per-course Course Catalog regulationYears mechanism
-// (see regulationsForYear in academicStructure.ts).
-export function regulationsForCourseYearByBatch(
-  regulationBatches: Record<string, string>,
-  courseYear: number,
-  asOfStartYear: number = currentAcademicStartYear(),
-): string[] {
-  const matches: string[] = [];
-  for (const [code, batch] of Object.entries(regulationBatches)) {
-    // Any one of the regulation's batches landing on this course-year is
-    // enough - they're consecutive intakes of the same regulation, so at most
-    // one of them can occupy a given year in a given session anyway.
-    const hit = parseBatchStartYears(batch).some((start) => asOfStartYear - start + 1 === courseYear);
-    if (hit) matches.push(code);
-  }
-  return matches;
+/** "2026-2030" - a course's own intake batch, from admission year + how many years it runs. */
+export function deriveBatch(admissionStartYear: number, durationYears: number): string {
+  return `${admissionStartYear}-${admissionStartYear + durationYears}`;
 }
 
 // A handful of sessions to choose from - two years back through one year
@@ -85,13 +47,26 @@ export function recentAcademicSessions(): string[] {
 // (see timetable/publish/route.ts) so a NEW cohort's published timetable
 // never silently deletes or gets confused with the PREVIOUS cohort's, and so
 // Timetable History can tell them apart.
-// NOTE: pure date-only resolution, unlike resolveCurrentAcademicYear below
-// (which honors a Principal-configured override) - the timetable/subject
-// callers of this are synchronous and don't have that stored setting loaded.
-// Worth reconciling the two later if a college's session ever needs to
-// diverge from the April cutoff for timetable purposes too.
+// Pure date-only fallback, used directly only by the one genuinely
+// synchronous, no-Firestore-at-hand caller (TimetableHistoryPanel.tsx, a
+// read-only session-picker filter) - every write/read path that has a `db`
+// and `collegeId` in scope should call resolveTimetableAcademicYear below
+// instead, so a Principal's override (see resolveCurrentAcademicYear) is
+// actually honored.
 export function currentTimetableAcademicYear(now: Date = new Date()): string {
   return academicSessionLabel(now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1);
+}
+
+// Override-aware counterpart to currentTimetableAcademicYear, in the same
+// short "2026-27" shape every timetable/teaching-assignment/leave/holiday
+// caller already stores and compares against (so no downstream comparison
+// changes shape). `storedCurrentLabel` is whichever academicSessions doc has
+// isCurrent:true (same doc resolveCurrentAcademicYear reads, just in short
+// form here) - pass null/undefined when none exists yet, which falls back to
+// today's pure date math exactly as before this function existed.
+export function resolveTimetableAcademicYear(storedCurrentLabel?: string | null, now: Date = new Date()): string {
+  const stored = parseAcademicYearStart(storedCurrentLabel);
+  return stored != null ? academicSessionLabel(stored) : currentTimetableAcademicYear(now);
 }
 
 // Same null-tolerant convention as lib/college/semester.ts's

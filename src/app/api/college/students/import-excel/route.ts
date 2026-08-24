@@ -109,11 +109,23 @@ export async function POST(request: Request) {
       hodScope = await getHodDepartmentScope(db, collegeId, session.uid);
     }
 
-    const [sectionsSnap, departmentsSnap, coursesSnap] = await Promise.all([
+    const [sectionsSnap, departmentsSnap, coursesSnap, courseYearTimingsSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("sections").get(),
       db.collection("colleges").doc(collegeId).collection("departments").get(),
       db.collection("colleges").doc(collegeId).collection("courses").get(),
+      db.collection("colleges").doc(collegeId).collection("courseYearTimings").get(),
     ]);
+    // Per-course, per-year configured semester count, for the Year<->Semester
+    // check below - a single whole-collection prefetch (not a per-row query,
+    // per this route's own no-per-row-DB-call convention) feeding
+    // validateYearSemesterConsistency's optional width override.
+    const semesterCountsByCourse = new Map<string, Record<number, number>>();
+    for (const d of courseYearTimingsSnap.docs) {
+      const t = d.data() as { courseId: string; year: number; semesters?: unknown[] };
+      const byYear = semesterCountsByCourse.get(t.courseId) ?? {};
+      byYear[t.year] = (t.semesters ?? []).length;
+      semesterCountsByCourse.set(t.courseId, byYear);
+    }
     // Section name + year alone isn't unique college-wide - two different
     // departments can each have a "Section A, Year 1" - so every name::year
     // key keeps *all* matching sections, not just the last one seen, and a
@@ -520,7 +532,11 @@ export async function POST(request: Request) {
         const resolvedCourseDoc = resolvedCourseId ? plainCourses.find((c) => c.id === resolvedCourseId) : undefined;
         const yearDurationError = validateYearForCourseDuration(Number(row.year), resolvedCourseDoc?.durationYears, resolvedCourse);
         if (yearDurationError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearDurationError }); continue; }
-        const yearSemesterError = validateYearSemesterConsistency(Number(row.year), row.semester ? Number(row.semester.match(/\d+/)?.[0]) : undefined);
+        const yearSemesterError = validateYearSemesterConsistency(
+          Number(row.year),
+          row.semester ? Number(row.semester.match(/\d+/)?.[0]) : undefined,
+          resolvedCourseId ? semesterCountsByCourse.get(resolvedCourseId) : undefined
+        );
         if (yearSemesterError) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: yearSemesterError }); continue; }
 
         // The Office doesn't know roll numbers yet, so they're optional here.
@@ -739,7 +755,11 @@ export async function POST(request: Request) {
       // REAL section - so there's nothing left to check there. Year <->
       // Semester consistency isn't tied to sections at all though, so it
       // still needs its own check here, same as the unassigned path.
-      const placedYearSemesterError = validateYearSemesterConsistency(section.year, row.semester ? Number(row.semester.match(/\d+/)?.[0]) : undefined);
+      const placedYearSemesterError = validateYearSemesterConsistency(
+        section.year,
+        row.semester ? Number(row.semester.match(/\d+/)?.[0]) : undefined,
+        semesterCountsByCourse.get(section.courseId)
+      );
       if (placedYearSemesterError) { failed.push({ row: rowNum, rollNumber: row.rollNumber, error: placedYearSemesterError }); continue; }
 
       const docRef = studentsColl.doc();

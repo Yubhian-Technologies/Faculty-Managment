@@ -130,6 +130,7 @@ export const NAV_ITEMS: NavItem[] = [
   // same hiring request, not independent destinations.
   { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Hiring Pipeline" },
   { label: "Departments", href: "/principal/departments", iconName: "BookOpen", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academic Management" },
+  { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Student Promotion", href: "/principal/promotions", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Graduated Students", href: "/principal/graduates", iconName: "Award", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -159,7 +160,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
   { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
-  { label: "Regulations & Batches", href: "/hod/settings/regulations", iconName: "ScrollText", roles: ["HOD"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
   { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"] },

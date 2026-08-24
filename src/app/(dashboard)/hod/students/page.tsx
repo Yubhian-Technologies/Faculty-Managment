@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { RosterDetailView, yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
+import { yearOptionsForDepartment, yearOptionsForCourse } from "@/components/students/RosterFieldInputs";
 import { structureFromDepartments, noOwnSectionsChildren, expandDepartmentNameForRollup, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
 import { disambiguateSectionLabels, sectionFeedsTarget } from "@/lib/sections/sectionLabel";
@@ -89,11 +89,6 @@ export default function HodStudentsPage() {
   const [editRoll, setEditRoll] = useState("");
   const [editStatus, setEditStatus] = useState("REGULAR");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-
-  // Full read-only profile (every roster field, same RosterDetailView the
-  // College Office Students page already shows) - opened by clicking a row,
-  // same as Office's own table.
-  const [viewTarget, setViewTarget] = useState<StudentRow | null>(null);
 
   // Per-student section assignment - the same move the bulk Distribute dialog
   // does for a whole cohort, but for one student at a time (e.g. placing the
@@ -957,7 +952,7 @@ export default function HodStudentsPage() {
       <DataTable
         data={isFreshmanView ? incomingFiltered : filtered}
         columns={isFreshmanView ? columns.filter((c) => c.key !== "actions") : columns}
-        onRowClick={setViewTarget}
+        onRowClick={(r) => router.push(`/hod/students/${r.id}`)}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
         searchPlaceholder="Search by roll number or name..."
@@ -994,43 +989,6 @@ export default function HodStudentsPage() {
           </>
         )}
       />
-
-      {/* ── Student detail (full profile, same as College Office sees) ── */}
-      <Dialog open={!!viewTarget} onOpenChange={(open) => { if (!open) setViewTarget(null); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{viewTarget?.name}</DialogTitle>
-          </DialogHeader>
-
-          {viewTarget && (
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Section:</span>
-              {viewTarget.section
-                ? <Badge variant="secondary" className="text-xs">{viewTarget.section}</Badge>
-                : <span className="italic text-muted-foreground">Unassigned</span>}
-              <span className="text-muted-foreground ml-3">Status:</span>
-              <Badge variant="secondary" className="text-xs">{viewTarget.status}</Badge>
-              {viewTarget.accessLevel === "secondary" && (
-                <Badge variant="outline" className="text-xs">View only</Badge>
-              )}
-            </div>
-          )}
-
-          {viewTarget && <RosterDetailView student={viewTarget} />}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewTarget(null)}>Close</Button>
-            {/* Not offered for a merely cross-listed (view-only) row - see the
-                Freshman's Department selector above; only this HOD's own
-                students (accessLevel "primary") are theirs to edit. */}
-            {viewTarget && viewTarget.accessLevel !== "secondary" && (
-              <Button onClick={() => { openEdit(viewTarget); setViewTarget(null); }}>
-                <Pencil className="h-4 w-4 mr-2" />Edit
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
         <DialogContent>

@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { loadAcademicRegulations } from "@/lib/firestore/academicRegulations";
 import { validateRegulationYears } from "@/lib/college/academicStructure";
 
 // colleges/{collegeId}/courseCatalog - the Principal's master list of course
@@ -62,16 +61,6 @@ export async function POST(request: Request) {
     const db = getAdminDb();
 
     const regulations = Array.from(new Set((body.regulations ?? []).map((r) => r.trim()).filter(Boolean)));
-    if (regulations.length > 0) {
-      const { regulations: declared } = await loadAcademicRegulations(db, session.collegeId);
-      const invalid = regulations.filter((r) => !declared.includes(r));
-      if (invalid.length > 0) {
-        return NextResponse.json(
-          { error: `Not declared under Settings > Academic Regulations: ${invalid.join(", ")}` },
-          { status: 400 },
-        );
-      }
-    }
     const regulationYearsErr = validateRegulationYears(body.regulationYears, regulations, durationYears);
     if (regulationYearsErr) return NextResponse.json({ error: regulationYearsErr }, { status: 400 });
 
