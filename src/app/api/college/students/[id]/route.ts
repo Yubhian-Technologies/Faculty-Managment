@@ -113,6 +113,41 @@ async function findCurrentSectionDoc(
   return bySecondaryDept.size === 1 ? bySecondaryDept.docs[0] : null;
 }
 
+// A single student's full roster record, for the Student Details page
+// (src/components/students/StudentDetailsPage.tsx) - that page loads fresh
+// on every visit (bookmark/refresh), so it needs its own by-id fetch rather
+// than relying on a row already held in a list page's memory. Same role tier
+// and HOD scope-check as PATCH below, so a details page never shows more
+// than that caller could already see/act on via the list.
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await requireCollegeMember(
+      "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"
+    );
+    const { id } = await params;
+    const db = getAdminDb();
+    const studentSnap = await db.collection("colleges").doc(session.collegeId).collection("students").doc(id).get();
+    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    const student = studentSnap.data() as StudentRecord;
+
+    if (session.role === "HOD") {
+      const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
+      const catalogId = await catalogIdForStudent(db, session.collegeId, student);
+      if (!inHodScope(student.department, student.year, catalogId)) {
+        return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+      }
+    }
+
+    return NextResponse.json({ student: { ...student, id: studentSnap.id } });
+  } catch (err) {
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[college/students/[id] GET]", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireCollegeMember(

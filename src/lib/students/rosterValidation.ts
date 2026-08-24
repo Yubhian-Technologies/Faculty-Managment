@@ -37,19 +37,32 @@ export function validateYearForCourseDuration(
 /**
  * Basic Year <-> Semester sanity check: Year N should only ever pair with
  * Semester (2N-1) or (2N) - Year 1 -> Semester 1/2, Year 2 -> Semester 3/4,
- * and so on. Deliberately just this flat, generic 2-semesters-per-year rule
- * (works for any course duration, not a hardcoded per-course table) - not a
- * real academic-calendar computation (irregular semester numbering, mid-year
- * transfers, etc. are out of scope - see this file's own top-of-file
- * comment). Semester is optional everywhere it's read, so this only fires
+ * and so on. That flat 2-per-year width is only the DEFAULT though -
+ * `semesterCountsByYear` (year -> that year's configured semester count,
+ * i.e. CourseYearTiming.semesters.length for whichever years have a timing
+ * doc) lets a caller override it per year so a course with an irregular
+ * semester count (e.g. a trimester Year 1) validates against what's actually
+ * configured instead of always assuming 2. Widths are summed cumulatively
+ * across years 1..year, matching how StudentRecord.semester has always been
+ * stored (course-global, not reset each year) - CourseYearTiming's own
+ * semester numbers are year-local (reset to 1..count every year, see
+ * CourseYearTimingForm's resizeSemesters) and are never compared directly
+ * here, only their COUNT is used as this year's width. Omitting the map
+ * entirely reproduces the exact old formula, so no caller is forced to
+ * change. Semester is optional everywhere it's read, so this only fires
  * when a row actually supplies one.
  */
-export function validateYearSemesterConsistency(year: number, semester: number | undefined): string | null {
+export function validateYearSemesterConsistency(
+  year: number,
+  semester: number | undefined,
+  semesterCountsByYear?: Record<number, number>
+): string | null {
   if (semester === undefined || !Number.isFinite(semester)) return null;
-  const minSem = (year - 1) * 2 + 1;
-  const maxSem = year * 2;
+  let minSem = 1;
+  for (let y = 1; y < year; y++) minSem += semesterCountsByYear?.[y] ?? 2;
+  const maxSem = minSem + (semesterCountsByYear?.[year] ?? 2) - 1;
   if (semester < minSem || semester > maxSem) {
-    return `Year ${year} + Semester ${semester} is inconsistent - Year ${year} must use Semester ${minSem} or ${maxSem}.`;
+    return `Year ${year} + Semester ${semester} is inconsistent - Year ${year} must use Semester ${minSem}${maxSem > minSem ? `-${maxSem}` : ""}.`;
   }
   return null;
 }

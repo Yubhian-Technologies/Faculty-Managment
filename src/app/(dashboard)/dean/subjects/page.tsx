@@ -11,10 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
-import type { AcademicRegulationSettings, Course, Department, Subject } from "@/types";
+import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { academicSessionLabel, currentAcademicStartYear, regulationsForCourseYearByBatch, recentAcademicSessions, parseAcademicYearStart } from "@/lib/college/academicSession";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
+import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -30,12 +30,10 @@ export default function DeanSubjectsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  // Which intake batches (e.g. "2024-2028,2025-2029") each regulation code
-  // covers, set by the Principal or an HOD (see RegulationSettingsCard). Used
-  // to RESOLVE which regulation governs the selected year - not displayed: the
-  // badge below shows the code alone, since listing every batch a regulation
-  // covers says nothing about the one this particular year resolved through.
-  const [regulationBatches, setRegulationBatches] = useState<Record<string, string>>({});
+  // Course Catalog entries (regulations/regulationYears per course) - used to
+  // resolve which regulation(s) govern the selected course's selected year,
+  // same source hod/sections/new/page.tsx's own regulation picker reads.
+  const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
@@ -44,10 +42,9 @@ export default function DeanSubjectsPage() {
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   // Calendar academic session (e.g. "2026-27") a subject is tagged with when
-  // the Dean adds it, AND what "now" means for resolving which regulation
-  // covers a year below (regulationsForCourseYearByBatch) - defaults to the
-  // real current session, but picking a different one here lets the Dean
-  // browse which regulation covered a year in a past/future session too.
+  // the Dean adds it - purely a record of when it was entered (shown as a
+  // badge), unrelated to which regulation applies (that's resolved from the
+  // course's own Course Catalog entry, not the session - see allowedRegulations).
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
   // Curriculum regulation (e.g. "R20", "R23") subjects for the selected year
   // are filed under - auto-resolved from each regulation's own Batch versus
@@ -76,9 +73,9 @@ export default function DeanSubjectsPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
       .finally(() => setIsLoading(false));
 
-    fetch("/api/college/settings/regulations")
-      .then((r) => r.json() as Promise<{ settings: AcademicRegulationSettings }>)
-      .then(({ settings }) => setRegulationBatches(settings.regulationBatches ?? {}))
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items?: CourseCatalogItem[] }>)
+      .then((d) => setCatalogItems(d.items ?? []))
       .catch(() => {});
   }, []);
 
@@ -107,22 +104,17 @@ export default function DeanSubjectsPage() {
     const assigned = resolveDepartmentCourseScope(courseOwningDepartment, selectedCourse.catalogId).assignedYears;
     return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
   }, [selectedCourse, courseOwningDepartment]);
-  // Whichever regulation(s) govern the selected year AS OF the selected
-  // Academic Year session above (not necessarily today's real date - see
-  // regulationsForCourseYearByBatch), purely from each regulation's own
-  // Batch - not scoped to this specific course at all, since a batch's
-  // course-year is the same for every course. Empty means no year is picked
-  // yet, or no regulation's batch lands on it for that session, which blocks
-  // adding subjects here (see subjects POST).
+  const selectedCatalogItem = useMemo(
+    () => catalogItems.find((c) => c.id === selectedCourse?.catalogId) ?? null,
+    [catalogItems, selectedCourse]
+  );
+  // Whichever regulation(s) this course's own Course Catalog entry declares
+  // for the selected year (regulationYears) - empty means no year is picked
+  // yet, or none/more than one regulation is assigned for it, either of
+  // which blocks adding subjects here (see subjects POST).
   const allowedRegulations = useMemo(
-    () => (selectedYear
-      ? regulationsForCourseYearByBatch(
-          regulationBatches,
-          Number(selectedYear),
-          parseAcademicYearStart(selectedAcademicYear) ?? currentAcademicStartYear(),
-        )
-      : []),
-    [regulationBatches, selectedYear, selectedAcademicYear]
+    () => (selectedYear ? regulationsForYear(selectedCatalogItem, Number(selectedYear)) : []),
+    [selectedCatalogItem, selectedYear]
   );
 
   // Curriculum-table order: by S.No. when set (matches a printed curriculum
@@ -259,37 +251,23 @@ export default function DeanSubjectsPage() {
     setSubjects([]);
   }
 
+  // Purely which session a newly-added subject gets stamped with (shown as a
+  // badge) - the regulation itself no longer depends on this at all (it's
+  // resolved from the course's own Course Catalog entry, not a calendar
+  // batch), so changing session no longer touches selectedRegulation/reloads
+  // subjects.
   function selectAcademicYear(academicYear: string) {
     setSelectedAcademicYear(academicYear);
-    // Re-resolve the auto-picked regulation for the ALREADY-selected year
-    // against the new session - a batch that was the sole match for, say,
-    // 2025-26 may not be for 2026-27, so the regulation (and the subjects
-    // list, which is filtered by it) has to follow the session, not stay
-    // pinned to whatever it resolved to before. No-op until a year is picked.
-    if (!selectedYear) return;
-    const regulationsForThisYear = regulationsForCourseYearByBatch(
-      regulationBatches,
-      Number(selectedYear),
-      parseAcademicYearStart(academicYear) ?? currentAcademicStartYear(),
-    );
-    const regulation = regulationsForThisYear.length === 1 ? regulationsForThisYear[0] : "";
-    setSelectedRegulation(regulation);
-    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, regulation);
   }
 
   function selectYear(year: string) {
     setSelectedYear(year);
-    // Auto-resolved from each regulation's own Batch versus the selected
-    // Academic Year session - unambiguous (exactly one) in the normal case,
-    // else "" (no year picked yet, or an ambiguous/unconfigured batch, both
-    // of which block Add Subject - see allowedRegulations). Computed inline
-    // against `year` rather than reading the allowedRegulations memo, which
-    // still reflects the OLD selectedYear at this point in the same render.
-    const regulationsForThisYear = regulationsForCourseYearByBatch(
-      regulationBatches,
-      Number(year),
-      parseAcademicYearStart(selectedAcademicYear) ?? currentAcademicStartYear(),
-    );
+    // Unambiguous (exactly one) in the normal case, else "" (no year picked
+    // yet, or none/more than one regulation assigned for it, either of which
+    // blocks Add Subject - see allowedRegulations). Computed inline against
+    // `year` rather than reading the allowedRegulations memo, which still
+    // reflects the OLD selectedYear at this point in the same render.
+    const regulationsForThisYear = regulationsForYear(selectedCatalogItem, Number(year));
     const regulation = regulationsForThisYear.length === 1 ? regulationsForThisYear[0] : "";
     setSelectedRegulation(regulation);
     if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, regulation);
@@ -372,8 +350,7 @@ export default function DeanSubjectsPage() {
                 <Label>Regulation</Label>
                 {/* Read-only - auto-resolved from Course Catalog's own
                     regulation-years for this course & year, set by the
-                    Principal (see Settings > Academic Regulations / Course
-                    Catalog). Never picked manually here. */}
+                    Principal. Never picked manually here. */}
                 <div className="flex h-9 items-center gap-1.5 rounded-md border bg-muted/30 px-3">
                   {!selectedYear ? (
                     <span className="text-sm text-muted-foreground">Pick a year first</span>
@@ -416,12 +393,12 @@ export default function DeanSubjectsPage() {
 
                 {allowedRegulations.length === 0 && (
                   <p className="text-sm text-amber-600 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
-                    No regulation&rsquo;s batch currently covers {ordinalYear(Number(selectedYear))} of {selectedCourse.name}. Ask the Principal to set (or fix) a regulation&rsquo;s Batch under Settings &gt; Academic Regulations so it lands on this year, then come back here to add subjects.
+                    No regulation is assigned to {ordinalYear(Number(selectedYear))} of {selectedCourse.name} yet. Ask the Principal to add one under Settings &gt; Course Catalog, then come back here to add subjects.
                   </p>
                 )}
                 {allowedRegulations.length > 1 && (
                   <p className="text-sm text-amber-600 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
-                    More than one regulation&rsquo;s batch currently covers {ordinalYear(Number(selectedYear))} of {selectedCourse.name}. Ask the Principal to fix the overlapping batches under Settings &gt; Academic Regulations before adding subjects here.
+                    More than one regulation covers {ordinalYear(Number(selectedYear))} of {selectedCourse.name}. Ask the Principal to fix the overlapping years under Settings &gt; Course Catalog before adding subjects here.
                   </p>
                 )}
 

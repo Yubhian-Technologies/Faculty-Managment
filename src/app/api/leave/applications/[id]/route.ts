@@ -15,8 +15,10 @@ import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import { validatePeriodSubstitutions, notifySubstitutes, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
+import { notifyAdjustmentAssignees, mergeSubstituteEntry } from "@/lib/leave/adjustmentRequests";
+import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
-import type { LeaveRequest, LeaveActionRecord, OtherLeaveCategory, PeriodSubstitution } from "@/types/leave";
+import type { AdjustmentRequest, LeaveRequest, LeaveActionRecord, OtherLeaveCategory } from "@/types/leave";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -57,12 +59,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const body = (await request.json()) as {
-      action?: "APPROVE" | "REJECT" | "CANCEL" | "ADJUST_COVERAGE";
+      action?: "APPROVE" | "REJECT" | "CANCEL" | "PROPOSE_COVERAGE" | "REVISE_ADJUSTMENT";
       remarks?: string;
       isPaidLeave?: boolean;
       otherLeaveCategory?: OtherLeaveCategory;
       reason?: string;
       periodSubstitutions?: PeriodSubstitutionInput[];
+      // REVISE_ADJUSTMENT only - which declined entry to replace, and who to
+      // replace it with.
+      declinedAssigneeUid?: string;
+      newSubstituteFacultyId?: string;
+      newHandoverUid?: string;
     };
     if (!body.action) {
       return NextResponse.json({ error: "action is required" }, { status: 400 });
@@ -95,7 +102,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       const wasApproved = req.status === "APPROVED";
       if (
-        req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL" &&
+        req.status !== "PENDING_ACCEPTANCE" && req.status !== "PENDING_HOD" && req.status !== "PENDING_PRINCIPAL" &&
         req.status !== "PENDING_MANAGEMENT" && !wasApproved
       ) {
         return NextResponse.json({ error: "Only a pending or approved request can be cancelled" }, { status: 400 });
@@ -155,22 +162,134 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ ok: true });
     }
 
-    // ─── Adjust coverage (already-decided leave only) ───────────────────────
-    // Every substitute pick above (the requester's own at submission, or an
-    // HOD's override while approving) is a snapshot taken at DECISION time.
-    // If the section's timetable is edited/republished afterward - a new
-    // period added to what this faculty member teaches on a day within the
-    // leave range - that new period was never part of the snapshot and
-    // silently shows no coverage on the timetable, with no way to go back
-    // and fix it once the request is already APPROVED. This lets the
-    // department's own HOD (or Principal-tier) revisit an approved leave and
-    // add/change coverage - re-validated fresh against the CURRENT timetable
-    // and current availability (buildPeriodCoverage picks up any newly-added
-    // period automatically), merged over whatever was already recorded so
-    // untouched periods keep their existing substitute.
-    if (body.action === "ADJUST_COVERAGE") {
-      if (req.status !== "APPROVED") {
-        return NextResponse.json({ error: "Only an approved leave request's coverage can be adjusted" }, { status: 400 });
+    // ─── Revise a declined adjustment pick (requester only) ─────────────────
+    // Once a named substitute/handover person declines (see
+    // /api/leave/applications/[id]/adjustment-response), the request stays at
+    // PENDING_ACCEPTANCE and the requester picks someone else here for that
+    // one declined slot - untouched (still-PENDING or already-ACCEPTED)
+    // entries are left exactly as they are.
+    if (body.action === "REVISE_ADJUSTMENT") {
+      if (req.uid !== session.uid) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (req.status !== "PENDING_ACCEPTANCE") {
+        return NextResponse.json({ error: "This request is no longer awaiting acceptance" }, { status: 400 });
+      }
+      const declined = (req.adjustmentRequests ?? []).find(
+        (a) => a.assigneeUid === body.declinedAssigneeUid && a.status === "DECLINED"
+      );
+      if (!declined) {
+        return NextResponse.json({ error: "No declined pick found to revise" }, { status: 400 });
+      }
+
+      let periodSubstitutions = req.periodSubstitutions;
+      let handoverToUid = req.handoverToUid;
+      let handoverToName = req.handoverToName;
+      // Everything except the declined entry, to start - the SUBSTITUTE
+      // branch below re-adds it back with just its still-ACCEPTED periods
+      // (if any), since a decline never touches periods this same person
+      // already accepted within the same bundle.
+      let adjustmentRequests = (req.adjustmentRequests ?? []).filter((a) => a.assigneeUid !== declined.assigneeUid);
+      let newEntry: AdjustmentRequest;
+
+      if (declined.kind === "SUBSTITUTE") {
+        if (!body.newSubstituteFacultyId || !req.department) {
+          return NextResponse.json({ error: "newSubstituteFacultyId is required" }, { status: 400 });
+        }
+        const declinedPeriods = (declined.periods ?? []).filter((p) => p.status === "DECLINED");
+        const acceptedPeriods = (declined.periods ?? []).filter((p) => p.status === "ACCEPTED");
+        if (declinedPeriods.length === 0) {
+          return NextResponse.json({ error: "Nothing declined on this pick to revise" }, { status: 400 });
+        }
+        if (acceptedPeriods.length > 0) {
+          // The declined person's still-accepted periods stay theirs -
+          // reassigning is only for the ones they turned down.
+          adjustmentRequests.push({ ...declined, periods: acceptedPeriods, status: "ACCEPTED" });
+        }
+
+        const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, req.uid);
+        const reqFromDate = (req.fromDate as unknown as { toDate(): Date }).toDate();
+        const reqToDate = (req.toDate as unknown as { toDate(): Date }).toDate();
+        const holidayDates = await getHolidayDateKeys(db, session.collegeId, reqFromDate, reqToDate);
+        const result = await validatePeriodSubstitutions({
+          db, collegeId: session.collegeId, facultyMemberId, department: req.department,
+          fromDate: reqFromDate, toDate: reqToDate, holidayDates,
+          submitted: declinedPeriods.map((p) => ({ date: p.date, timetableSlotId: p.timetableSlotId, substituteFacultyId: body.newSubstituteFacultyId! })),
+          mode: "PARTIAL",
+        });
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error }, { status: 400 });
+        }
+        const byKey = new Map((req.periodSubstitutions ?? []).map((p) => [`${p.date}|${p.timetableSlotId}`, p]));
+        for (const p of result.resolved) byKey.set(`${p.date}|${p.timetableSlotId}`, p);
+        periodSubstitutions = Array.from(byKey.values());
+
+        const newUid = await resolveLoginUidForFacultyMember(db, session.collegeId, body.newSubstituteFacultyId);
+        if (!newUid || newUid === body.newSubstituteFacultyId) {
+          return NextResponse.json({ error: "That faculty member has no login yet and can't be asked to accept" }, { status: 400 });
+        }
+        const newPeriods = result.resolved.map((p) => ({ date: p.date, timetableSlotId: p.timetableSlotId, status: "PENDING" as const }));
+        // The new pick might already be covering OTHER periods on this same
+        // leave - merge rather than create a second entry for them, so they
+        // still only ever see one combined request.
+        const existingForNewUid = adjustmentRequests.find((a) => a.assigneeUid === newUid && a.kind === "SUBSTITUTE");
+        if (existingForNewUid) {
+          adjustmentRequests = adjustmentRequests.filter((a) => a !== existingForNewUid);
+          newEntry = { ...existingForNewUid, periods: [...(existingForNewUid.periods ?? []), ...newPeriods], status: "PENDING" };
+        } else {
+          newEntry = {
+            kind: "SUBSTITUTE", assigneeUid: newUid,
+            assigneeName: result.resolved[0]?.substituteFacultyName ?? "Unknown",
+            assigneeFacultyId: body.newSubstituteFacultyId, periods: newPeriods, status: "PENDING",
+          };
+        }
+      } else {
+        if (!body.newHandoverUid) {
+          return NextResponse.json({ error: "newHandoverUid is required" }, { status: 400 });
+        }
+        if (body.newHandoverUid === req.uid) {
+          return NextResponse.json({ error: "You can't hand over to yourself" }, { status: 400 });
+        }
+        const handoverSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("users").doc(body.newHandoverUid).get();
+        const handoverData = handoverSnap.data() as { name?: string; department?: string } | undefined;
+        if (!handoverSnap.exists || !req.department || handoverData?.department !== req.department) {
+          return NextResponse.json({ error: "Pick a handover contact from your own department" }, { status: 400 });
+        }
+        handoverToUid = body.newHandoverUid;
+        handoverToName = handoverData?.name ?? "Unknown";
+        newEntry = { kind: "HANDOVER", assigneeUid: handoverToUid, assigneeName: handoverToName, status: "PENDING" };
+      }
+
+      adjustmentRequests = adjustmentRequests.concat(newEntry);
+
+      await ref.update({
+        adjustmentRequests,
+        ...(periodSubstitutions ? { periodSubstitutions } : {}),
+        ...(handoverToUid ? { handoverToUid, handoverToName } : {}),
+        updatedAt: now,
+      });
+      await notifyAdjustmentAssignees(db, session.collegeId, { ...req, adjustmentRequests });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ─── Propose coverage (HOD/Principal naming a NEW substitute) ───────────
+    // Two callers: an HOD/Principal overriding a pick while a standard
+    // request is still PENDING_HOD (previously bundled straight into the
+    // same APPROVE call - see LeaveApprovalQueue.tsx), or revisiting an
+    // already-APPROVED leave after the timetable added a period that was
+    // never part of the original snapshot (buildPeriodCoverage picks up any
+    // newly-added one automatically - see AdjustCoverageDialog.tsx). Either
+    // way this only PROPOSES - re-validated fresh against current
+    // availability, but a genuinely new/changed pick still needs that
+    // person's own acceptance (see pendingPeriodSubstitutions in
+    // types/leave.ts) before it actually takes effect on periodSubstitutions
+    // (and the timetable). A period whose submitted pick is unchanged from
+    // what's already recorded is a no-op here - re-approving your own
+    // already-accepted picks doesn't ask anyone again.
+    if (body.action === "PROPOSE_COVERAGE") {
+      if (req.status !== "PENDING_HOD" && req.status !== "APPROVED") {
+        return NextResponse.json({ error: "Coverage can only be proposed while pending HOD decision or already approved" }, { status: 400 });
       }
       if (session.role === "HOD") {
         const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
@@ -199,17 +318,40 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: 400 });
       }
-      const byKey = new Map((req.periodSubstitutions ?? []).map((p) => [`${p.date}|${p.timetableSlotId}`, p]));
-      for (const p of result.resolved) byKey.set(`${p.date}|${p.timetableSlotId}`, p);
-      const periodSubstitutions = Array.from(byKey.values());
 
-      await ref.update({ periodSubstitutions, updatedAt: now });
+      const currentByKey = new Map((req.periodSubstitutions ?? []).map((p) => [`${p.date}|${p.timetableSlotId}`, p]));
+      const changed = result.resolved.filter((p) => currentByKey.get(`${p.date}|${p.timetableSlotId}`)?.substituteFacultyId !== p.substituteFacultyId);
+      if (changed.length === 0) {
+        return NextResponse.json({ ok: true, changed: false });
+      }
+
+      const byFacultyId = new Map<string, { name: string; periods: typeof changed }>();
+      for (const p of changed) {
+        const entry = byFacultyId.get(p.substituteFacultyId) ?? { name: p.substituteFacultyName, periods: [] };
+        entry.periods.push(p);
+        byFacultyId.set(p.substituteFacultyId, entry);
+      }
+      let adjustmentRequests = req.adjustmentRequests ?? [];
+      for (const [facultyId, { name, periods: facultyPeriods }] of byFacultyId) {
+        const uid = await resolveLoginUidForFacultyMember(db, session.collegeId, facultyId);
+        if (!uid || uid === facultyId) continue; // not provisioned with a login yet - nothing to ask
+        adjustmentRequests = mergeSubstituteEntry(
+          adjustmentRequests, { uid, name, facultyId },
+          facultyPeriods.map((p) => ({ date: p.date, timetableSlotId: p.timetableSlotId, status: "PENDING" as const }))
+        );
+      }
+
+      const pendingByKey = new Map((req.pendingPeriodSubstitutions ?? []).map((p) => [`${p.date}|${p.timetableSlotId}`, p]));
+      for (const p of changed) pendingByKey.set(`${p.date}|${p.timetableSlotId}`, p);
+      const pendingPeriodSubstitutions = Array.from(pendingByKey.values());
+
+      await ref.update({ adjustmentRequests, pendingPeriodSubstitutions, updatedAt: now });
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
-        collegeId: session.collegeId, action: "LEAVE_COVERAGE_ADJUSTED", performedBy: session.uid,
-        performedByName: session.email || session.role, targetId: id, details: {}, timestamp: now,
+        collegeId: session.collegeId, action: "LEAVE_COVERAGE_PROPOSED", performedBy: session.uid,
+        performedByName: session.email || session.role, targetId: id, details: { changedCount: changed.length }, timestamp: now,
       });
-      await notifySubstitutes(db, session.collegeId, { ...req, periodSubstitutions });
-      return NextResponse.json({ ok: true, periodSubstitutions });
+      await notifyAdjustmentAssignees(db, session.collegeId, { ...req, adjustmentRequests });
+      return NextResponse.json({ ok: true, changed: true });
     }
 
     // ─── HOD stage ────────────────────────────────────────────────────────────
@@ -251,39 +393,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
 
       // APPROVE
+      // Naming a NEW substitute (overriding a pick, or - for an Other
+      // request - the HOD adding one for the first time) is a separate step
+      // now (see PROPOSE_COVERAGE above) - that person must accept before
+      // this can go through, so neither branch below still takes
+      // periodSubstitutions inline.
+      if (req.pendingPeriodSubstitutions?.length) {
+        return NextResponse.json(
+          { error: "Some substitute changes on this request are still awaiting acceptance" },
+          { status: 400 }
+        );
+      }
       if (req.isOtherRequest) {
         if (typeof body.isPaidLeave !== "boolean") {
           return NextResponse.json({ error: "isPaidLeave is required to forward an Other request" }, { status: 400 });
         }
         actionRecord.isPaidLeave = body.isPaidLeave;
 
-        // Optional - unlike a standard leave type (where the requester must
-        // name a substitute for every affected period up front), an "Other"
-        // request never collects that at submission. The HOD may adjust/
-        // replace some or all of the requester's periods here while
-        // forwarding - anything left unpicked is simply left for the
-        // Principal/HOD to sort out manually (see periodCoverage.ts's
-        // "PARTIAL" mode).
-        let periodSubstitutions: PeriodSubstitution[] | undefined;
-        if (body.periodSubstitutions?.length && req.department) {
-          const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, req.uid);
-          const reqFromDate = (req.fromDate as unknown as { toDate(): Date }).toDate();
-          const reqToDate = (req.toDate as unknown as { toDate(): Date }).toDate();
-          const holidayDates = await getHolidayDateKeys(db, session.collegeId, reqFromDate, reqToDate);
-          const result = await validatePeriodSubstitutions({
-            db, collegeId: session.collegeId, facultyMemberId, department: req.department,
-            fromDate: reqFromDate, toDate: reqToDate, holidayDates,
-            submitted: body.periodSubstitutions, mode: "PARTIAL",
-          });
-          if (!result.ok) {
-            return NextResponse.json({ error: result.error }, { status: 400 });
-          }
-          if (result.resolved.length > 0) periodSubstitutions = result.resolved;
-        }
-
         await ref.update({
           status: "PENDING_PRINCIPAL", isPaidLeave: body.isPaidLeave, hodAction: actionRecord, updatedAt: now,
-          ...(periodSubstitutions ? { periodSubstitutions } : {}),
         });
         await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
           collegeId: session.collegeId, action: "LEAVE_HOD_FORWARDED", performedBy: session.uid,
@@ -308,37 +436,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
 
       // Standard type - HOD approval is final. Insufficient balance never
-      // blocks this - the excess becomes Loss of Pay instead.
-
-      // The requester already named a substitute for every affected period
-      // at submission time (mode: "FULL" in applications/route.ts POST) -
-      // but that pick may no longer hold by the time the HOD actually
-      // decides (the substitute got scheduled elsewhere, went on leave
-      // themselves, or the HOD simply knows a better fit). The HOD may
-      // override any subset of those picks here (see LeaveApprovalQueue's
-      // Adjustment/Replacement panel, pre-filled with the requester's
-      // original choices) - re-validated fresh against current
-      // availability. Anything not resubmitted keeps the requester's
-      // original pick untouched, same merge behavior as the Other-request
-      // branch above.
-      let periodSubstitutions = req.periodSubstitutions;
-      if (body.periodSubstitutions?.length && req.department) {
-        const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, req.uid);
-        const reqFromDate = (req.fromDate as unknown as { toDate(): Date }).toDate();
-        const reqToDate = (req.toDate as unknown as { toDate(): Date }).toDate();
-        const holidayDates = await getHolidayDateKeys(db, session.collegeId, reqFromDate, reqToDate);
-        const result = await validatePeriodSubstitutions({
-          db, collegeId: session.collegeId, facultyMemberId, department: req.department,
-          fromDate: reqFromDate, toDate: reqToDate, holidayDates,
-          submitted: body.periodSubstitutions, mode: "PARTIAL",
-        });
-        if (!result.ok) {
-          return NextResponse.json({ error: result.error }, { status: 400 });
-        }
-        const byKey = new Map((req.periodSubstitutions ?? []).map((p) => [`${p.date}|${p.timetableSlotId}`, p]));
-        for (const p of result.resolved) byKey.set(`${p.date}|${p.timetableSlotId}`, p);
-        periodSubstitutions = Array.from(byKey.values());
-      }
+      // blocks this - the excess becomes Loss of Pay instead. Coverage is
+      // whatever's already on record - the requester's own accepted
+      // submission-time picks, plus any HOD override that's already cleared
+      // PROPOSE_COVERAGE's acceptance gate above.
+      const periodSubstitutions = req.periodSubstitutions;
 
       let lopDays = 0;
       if (req.leaveTypeCode) {

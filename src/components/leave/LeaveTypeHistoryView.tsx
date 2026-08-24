@@ -237,9 +237,19 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
       <AdjustCoverageDialog
         request={adjustTarget}
         onOpenChange={(open) => { if (!open) setAdjustTarget(null); }}
-        onUpdated={(id, periodSubstitutions) =>
-          setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, periodSubstitutions } : r)))
-        }
+        onUpdated={(id) => {
+          // A propose doesn't take effect until accepted (see
+          // AdjustCoverageDialog) - re-fetch this one request so its row
+          // reflects the new pendingPeriodSubstitutions/adjustmentRequests
+          // state instead of assuming the picks just made are already live.
+          fetch(`/api/leave/applications/${id}`)
+            .then((r) => r.json() as Promise<{ request?: LeaveRequest }>)
+            .then((d) => {
+              if (!d.request) return;
+              setRequests((prev) => prev.map((r) => (r.id === id ? d.request! : r)));
+            })
+            .catch(() => {});
+        }}
       />
     </div>
   );

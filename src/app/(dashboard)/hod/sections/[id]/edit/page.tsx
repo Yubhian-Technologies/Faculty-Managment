@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
 import { regulationsForYear } from "@/lib/college/academicStructure";
+import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, parseAcademicYearStart } from "@/lib/college/academicSession";
 import type { Course, CourseCatalogItem, Department, Section, Subject, TeachingAssignment } from "@/types";
 
 type SectionRow = Section & { id: string };
@@ -66,6 +67,10 @@ export default function EditSectionPage() {
   const [ownerDept, setOwnerDept] = useState("");
   const [branch, setBranch] = useState("");
   const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
+  // The college's configured current session (see the New Section page's own
+  // doc-comment on this same fetch) - centers the Batch picker's default on
+  // the right intake year for a new cohort moving into this fixed year-slot.
+  const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
 
   // Class Leader (CR) login - bound to this section via Section.classLeaderUid.
   const [classLeaderUid, setClassLeaderUid] = useState<string | undefined>(undefined);
@@ -123,6 +128,14 @@ export default function EditSectionPage() {
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => setCatalogItems(d.items ?? []))
       .catch(() => { /* non-critical - regulation picker just stays empty */ });
+
+    fetch("/api/college/academic-sessions")
+      .then((r) => r.json() as Promise<{ academicSessions?: { label: string; isCurrent: boolean }[] }>)
+      .then((d) => {
+        const current = (d.academicSessions ?? []).find((s) => s.isCurrent);
+        setCurrentSessionStart(current ? parseAcademicYearStart(current.label) ?? null : null);
+      })
+      .catch(() => { /* non-critical - Batch picker falls back to the date-based session */ });
 
     fetch("/api/college/sections")
       .then((r) => r.json() as Promise<{ sections: SectionRow[] }>)
@@ -363,6 +376,20 @@ export default function EditSectionPage() {
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
 
+  // Candidate intake years for the Batch picker (same derivation as the New
+  // Section page), centered on this fixed year-slot's admission year for the
+  // college's current session - plus, whenever this section's ALREADY-SAVED
+  // batch doesn't match any derivable candidate (older free-typed data),
+  // that saved value is kept in the list too, so opening Edit on a legacy
+  // section never silently blanks/discards it.
+  const batchOptions = useMemo(() => {
+    if (!formCourse || !form.year) return form.batch ? [form.batch] : [];
+    const sessionStart = currentSessionStart ?? currentAcademicStartYear();
+    const center = admissionStartYearForCourseYear(sessionStart, Number(form.year));
+    const derived = [center + 1, center, center - 1, center - 2, center - 3].map((y) => deriveBatch(y, formCourse.durationYears));
+    return form.batch && !derived.includes(form.batch) ? [form.batch, ...derived] : derived;
+  }, [formCourse, form.year, form.batch, currentSessionStart]);
+
   // This course's own assigned regulations, narrowed to whichever are
   // actually offered for this section's (fixed) year - same set the Dean's
   // Add Subject page and Add Section form offer.
@@ -537,12 +564,13 @@ export default function EditSectionPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Batch *</Label>
-                <Input
-                  value={form.batch}
-                  onChange={(e) => setF({ batch: e.target.value })}
-                  placeholder="e.g. 2023-2027"
-                />
-                <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+                <Select value={form.batch} onValueChange={(v) => setF({ batch: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
+                  <SelectContent>
+                    {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Admission year to passout year, derived from this course&apos;s duration</p>
               </div>
               <div className="space-y-2">
                 <Label>Regulation</Label>

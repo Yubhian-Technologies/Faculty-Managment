@@ -40,15 +40,21 @@ export async function GET(request: Request) {
     let department: string | undefined;
 
     if (requestId) {
-      if (session.role !== "HOD") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
       const snap = await REQUESTS_COL(session.collegeId, db).doc(requestId).get();
       if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
       const req = { id: snap.id, ...snap.data() } as LeaveRequest;
-      const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
-      if (!hodDept || req.department !== hodDept) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      // Either the department's own HOD (adjusting/replacing periods on an
+      // "Other" request), or the requester themselves (re-picking a
+      // substitute who declined - see REVISE_ADJUSTMENT in
+      // applications/[id]/route.ts).
+      if (req.uid !== session.uid) {
+        if (session.role !== "HOD") {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        const hodDept = await resolveUserDepartment(db, session.collegeId, session.uid);
+        if (!hodDept || req.department !== hodDept) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
       }
       targetUid = req.uid;
       department = req.department;

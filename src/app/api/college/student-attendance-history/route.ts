@@ -4,7 +4,12 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
-import type { StudentAttendanceSession, StudentRecord } from "@/types";
+import type { CourseYearTiming, StudentAttendanceSession, StudentRecord } from "@/types";
+
+function toDateStr(v: unknown): string {
+  const d = (v as { toDate?: () => Date })?.toDate ? (v as { toDate: () => Date }).toDate() : new Date(v as string);
+  return d.toISOString().slice(0, 10);
+}
 
 // Cumulative per-subject Held/Attend/% for ONE student, across a
 // caller-chosen range - Monthly (year+month), Period (from+to), or Till now
@@ -29,6 +34,11 @@ export async function GET(request: Request) {
     const monthParam = searchParams.get("month");
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
+    const semesterParam = searchParams.get("semester");
+    // Metadata-only call - just this student's configured semester numbers,
+    // for the range picker's Semester tab. Skips the (potentially large)
+    // attendance-session scan below entirely.
+    const optionsOnly = searchParams.get("optionsOnly") === "true";
     // A reversed range wouldn't error out below - the date filter would
     // just never match anything, silently returning an empty (not wrong,
     // but confusing) report instead of the mistake it actually is. Caught
@@ -57,6 +67,35 @@ export async function GET(request: Request) {
       }
     }
 
+    // This student's configured semester numbers (from their course-year's
+    // CourseYearTiming), plus - when a specific one was requested - the
+    // date range to filter attendance sessions by. A course-year with no
+    // semesters configured has none to offer; the Semester tab stays hidden
+    // client-side in that case.
+    let semesterOptions: number[] = [];
+    let semesterFrom: string | null = null;
+    let semesterTo: string | null = null;
+    if (student.courseId) {
+      const timingSnap = await collegeRef
+        .collection("courseYearTimings")
+        .doc(`${student.courseId}_year${student.year}`)
+        .get();
+      const timing = timingSnap.exists ? (timingSnap.data() as CourseYearTiming) : null;
+      semesterOptions = (timing?.semesters ?? []).map((s) => s.semester).sort((a, b) => a - b);
+      if (semesterParam) {
+        const match = timing?.semesters?.find((s) => s.semester === Number(semesterParam));
+        if (!match) {
+          return NextResponse.json({ error: "That semester isn't configured for this student's course-year" }, { status: 400 });
+        }
+        semesterFrom = toDateStr(match.startDate);
+        semesterTo = toDateStr(match.endDate);
+      }
+    }
+
+    if (optionsOnly) {
+      return NextResponse.json({ availableSemesters: semesterOptions });
+    }
+
     // Scoped by department (an indexed scalar field every session doc
     // carries) as a practical narrowing - correct for the overwhelming
     // majority of students, who never change department. A rare
@@ -74,6 +113,8 @@ export async function GET(request: Request) {
     const inRange = sessionsSnap.docs
       .map((d) => d.data() as StudentAttendanceSession)
       .filter((r) => {
+        if (semesterFrom && r.date < semesterFrom) return false;
+        if (semesterTo && r.date > semesterTo) return false;
         if (yearParam && r.date.slice(0, 4) !== yearParam) return false;
         if (monthStr && r.date.slice(5, 7) !== monthStr) return false;
         if (fromParam && r.date < fromParam) return false;
@@ -125,6 +166,7 @@ export async function GET(request: Request) {
         attend: totalAttend,
         percent: totalHeld > 0 ? Math.round((totalAttend / totalHeld) * 10000) / 100 : 0,
       },
+      availableSemesters: semesterOptions,
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

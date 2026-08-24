@@ -16,7 +16,7 @@ import type { CollegeType, UserRole } from "@/types";
 // COLLEGE_STAFF is intentionally omitted - non-teaching staff are created via
 // the Supporting Staff module (which makes both a login and a profile record),
 // not as a bare login here. See principal/staff/new/page.tsx for the rationale.
-const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ACCOUNTS"];
+const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "COLLEGE_ADMIN", "VICE_PRINCIPAL", "COLLEGE_ACCOUNTS"];
 // HOD is included so a main HOD can create a Sub-HOD login (see
 // hod/settings/sub-departments/page.tsx's "Create Sub-HOD" dialog, which
 // posts role: "HOD" with the not-yet-created sub-department's name as
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       name?: string; // not required for CLASS_LEADER - auto-generated below (role rotates by college rules)
-      email: string;
+      email?: string; // required for CLASS_LEADER; optional personal contact for everyone else
       collegeEmail?: string;
       employeeId?: string;
       phone?: string;
@@ -118,10 +118,21 @@ export async function POST(request: Request) {
       dateOfJoining?: string;
     } & PersonalDetailsInput;
 
-    const { name, email, password, role, department, academicProfile, profilePhotoUrl, designation, sectionId, dateOfJoining } = body;
+    const { name, email, collegeEmail, password, role, department, academicProfile, profilePhotoUrl, designation, sectionId, dateOfJoining } = body;
 
-    if (!email || !password || !role) {
+    if (!password || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // College email is the login username for every real staff hire (not a
+    // Class Leader - a rotating student-rep login, which still requires its
+    // own `email` instead) - same rule /api/college/faculty and
+    // /api/college/supporting-staff already enforce. `email` here becomes
+    // just an optional personal contact address for real staff.
+    if (role === "CLASS_LEADER" && !email) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    if (role !== "CLASS_LEADER" && !collegeEmail) {
+      return NextResponse.json({ error: "collegeEmail is required" }, { status: 400 });
     }
     if (role !== "CLASS_LEADER" && !name) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -238,8 +249,14 @@ export async function POST(request: Request) {
     // Office never enters a name; every such login gets this generic label.
     const resolvedName = role === "CLASS_LEADER" ? "Class Representative" : name!;
 
+    // College email is the login username (and the canonical `email` field
+    // below) for every real staff hire - the personal `email` input is kept
+    // only as an optional contact address (`personalEmail`). A Class Leader
+    // has no college email concept, so it keeps using its own `email` as before.
+    const loginEmail = role === "CLASS_LEADER" ? email! : collegeEmail!;
+
     // Create Firebase Auth user via REST API (no firebase-admin/auth required)
-    const uid = await createFirebaseUser(email, password, resolvedName);
+    const uid = await createFirebaseUser(loginEmail, password, resolvedName);
 
     const now = new Date();
     await db
@@ -251,8 +268,9 @@ export async function POST(request: Request) {
         uid,
         collegeId,
         name: resolvedName,
-        email,
-        ...(body.collegeEmail ? { collegeEmail: body.collegeEmail } : {}),
+        email: loginEmail,
+        ...(role !== "CLASS_LEADER" ? { collegeEmail } : {}),
+        ...(role !== "CLASS_LEADER" && email ? { personalEmail: email } : {}),
         ...(body.employeeId ? { employeeId: body.employeeId } : {}),
         ...(body.phone ? { phone: body.phone } : {}),
         role,
@@ -271,7 +289,7 @@ export async function POST(request: Request) {
 
     // Role mapping for Firestore-based session resolution
     await db.collection("systemUsers").doc(uid).set({
-      uid, role, collegeId, email, name: resolvedName,
+      uid, role, collegeId, email: loginEmail, name: resolvedName,
       ...(profilePhotoUrl ? { profilePhotoUrl } : {}),
     });
 

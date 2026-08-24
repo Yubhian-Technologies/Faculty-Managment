@@ -40,6 +40,7 @@ interface LeaveProfileViewProps {
 }
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "pending" | "approved" | "rejected" | "modified"> = {
+  PENDING_ACCEPTANCE: "pending",
   PENDING_HOD: "pending",
   PENDING_PRINCIPAL: "pending",
   PENDING_MANAGEMENT: "pending",
@@ -138,7 +139,8 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
     return fromStart <= today;
   })();
   const pendingRequest = requests.find(
-    (r) => r.status === "PENDING_HOD" || r.status === "PENDING_PRINCIPAL" || r.status === "PENDING_MANAGEMENT"
+    (r) => r.status === "PENDING_ACCEPTANCE" || r.status === "PENDING_HOD" ||
+      r.status === "PENDING_PRINCIPAL" || r.status === "PENDING_MANAGEMENT"
   );
   const applyBlockedReason = unfinishedApprovedLeave
     ? isOngoingLeave
@@ -305,7 +307,7 @@ function CountBadge({ count, title }: { count: number; title: string }) {
   );
 }
 
-const PENDING_STATUSES: LeaveRequestStatus[] = ["PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT"];
+const PENDING_STATUSES: LeaveRequestStatus[] = ["PENDING_ACCEPTANCE", "PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT"];
 
 // An APPROVED request is only cancellable up until its own leave period ends
 // - cancelling something already lived through doesn't make sense. Pending
@@ -399,6 +401,32 @@ export function LeaveHistoryRow({
             {summarizeCoverage(request.periodSubstitutions)}
           </p>
         )}
+        {!!request.pendingPeriodSubstitutions?.length && (
+          <p className="text-xs mt-0.5">
+            <Badge variant="pending" className="text-[10px] px-1.5 py-0 font-normal">
+              {request.pendingPeriodSubstitutions.length} period(s) awaiting new substitute&rsquo;s acceptance - timetable unchanged until then
+            </Badge>
+          </p>
+        )}
+        {!!request.handoverToName && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <span className="font-medium text-foreground/80">Handover:</span> {request.handoverToName}
+          </p>
+        )}
+        {!!request.adjustmentRequests?.length && (
+          <p className="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1">
+            <span className="font-medium text-foreground/80">Acceptance:</span>
+            {request.adjustmentRequests.map((a) => (
+              <Badge
+                key={a.assigneeUid}
+                variant={a.status === "ACCEPTED" ? "approved" : a.status === "DECLINED" ? "rejected" : "pending"}
+                className="text-[10px] px-1.5 py-0 font-normal"
+              >
+                {a.assigneeName} · {a.status.toLowerCase()}
+              </Badge>
+            ))}
+          </p>
+        )}
         {request.status === "CANCELLED" && request.cancelReason && (
           <p className="text-xs text-muted-foreground mt-0.5">
             <span className="font-medium text-foreground/80">Cancellation reason:</span> {request.cancelReason}
@@ -418,6 +446,11 @@ export function LeaveHistoryRow({
           </>
         )}
         <Badge variant={STATUS_VARIANT[request.status]}>{LEAVE_REQUEST_STATUS_LABELS[request.status]}</Badge>
+        {!!onCancel && request.status === "PENDING_ACCEPTANCE" && request.adjustmentRequests?.some((a) => a.status === "DECLINED") && (
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
+            <Link href={`/leave/revise/${request.id}`}>Pick someone else</Link>
+          </Button>
+        )}
         {canAdjustCoverage && (
           <Button
             size="sm"

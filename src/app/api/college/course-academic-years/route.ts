@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { parseAcademicYearStart } from "@/lib/college/academicSession";
 import type { FacultyStatus } from "@/types";
 
 export async function GET(request: Request) {
@@ -51,6 +52,10 @@ export async function POST(request: Request) {
     if (!departmentId || !courseId || !year || !label?.trim()) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    const labelStart = parseAcademicYearStart(label);
+    if (labelStart == null) {
+      return NextResponse.json({ error: `Academic year label must be a year range like "2025-2026", got "${label}"` }, { status: 400 });
+    }
 
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
@@ -60,6 +65,18 @@ export async function POST(request: Request) {
     const existing = await ref.get();
     const isAdvance = existing.exists;
     const fromLabel = isAdvance ? (existing.data() as { label?: string }).label ?? "" : null;
+
+    // Reject a backwards move (never require exactly +1 though - a Principal
+    // may legitimately skip a year they missed advancing, see this route's
+    // own top comment). If the EXISTING label itself doesn't parse (legacy
+    // free text), there's nothing sane to compare against, so this is
+    // skipped entirely rather than blocking every future advance on it.
+    if (isAdvance && fromLabel) {
+      const fromStart = parseAcademicYearStart(fromLabel);
+      if (fromStart != null && labelStart < fromStart) {
+        return NextResponse.json({ error: `"${label}" is earlier than the current "${fromLabel}" - an academic year can only move forward.` }, { status: 400 });
+      }
+    }
 
     let actorName = "Unknown";
     try {

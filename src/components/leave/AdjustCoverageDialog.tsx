@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
+import type { LeaveRequest } from "@/types/leave";
 
 interface PeriodCoverageEntry {
   date: string;
@@ -27,7 +27,10 @@ interface PeriodCoverageEntry {
 // already APPROVED. This dialog re-fetches the CURRENT required periods
 // (buildPeriodCoverage picks up any newly-added one automatically) and lets
 // an HOD/Principal re-pick coverage for any of them, pre-filled with
-// whatever's already recorded.
+// whatever's already recorded. Only genuinely NEW/changed picks actually go
+// anywhere though - PROPOSE_COVERAGE just sends that person a request; the
+// timetable itself only updates once they accept (see
+// /api/leave/applications/[id]/adjustment-response).
 export function AdjustCoverageDialog({
   request,
   onOpenChange,
@@ -35,7 +38,7 @@ export function AdjustCoverageDialog({
 }: {
   request: LeaveRequest | null;
   onOpenChange: (open: boolean) => void;
-  onUpdated: (id: string, periodSubstitutions: PeriodSubstitution[]) => void;
+  onUpdated: (id: string) => void;
 }) {
   const [periods, setPeriods] = useState<PeriodCoverageEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -74,12 +77,16 @@ export function AdjustCoverageDialog({
       const res = await fetch(`/api/leave/applications/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ADJUST_COVERAGE", periodSubstitutions: submitted }),
+        body: JSON.stringify({ action: "PROPOSE_COVERAGE", periodSubstitutions: submitted }),
       });
-      const data = (await res.json()) as { error?: string; periodSubstitutions?: PeriodSubstitution[] };
+      const data = (await res.json()) as { error?: string; changed?: boolean };
       if (!res.ok) throw new Error(data.error ?? "Failed to update coverage");
-      toast({ variant: "success", title: "Coverage updated" });
-      onUpdated(request.id, data.periodSubstitutions ?? []);
+      toast({
+        variant: "success",
+        title: data.changed ? "Sent for acceptance" : "Nothing changed",
+        description: data.changed ? "The newly-picked faculty need to accept before it takes effect on the timetable." : undefined,
+      });
+      onUpdated(request.id);
       onOpenChange(false);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update coverage" });

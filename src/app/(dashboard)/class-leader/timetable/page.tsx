@@ -54,8 +54,10 @@ export default function ClassLeaderTimetablePage() {
 
   const rows = timing ? buildRows(timing) : [];
 
-  function slotFor(day: DayOfWeek, period: number) {
-    return slots.find((s) => s.day === day && s.periodNumber === period);
+  // Plural - a split period (two+ subjects/faculty sharing one section+day+
+  // period) means a cell can hold more than one.
+  function slotsFor(day: DayOfWeek, period: number) {
+    return slots.filter((s) => s.day === day && s.periodNumber === period);
   }
 
   return (
@@ -118,23 +120,27 @@ export default function ClassLeaderTimetablePage() {
                       )}
                     </td>
                     {DAYS.map((d) => {
-                      const slot = slotFor(d, row.period);
+                      const cellSlots = slotsFor(d, row.period);
                       return (
                         <td key={d} className="p-2 align-top">
-                          {slot ? (
-                            <div className={`rounded-md border p-2 ${slot.substituteFacultyName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
-                              <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
-                              {slot.substituteFacultyName ? (
-                                <>
-                                  <p className="text-[11px] font-medium text-amber-700 mt-0.5">{slot.substituteFacultyName}</p>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
-                                  </p>
-                                </>
-                              ) : (
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
-                              )}
-                              {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
+                          {cellSlots.length > 0 ? (
+                            <div className="space-y-1">
+                              {cellSlots.map((slot) => (
+                                <div key={slot.assignmentId} className={`rounded-md border p-2 ${slot.substituteFacultyName ? "bg-amber-50 border-amber-200" : "bg-primary/5 border-primary/20"}`}>
+                                  <p className="text-xs font-semibold leading-tight">{slot.subjectName}</p>
+                                  {slot.substituteFacultyName ? (
+                                    <>
+                                      <p className="text-[11px] font-medium text-amber-700 mt-0.5">{slot.substituteFacultyName}</p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        Substituting for {slot.substituteForName}{slot.substituteDate ? ` (${formatDMY(slot.substituteDate)})` : ""}
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
+                                  )}
+                                  {slot.classroom && <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>}
+                                </div>
+                              ))}
                             </div>
                           ) : (
                             <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">-</div>

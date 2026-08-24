@@ -14,6 +14,7 @@ import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
 import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, parseAcademicYearStart } from "@/lib/college/academicSession";
 import type { Course, CourseCatalogItem, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -89,6 +90,13 @@ export default function NewSectionPage() {
   // different branch has a different set of sub-departments.
   const [branchSubDept, setBranchSubDept] = useState("");
   const [letter, setLetter] = useState("");
+  // The college's own configured current session, when a Principal has set
+  // one via Settings > Academic Year (see AcademicYearSettingsCard.tsx) -
+  // used to center the Batch picker's default on the right intake year for
+  // whatever Year is picked. Falls back to the plain date-based session
+  // (currentAcademicStartYear) when nothing's configured yet, same fallback
+  // resolveCurrentAcademicYear itself uses.
+  const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/college/faculty?status=ACTIVE")
@@ -109,6 +117,14 @@ export default function NewSectionPage() {
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => setCatalogItems(d.items ?? []))
       .catch(() => { /* non-critical - regulation picker just stays empty */ });
+
+    fetch("/api/college/academic-sessions")
+      .then((r) => r.json() as Promise<{ academicSessions?: { label: string; isCurrent: boolean }[] }>)
+      .then((d) => {
+        const current = (d.academicSessions ?? []).find((s) => s.isCurrent);
+        setCurrentSessionStart(current ? parseAcademicYearStart(current.label) ?? null : null);
+      })
+      .catch(() => { /* non-critical - Batch picker falls back to the date-based session */ });
   }, []);
 
   const topDepartmentId = useMemo(
@@ -168,8 +184,25 @@ export default function NewSectionPage() {
   }, [formCourse, catalogItems, form.year]);
 
   function selectYear(year: string) {
-    setF({ year, regulation: "" });
+    const sessionStart = currentSessionStart ?? currentAcademicStartYear();
+    const admissionYear = admissionStartYearForCourseYear(sessionStart, Number(year));
+    const batch = formCourse ? deriveBatch(admissionYear, formCourse.durationYears) : "";
+    setF({ year, regulation: "", batch });
   }
+
+  // Candidate intake years to offer in the Batch picker, centered on the
+  // admission year this Course+Year combination actually implies for the
+  // college's current session - a couple of intakes either side, so an HOD
+  // can still deliberately pick an off-cycle admission year (e.g. correcting
+  // a transition-year section - see Section.regulation's own doc-comment on
+  // why that's a legitimate case), without ever typing an end year that
+  // contradicts the course's real duration.
+  const batchOptions = useMemo(() => {
+    if (!formCourse || !form.year) return [];
+    const sessionStart = currentSessionStart ?? currentAcademicStartYear();
+    const center = admissionStartYearForCourseYear(sessionStart, Number(form.year));
+    return [center + 1, center, center - 1, center - 2, center - 3].map((y) => deriveBatch(y, formCourse.durationYears));
+  }, [formCourse, form.year, currentSessionStart]);
 
   // The department this section is being created under: the sub-department a
   // parent HOD explicitly targeted, otherwise the chosen top-level department
@@ -192,12 +225,15 @@ export default function NewSectionPage() {
   );
   function selectCourseGroup(groupKey: string) {
     const group = courseGroups.find((g) => g.key === groupKey);
-    if (!group) { setF({ courseId: "", year: "", regulation: "" }); return; }
+    if (!group) { setF({ courseId: "", year: "", regulation: "", batch: "" }); return; }
     // Prefer the course doc owned by the department this section is actually
     // being created under, so the stored courseId lines up with it rather than
     // a feeder's - same preference the Sections list uses when jumping here.
     const own = group.courseIds.find((id) => courses.find((c) => c.id === id)?.departmentId === (departmentId || activeDept?.id));
-    setF({ courseId: own ?? group.courseIds[0], year: "", regulation: "" });
+    // Batch depends on the course's own durationYears, so it's cleared here
+    // (a different course may run for a different number of years) and
+    // re-derived once selectYear runs for the newly picked course.
+    setF({ courseId: own ?? group.courseIds[0], year: "", regulation: "", batch: "" });
   }
 
   // Managed-branch mode: activeDept is a real branch (e.g. IT) reached through
@@ -607,12 +643,13 @@ export default function NewSectionPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Batch *</Label>
-                <Input
-                  value={form.batch}
-                  onChange={(e) => setF({ batch: e.target.value })}
-                  placeholder="e.g. 2023-2027"
-                />
-                <p className="text-xs text-muted-foreground">Admission year to passout year</p>
+                <Select value={form.batch} onValueChange={(v) => setF({ batch: v })} disabled={!form.year}>
+                  <SelectTrigger><SelectValue placeholder={form.year ? "Select batch" : "Pick a year first"} /></SelectTrigger>
+                  <SelectContent>
+                    {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Admission year to passout year, derived from this course&apos;s duration</p>
               </div>
               <div className="space-y-2">
                 <Label>Regulation</Label>

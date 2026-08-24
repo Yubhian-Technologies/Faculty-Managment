@@ -35,36 +35,45 @@ const EVALUATION_PATH = "/evaluation";
 // HOD, Principal/VP and College Office (they each already read the same
 // candidate/letter data via the college API guards).
 const CANDIDATE_PROFILE_PATH = "/candidate-profile";
+// /leave/adjustments (accept/decline a substitute/handover request) and
+// /leave/revise/[id] (pick someone else after a decline) are shared across
+// every leave-applicant role - see /api/leave/adjustment-requests and
+// /api/leave/applications/[id]/adjustment-response.
+const LEAVE_ADJUSTMENTS_PATH = "/leave";
 
 // Per-role *own* (and explicitly-shared) path prefixes. Inherited lower-level
 // dashboard paths are added on top of these by allowedPathsForRole().
 const ROLE_PATH_MAP: Record<string, string[]> = {
   SUPER_ADMIN: ["/super-admin", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
   MANAGEMENT: ["/management"],
-  WEBMASTER: ["/webmaster"],
+  WEBMASTER: ["/webmaster", LEAVE_ADJUSTMENTS_PATH],
   ADMINISTRATION: ["/administration"],
   HR_ADMIN: ["/hr-admin"],
   ADMIN_OFFICE: ["/admin-office"],
-  PLACEMENT_DEPT: ["/placement-dept"],
-  LIBRARY: ["/library"],
-  EXAM_CELL: ["/exam-cell"],
+  PLACEMENT_DEPT: ["/placement-dept", LEAVE_ADJUSTMENTS_PATH],
+  LIBRARY: ["/library", LEAVE_ADJUSTMENTS_PATH],
+  EXAM_CELL: ["/exam-cell", LEAVE_ADJUSTMENTS_PATH],
   LOCATION_DEPT_HEAD: ["/location-dept-head"],
-  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
+  PRINCIPAL: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
   // Vice Principal mirrors Principal's authority (see AGENTS.md) - full access
   // to /principal/* alongside its own /vice-principal home.
-  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
-  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
-  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
-  COLLEGE_STAFF: ["/college-staff"],
-  DEAN: ["/dean"],
-  IQAC_COORDINATOR: ["/iqac-coordinator"],
-  T_AND_P: ["/t-and-p"],
-  R_AND_D: ["/r-and-d"],
-  PANEL_MEMBER: ["/panel", "/coordinator", EVALUATION_PATH],
-  ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH],
+  VICE_PRINCIPAL: ["/vice-principal", "/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
+  // College Admin mirrors Principal's authority exactly - same dashboard, no
+  // separate home path of its own (role is normalized to PRINCIPAL for auth,
+  // see src/app/api/auth/session/route.ts and src/hooks/useAuth.ts).
+  COLLEGE_ADMIN: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
+  HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
+  COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
+  COLLEGE_STAFF: ["/college-staff", LEAVE_ADJUSTMENTS_PATH],
+  DEAN: ["/dean", LEAVE_ADJUSTMENTS_PATH],
+  IQAC_COORDINATOR: ["/iqac-coordinator", LEAVE_ADJUSTMENTS_PATH],
+  T_AND_P: ["/t-and-p", LEAVE_ADJUSTMENTS_PATH],
+  R_AND_D: ["/r-and-d", LEAVE_ADJUSTMENTS_PATH],
+  PANEL_MEMBER: ["/panel", "/coordinator", EVALUATION_PATH, LEAVE_ADJUSTMENTS_PATH],
+  ACCOUNTS: ["/accounts", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
   COLLEGE_ACCOUNTS: ["/college-accounts", CANDIDATE_PROFILE_PATH],
-  FINANCE: ["/finance"],
-  PURCHASE_DEPT: ["/purchase"],
+  FINANCE: ["/finance", LEAVE_ADJUSTMENTS_PATH],
+  PURCHASE_DEPT: ["/purchase", LEAVE_ADJUSTMENTS_PATH],
   CLASS_LEADER: ["/class-leader"],
 };
 

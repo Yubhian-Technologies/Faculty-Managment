@@ -226,8 +226,13 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
       ? [fulfillingAssignmentId]
       : assignments.filter((a) => myFacultyIds.has(a.facultyId)).map((a) => a.id)
     : assignments.filter((a) => !lentInAssignmentIds.has(a.id)).map((a) => a.id);
-  // Same restriction, applied to the "Add a subject" picker.
-  const pickableAssignments = assignments.filter((a) => myAssignmentIds.includes(a.id));
+  // Same restriction, applied to the "Add a subject" picker - also excludes
+  // whatever's already occupying the target cell, so a split-add can't
+  // double-place the exact same assignment onto its own cell.
+  const occupyingAtTarget = new Set(
+    addingAt ? cellEntriesFor(addingAt.day, addingAt.period).map((e) => e.slot.assignmentId) : []
+  );
+  const pickableAssignments = assignments.filter((a) => myAssignmentIds.includes(a.id) && !occupyingAtTarget.has(a.id));
   const draftHasSlots = Boolean(draft?.slots?.length);
   // Gates the Update button specifically: having *some* slots in the draft
   // isn't enough if none of them are this HOD's own faculty's yet.
@@ -236,15 +241,41 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
     : draftHasSlots;
   const draftIsUnpublished = draft?.status === "DRAFT";
 
-  function publishedSlotFor(day: DayOfWeek, period: number) {
-    return slots.find((s) => s.day === day && s.periodNumber === period);
+  // Plural - a split period (two+ subjects/faculty sharing one section+day+
+  // period, see timetable-slots/route.ts's allowSplit) means a cell can now
+  // hold more than one occupant.
+  function publishedSlotsFor(day: DayOfWeek, period: number) {
+    return slots.filter((s) => s.day === day && s.periodNumber === period);
   }
-  function draftSlotFor(day: DayOfWeek, period: number) {
-    return draft?.slots.find((s) => s.day === day && s.periodNumber === period);
+  function draftSlotsFor(day: DayOfWeek, period: number) {
+    return draft?.slots.filter((s) => s.day === day && s.periodNumber === period) ?? [];
   }
   /** Pinned slots stay visible in draft mode - the generator scheduled around them. */
-  function pinnedSlotFor(day: DayOfWeek, period: number) {
-    return slots.find((s) => s.day === day && s.periodNumber === period && s.source !== "GENERATED");
+  function pinnedSlotsFor(day: DayOfWeek, period: number) {
+    return slots.filter((s) => s.day === day && s.periodNumber === period && s.source !== "GENERATED");
+  }
+  /**
+   * Everything occupying a cell, for whichever mode is showing - a split
+   * period (two+ subjects/faculty sharing one section+day+period) means
+   * this can now hold more than one entry. Draft mode unions pinned
+   * (locked, from the published timetable) with the draft's own entries,
+   * deduped by assignmentId - a pinned subject is never also independently
+   * present in draft.slots for the same cell, but a split cell can
+   * legitimately have one pinned occupant and one freshly-added draft
+   * occupant side by side.
+   */
+  function cellEntriesFor(day: DayOfWeek, period: number): { slot: TimetableSlot | DraftSlot; isPinned: boolean }[] {
+    if (mode !== "draft") {
+      return publishedSlotsFor(day, period).map((slot) => ({ slot, isPinned: slot.source !== "GENERATED" }));
+    }
+    const pinned = pinnedSlotsFor(day, period);
+    const pinnedAssignmentIds = new Set(pinned.map((s) => s.assignmentId));
+    return [
+      ...pinned.map((slot) => ({ slot, isPinned: true })),
+      ...draftSlotsFor(day, period)
+        .filter((s) => !pinnedAssignmentIds.has(s.assignmentId))
+        .map((slot) => ({ slot, isPinned: false })),
+    ];
   }
 
   /** Starts an empty draft so the whole timetable can be built by hand. */
@@ -275,6 +306,10 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
     if (!addingAt) return;
     setBusy("move");
     try {
+      // Only a genuinely already-occupied cell opts into a split period -
+      // the empty-cell "Add" flow never sets this, so it still gets the
+      // normal double-booking rejection if something raced it.
+      const allowSplit = cellEntriesFor(addingAt.day, addingAt.period).length > 0;
       const res = await fetch("/api/college/timetable/draft", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -284,6 +319,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
           assignmentId: assignment.id,
           toDay: addingAt.day,
           toPeriod: addingAt.period,
+          allowSplit,
         }),
       });
       const json = (await res.json()) as { slots?: DraftSlot[]; error?: string; adjustedNote?: string | null };
@@ -670,95 +706,116 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref }: Tim
                       )}
                     </td>
                     {days.map((d) => {
-                      const pinned = mode === "draft" ? pinnedSlotFor(d, row.period) : undefined;
-                      const dSlot = mode === "draft" ? draftSlotFor(d, row.period) : undefined;
-                      const pSlot = mode === "published" ? publishedSlotFor(d, row.period) : undefined;
-                      const slot = pinned ?? dSlot ?? pSlot;
-                      // A placed period this HOD doesn't own (e.g. a subject lent in
-                      // through a cross-department Assignment Request) is shown same as
-                      // a pinned slot - visible, but locked against move/remove here.
-                      const isForeignSlot = Boolean(dSlot) && !myAssignmentIds.includes(dSlot!.assignmentId);
-                      const isPinnedCell = Boolean(pinned) || isForeignSlot || (mode === "published" && pSlot?.source !== "GENERATED" && pSlot !== undefined);
-                      const isSelected =
-                        selected && dSlot &&
-                        selected.assignmentId === dSlot.assignmentId &&
-                        selected.day === dSlot.day &&
-                        selected.periodNumber === dSlot.periodNumber;
-
-                      const clickable = mode === "draft" && isEditing && !pinned && !isForeignSlot;
+                      const entries = cellEntriesFor(d, row.period);
+                      // A cell already holding something can still take another
+                      // subject (a split period) - shown as a small action below
+                      // the existing entries, never replacing the "empty cell"
+                      // Add button below, and never available in move-mode
+                      // (a slot is selected) to avoid ambiguity with "Place here".
+                      const canAddAnother = mode === "draft" && isEditing && !selected;
 
                       return (
                         <td key={d} className="p-2 align-top">
-                          {slot ? (
-                            <button
-                              type="button"
-                              disabled={!clickable || busy !== null}
-                              onClick={() => {
-                                if (!clickable || !dSlot) return;
-                                setSelected(isSelected ? null : dSlot);
-                              }}
-                              className={[
-                                "w-full text-left rounded-md border p-2 transition-colors",
-                                isPinnedCell
-                                  ? "bg-muted border-border"
-                                  : "bg-primary/5 border-primary/20",
-                                isSelected ? "ring-2 ring-primary" : "",
-                                clickable ? "hover:border-primary cursor-pointer" : "cursor-default",
-                              ].join(" ")}
-                            >
-                              <p className="text-xs font-semibold leading-tight flex items-center gap-1">
-                                {isPinnedCell && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                                {slot.subjectName}
-                              </p>
-                              {pSlot?.substituteFacultyName ? (
-                                <>
-                                  <p className="text-[11px] font-medium text-amber-700 mt-0.5">{pSlot.substituteFacultyName}</p>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    Substituting for {pSlot.substituteForName}{pSlot.substituteDate ? ` (${formatDMY(pSlot.substituteDate)})` : ""}
-                                  </p>
-                                </>
-                              ) : (
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
-                              )}
-                              {"classroom" in slot && slot.classroom && (
-                                <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>
-                              )}
-                              {isSelected && dSlot && (
-                                <span
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={(e) => { e.stopPropagation(); void handleRemove(dSlot); }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.preventDefault(); e.stopPropagation(); void handleRemove(dSlot);
-                                    }
+                          <div className="space-y-1">
+                            {entries.map((entry) => {
+                              const { slot, isPinned } = entry;
+                              const dSlot = !isPinned && mode === "draft" ? (slot as DraftSlot) : undefined;
+                              // A placed period this HOD doesn't own (e.g. a subject lent in
+                              // through a cross-department Assignment Request) is shown same as
+                              // a pinned slot - visible, but locked against move/remove here.
+                              const isForeignSlot = Boolean(dSlot) && !myAssignmentIds.includes(dSlot!.assignmentId);
+                              const isLocked = isPinned || isForeignSlot;
+                              const isSelected =
+                                selected && dSlot &&
+                                selected.assignmentId === dSlot.assignmentId &&
+                                selected.day === dSlot.day &&
+                                selected.periodNumber === dSlot.periodNumber;
+                              const clickable = mode === "draft" && isEditing && !isLocked;
+                              const substituteFacultyName = "substituteFacultyName" in slot ? slot.substituteFacultyName : undefined;
+
+                              return (
+                                <button
+                                  key={slot.assignmentId}
+                                  type="button"
+                                  disabled={!clickable || busy !== null}
+                                  onClick={() => {
+                                    if (!clickable || !dSlot) return;
+                                    setSelected(isSelected ? null : dSlot);
                                   }}
-                                  className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+                                  className={[
+                                    "w-full text-left rounded-md border p-2 transition-colors",
+                                    isLocked ? "bg-muted border-border" : "bg-primary/5 border-primary/20",
+                                    isSelected ? "ring-2 ring-primary" : "",
+                                    clickable ? "hover:border-primary cursor-pointer" : "cursor-default",
+                                  ].join(" ")}
                                 >
-                                  <Trash2 className="h-3 w-3" />Remove
-                                </span>
-                              )}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={!(mode === "draft" && isEditing) || busy !== null}
-                              onClick={() => {
-                                if (selected) void moveSelectedTo(d, row.period);
-                                else setAddingAt({ day: d, period: row.period });
-                              }}
-                              className={[
-                                "w-full rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground",
-                                mode === "draft" && isEditing
-                                  ? "hover:border-primary hover:text-primary cursor-pointer"
-                                  : "cursor-default",
-                              ].join(" ")}
-                            >
-                              {mode === "draft" && isEditing
-                                ? (selected ? "Place here" : <span className="inline-flex items-center gap-1"><Plus className="h-3 w-3" />Add</span>)
-                                : "-"}
-                            </button>
-                          )}
+                                  <p className="text-xs font-semibold leading-tight flex items-center gap-1">
+                                    {isLocked && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                                    {slot.subjectName}
+                                  </p>
+                                  {substituteFacultyName ? (
+                                    <>
+                                      <p className="text-[11px] font-medium text-amber-700 mt-0.5">{substituteFacultyName}</p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        Substituting for {(slot as TimetableSlot).substituteForName}
+                                        {(slot as TimetableSlot).substituteDate ? ` (${formatDMY((slot as TimetableSlot).substituteDate!)})` : ""}
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">{slot.facultyName}</p>
+                                  )}
+                                  {"classroom" in slot && slot.classroom && (
+                                    <p className="text-[11px] text-muted-foreground">{slot.classroom}</p>
+                                  )}
+                                  {isSelected && dSlot && (
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => { e.stopPropagation(); void handleRemove(dSlot); }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault(); e.stopPropagation(); void handleRemove(dSlot);
+                                        }
+                                      }}
+                                      className="mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+                                    >
+                                      <Trash2 className="h-3 w-3" />Remove
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+
+                            {entries.length === 0 ? (
+                              <button
+                                type="button"
+                                disabled={!(mode === "draft" && isEditing) || busy !== null}
+                                onClick={() => {
+                                  if (selected) void moveSelectedTo(d, row.period);
+                                  else setAddingAt({ day: d, period: row.period });
+                                }}
+                                className={[
+                                  "w-full rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground",
+                                  mode === "draft" && isEditing
+                                    ? "hover:border-primary hover:text-primary cursor-pointer"
+                                    : "cursor-default",
+                                ].join(" ")}
+                              >
+                                {mode === "draft" && isEditing
+                                  ? (selected ? "Place here" : <span className="inline-flex items-center gap-1"><Plus className="h-3 w-3" />Add</span>)
+                                  : "-"}
+                              </button>
+                            ) : canAddAnother ? (
+                              <button
+                                type="button"
+                                disabled={busy !== null}
+                                onClick={() => setAddingAt({ day: d, period: row.period })}
+                                className="w-full rounded-md border border-dashed p-1 text-center text-[10px] text-muted-foreground hover:border-primary hover:text-primary cursor-pointer"
+                              >
+                                <span className="inline-flex items-center gap-1"><Plus className="h-3 w-3" />Split - add subject</span>
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
                       );
                     })}

@@ -4,7 +4,7 @@ import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMem
 import { notify } from "@/lib/notify";
 import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
-import { currentTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
+import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import type { CollegeType, DayOfWeek, FacultyMember, TimetableSlot } from "@/types";
 import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
 
@@ -19,7 +19,10 @@ async function filterToCurrentSlots(
   collegeId: string,
   slots: (TimetableSlot & { id: string })[]
 ): Promise<(TimetableSlot & { id: string })[]> {
-  const currentAcademicYear = currentTimetableAcademicYear();
+  const sessionSnap = await db.collection("colleges").doc(collegeId).collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+  const currentAcademicYear = resolveTimetableAcademicYear(
+    sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
+  );
   const distinctCourseYears = new Map<string, { courseId: string; year: number }>();
   for (const s of slots) distinctCourseYears.set(`${s.courseId} ${s.year}`, { courseId: s.courseId, year: s.year });
   const semesterByCourseYear = new Map<string, number | null>();

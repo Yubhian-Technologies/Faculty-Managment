@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,10 +10,114 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
-import type { AcademicRegulationSettings, CourseCatalogItem } from "@/types";
+import type { CourseCatalogItem } from "@/types";
 
-type Draft = { name: string; code: string; durationYears: string; regulations: string[] };
-const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [] };
+type Draft = { name: string; code: string; durationYears: string; regulations: string[]; regulationYears: Record<string, number[]> };
+const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [], regulationYears: {} };
+
+/** Starting Year N for `duration` years, clipped to the course's own 1..durationYears span. */
+function computeRegulationYears(start: number, duration: number, courseDurationYears: number): number[] {
+  const years: number[] = [];
+  for (let y = start; y < start + duration; y++) {
+    if (y >= 1 && y <= courseDurationYears) years.push(y);
+  }
+  return years;
+}
+
+function yearRangeLabel(years: number[]): string {
+  if (years.length === 0) return "";
+  const [min, max] = [Math.min(...years), Math.max(...years)];
+  return min === max ? `Year ${min}` : `Year ${min}–${max}`;
+}
+
+/**
+ * Add/remove regulations for a course draft (used identically for the "Add
+ * new course" panel and each item's Edit mode) - a regulation is created
+ * right here, by giving it a starting year and a duration, rather than
+ * declared standalone elsewhere and attached afterward. Typing a code
+ * already used by another course reuses it (`knownCodes` just offers it back
+ * via the datalist); there is no separate registry to keep it in sync with.
+ */
+function RegulationYearsEditor({
+  draft, setDraft, courseDurationYears, knownCodes, listId,
+}: {
+  draft: Draft;
+  setDraft: (d: Draft) => void;
+  courseDurationYears: number;
+  knownCodes: string[];
+  listId: string;
+}) {
+  const [code, setCode] = useState("");
+  const [start, setStart] = useState("1");
+  const [duration, setDuration] = useState("1");
+
+  function addRegulation() {
+    const trimmed = code.trim().toUpperCase();
+    if (!trimmed) { toast({ variant: "destructive", title: "Enter a regulation code" }); return; }
+    const startYear = Number(start);
+    const durationYears = Number(duration);
+    if (!startYear || startYear < 1 || startYear > courseDurationYears) {
+      toast({ variant: "destructive", title: `Starting year must be between 1 and ${courseDurationYears}` });
+      return;
+    }
+    if (!durationYears || durationYears < 1) {
+      toast({ variant: "destructive", title: "Duration must be at least 1 year" });
+      return;
+    }
+    const years = computeRegulationYears(startYear, durationYears, courseDurationYears);
+    setDraft({
+      ...draft,
+      regulations: draft.regulations.includes(trimmed) ? draft.regulations : [...draft.regulations, trimmed],
+      regulationYears: { ...draft.regulationYears, [trimmed]: years },
+    });
+    setCode("");
+    setStart("1");
+    setDuration("1");
+  }
+
+  function removeRegulation(regCode: string) {
+    const regulationYears = { ...draft.regulationYears };
+    delete regulationYears[regCode];
+    setDraft({ ...draft, regulations: draft.regulations.filter((r) => r !== regCode), regulationYears });
+  }
+
+  return (
+    <div className="space-y-2">
+      {draft.regulations.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {draft.regulations.map((r) => (
+            <span key={r} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
+              {r}{draft.regulationYears[r]?.length ? ` — ${yearRangeLabel(draft.regulationYears[r])}` : ""}
+              <button type="button" onClick={() => removeRegulation(r)} className="rounded-full hover:bg-muted-foreground/20" title={`Remove ${r}`}>
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label className="text-[11px]">Code</Label>
+          <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. R23" className="w-24 uppercase" list={listId} />
+          <datalist id={listId}>
+            {knownCodes.map((c) => <option key={c} value={c} />)}
+          </datalist>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px]">Starting Year</Label>
+          <Input type="number" min={1} max={courseDurationYears} value={start} onChange={(e) => setStart(stripLeadingZeros(e.target.value))} className="w-20" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px]">Duration (years)</Label>
+          <Input type="number" min={1} value={duration} onChange={(e) => setDuration(stripLeadingZeros(e.target.value))} className="w-20" />
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={addRegulation}>
+          <Plus className="h-3.5 w-3.5 mr-1" />Add
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 interface CourseCatalogSettingsCardProps {
   // Dean's dashboard reads the same catalog off the Principal's own GET
@@ -21,32 +125,19 @@ interface CourseCatalogSettingsCardProps {
   // and per-item edit/delete/activate controls and shows courses + their
   // assigned regulations only.
   readOnly?: boolean;
-  // Bumped by the parent Settings page whenever RegulationSettingsCard (a
-  // sibling card on the same page, not a child of this one) saves a change -
-  // this card fetches declaredRegulations once on mount, so without this it
-  // keeps showing "Declare regulation codes... first" and an empty Edit
-  // picker even after regulations are declared, until the whole page is
-  // reloaded. See principal/settings/page.tsx for the wiring.
-  regulationsRefreshKey?: number;
 }
 
-export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefreshKey }: CourseCatalogSettingsCardProps) {
+export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSettingsCardProps) {
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // The college's declared regulation codes (Settings > Academic Regulations,
-  // see RegulationSettingsCard) - each catalog entry picks the subset that's
-  // actually valid for that course. A course with none picked here blocks the
-  // Dean from adding subjects to it until the Principal sets this, AND a
-  // regulation left out here is invisible to the Dean even if it's declared
-  // college-wide and even if RegulationSettingsCard's own per-year mapping
-  // points at it (that mapping only fixes ONE default regulation per year,
-  // for browsing convenience - see currentRegulation in dean/subjects/page.tsx
-  // - it was never meant to be an exhaustive list of what a course may use;
-  // a course can legitimately run more than one regulation at once, e.g. R23
-  // for continuing students alongside R26 for a fresh intake in the same
-  // year). So the default here is simply every declared regulation, not a
-  // narrower guess derived from any one year's fixed value.
-  const [declaredRegulations, setDeclaredRegulations] = useState<string[]>([]);
+  // Every regulation code any course already uses - purely a reuse/autocomplete
+  // suggestion for RegulationYearsEditor's Code field (see its own doc-comment),
+  // not a separate registry: typing a new code there is the only way one gets
+  // created at all.
+  const knownRegulationCodes = useMemo(
+    () => Array.from(new Set(items.flatMap((i) => i.regulations ?? []))).sort((a, b) => a.localeCompare(b)),
+    [items]
+  );
 
   const [newDraft, setNewDraft] = useState<Draft>(EMPTY_DRAFT);
   const [isAdding, setIsAdding] = useState(false);
@@ -70,24 +161,6 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
     load();
   }, []);
 
-  useEffect(() => {
-    if (readOnly) return;
-    fetch("/api/college/settings/regulations")
-      .then((r) => r.json() as Promise<{ settings: AcademicRegulationSettings }>)
-      .then((d) => setDeclaredRegulations(d.settings.regulations ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
-  }, [readOnly, regulationsRefreshKey]);
-
-  function toggleRegulation(draft: Draft, setDraft: (d: Draft) => void, code: string) {
-    const isRemoving = draft.regulations.includes(code);
-    setDraft({
-      ...draft,
-      regulations: isRemoving
-        ? draft.regulations.filter((r) => r !== code)
-        : [...draft.regulations, code],
-    });
-  }
-
   function validate(d: Draft): string | null {
     if (!d.name.trim()) return "Course name is required";
     if (!d.code.trim()) return "Short code is required";
@@ -108,12 +181,8 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
           name: newDraft.name.trim(),
           code: newDraft.code.trim(),
           durationYears: Number(newDraft.durationYears),
-          // Every declared regulation - no longer a step the Principal walks
-          // through here; Edit further down still lets them narrow a
-          // specific course's regulations afterwards if needed. Which year
-          // each regulation actually applies to is resolved from its own
-          // Batch (see Academic Regulations) instead of set per-course.
-          regulations: declaredRegulations,
+          regulations: newDraft.regulations,
+          regulationYears: newDraft.regulationYears,
         }),
       });
       if (!res.ok) {
@@ -136,11 +205,8 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
       name: item.name,
       code: item.code,
       durationYears: String(item.durationYears),
-      // A course stuck with none picked starts from every declared
-      // regulation instead of blank, so opening Edit gives the Principal
-      // something to just confirm (or narrow down) rather than an empty
-      // click-fest. A course that already has regulations keeps them as-is.
-      regulations: item.regulations?.length ? item.regulations : declaredRegulations,
+      regulations: item.regulations ?? [],
+      regulationYears: item.regulationYears ?? {},
     });
   }
 
@@ -157,6 +223,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
           code: editDraft.code.trim(),
           durationYears: Number(editDraft.durationYears),
           regulations: editDraft.regulations,
+          regulationYears: editDraft.regulationYears,
         }),
       });
       if (!res.ok) {
@@ -190,35 +257,6 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
     }
   }
 
-  // One click straight from the "No regulations assigned yet" warning - no
-  // need to open Edit, notice the chips came pre-filled, and remember to
-  // hit Save. Assigns every declared regulation, same default startEdit
-  // pre-fills with - otherwise there's nothing to auto-assign (nothing
-  // declared yet) and Edit is still the only way in, same as before this
-  // existed.
-  async function quickAssignRegulations(item: CourseCatalogItem) {
-    const regulations = declaredRegulations;
-    if (regulations.length === 0) return;
-    setBusyId(item.id);
-    try {
-      const res = await fetch(`/api/college/course-catalog/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ regulations }),
-      });
-      if (!res.ok) {
-        const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to assign regulations");
-      }
-      toast({ variant: "success", title: `Assigned ${regulations.join(", ")}` });
-      load();
-    } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to assign regulations" });
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function confirmDelete() {
     if (!deleteTarget) return;
     setIsDeleting(true);
@@ -246,15 +284,12 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
         </CardTitle>
         <CardDescription>
           The fixed list of courses for your entire college. Departments can only select from these — this keeps
-          course names and codes consistent and prevents duplicates. Declare regulation codes under Academic
-          Regulations above first. A new course starts assigned to every declared regulation, unrestricted by year -
-          use Edit below to narrow a specific course down if needed.
+          course names and codes consistent and prevents duplicates. Each course&apos;s curriculum regulations (e.g. R23)
+          are created right here too - give one a starting year and a duration and it covers those years automatically.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Add new - laid out as the three steps that actually happen in
-            order: course details (incl. duration), then which regulations
-            apply, then which of the course's own years each one covers. */}
+        {/* Add new - course details, then its regulations. */}
         {!readOnly && (
           <div className="space-y-4 rounded-lg border bg-muted/30 p-3">
             <div className="space-y-1.5">
@@ -292,9 +327,16 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
                   <Plus className="h-4 w-4 mr-1" /> Add
                 </Button>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Starts with every declared regulation, unrestricted by year - narrow a specific course down afterwards via Edit below if needed.
-              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-foreground">2. Regulations (optional - can add after too)</Label>
+              <RegulationYearsEditor
+                draft={newDraft}
+                setDraft={setNewDraft}
+                courseDurationYears={Number(newDraft.durationYears) || 10}
+                knownCodes={knownRegulationCodes}
+                listId="new-course-regulations"
+              />
             </div>
           </div>
         )}
@@ -377,49 +419,28 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsRefresh
                   {isEditing ? (
                     <div className="space-y-1">
                       <Label className="text-[11px] text-muted-foreground">Regulations for this course</Label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {declaredRegulations.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No regulations declared yet.</p>
-                        ) : (
-                          declaredRegulations.map((r) => {
-                            const active = editDraft.regulations.includes(r);
-                            return (
-                              <Badge
-                                key={r}
-                                variant={active ? "secondary" : "outline"}
-                                className="cursor-pointer text-xs"
-                                onClick={() => toggleRegulation(editDraft, setEditDraft, r)}
-                              >
-                                {active && <Check className="h-3 w-3 mr-1" />}{r}
-                              </Badge>
-                            );
-                          })
-                        )}
-                      </div>
+                      <RegulationYearsEditor
+                        draft={editDraft}
+                        setDraft={setEditDraft}
+                        courseDurationYears={Number(editDraft.durationYears) || item.durationYears || 10}
+                        knownCodes={knownRegulationCodes}
+                        listId={`edit-course-regulations-${item.id}`}
+                      />
                     </div>
                   ) : (item.regulations ?? []).length === 0 ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="flex items-center gap-1 text-xs text-amber-600">
-                        <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you assign at least one.
-                      </p>
-                      {!readOnly && declaredRegulations.length > 0 && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2 text-xs"
-                          disabled={busy}
-                          loading={busy}
-                          onClick={() => quickAssignRegulations(item)}
-                        >
-                          Assign {declaredRegulations.join(", ")}
-                        </Button>
-                      )}
-                    </div>
+                    <p className="flex items-center gap-1 text-xs text-amber-600">
+                      <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you add at least one.
+                    </p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
-                      {(item.regulations ?? []).map((r) => (
-                        <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>
-                      ))}
+                      {(item.regulations ?? []).map((r) => {
+                        const years = item.regulationYears?.[r];
+                        return (
+                          <Badge key={r} variant="secondary" className="text-xs">
+                            {r}{years?.length ? ` — ${yearRangeLabel(years)}` : ""}
+                          </Badge>
+                        );
+                      })}
                     </div>
                   )}
                 </li>

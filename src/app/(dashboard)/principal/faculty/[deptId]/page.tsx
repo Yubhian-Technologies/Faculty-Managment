@@ -92,7 +92,7 @@ export default function PrincipalDepartmentFacultyPage() {
       hideOnMobile: true,
       render: (row) => (
         <div className="space-y-0.5">
-          <p className="text-xs">{row.email}</p>
+          <p className="text-xs">{row.collegeEmail || row.email}</p>
           {row.phone && <p className="text-xs text-muted-foreground">{row.phone}</p>}
         </div>
       ),

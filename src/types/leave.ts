@@ -130,6 +130,12 @@ export interface LeaveBalance {
 // within the college itself.
 
 export type LeaveRequestStatus =
+  // Sits here, before PENDING_HOD/PRINCIPAL/MANAGEMENT, whenever the request
+  // has any AdjustmentRequest (below) still unaccepted - the approver never
+  // even sees it until every named substitute/handover person has accepted.
+  // Skipped entirely (request starts straight at its normal first stage) when
+  // there's nothing to accept - see applications/route.ts POST.
+  | "PENDING_ACCEPTANCE"
   | "PENDING_HOD"
   | "PENDING_PRINCIPAL"
   | "PENDING_MANAGEMENT"
@@ -138,6 +144,7 @@ export type LeaveRequestStatus =
   | "CANCELLED";
 
 export const LEAVE_REQUEST_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
+  PENDING_ACCEPTANCE: "Awaiting Acceptance",
   PENDING_HOD: "Pending HOD",
   PENDING_PRINCIPAL: "Pending Principal",
   PENDING_MANAGEMENT: "Pending Management",
@@ -232,6 +239,56 @@ export interface PeriodSubstitution {
   assignedBy: "APPLICANT" | "HOD";
 }
 
+// ─── Adjustment Requests (substitute / handover consent) ──────────────────
+// Before this existed, a requester's/HOD's substitute picks (PeriodSubstitution
+// above) and any handover pick (LeaveRequest.handoverToUid below) took effect
+// directly - the named person was just notified once the leave was already
+// APPROVED (see notifySubstitutes in periodCoverage.ts), never asked first.
+// Now each named person must explicitly accept before the request can even
+// reach the HOD/Principal/Management approver - see PENDING_ACCEPTANCE above,
+// buildAdjustmentRequests in lib/leave/adjustmentRequests.ts (submission time),
+// and /api/leave/applications/[id]/adjustment-response (their accept/decline).
+// One entry per DISTINCT assignee, not per period - a substitute covering
+// several of the requester's periods within one leave still gets a single
+// combined notification, not one per period. Within that one entry, though,
+// a SUBSTITUTE assignee can accept some periods and decline others (see
+// `periods` below) rather than an all-or-nothing bundle - e.g. free for 4 of
+// the 5 classes they were asked to cover, just not the 5th.
+export type AdjustmentKind = "SUBSTITUTE" | "HANDOVER";
+export type AdjustmentResponseStatus = "PENDING" | "ACCEPTED" | "DECLINED";
+
+export interface AdjustmentPeriodStatus {
+  date: string;
+  timetableSlotId: string;
+  status: AdjustmentResponseStatus;
+}
+
+export interface AdjustmentRequest {
+  kind: AdjustmentKind;
+  assigneeUid: string;
+  assigneeName: string;
+  // SUBSTITUTE only - the FacultyMember doc id this entry's assigneeUid
+  // resolved from, so a decline can be traced back to which
+  // PeriodSubstitution entries (keyed by substituteFacultyId, not uid) need
+  // reassigning - see the REVISE_ADJUSTMENT action in applications/[id]/route.ts.
+  assigneeFacultyId?: string;
+  // SUBSTITUTE only - one row per period this assignee was asked to cover,
+  // each independently PENDING/ACCEPTED/DECLINED (see
+  // /api/leave/applications/[id]/adjustment-response's PARTIAL response).
+  // Undefined for HANDOVER - there's nothing to split, see `status` below.
+  periods?: AdjustmentPeriodStatus[];
+  // The single source of truth for HANDOVER. For SUBSTITUTE it's DERIVED
+  // from `periods` and kept in sync on every response: PENDING while any
+  // period is still PENDING, ACCEPTED once every period is ACCEPTED,
+  // DECLINED once every period is settled but at least one is DECLINED
+  // (still blocks the request at PENDING_ACCEPTANCE until the requester
+  // reassigns just those - see allAdjustmentsAccepted in
+  // lib/leave/adjustmentRequests.ts).
+  status: AdjustmentResponseStatus;
+  respondedAt?: Timestamp;
+  declineReason?: string;
+}
+
 export interface LeaveRequest {
   id: string;
   collegeId: string;
@@ -283,6 +340,41 @@ export interface LeaveRequest {
   // non-teaching requester, a leave range with no affected periods, or an
   // "Other" request the HOD chose not to adjust.
   periodSubstitutions?: PeriodSubstitution[];
+  // A HOD/Principal-proposed CHANGE to one or more periods above - e.g.
+  // overriding a pick while approving, or revisiting an already-APPROVED
+  // leave after the timetable added a new period (see PROPOSE_COVERAGE in
+  // applications/[id]/route.ts). Holds only the proposed subset, not a full
+  // copy of periodSubstitutions. Each entry here has a matching PENDING
+  // AdjustmentRequest (below) - once that new person accepts, the entry
+  // moves from here into periodSubstitutions for real (see
+  // /api/leave/applications/[id]/adjustment-response); if declined, it's
+  // dropped here and the HOD/Principal must propose someone else. A standard
+  // request's APPROVE (and an "Other" request's HOD forward) is blocked
+  // while anything remains here - see PENDING_HOD's stage guard.
+  pendingPeriodSubstitutions?: PeriodSubstitution[];
+  // Optional, for EVERY requester (teaching or not) - a same-department
+  // colleague named as the point of contact for whatever else the requester
+  // handles day-to-day, separate from and in addition to period substitutes
+  // (e.g. an HOD handing over admin duties, a College Office staffer handing
+  // over their desk). Never required - a requester with nothing else to hand
+  // over simply leaves this unset. Also tracked as its own AdjustmentRequest
+  // (kind "HANDOVER") when set - see adjustmentRequests below.
+  handoverToUid?: string;
+  handoverToName?: string;
+  handoverNote?: string;
+  // Every named substitute/handover person's accept/decline state - see
+  // AdjustmentRequest above. Undefined/empty when there was nothing to name
+  // (a non-teaching leave with no handover picked) or the request predates
+  // this feature.
+  adjustmentRequests?: AdjustmentRequest[];
+  // The status this request moves to once every adjustmentRequests entry is
+  // ACCEPTED (PENDING_HOD / PENDING_PRINCIPAL / PENDING_MANAGEMENT, whichever
+  // applications/route.ts POST's own routing rule picked at submission time).
+  // Stashed here because that routing depends on the REQUESTER's role/dept,
+  // which the accept/decline endpoint - run under the ASSIGNEE's session -
+  // has no other way to recompute. Undefined whenever adjustmentRequests is
+  // empty (status was never held at PENDING_ACCEPTANCE to begin with).
+  postAcceptanceStatus?: LeaveRequestStatus;
   // Required from the requester whenever they cancel (see
   // applications/[id]/route.ts PATCH's CANCEL branch) - shown alongside the
   // cancelled request wherever the approver above them (HOD/Principal/VP/

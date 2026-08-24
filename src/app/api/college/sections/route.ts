@@ -7,6 +7,7 @@ import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments
 import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { resolveDepartmentCourseScope, regulationsForYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
+import { parseBatchStartYear, deriveBatch } from "@/lib/college/academicSession";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
@@ -353,6 +354,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
     }
 
+    // Normalize the batch to this course's own real duration rather than
+    // trusting whatever end year the client sent (or the UI derived off a
+    // stale durationYears) - a client that sends a parseable admission year
+    // ("2026-..." or just "2026") gets it rewritten to deriveBatch's exact
+    // shape; anything that doesn't parse as a leading 4-digit year is kept
+    // as-is (already-required non-blank check above still applies), so a
+    // legacy/off-format value already saved elsewhere is never hard-rejected
+    // here, only new, parseable input is normalized.
+    const parsedBatchStart = parseBatchStartYear(body.batch.trim());
+    const batch = parsedBatchStart != null ? deriveBatch(parsedBatchStart, course.durationYears) : body.batch.trim();
+
     // The batch currently occupying this year-slot's curriculum regulation -
     // same validation Subject.regulation uses (against this course's own
     // catalog entry, narrowed to this year), but optional: a course with no
@@ -605,7 +617,7 @@ export async function POST(request: Request) {
       courseName: course.name,
       name: sectionName,
       year: Number(body.year),
-      batch: body.batch.trim(),
+      batch,
       ...(regulation ? { regulation } : {}),
       facultyInchargeUid,
       facultyInchargeName: body.facultyInchargeName ?? "",
