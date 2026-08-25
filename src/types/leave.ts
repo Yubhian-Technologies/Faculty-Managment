@@ -396,4 +396,12 @@ export interface LeaveRequest {
   // Maternity for anyone who isn't female. Undefined when the requester has
   // no gender recorded, which the picker treats as "don't offer Maternity".
   requesterGender?: "Male" | "Female" | "Other";
+  // Same "not stored on the document" convention as requesterGender above -
+  // whether the requester has completed at least 1 year of service as of
+  // today, computed off their dateOfJoining (see lib/leave/identity.ts's
+  // resolveEmployeeIdentity and lib/leave/dayCounter.ts's yearsOfService,
+  // the same completed-years rule the New Joining leave category already
+  // uses). The Principal's "Other" leave-category picker also requires this
+  // before offering Maternity, alongside requesterGender.
+  requesterHasOneYearService?: boolean;
 }

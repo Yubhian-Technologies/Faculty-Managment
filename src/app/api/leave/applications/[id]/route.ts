@@ -9,7 +9,8 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { REQUESTS_COL, commitApproval, releasePending, releaseApproval, splitLeaveDays } from "@/lib/leave/balanceEngine";
 import { decideFinalStageLeave } from "@/lib/leave/decideFinalStage";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
-import { resolveStaffGender } from "@/lib/leave/identity";
+import { resolveStaffGender, resolveEmployeeIdentity } from "@/lib/leave/identity";
+import { yearsOfService } from "@/lib/leave/dayCounter";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify, notifyRole } from "@/lib/notify";
@@ -511,18 +512,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             { status: 400 }
           );
         }
-        // Maternity applies to female staff only. The picker already hides it
-        // for everyone else (LeaveApprovalQueue), but that's presentation -
-        // this is the guard, so a direct API call can't set it either. Read
-        // live from the requester's user record rather than from anything
-        // copied onto the request, matching how the queue decides what to
-        // offer. A requester with no gender recorded is not eligible: the
-        // college should record it rather than have the app assume.
+        // Maternity applies to female staff only, and only once they've
+        // completed at least 1 year of service. The picker already hides
+        // Maternity for anyone who isn't female (LeaveApprovalQueue), but
+        // that's presentation - this is the guard, so a direct API call
+        // can't set it either. Both reads are live from the requester's own
+        // record rather than from anything copied onto the request,
+        // matching how the queue decides what to offer. A requester with no
+        // gender recorded is not eligible: the college should record it
+        // rather than have the app assume. Service length uses the same
+        // completed-years rule (yearsOfService) already used to gate the
+        // new-joining leave category, off the same dateOfJoining
+        // resolveEmployeeIdentity already falls back through for every
+        // account shape.
         if (body.otherLeaveCategory === "MATERNITY") {
           const gender = await resolveStaffGender(db, session.collegeId, req.uid);
           if (gender !== "Female") {
             return NextResponse.json(
               { error: "Maternity leave applies to female staff only" },
+              { status: 400 }
+            );
+          }
+          const identity = await resolveEmployeeIdentity(db, session.collegeId, req.uid);
+          const completedYears = identity ? yearsOfService(identity.dateOfJoining, new Date()) : 0;
+          if (completedYears < 1) {
+            return NextResponse.json(
+              { error: "Maternity leave requires at least 1 completed year of service" },
               { status: 400 }
             );
           }
