@@ -59,9 +59,10 @@ export default function NewDeanSubjectPage() {
   const [saving, setSaving] = useState(false);
   // Whichever of this course's own regulations (Course Catalog, see
   // CourseCatalogSettingsCard) currently cover the picked year, resolved
-  // from their batch coverage. Every subject must be tagged with one of these.
+  // from their batch coverage - offered as an optional tag, not required
+  // (subjects are scoped by Academic Year session, not regulation; see
+  // dean/subjects/page.tsx).
   const [regulations, setRegulations] = useState<string[]>([]);
-  const [loadedCatalog, setLoadedCatalog] = useState(false);
 
   useEffect(() => {
     if (!courseId || !year) {
@@ -77,27 +78,10 @@ export default function NewDeanSubjectPage() {
         const catalogItem = (d.items ?? []).find((c) => c.id === catalogId);
         setRegulations(regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), parseAcademicYearStart(academicYear) ?? undefined));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }))
-      .finally(() => setLoadedCatalog(true));
+      .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
   }, [catalogId, year, academicYear]);
 
   if (!courseId || !year) return null;
-
-  if (loadedCatalog && regulations.length === 0) {
-    return (
-      <div className="max-w-xl">
-        <PageHeader title="Add Subject" description={`No regulations available for Year ${year}`} />
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Add a regulation whose batch covers this year to this course under Course Catalog before adding subjects to it.
-            </p>
-            <Button variant="outline" onClick={() => router.push(backHref)}>Back</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   function setF(patch: Partial<SubjectForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -107,10 +91,6 @@ export default function NewDeanSubjectPage() {
     e.preventDefault();
     if (!form.name.trim() || !form.code.trim()) {
       toast({ variant: "destructive", title: "Name and code are required" });
-      return;
-    }
-    if (!form.regulation) {
-      toast({ variant: "destructive", title: "Select a regulation" });
       return;
     }
     if (form.serialNumber === "") {
@@ -220,16 +200,16 @@ export default function NewDeanSubjectPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Regulation *</Label>
-              <Select value={form.regulation} onValueChange={(v) => setF({ regulation: v })}>
-                <SelectTrigger><SelectValue placeholder={regulations.length ? "Select regulation" : "No regulations declared yet"} /></SelectTrigger>
+              <Label>Regulation</Label>
+              <Select value={form.regulation} onValueChange={(v) => setF({ regulation: v })} disabled={regulations.length === 0}>
+                <SelectTrigger><SelectValue placeholder={regulations.length ? "Select regulation (optional)" : "None resolved for this year"} /></SelectTrigger>
                 <SelectContent>
                   {regulations.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                 </SelectContent>
               </Select>
               {regulations.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Ask the Principal to declare regulations under Settings first.
+                  No regulation&rsquo;s batch currently covers this year - the subject will be added without one.
                 </p>
               )}
             </div>
