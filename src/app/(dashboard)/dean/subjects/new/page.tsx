@@ -12,7 +12,8 @@ import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
 import type { CourseCatalogItem, SubjectCategory, SubjectType } from "@/types";
 import { SUBJECT_CATEGORY_LABELS, SUBJECT_TYPE_LABELS } from "@/types";
-import { regulationsForYear } from "@/lib/college/academicStructure";
+import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
+import { parseAcademicYearStart } from "@/lib/college/academicSession";
 
 type SubjectForm = {
   serialNumber: string;
@@ -56,10 +57,9 @@ export default function NewDeanSubjectPage() {
     ...EMPTY_SUBJECT_FORM, regulation: regulationFromList, serialNumber: nextSerialNumber,
   });
   const [saving, setSaving] = useState(false);
-  // This course's OWN assigned regulations (Course Catalog > Regulations,
-  // see CourseCatalogSettingsCard) - a narrower set than the college's full
-  // declared list, since a different course can use an entirely different
-  // set of regulations. Every subject must be tagged with one of these.
+  // Whichever of this course's own regulations (Course Catalog, see
+  // CourseCatalogSettingsCard) currently cover the picked year, resolved
+  // from their batch coverage. Every subject must be tagged with one of these.
   const [regulations, setRegulations] = useState<string[]>([]);
   const [loadedCatalog, setLoadedCatalog] = useState(false);
 
@@ -75,11 +75,11 @@ export default function NewDeanSubjectPage() {
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => {
         const catalogItem = (d.items ?? []).find((c) => c.id === catalogId);
-        setRegulations(regulationsForYear(catalogItem, Number(year)));
+        setRegulations(regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), parseAcademicYearStart(academicYear) ?? undefined));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }))
       .finally(() => setLoadedCatalog(true));
-  }, [catalogId, year]);
+  }, [catalogId, year, academicYear]);
 
   if (!courseId || !year) return null;
 
@@ -90,7 +90,7 @@ export default function NewDeanSubjectPage() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             <p className="text-sm text-muted-foreground">
-              Ask the Principal to assign a regulation covering this year to this course under Settings &gt; Course Catalog before adding subjects to it.
+              Add a regulation whose batch covers this year to this course under Course Catalog before adding subjects to it.
             </p>
             <Button variant="outline" onClick={() => router.push(backHref)}>Back</Button>
           </CardContent>

@@ -3,14 +3,13 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { validateRegulationYears } from "@/lib/college/academicStructure";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("DEAN", "SUPER_ADMIN");
     const { id } = await params;
     const body = (await request.json()) as {
       name?: string;
@@ -18,7 +17,7 @@ export async function PATCH(
       durationYears?: number;
       isActive?: boolean;
       regulations?: string[];
-      regulationYears?: Record<string, number[]>;
+      regulationBatches?: Record<string, string>;
     };
 
     const db = getAdminDb();
@@ -26,7 +25,6 @@ export async function PATCH(
     const ref = catalogCol.doc(id);
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const existing = snap.data() as { durationYears?: number; regulations?: string[]; regulationYears?: Record<string, number[]> };
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -65,12 +63,8 @@ export async function PATCH(
       updates.regulations = Array.from(new Set(body.regulations.map((r) => r.trim()).filter(Boolean)));
     }
 
-    if (body.regulationYears != null) {
-      const effectiveRegulations = (updates.regulations as string[] | undefined) ?? existing.regulations ?? [];
-      const effectiveDuration = (updates.durationYears as number | undefined) ?? existing.durationYears ?? 10;
-      const err = validateRegulationYears(body.regulationYears, effectiveRegulations, effectiveDuration);
-      if (err) return NextResponse.json({ error: err }, { status: 400 });
-      updates.regulationYears = body.regulationYears;
+    if (body.regulationBatches != null) {
+      updates.regulationBatches = body.regulationBatches;
     }
 
     await ref.update(updates);
@@ -89,7 +83,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("DEAN", "SUPER_ADMIN");
     const { id } = await params;
 
     const db = getAdminDb();

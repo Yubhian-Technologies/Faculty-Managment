@@ -46,7 +46,7 @@ export interface Subject {
   academicYear?: string;
   // The curriculum regulation this subject's syllabus follows (e.g. "R20",
   // "R23") - one of the owning course's own Course Catalog regulations
-  // (CourseCatalogItem.regulations/regulationYears). Different batches of
+  // (CourseCatalogItem.regulations/regulationBatches). Different batches of
   // the same year-of-study can be on different regulations at once (e.g. a
   // transition year), so this is set per-subject rather than inherited from
   // a single default. Required for course/year-scoped

@@ -13,7 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
-import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, parseAcademicYearStart } from "@/lib/college/academicSession";
 import type { Course, CourseCatalogItem, Department } from "@/types";
 
@@ -173,15 +173,16 @@ export default function NewSectionPage() {
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
 
-  // This course's own assigned regulations, narrowed to whichever are
-  // actually offered for the picked year (regulationYears) - same set the
-  // Dean's Add Subject page offers, so a section can only ever be tagged
-  // with a regulation its own course/year combination could actually use.
+  // This course's own regulations, resolved by which batch (intake year)
+  // currently occupies the picked year AS OF this college's current session
+  // - same resolution the Dean's Add Subject page uses, so a section can
+  // only ever be tagged with a regulation its own course/year combination
+  // could actually use right now.
   const regulationOptions = useMemo(() => {
     if (!formCourse?.catalogId || !form.year) return [];
     const catalogItem = catalogItems.find((c) => c.id === formCourse.catalogId);
-    return regulationsForYear(catalogItem, Number(form.year));
-  }, [formCourse, catalogItems, form.year]);
+    return regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(form.year), currentSessionStart ?? undefined);
+  }, [formCourse, catalogItems, form.year, currentSessionStart]);
 
   function selectYear(year: string) {
     const sessionStart = currentSessionStart ?? currentAcademicStartYear();

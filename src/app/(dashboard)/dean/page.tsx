@@ -22,10 +22,10 @@ export default function DeanDashboard() {
         </CardContent>
       </Card>
 
-      {/* Read-only - the Principal maintains Course Catalog under Settings;
-          whatever they save there (each course's regulation codes and which
-          of its years each applies to) shows up here immediately on next load. */}
-      <CourseCatalogSettingsCard readOnly />
+      {/* Course Catalog is the Dean's own module - added/edited directly here,
+          including each course's curriculum regulations and their intake
+          batches (see CourseCatalogSettingsCard/RegulationBatchesEditor). */}
+      <CourseCatalogSettingsCard />
     </div>
   );
 }
