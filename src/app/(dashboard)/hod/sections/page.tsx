@@ -867,7 +867,13 @@ export default function HODSectionsPage() {
                               />
                             )}
                           </div>
-                          <p className="text-sm opacity-70 mt-0.5">{sec.batch}</p>
+                          {/* Regulation shown here (not just inside Edit Section) so it's
+                              visible at a glance regardless of the Edit form's own picker -
+                              omitted entirely for a section with none set, rather than
+                              showing an empty/dash placeholder. */}
+                          <p className="text-sm opacity-70 mt-0.5">
+                            {sec.batch}{sec.regulation ? ` · ${sec.regulation}` : ""}
+                          </p>
                         </Link>
                         <div className="flex gap-1">
                           <button

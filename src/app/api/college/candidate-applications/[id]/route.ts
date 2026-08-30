@@ -364,7 +364,7 @@ export async function PATCH(
     if (notifyPrincipalDocsReady) {
       const principalSnap = await collegeRef
         .collection("users")
-        .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
+        .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"])
         .get();
       for (const principalDoc of principalSnap.docs) {
         await collegeRef.collection("notifications").add({

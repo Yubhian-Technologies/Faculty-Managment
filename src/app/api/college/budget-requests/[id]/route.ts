@@ -133,7 +133,7 @@ export async function PATCH(
 
       const principalsSnap = await db
         .collection("colleges").doc(session.collegeId)
-        .collection("users").where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"]).get();
+        .collection("users").where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]).get();
       for (const p of principalsSnap.docs) {
         await emitWorkflowNotification({
           db, collegeId: session.collegeId, toUid: p.id,

@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { cn, exportToCSV } from "@/lib/utils";
 import { EmptyState } from "./EmptyState";
 import { TableSkeleton } from "./SkeletonLoader";
+import { Pagination } from "./Pagination";
+
+const DEFAULT_PAGE_SIZE = 20;
 
 export interface Column<T> {
   key: string;
@@ -32,6 +35,14 @@ interface DataTableProps<T extends Record<string, unknown>> {
   // When set, rows are grouped under a header row per returned label (e.g.
   // department), sorted alphabetically - search/export still apply first.
   groupBy?: (row: T) => string;
+  // Opt-in client-side pagination (default page size 20, same 10/20/30/50
+  // choices as the shared Pagination component used by the Office/Principal
+  // Students pages) - off by default so every other, non-student list already
+  // using this table is unaffected. Paginates AFTER search/groupBy so typing
+  // in the search box still searches the whole `data` array, not just the
+  // current page.
+  paginate?: boolean;
+  defaultPageSize?: number;
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -48,8 +59,12 @@ export function DataTable<T extends Record<string, unknown>>({
   onRowClick,
   keyExtractor,
   groupBy,
+  paginate,
+  defaultPageSize,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(defaultPageSize ?? DEFAULT_PAGE_SIZE);
 
   const filtered = search
     ? data.filter((row) =>
@@ -59,9 +74,17 @@ export function DataTable<T extends Record<string, unknown>>({
       )
     : data;
 
+  // Clamped rather than reset via an effect - if an external filter (e.g. the
+  // host page's own Department/Course/Year selects) shrinks `data` while
+  // sitting on a later page, this settles back to the last real page on the
+  // very next render instead of showing a blank table.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const effectivePage = Math.min(page, totalPages);
+  const pageRows = paginate ? filtered.slice((effectivePage - 1) * pageSize, effectivePage * pageSize) : filtered;
+
   const groups = groupBy
     ? Object.entries(
-        filtered.reduce<Record<string, T[]>>((acc, row) => {
+        pageRows.reduce<Record<string, T[]>>((acc, row) => {
           const label = groupBy(row) || "—";
           (acc[label] ??= []).push(row);
           return acc;
@@ -124,7 +147,7 @@ export function DataTable<T extends Record<string, unknown>>({
           <Input
             placeholder={searchPlaceholder}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); if (paginate) setPage(1); }}
             className="pl-9"
             // A plain, un-hinted text input is exactly what a browser's
             // autofill heuristics latch onto (e.g. offering the logged-in
@@ -190,11 +213,21 @@ export function DataTable<T extends Record<string, unknown>>({
                         {rows.map((row) => renderRow(row))}
                       </React.Fragment>
                     ))
-                  : filtered.map((row) => renderRow(row))}
+                  : pageRows.map((row) => renderRow(row))}
               </tbody>
             </table>
           </div>
         </div>
+      )}
+
+      {paginate && filtered.length > 0 && (
+        <Pagination
+          page={effectivePage}
+          pageSize={pageSize}
+          total={filtered.length}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
       )}
     </div>
   );

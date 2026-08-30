@@ -308,19 +308,28 @@ export async function POST(request: Request) {
       creatorName = (creatorSnap.data() as { name?: string } | undefined)?.name ?? "Unknown";
     } catch { /* best-effort */ }
 
-    await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("auditLogs")
-      .add({
-        collegeId,
-        action: "USER_CREATED",
-        performedBy: session.uid,
-        performedByName: creatorName,
-        targetId: uid,
-        details: { email, role, name: resolvedName, department: resolvedDepartment },
-        timestamp: now,
-      });
+    // Best-effort: the account already exists at this point, so a logging
+    // failure must not surface as "Internal error" to the caller. `email`
+    // (the optional personal contact address) is often absent, so log the
+    // login email instead - a plain `email: email` here would be `undefined`
+    // and Firestore rejects undefined field values, failing the whole request.
+    try {
+      await db
+        .collection("colleges")
+        .doc(collegeId)
+        .collection("auditLogs")
+        .add({
+          collegeId,
+          action: "USER_CREATED",
+          performedBy: session.uid,
+          performedByName: creatorName,
+          targetId: uid,
+          details: { email: loginEmail, role, name: resolvedName, department: resolvedDepartment },
+          timestamp: now,
+        });
+    } catch (auditErr) {
+      console.error("[college/users POST] audit log write failed", auditErr);
+    }
 
     return NextResponse.json({ uid }, { status: 201 });
   } catch (err) {

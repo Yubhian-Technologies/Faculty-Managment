@@ -1,10 +1,12 @@
 import type { Firestore } from "firebase-admin/firestore";
 
-// CC list for an offer letter email: Principal, Vice Principal, the batch's panel
-// members, the HOD, and Accounts (location-scoped - see ROLE_SCOPE in
-// src/types/core.ts, profile lives under locations/{locationId}/locationUsers).
-// Principal/VP are resolved independently of the batch existing - a missing/
-// deleted batch should never silently drop them from CC.
+// CC list for an offer letter email: Principal, Vice Principal, College Admin
+// (mirrors Principal's authority - see UserRole's own doc-comment), the
+// batch's panel members, the HOD, and Accounts (location-scoped - see
+// ROLE_SCOPE in src/types/core.ts, profile lives under
+// locations/{locationId}/locationUsers). Principal/VP/College Admin are
+// resolved independently of the batch existing - a missing/deleted batch
+// should never silently drop them from CC.
 export async function resolveOfferLetterCcEmails(
   db: Firestore,
   collegeId: string,
@@ -16,7 +18,7 @@ export async function resolveOfferLetterCcEmails(
   const [collegeSnap, batchSnap, principalVpSnap] = await Promise.all([
     db.collection("colleges").doc(collegeId).get(),
     batchId ? db.collection("colleges").doc(collegeId).collection("hiringBatches").doc(batchId).get() : Promise.resolve(null),
-    usersColl.where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"]).get(),
+    usersColl.where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]).get(),
   ]);
   for (const d of principalVpSnap.docs) {
     const email = (d.data() as { email?: string }).email;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DepartmentScopeSelect } from "@/components/shared/DepartmentScopeSelect";
@@ -13,8 +13,8 @@ import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { findBranchManager } from "@/lib/departments/managedBranches";
 import { buildCourseGroups, managerEffectiveYears } from "@/lib/departments/hodScope";
-import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
-import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, parseAcademicYearStart } from "@/lib/college/academicSession";
+import { resolveDepartmentCourseScope, regulationsForBatchStartYear } from "@/lib/college/academicStructure";
+import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, sectionBatchIntakeYears, parseBatchStartYear } from "@/lib/college/academicSession";
 import type { Course, CourseCatalogItem, Department } from "@/types";
 
 // `id` is the facultyMembers doc id — used only as the React/Select key.
@@ -90,13 +90,6 @@ export default function NewSectionPage() {
   // different branch has a different set of sub-departments.
   const [branchSubDept, setBranchSubDept] = useState("");
   const [letter, setLetter] = useState("");
-  // The college's own configured current session, when a Principal has set
-  // one via Settings > Academic Year (see AcademicYearSettingsCard.tsx) -
-  // used to center the Batch picker's default on the right intake year for
-  // whatever Year is picked. Falls back to the plain date-based session
-  // (currentAcademicStartYear) when nothing's configured yet, same fallback
-  // resolveCurrentAcademicYear itself uses.
-  const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/college/faculty?status=ACTIVE")
@@ -117,14 +110,6 @@ export default function NewSectionPage() {
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => setCatalogItems(d.items ?? []))
       .catch(() => { /* non-critical - regulation picker just stays empty */ });
-
-    fetch("/api/college/academic-sessions")
-      .then((r) => r.json() as Promise<{ academicSessions?: { label: string; isCurrent: boolean }[] }>)
-      .then((d) => {
-        const current = (d.academicSessions ?? []).find((s) => s.isCurrent);
-        setCurrentSessionStart(current ? parseAcademicYearStart(current.label) ?? null : null);
-      })
-      .catch(() => { /* non-critical - Batch picker falls back to the date-based session */ });
   }, []);
 
   const topDepartmentId = useMemo(
@@ -173,19 +158,28 @@ export default function NewSectionPage() {
 
   const formCourse = useMemo(() => courses.find((c) => c.id === form.courseId) ?? null, [courses, form.courseId]);
 
-  // This course's own regulations, resolved by which batch (intake year)
-  // currently occupies the picked year AS OF this college's current session
-  // - same resolution the Dean's Add Subject page uses, so a section can
-  // only ever be tagged with a regulation its own course/year combination
-  // could actually use right now.
-  const regulationOptions = useMemo(() => {
-    if (!formCourse?.catalogId || !form.year) return [];
+  // This course's own regulations, resolved directly from a batch's own
+  // admission year - not from "current session as of now", so picking a
+  // different Batch (an HOD deliberately choosing an off-cycle admission
+  // year - see Section.regulation's own doc-comment) immediately re-narrows
+  // Regulation to whatever actually covers that batch, instead of staying
+  // stuck on the previous batch's answer. Also called directly (not just via
+  // the regulationOptions memo below) from the Batch picker's onValueChange,
+  // to decide whether the currently-picked regulation survives the change.
+  const regulationsForBatch = useCallback((batchValue: string): string[] => {
+    if (!formCourse?.catalogId || !batchValue) return [];
+    const batchStart = parseBatchStartYear(batchValue);
+    if (batchStart == null) return [];
     const catalogItem = catalogItems.find((c) => c.id === formCourse.catalogId);
-    return regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(form.year), currentSessionStart ?? undefined);
-  }, [formCourse, catalogItems, form.year, currentSessionStart]);
+    return regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, batchStart, catalogItem?.regulations);
+  }, [formCourse, catalogItems]);
+  const regulationOptions = useMemo(() => regulationsForBatch(form.batch), [regulationsForBatch, form.batch]);
 
   function selectYear(year: string) {
-    const sessionStart = currentSessionStart ?? currentAcademicStartYear();
+    // Anchor on the real current academic year, not the stored session pin
+    // (which can be years stale) - otherwise the auto-filled batch below can
+    // land outside the widened Batch list computed in batchOptions.
+    const sessionStart = currentAcademicStartYear();
     const admissionYear = admissionStartYearForCourseYear(sessionStart, Number(year));
     const batch = formCourse ? deriveBatch(admissionYear, formCourse.durationYears) : "";
     setF({ year, regulation: "", batch });
@@ -193,17 +187,20 @@ export default function NewSectionPage() {
 
   // Candidate intake years to offer in the Batch picker, centered on the
   // admission year this Course+Year combination actually implies for the
-  // college's current session - a couple of intakes either side, so an HOD
-  // can still deliberately pick an off-cycle admission year (e.g. correcting
-  // a transition-year section - see Section.regulation's own doc-comment on
-  // why that's a legitimate case), without ever typing an end year that
-  // contradicts the course's real duration.
+  // college's current academic year - one intake ahead ("next year"), that
+  // year ("this year"), then the last 4, so an HOD can still deliberately
+  // pick an off-cycle admission year (e.g. correcting a transition-year
+  // section - see Section.regulation's own doc-comment on why that's a
+  // legitimate case), without ever typing an end year that contradicts the
+  // course's real duration. Anchored on the real current academic year
+  // rather than the stored session pin (currentSessionStart) - that pin can
+  // be years stale, which is exactly what kept a current-year intake off
+  // this list.
   const batchOptions = useMemo(() => {
     if (!formCourse || !form.year) return [];
-    const sessionStart = currentSessionStart ?? currentAcademicStartYear();
-    const center = admissionStartYearForCourseYear(sessionStart, Number(form.year));
-    return [center + 1, center, center - 1, center - 2, center - 3].map((y) => deriveBatch(y, formCourse.durationYears));
-  }, [formCourse, form.year, currentSessionStart]);
+    const center = admissionStartYearForCourseYear(currentAcademicStartYear(), Number(form.year));
+    return sectionBatchIntakeYears(center).map((y) => deriveBatch(y, formCourse.durationYears));
+  }, [formCourse, form.year]);
 
   // The department this section is being created under: the sub-department a
   // parent HOD explicitly targeted, otherwise the chosen top-level department
@@ -644,7 +641,18 @@ export default function NewSectionPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Batch *</Label>
-                <Select value={form.batch} onValueChange={(v) => setF({ batch: v })} disabled={!form.year}>
+                <Select
+                  value={form.batch}
+                  onValueChange={(v) => {
+                    // Keep the current regulation only if it still covers the
+                    // newly-picked batch - otherwise it's stale (belonged to
+                    // the previous batch) and must be re-picked, exactly like
+                    // switching Year already clears it.
+                    const stillValid = regulationsForBatch(v).includes(form.regulation);
+                    setF({ batch: v, regulation: stillValid ? form.regulation : "" });
+                  }}
+                  disabled={!form.year}
+                >
                   <SelectTrigger><SelectValue placeholder={form.year ? "Select batch" : "Pick a year first"} /></SelectTrigger>
                   <SelectContent>
                     {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
@@ -657,10 +665,10 @@ export default function NewSectionPage() {
                 <Select
                   value={form.regulation}
                   onValueChange={(v) => setF({ regulation: v })}
-                  disabled={!form.year || regulationOptions.length === 0}
+                  disabled={!form.batch || regulationOptions.length === 0}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={form.year ? (regulationOptions.length ? "Select regulation" : "None assigned for this year") : "Pick a year first"} />
+                    <SelectValue placeholder={form.batch ? (regulationOptions.length ? "Select regulation" : "None assigned for this batch") : "Pick a batch first"} />
                   </SelectTrigger>
                   <SelectContent>
                     {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}

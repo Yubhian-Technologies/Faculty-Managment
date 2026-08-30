@@ -15,7 +15,10 @@ import { ShieldCheck, KeyRound, UserCheck } from "lucide-react";
 import { ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
 import type { VacancyRequest, Candidate, CandidateApplication, FMSUser, HiringBatch, MeetingPlatform } from "@/types";
 
-const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL"] as const;
+// COLLEGE_ADMIN mirrors Principal's authority (see UserRole's own doc-comment)
+// but keeps its real "COLLEGE_ADMIN" role on its own Firestore doc, so it
+// needs its own entry here to be locked in as a default panel member too.
+const DEFAULT_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"] as const;
 const SELECTABLE_ROLES = ["HOD", "PANEL_MEMBER"] as const;
 const MEETING_PLATFORMS = Object.keys(MEETING_PLATFORM_LABELS) as MeetingPlatform[];
 
@@ -97,7 +100,7 @@ export default function NewBatchPage() {
           setSelectedVacancyId(prefilledVacancyId);
         }
 
-        // Locked defaults: Principal + VP (excluding self, though unlikely)
+        // Locked defaults: Principal + VP + College Admin (excluding self, though unlikely)
         const defaults = s.filter(
           (u) => u.uid !== user?.uid && (DEFAULT_ROLES as readonly string[]).includes(u.role)
         );
@@ -113,7 +116,7 @@ export default function NewBatchPage() {
           )
         );
 
-        // Build full default uid set: HOD + all Principals + all VPs
+        // Build full default uid set: HOD + all Principals + all VPs + all College Admins
         const defaultUids = [
           ...(user?.uid ? [user.uid] : []),
           ...defaults.map((u) => u.uid),

@@ -35,6 +35,9 @@ export function useAuth() {
         let serverProfile: FMSUser | null = null;
         let serverName: string | undefined;
         let serverEmail: string | undefined;
+        // True underlying role from /api/auth/session's own realRole (only
+        // ever differs from `role` for COLLEGE_ADMIN) - see FMSUser.realRole.
+        let serverRealRole: string | undefined;
 
         // Users created via REST API have no JWT custom claims.
         // Call session API (uses Admin SDK, bypasses Firestore rules) to resolve role.
@@ -47,7 +50,7 @@ export function useAuth() {
             });
             if (res.ok) {
               const data = await res.json() as {
-                role?: string; collegeId?: string; locationId?: string;
+                role?: string; realRole?: string; collegeId?: string; locationId?: string;
                 name?: string; email?: string; profile?: FMSUser;
               };
               role = data.role && data.role !== "UNKNOWN" ? data.role : undefined;
@@ -56,6 +59,7 @@ export function useAuth() {
               serverName = data.name;
               serverEmail = data.email;
               serverProfile = data.profile ?? null;
+              serverRealRole = data.realRole;
             }
           } catch { /* non-fatal */ }
         } else {
@@ -113,6 +117,7 @@ export function useAuth() {
           // Server already fetched the profile for claim-less users.
           // For users with JWT claims, try client-side Firestore fetch.
           let profile: FMSUser | null = serverProfile;
+          let realRole: string | undefined = serverRealRole;
           if (!profile) {
             try {
               profile = await getUserById(collegeId, firebaseUser.uid);
@@ -123,19 +128,26 @@ export function useAuth() {
           // but auth/UI treats it as Principal everywhere. /api/auth/session
           // does the same normalization server-side; this covers the direct
           // Firestore read path used once custom claims are already set.
+          // `realRole` preserves the pre-normalization value the same way
+          // api/auth/session's own `realRole` does, for the rare feature that
+          // must tell College Admin apart from Principal (see FMSUser.realRole).
           if (profile && (profile.role as string) === "COLLEGE_ADMIN") {
+            realRole = "COLLEGE_ADMIN";
             profile = { ...profile, role: "PRINCIPAL" };
           }
           setUser(
-            profile ?? {
-              uid: firebaseUser.uid,
-              collegeId,
-              name: serverName ?? firebaseUser.displayName ?? "User",
-              email: serverEmail ?? firebaseUser.email ?? "",
-              role: role as UserRole,
-              isActive: true,
-              createdAt: {} as never,
-            }
+            profile
+              ? { ...profile, realRole: (realRole as UserRole | undefined) ?? profile.role }
+              : {
+                  uid: firebaseUser.uid,
+                  collegeId,
+                  name: serverName ?? firebaseUser.displayName ?? "User",
+                  email: serverEmail ?? firebaseUser.email ?? "",
+                  role: role as UserRole,
+                  realRole: (realRole as UserRole | undefined) ?? (role as UserRole),
+                  isActive: true,
+                  createdAt: {} as never,
+                }
           );
         } else {
           // Genuinely no account configured

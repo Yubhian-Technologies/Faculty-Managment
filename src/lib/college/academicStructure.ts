@@ -30,7 +30,7 @@ export type DepartmentWithId = Department & { id: string };
  * too (re-exported) so every caller can import course-scoped regulation
  * resolution from this one file regardless of which piece it needs.
  */
-export { regulationsForCourseYearByBatch } from "@/lib/college/academicSession";
+export { regulationsForCourseYearByBatch, regulationsForBatchStartYear } from "@/lib/college/academicSession";
 
 /**
  * The catalog course a department's own Course doc resolves `courseName` to -
