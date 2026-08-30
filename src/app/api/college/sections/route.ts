@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope, regulationsForYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, isDeclaredFeederFor } from "@/lib/college/academicStructure";
 import { parseBatchStartYear, deriveBatch } from "@/lib/college/academicSession";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
@@ -379,8 +379,8 @@ export async function POST(request: Request) {
         );
       }
       const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
-      const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulations?: string[]; regulationYears?: Record<string, number[]> }) : null;
-      const allowed = regulationsForYear(catalogItem, Number(body.year));
+      const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulationBatches?: Record<string, string> }) : null;
+      const allowed = regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(body.year));
       if (!allowed.includes(regulation)) {
         return NextResponse.json(
           { error: `"${regulation}" isn't offered for Year ${body.year} of ${course.name}. Check Settings > Course Catalog.` },

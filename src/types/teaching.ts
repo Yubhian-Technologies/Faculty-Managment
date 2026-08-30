@@ -41,20 +41,22 @@ export interface Subject {
   semester?: number;           // semester-scoped subjects only
   // The calendar academic session this subject entry belongs to (e.g.
   // "2026-27") - not the same as `year` above. Set by the Dean when creating
-  // a subject (see dean/subjects/new/page.tsx); optional/absent on subjects
-  // created before this field existed or via the HOD's own Subjects page.
+  // a subject (see dean/subjects/new/page.tsx) and what the Dean's Subjects
+  // list is actually scoped/filtered by (dean/subjects/page.tsx) - each
+  // session gets its own independent subject list per course-year, filled in
+  // fresh by the Dean rather than carried over or auto-reset. Optional/absent
+  // on subjects created before this field existed or via the HOD's own
+  // Subjects page.
   academicYear?: string;
   // The curriculum regulation this subject's syllabus follows (e.g. "R20",
-  // "R23") - one of the owning course's own Course Catalog regulations
-  // (CourseCatalogItem.regulations/regulationYears). Different batches of
-  // the same year-of-study can be on different regulations at once (e.g. a
-  // transition year), so this is set per-subject rather than inherited from
-  // a single default. Required for course/year-scoped
-  // subjects going forward (enforced in POST); absent on semester-scoped
-  // subjects (no course/year link to hang a regulation off of) and on subjects
-  // created before this field existed, until backfilled - see
-  // scripts/backfill-subject-regulations.mjs. Immutable once set (like
-  // courseId/year) - not editable via PATCH.
+  // "R23"), auto-resolved from the owning course's own Course Catalog
+  // regulations (CourseCatalogItem.regulations/regulationBatches) when
+  // unambiguous. Optional, not a gate on adding a subject - a course-year
+  // with no (or more than one) regulation currently resolved can still have
+  // subjects added; this is purely a tag, used elsewhere to match a Subject
+  // to a Section on the same regulation (TeachingAssignmentsEditor). Absent
+  // on semester-scoped subjects and on subjects created before this field
+  // existed. Immutable once set (like courseId/year) - not editable via PATCH.
   regulation?: string;
   // Row position in the Dean's curriculum-table view of a course/year -
   // editable, so the Dean can match a printed curriculum sheet's ordering

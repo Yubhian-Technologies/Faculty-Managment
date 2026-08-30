@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
-import { regulationsForYear } from "@/lib/college/academicStructure";
+import { regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, parseAcademicYearStart } from "@/lib/college/academicSession";
 import type { Course, CourseCatalogItem, Department, Section, Subject, TeachingAssignment } from "@/types";
 
@@ -390,14 +390,14 @@ export default function EditSectionPage() {
     return form.batch && !derived.includes(form.batch) ? [form.batch, ...derived] : derived;
   }, [formCourse, form.year, form.batch, currentSessionStart]);
 
-  // This course's own assigned regulations, narrowed to whichever are
-  // actually offered for this section's (fixed) year - same set the Dean's
-  // Add Subject page and Add Section form offer.
+  // This course's own regulations, resolved by which batch currently
+  // occupies this section's (fixed) year AS OF the current session - same
+  // resolution the Dean's Add Subject page and Add Section form use.
   const regulationOptions = useMemo(() => {
     if (!formCourse?.catalogId || !form.year) return [];
     const catalogItem = catalogItems.find((c) => c.id === formCourse.catalogId);
-    return regulationsForYear(catalogItem, Number(form.year));
-  }, [formCourse, catalogItems, form.year]);
+    return regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(form.year), currentSessionStart ?? undefined);
+  }, [formCourse, catalogItems, form.year, currentSessionStart]);
 
   // Collapse the several Course docs that represent one catalog programme into
   // a single dropdown choice - `courses` legitimately holds one row per related

@@ -8,7 +8,7 @@ import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/department
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 import { parseBatchStartYear, deriveBatch } from "@/lib/college/academicSession";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { DepartmentCourseScope } from "@/types";
@@ -178,8 +178,8 @@ export async function PATCH(
           );
         }
         const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
-        const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulations?: string[]; regulationYears?: Record<string, number[]> }) : null;
-        const allowed = regulationsForYear(catalogItem, targetYear ?? sectionYear);
+        const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulationBatches?: Record<string, string> }) : null;
+        const allowed = regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, targetYear ?? sectionYear);
         if (!allowed.includes(regulation)) {
           return NextResponse.json(
             { error: `"${regulation}" isn't offered for Year ${targetYear ?? sectionYear} of ${course.name}. Check Settings > Course Catalog.` },

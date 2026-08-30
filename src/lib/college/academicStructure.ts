@@ -18,51 +18,19 @@
 // re-checking `assignedYears`/`hasSubDepartments` inline, so the definition
 // can't drift between routes. If the heuristic ever needs to change (or become
 // a stored flag), this file is the only thing to edit.
-import type { Course, CourseCatalogItem, Department, DepartmentCourseScope } from "@/types";
+import type { Course, Department, DepartmentCourseScope } from "@/types";
 
 export type DepartmentWithId = Department & { id: string };
 
 /**
- * Which of a course catalog entry's own assigned regulations are actually
- * offered for a given year of that course - narrowed by `regulationYears`
- * when the Principal has scoped a regulation to specific years (e.g. R20 only
- * for years 3-4 during a transition), otherwise unrestricted (a regulation
- * with no entry there is offered for every year). Isomorphic (used by both
- * client pickers - Dean's Add Subject, HOD's Add/Edit Section - and the
- * subjects/sections API routes' own server-side validation) so the two never
- * disagree on which regulations a given year may use.
+ * Which of a course catalog entry's own regulations govern a given ordinal
+ * year of that course, AS OF a given session - see
+ * academicSession.ts's regulationsForCourseYearByBatch, which this just
+ * forwards to with the catalog entry's own `regulationBatches`. Kept here
+ * too (re-exported) so every caller can import course-scoped regulation
+ * resolution from this one file regardless of which piece it needs.
  */
-export function regulationsForYear(catalogItem: Pick<CourseCatalogItem, "regulations" | "regulationYears"> | null | undefined, year: number): string[] {
-  const regulations = catalogItem?.regulations ?? [];
-  const regulationYears = catalogItem?.regulationYears ?? {};
-  return regulations.filter((r) => {
-    const years = regulationYears[r];
-    return !years || years.length === 0 || years.includes(year);
-  });
-}
-
-/**
- * Validates a CourseCatalogItem's `regulationYears` map on write (POST/PATCH
- * for course-catalog, see api/college/course-catalog/route.ts and
- * [id]/route.ts): every key must be one of the course's own `regulations`,
- * and every year in range for this course's own duration.
- */
-export function validateRegulationYears(
-  regulationYears: Record<string, number[]> | undefined,
-  regulations: string[],
-  durationYears: number,
-): string | null {
-  if (!regulationYears) return null;
-  for (const [code, years] of Object.entries(regulationYears)) {
-    if (!regulations.includes(code)) {
-      return `"${code}" isn't one of this course's assigned regulations`;
-    }
-    if (!Array.isArray(years) || years.some((y) => !Number.isInteger(y) || y < 1 || y > durationYears)) {
-      return `Years for "${code}" must be between 1 and ${durationYears}`;
-    }
-  }
-  return null;
-}
+export { regulationsForCourseYearByBatch } from "@/lib/college/academicSession";
 
 /**
  * The catalog course a department's own Course doc resolves `courseName` to -

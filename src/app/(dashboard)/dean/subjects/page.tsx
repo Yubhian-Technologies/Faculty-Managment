@@ -13,8 +13,8 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions } from "@/lib/college/academicSession";
-import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
+import { academicSessionLabel, currentAcademicStartYear, recentAcademicSessions, parseAcademicYearStart } from "@/lib/college/academicSession";
+import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
 
 function ordinalYear(year: number) {
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
@@ -30,9 +30,9 @@ export default function DeanSubjectsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  // Course Catalog entries (regulations/regulationYears per course) - used to
-  // resolve which regulation(s) govern the selected course's selected year,
-  // same source hod/sections/new/page.tsx's own regulation picker reads.
+  // Course Catalog entries (regulations/regulationBatches per course) - used
+  // to resolve which regulation(s) govern the selected course's selected
+  // year, same source hod/sections/new/page.tsx's own regulation picker reads.
   const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
@@ -42,18 +42,11 @@ export default function DeanSubjectsPage() {
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   // Calendar academic session (e.g. "2026-27") a subject is tagged with when
-  // the Dean adds it - purely a record of when it was entered (shown as a
-  // badge), unrelated to which regulation applies (that's resolved from the
-  // course's own Course Catalog entry, not the session - see allowedRegulations).
+  // the Dean adds it, AND what "now" means for resolving which regulation
+  // covers a year below (regulationsForCourseYearByBatch) - defaults to the
+  // real current session, but picking a different one here lets the Dean
+  // browse which regulation covered a year in a past/future session too.
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
-  // Curriculum regulation (e.g. "R20", "R23") subjects for the selected year
-  // are filed under - auto-resolved from each regulation's own Batch versus
-  // the selected Academic Year session above (see selectYear/
-  // selectAcademicYear/allowedRegulations below), never picked manually here:
-  // "" means either no year is picked yet, or (rare) more than one regulation
-  // is currently assigned to this year, which blocks adding a subject until
-  // the Principal narrows Course Catalog down to exactly one.
-  const [selectedRegulation, setSelectedRegulation] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
 
@@ -108,14 +101,24 @@ export default function DeanSubjectsPage() {
     () => catalogItems.find((c) => c.id === selectedCourse?.catalogId) ?? null,
     [catalogItems, selectedCourse]
   );
-  // Whichever regulation(s) this course's own Course Catalog entry declares
-  // for the selected year (regulationYears) - empty means no year is picked
-  // yet, or none/more than one regulation is assigned for it, either of
-  // which blocks adding subjects here (see subjects POST).
+  // Whichever regulation(s) govern the selected year AS OF the selected
+  // Academic Year session above, resolved from this course's own Course
+  // Catalog entry's regulationBatches - purely informational (shown as a
+  // badge, tagged onto a new subject when unambiguous), never a gate on
+  // adding subjects, which are scoped by Academic Year session instead
+  // (see loadSubjects).
   const allowedRegulations = useMemo(
-    () => (selectedYear ? regulationsForYear(selectedCatalogItem, Number(selectedYear)) : []),
-    [selectedCatalogItem, selectedYear]
+    () => (selectedYear
+      ? regulationsForCourseYearByBatch(
+          selectedCatalogItem?.regulationBatches ?? {},
+          Number(selectedYear),
+          parseAcademicYearStart(selectedAcademicYear) ?? currentAcademicStartYear(),
+        )
+      : []),
+    [selectedCatalogItem, selectedYear, selectedAcademicYear]
   );
+  // The single regulation to tag a new subject with - only when unambiguous.
+  const singleRegulation = allowedRegulations.length === 1 ? allowedRegulations[0] : "";
 
   // Curriculum-table order: by S.No. when set (matches a printed curriculum
   // sheet), falling back to name for legacy subjects that predate the field.
@@ -173,18 +176,16 @@ export default function DeanSubjectsPage() {
     }
   }, []);
 
-  // Deliberately NOT filtered by academic session (academicYear) - a
-  // regulation's year-N curriculum is the same subject list no matter which
-  // session you're browsing under, so a batch's juniors see exactly what
-  // their seniors saw. academicYear is still stamped on each subject at
-  // creation time (shown as a badge) purely as a record of when it was
-  // entered, never as a visibility gate.
-  const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string, regulation: string) => {
+  // Scoped by Academic Year session, not regulation - each session (e.g.
+  // "2026-27") gets its own independent, persisted subject list per
+  // course-year, filled in fresh by the Dean every year rather than carried
+  // over or auto-reset when a different regulation happens to resolve.
+  const loadSubjects = useCallback(async (departmentName: string, courseId: string, year: string, academicYear: string) => {
     if (!departmentName || !courseId || !year) { setSubjects([]); return; }
     setIsLoadingSubjects(true);
     try {
       const res = await fetch(
-        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}${regulation ? `&regulation=${encodeURIComponent(regulation)}` : ""}`
+        `/api/college/subjects?department=${encodeURIComponent(departmentName)}&courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}${academicYear ? `&academicYear=${encodeURIComponent(academicYear)}` : ""}`
       );
       const data = await res.json() as { subjects: Subject[] };
       // The API also returns a feeder's shared subjects for a fed department
@@ -214,20 +215,18 @@ export default function DeanSubjectsPage() {
     const courseId = searchParams.get("courseId");
     const year = searchParams.get("year");
     const academicYear = searchParams.get("academicYear") || selectedAcademicYear;
-    const regulation = searchParams.get("regulation") ?? "";
     if (!departmentId) return;
     const dept = departments.find((d) => d.id === departmentId);
     if (!dept) return;
     void (async () => {
       setSelectedDepartmentId(departmentId);
       setSelectedAcademicYear(academicYear);
-      setSelectedRegulation(regulation);
       const list = await loadCourses(departmentId);
       if (courseId && list.some((c) => c.id === courseId)) {
         setSelectedCourseId(courseId);
         if (year) {
           setSelectedYear(year);
-          await loadSubjects(dept.name, courseId, year, regulation);
+          await loadSubjects(dept.name, courseId, year, academicYear);
         }
       }
     })();
@@ -251,26 +250,17 @@ export default function DeanSubjectsPage() {
     setSubjects([]);
   }
 
-  // Purely which session a newly-added subject gets stamped with (shown as a
-  // badge) - the regulation itself no longer depends on this at all (it's
-  // resolved from the course's own Course Catalog entry, not a calendar
-  // batch), so changing session no longer touches selectedRegulation/reloads
-  // subjects.
   function selectAcademicYear(academicYear: string) {
     setSelectedAcademicYear(academicYear);
+    // Switching session re-scopes the subject list (see loadSubjects) - each
+    // session has its own independent list, so this reloads rather than
+    // reusing whatever was showing for the previous session.
+    if (selectedDepartment && selectedYear) void loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, academicYear);
   }
 
   function selectYear(year: string) {
     setSelectedYear(year);
-    // Unambiguous (exactly one) in the normal case, else "" (no year picked
-    // yet, or none/more than one regulation assigned for it, either of which
-    // blocks Add Subject - see allowedRegulations). Computed inline against
-    // `year` rather than reading the allowedRegulations memo, which still
-    // reflects the OLD selectedYear at this point in the same render.
-    const regulationsForThisYear = regulationsForYear(selectedCatalogItem, Number(year));
-    const regulation = regulationsForThisYear.length === 1 ? regulationsForThisYear[0] : "";
-    setSelectedRegulation(regulation);
-    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, regulation);
+    if (selectedDepartment) void loadSubjects(selectedDepartment.name, selectedCourseId, year, selectedAcademicYear);
   }
 
   async function handleDelete() {
@@ -280,7 +270,7 @@ export default function DeanSubjectsPage() {
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to delete subject");
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
-      await loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedRegulation);
+      await loadSubjects(selectedDepartment.name, selectedCourseId, selectedYear, selectedAcademicYear);
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete subject" });
     } finally {
@@ -325,11 +315,9 @@ export default function DeanSubjectsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Academic Year</Label>
-                {/* Only stamps newly-added subjects with which session they were
-                    entered under (passed through to Add/Edit Subject below) -
-                    the subject LIST itself is never filtered by this, since a
-                    regulation's year-N curriculum is the same list every
-                    session (see loadSubjects). */}
+                {/* Scopes the subject list below (see loadSubjects) - each
+                    session has its own independent list per course-year,
+                    stamped onto subjects added under it. */}
                 <Select value={selectedAcademicYear} onValueChange={selectAcademicYear}>
                   <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
                   <SelectContent>
@@ -349,8 +337,8 @@ export default function DeanSubjectsPage() {
               <div className="space-y-1.5">
                 <Label>Regulation</Label>
                 {/* Read-only - auto-resolved from Course Catalog's own
-                    regulation-years for this course & year, set by the
-                    Principal. Never picked manually here. */}
+                    regulation batches for this course & year. Never picked
+                    manually here. */}
                 <div className="flex h-9 items-center gap-1.5 rounded-md border bg-muted/30 px-3">
                   {!selectedYear ? (
                     <span className="text-sm text-muted-foreground">Pick a year first</span>
@@ -384,23 +372,11 @@ export default function DeanSubjectsPage() {
                   </h2>
                   <Button
                     size="sm"
-                    disabled={allowedRegulations.length !== 1}
-                    onClick={() => router.push(`/dean/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(selectedRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                    onClick={() => router.push(`/dean/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
                   >
                     <Plus className="h-4 w-4 mr-2" />Add Subject
                   </Button>
                 </div>
-
-                {allowedRegulations.length === 0 && (
-                  <p className="text-sm text-amber-600 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
-                    No regulation is assigned to {ordinalYear(Number(selectedYear))} of {selectedCourse.name} yet. Ask the Principal to add one under Settings &gt; Course Catalog, then come back here to add subjects.
-                  </p>
-                )}
-                {allowedRegulations.length > 1 && (
-                  <p className="text-sm text-amber-600 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
-                    More than one regulation covers {ordinalYear(Number(selectedYear))} of {selectedCourse.name}. Ask the Principal to fix the overlapping years under Settings &gt; Course Catalog before adding subjects here.
-                  </p>
-                )}
 
                 {isLoadingSubjects ? (
                   <div className="space-y-2">
@@ -453,7 +429,7 @@ export default function DeanSubjectsPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    onClick={() => router.push(`/dean/subjects/${s.id}/edit?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(selectedRegulation)}`)}
+                                    onClick={() => router.push(`/dean/subjects/${s.id}/edit?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&regulation=${encodeURIComponent(singleRegulation)}`)}
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>

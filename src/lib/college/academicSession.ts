@@ -30,6 +30,45 @@ export function deriveBatch(admissionStartYear: number, durationYears: number): 
   return `${admissionStartYear}-${admissionStartYear + durationYears}`;
 }
 
+/**
+ * Every intake year a regulation's batch field covers. One regulation commonly
+ * runs for several consecutive intakes ("2024-2028,2025-2029" - R23 governing
+ * both the 2024 and 2025 admissions), so the field is a comma-separated list
+ * and each entry contributes its own start year.
+ */
+export function parseBatchStartYears(batch: string): number[] {
+  return batch
+    .split(",")
+    .map((part) => parseBatchStartYear(part.trim()))
+    .filter((y): y is number => y != null);
+}
+
+// Which regulation code(s) govern ordinal course-year `courseYear` (1-based -
+// 1st Year, 2nd Year, ...) AS OF a given session, derived purely from each
+// regulation's own batch coverage (CourseCatalogItem.regulationBatches)
+// versus that session - a batch starting in year Y sits in ordinal year
+// `asOfStartYear - Y + 1` for the session starting `asOfStartYear`; this
+// returns every regulation whose batch computes to exactly `courseYear` for
+// that session - normally exactly one, since each admission year has its own
+// regulation, but callers should treat more than one as "ambiguous, ask the
+// Dean to fix the batches" rather than silently picking the first.
+// `asOfStartYear` defaults to the real current session.
+export function regulationsForCourseYearByBatch(
+  regulationBatches: Record<string, string>,
+  courseYear: number,
+  asOfStartYear: number = currentAcademicStartYear(),
+): string[] {
+  const matches: string[] = [];
+  for (const [code, batch] of Object.entries(regulationBatches)) {
+    // Any one of the regulation's batches landing on this course-year is
+    // enough - they're consecutive intakes of the same regulation, so at most
+    // one of them can occupy a given year in a given session anyway.
+    const hit = parseBatchStartYears(batch).some((start) => start === admissionStartYearForCourseYear(asOfStartYear, courseYear));
+    if (hit) matches.push(code);
+  }
+  return matches;
+}
+
 // A handful of sessions to choose from - two years back through one year
 // ahead, newest first. Deliberately short (unlike indents' full history since
 // EARLIEST_ACADEMIC_START_YEAR) - a Subject's session only ever needs to be

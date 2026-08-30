@@ -3,9 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { validateRegulationYears } from "@/lib/college/academicStructure";
 
-// colleges/{collegeId}/courseCatalog - the Principal's master list of course
+// colleges/{collegeId}/courseCatalog - the Dean's master list of course
 // definitions (canonical name + short code + duration). Departments only *select*
 // from this list, they never re-type a course name, so duplicates can't creep in.
 
@@ -38,13 +37,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("DEAN", "SUPER_ADMIN");
     const body = (await request.json()) as {
       name?: string;
       code?: string;
       durationYears?: number;
       regulations?: string[];
-      regulationYears?: Record<string, number[]>;
+      regulationBatches?: Record<string, string>;
     };
 
     const name = body.name?.trim();
@@ -61,8 +60,6 @@ export async function POST(request: Request) {
     const db = getAdminDb();
 
     const regulations = Array.from(new Set((body.regulations ?? []).map((r) => r.trim()).filter(Boolean)));
-    const regulationYearsErr = validateRegulationYears(body.regulationYears, regulations, durationYears);
-    if (regulationYearsErr) return NextResponse.json({ error: regulationYearsErr }, { status: 400 });
 
     const catalogCol = db.collection("colleges").doc(session.collegeId).collection("courseCatalog");
 
@@ -97,7 +94,7 @@ export async function POST(request: Request) {
         code,
         durationYears,
         regulations,
-        ...(body.regulationYears ? { regulationYears: body.regulationYears } : {}),
+        ...(body.regulationBatches ? { regulationBatches: body.regulationBatches } : {}),
         isActive: true,
         createdBy: session.uid,
         createdByName: actorName,
