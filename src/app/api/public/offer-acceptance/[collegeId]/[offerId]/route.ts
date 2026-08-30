@@ -95,7 +95,7 @@ export async function POST(
 
     // Notify the office + HOD so the response is visible without them having
     // to poll the offers list.
-    const officeSnap = await collegeRef.collection("users").where("role", "in", ["COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL"]).get();
+    const officeSnap = await collegeRef.collection("users").where("role", "in", ["COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]).get();
     const batch = db.batch();
     for (const d of officeSnap.docs) {
       const notifRef = collegeRef.collection("notifications").doc();

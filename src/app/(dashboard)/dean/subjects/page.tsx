@@ -47,6 +47,12 @@ export default function DeanSubjectsPage() {
   // real current session, but picking a different one here lets the Dean
   // browse which regulation covered a year in a past/future session too.
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicSessionLabel(currentAcademicStartYear()));
+  // The college's own configured current session (Settings > Academic Year),
+  // when a Principal has set one - applied over the plain clock-based default
+  // above once loaded (see the effect below), so this page's notion of "now"
+  // agrees with HOD Sections' (hod/sections/new/page.tsx) and the server's
+  // (sections/route.ts) rather than drifting from it.
+  const [currentSessionLabel, setCurrentSessionLabel] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
 
@@ -70,7 +76,26 @@ export default function DeanSubjectsPage() {
       .then((r) => r.json() as Promise<{ items?: CourseCatalogItem[] }>)
       .then((d) => setCatalogItems(d.items ?? []))
       .catch(() => {});
+
+    fetch("/api/college/academic-sessions")
+      .then((r) => r.json() as Promise<{ academicSessions?: { label: string; isCurrent: boolean }[] }>)
+      .then((d) => {
+        const current = (d.academicSessions ?? []).find((s) => s.isCurrent);
+        if (current?.label) setCurrentSessionLabel(current.label);
+      })
+      .catch(() => { /* non-critical - falls back to the date-based session */ });
   }, []);
+
+  // Apply the college's configured current session over the clock-only
+  // default, once it loads - but never fight a URL-restored session (see
+  // hasRestoredRef below), and never override a session the Dean has since
+  // picked by hand.
+  const hasAppliedSessionRef = useRef(false);
+  useEffect(() => {
+    if (hasAppliedSessionRef.current || !currentSessionLabel || searchParams.get("academicYear")) return;
+    hasAppliedSessionRef.current = true;
+    setSelectedAcademicYear(currentSessionLabel);
+  }, [currentSessionLabel, searchParams]);
 
   const selectedDepartment = useMemo(
     () => departments.find((d) => d.id === selectedDepartmentId) ?? null,
@@ -113,12 +138,24 @@ export default function DeanSubjectsPage() {
           selectedCatalogItem?.regulationBatches ?? {},
           Number(selectedYear),
           parseAcademicYearStart(selectedAcademicYear) ?? currentAcademicStartYear(),
+          selectedCatalogItem?.regulations,
         )
       : []),
     [selectedCatalogItem, selectedYear, selectedAcademicYear]
   );
   // The single regulation to tag a new subject with - only when unambiguous.
   const singleRegulation = allowedRegulations.length === 1 ? allowedRegulations[0] : "";
+
+  // recentAcademicSessions() is clock-anchored only, so a college whose
+  // configured current session (currentSessionLabel, applied above) has
+  // drifted from the plain calendar date would otherwise select a value
+  // missing from the dropdown's own option list. Same self-healing pattern as
+  // hod/sections' batchOptions: keep the actually-selected session in the
+  // list even when the clock-derived window doesn't cover it.
+  const academicYearOptions = useMemo(() => {
+    const base = recentAcademicSessions();
+    return base.includes(selectedAcademicYear) ? base : [selectedAcademicYear, ...base];
+  }, [selectedAcademicYear]);
 
   // Curriculum-table order: by S.No. when set (matches a printed curriculum
   // sheet), falling back to name for legacy subjects that predate the field.
@@ -321,7 +358,7 @@ export default function DeanSubjectsPage() {
                 <Select value={selectedAcademicYear} onValueChange={selectAcademicYear}>
                   <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
                   <SelectContent>
-                    {recentAcademicSessions().map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    {academicYearOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

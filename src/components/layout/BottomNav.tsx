@@ -36,7 +36,7 @@ export function BottomNav({ hiddenModules, hiddenItems }: BottomNavProps) {
 
   if (!user || user.role === "STUDENT") return null;
 
-  const baseItems = filterVisibleNavItems(BOTTOM_NAV_ITEMS[user.role] ?? [], hiddenModules, hiddenItems);
+  const baseItems = filterVisibleNavItems(BOTTOM_NAV_ITEMS[user.role] ?? [], hiddenModules, hiddenItems, user.realRole);
   // Faculty: inject Interviews after Home when assigned, keep total ≤ 5 slots
   const items: NavItem[] =
     user.role === "PANEL_MEMBER" && hasInterviews

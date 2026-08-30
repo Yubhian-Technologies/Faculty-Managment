@@ -76,7 +76,7 @@ export default function NewDeanSubjectPage() {
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => {
         const catalogItem = (d.items ?? []).find((c) => c.id === catalogId);
-        setRegulations(regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), parseAcademicYearStart(academicYear) ?? undefined));
+        setRegulations(regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(year), parseAcademicYearStart(academicYear) ?? undefined, catalogItem?.regulations));
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load regulations" }));
   }, [catalogId, year, academicYear]);

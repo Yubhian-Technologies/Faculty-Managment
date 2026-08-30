@@ -121,7 +121,7 @@ export async function resolveEmployeeIdentity(
     dateOfJoining?: { toDate(): Date };
     createdAt?: { toDate(): Date };
   };
-  const isAcademicLeadership = u.role === "HOD" || u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "DEAN";
+  const isAcademicLeadership = u.role === "HOD" || u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "COLLEGE_ADMIN" || u.role === "DEAN";
   return {
     name: u.name ?? "Unknown",
     department: u.department,

@@ -317,6 +317,15 @@ export interface FMSUser {
   collegeEmail?: string; // same field name as FacultyMember below, for consistency
   phone?: string;
   role: UserRole;
+  // The Firestore doc's real, un-normalized role - only ever differs from
+  // `role` for COLLEGE_ADMIN, which `role` always reports as "PRINCIPAL" (see
+  // useAuth.ts / api/auth/session). Exists solely so a specific feature can
+  // opt out College Admin from something Principal sees (e.g. navConfig's
+  // NavItem.hideForRealRoles) without disturbing the "College Admin behaves
+  // exactly like Principal" normalization everywhere else. Don't use this for
+  // anything other than that kind of narrow exclusion - `role` remains the
+  // one source of truth for permissions.
+  realRole?: UserRole;
   // for HOD / LOCATION_DEPT_HEAD - kept as the first entry of `departments`
   // (the HOD's "primary" department) for every screen that hasn't been
   // updated to the multi-department list below; always write both together.
@@ -581,6 +590,16 @@ export interface Course {
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+  // Response-only, never persisted - set by GET /api/college/courses when this
+  // doc represents a group of duplicate Course docs for the same department +
+  // conceptual course (see lib/departments/courseGrouping.ts). Every doc id in
+  // the group, including this course's own `id` - callers that filter
+  // Firestore queries by an exact courseId picked from this list should widen
+  // to `where("courseId", "in", mergedCourseIds)` instead of a single `==`,
+  // since teachingAssignments/sections/etc. may be split across the group
+  // (a legacy pre-catalog course doc alongside a properly catalog-linked one -
+  // see scripts/fix-course-catalog-duplicates.mjs for the root cause).
+  mergedCourseIds?: string[];
 }
 
 // ─── Course-Year Timing (college timings, periods, breaks — per course, per year) ──
@@ -1661,7 +1680,8 @@ export type AuditAction =
   | "ACADEMIC_YEAR_ADVANCED"
   // Student promotion module
   | "STUDENT_PROMOTED"
-  | "STUDENT_GRADUATED";
+  | "STUDENT_GRADUATED"
+  | "STUDENT_SECTION_DISTRIBUTED";
 
 export interface AuditLog {
   id: string;

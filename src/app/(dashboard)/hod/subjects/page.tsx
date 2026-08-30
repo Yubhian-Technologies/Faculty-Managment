@@ -12,9 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import type { Course, Department, Subject } from "@/types";
+import type { Course, CourseCatalogItem, Department, Subject } from "@/types";
 import { SUBJECT_TYPE_LABELS } from "@/types";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { fedYears, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
+import { deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
+import { parseAcademicYearStart } from "@/lib/college/academicSession";
 
 const ALL_REGULATIONS = "__all__"; // sentinel: Radix Select items can't use an empty string value
 
@@ -29,6 +31,17 @@ export default function HODSubjectsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  // Course Catalog entries (regulations/regulationBatches per course) - the
+  // Regulation picker below is sourced from here, same as HOD Sections' own
+  // regulation picker (hod/sections/new/page.tsx), rather than only from
+  // whatever subjects happen to already exist for this course/year.
+  const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
+  // The college's own configured current session, when a Principal has set
+  // one (Settings > Academic Year) - used only to resolve which regulation
+  // batch currently occupies the selected year (same pattern as HOD
+  // Sections' currentSessionStart). Falls back to the plain date-based
+  // session when nothing's configured yet.
+  const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
 
@@ -66,6 +79,21 @@ export default function HODSubjectsPage() {
     void (async () => { await loadCourses(); })();
   }, [loadCourses]);
 
+  useEffect(() => {
+    fetch("/api/college/course-catalog")
+      .then((r) => r.json() as Promise<{ items?: CourseCatalogItem[] }>)
+      .then((d) => setCatalogItems(d.items ?? []))
+      .catch(() => {});
+
+    fetch("/api/college/academic-sessions")
+      .then((r) => r.json() as Promise<{ academicSessions?: { label: string; isCurrent: boolean }[] }>)
+      .then((d) => {
+        const current = (d.academicSessions ?? []).find((s) => s.isCurrent);
+        setCurrentSessionStart(current ? parseAcademicYearStart(current.label) ?? null : null);
+      })
+      .catch(() => { /* non-critical - falls back to the date-based session */ });
+  }, []);
+
   // Each department owns its own course row for the same catalog programme
   // (e.g. Basic Science's and CIVIL's own "Bachelor of Technology"), and each
   // carries its own distinct subject list - so, unlike Sections, these can't
@@ -91,28 +119,80 @@ export default function HODSubjectsPage() {
   // almost always already there.
   const selectedCourseId = pickedCourseId || courses[0]?.id || "";
   const selectedCourse = useMemo(() => courses.find((c) => c.id === selectedCourseId) ?? null, [courses, selectedCourseId]);
-  const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
-  // Never the raw 1..durationYears span - a department (or, for a sub-HOD,
-  // its parent) only teaches the years the Principal actually assigned it
-  // (resolveDepartmentCourseScope, per-course override included). Falls back
-  // to the full span only when the department has no assignment at all, so an
-  // unconfigured college isn't locked out.
+  // The course dropdown includes courses from OTHER departments this HOD only
+  // reaches by managing their shared first year (e.g. Basic Science browsing
+  // IT's own "Bachelor of Technology" doc - see api/college/courses' HOD
+  // scope union). So the years to offer can't come from that course's own
+  // owning department (IT's own assignedYears is [2,3,4] - IT's own HOD's
+  // years, not what Basic Science was assigned) - they must come from THIS
+  // HOD's own department(s), the same way Teaching Assignments/Sections
+  // resolve it (deriveHodScope + managerEffectiveYears): own department plus
+  // its real sub-departments (never a managed branch's own later years).
+  const ownScopeDepartments = useMemo(() => {
+    const seen = new Map<string, Department>();
+    for (const name of myDepartments) {
+      const scope = deriveHodScope(departments, name);
+      if (scope.ownDept) seen.set(scope.ownDept.id, scope.ownDept);
+      for (const d of [...scope.groupingChildren, ...scope.plainChildren]) seen.set(d.id, d);
+    }
+    return Array.from(seen.values());
+  }, [departments, myDepartments]);
+  // Never the raw 1..durationYears span - only the years the Principal
+  // actually assigned this HOD's own scope for this course (per-course
+  // override included, via managerEffectiveYears). A year some OTHER
+  // department already claims as a feeder for this scope (fedYears) is
+  // excluded even from the "nothing assigned yet" fallback, so an
+  // unconfigured department doesn't wrongly offer a shared year that
+  // structurally belongs to someone else.
   const yearOptions = useMemo(() => {
     if (!selectedCourse) return [];
     const courseYears = Array.from({ length: selectedCourse.durationYears }, (_, i) => i + 1);
-    const dept = departmentById.get(selectedCourse.departmentId);
-    const assigned = dept ? resolveDepartmentCourseScope(dept, selectedCourse.catalogId).assignedYears : [];
-    return assigned.length > 0 ? courseYears.filter((y) => assigned.includes(y)) : courseYears;
-  }, [selectedCourse, departmentById]);
+    const assigned = new Set<number>();
+    const excluded = new Set<number>();
+    for (const d of ownScopeDepartments) {
+      for (const y of managerEffectiveYears(d, departments, selectedCourse.catalogId)) assigned.add(y);
+      for (const y of fedYears(d, departments, selectedCourse.catalogId)) excluded.add(y);
+    }
+    const base = assigned.size > 0 ? courseYears.filter((y) => assigned.has(y)) : courseYears;
+    return base.filter((y) => !excluded.has(y));
+  }, [selectedCourse, ownScopeDepartments, departments]);
   const selectedYear = pickedYear || (yearOptions.length > 0 ? String(yearOptions[0]) : "");
 
-  // Regulation codes actually present among this course/year's subjects -
-  // only offer ones that would narrow the list down, not every regulation
-  // the college has ever declared.
-  const regulationOptions = useMemo(
-    () => Array.from(new Set(subjects.map((s) => s.regulation).filter((r): r is string => !!r))).sort(),
-    [subjects]
+  const selectedCatalogItem = useMemo(
+    () => catalogItems.find((c) => c.id === selectedCourse?.catalogId) ?? null,
+    [catalogItems, selectedCourse]
   );
+  // Sourced from the Course Catalog (same resolution HOD Sections' and Dean
+  // Subjects' own regulation pickers use), unioned with whatever's already
+  // on this course/year's saved subjects - so a regulation the Dean just
+  // configured shows up even before any subject uses it (this control used
+  // to be a post-hoc filter over already-loaded subjects, which meant an
+  // empty subject list always meant an empty, disabled dropdown with no
+  // explanation why), while a legacy/edge-case subject the catalog can no
+  // longer resolve stays filterable too.
+  const catalogRegulations = useMemo(
+    () => (selectedCourse?.catalogId && selectedYear
+      ? regulationsForCourseYearByBatch(
+          selectedCatalogItem?.regulationBatches ?? {},
+          Number(selectedYear),
+          currentSessionStart ?? undefined,
+          selectedCatalogItem?.regulations,
+        )
+      : []),
+    [selectedCourse, selectedCatalogItem, selectedYear, currentSessionStart]
+  );
+  const regulationOptions = useMemo(
+    () => Array.from(new Set([
+      ...catalogRegulations,
+      ...subjects.map((s) => s.regulation).filter((r): r is string => !!r),
+    ])).sort(),
+    [catalogRegulations, subjects]
+  );
+  const regulationEmptyReason = useMemo(() => {
+    if (regulationOptions.length > 0) return null;
+    if (!selectedCourse?.catalogId) return "This course isn't linked to a Course Catalog entry.";
+    return "No regulation is configured for this year yet — set one in Course Catalog (Dean).";
+  }, [regulationOptions, selectedCourse]);
   const visibleSubjects = useMemo(() => {
     const filtered = pickedRegulation ? subjects.filter((s) => !s.regulation || s.regulation === pickedRegulation) : subjects;
     // Curriculum-table order: by S.No. when set, falling back to name for
@@ -217,6 +297,9 @@ export default function HODSubjectsPage() {
                     {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {regulationEmptyReason && (
+                  <p className="text-xs text-muted-foreground">{regulationEmptyReason}</p>
+                )}
               </div>
             </CardContent>
           </Card>

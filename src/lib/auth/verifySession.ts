@@ -6,9 +6,23 @@ export interface SessionPayload {
   uid: string;
   email: string;
   role: string;
+  // True underlying role, before the COLLEGE_ADMIN→PRINCIPAL normalization
+  // api/auth/session applies to `role` everywhere - only ever differs from
+  // `role` for a COLLEGE_ADMIN login. Absent on cookies issued before this
+  // field existed; treat missing as "same as role" (see isCollegeAdmin).
+  realRole?: string;
   collegeId: string;
   locationId: string;   // set for location-scoped roles; may also be set for college roles
   exp: number;
+}
+
+// A COLLEGE_ADMIN login's session always has `role === "PRINCIPAL"` (see
+// api/auth/session's normalization) - this is the one place that still needs
+// to tell them apart from a real Principal, e.g. to keep a feature Principal-
+// only in the literal sense. Don't use this for permission checks in general;
+// `role` remains the source of truth everywhere else on purpose.
+export function isCollegeAdmin(session: Pick<SessionPayload, "realRole">): boolean {
+  return session.realRole === "COLLEGE_ADMIN";
 }
 
 export async function verifySession(): Promise<SessionPayload | null> {

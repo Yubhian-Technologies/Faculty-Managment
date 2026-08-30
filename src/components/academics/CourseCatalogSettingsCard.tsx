@@ -433,15 +433,23 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                       <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you add at least one.
                     </p>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {(item.regulations ?? []).map((r) => {
-                        const batches = item.regulationBatches?.[r];
-                        return (
-                          <Badge key={r} variant="secondary" className="text-xs">
-                            {r}{batches ? ` — ${batches}` : ""}
-                          </Badge>
-                        );
-                      })}
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(item.regulations ?? []).map((r) => {
+                          const batches = item.regulationBatches?.[r];
+                          return (
+                            <Badge key={r} variant="secondary" className="text-xs">
+                              {r}{batches ? ` — ${batches}` : ""}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                      {(item.regulations ?? []).some((r) => !item.regulationBatches?.[r]) && (
+                        <p className="flex items-center gap-1 text-xs text-amber-600">
+                          <AlertTriangle className="h-3 w-3" /> Some regulations have no intake batches set (carried over from the
+                          old catalog). Edit this course and re-add each one with a starting year so it shows up in Sections and Subjects.
+                        </p>
+                      )}
                     </div>
                   )}
                 </li>

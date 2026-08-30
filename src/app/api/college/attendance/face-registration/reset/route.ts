@@ -67,13 +67,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
       }
       const target = targetSnap.data() as { role?: string };
-      // Principal and Vice Principal reset each other symmetrically (equal
-      // authority), plus either can reset an HOD or a unit head - mirrors
-      // manual/route.ts's identical PRINCIPAL/VICE_PRINCIPAL treatment there.
-      const validTargetRoles =
-        session.role === "PRINCIPAL"
-          ? ["HOD", "VICE_PRINCIPAL", ...COLLEGE_STAFF_UNIT_HEAD_ROLES]
-          : ["HOD", "PRINCIPAL", ...COLLEGE_STAFF_UNIT_HEAD_ROLES];
+      // Principal, Vice Principal, and College Admin (equal authority -
+      // College Admin mirrors Principal's authority end-to-end, see UserRole's
+      // own doc-comment; its session normalizes to "PRINCIPAL" but its own
+      // target doc keeps the real "COLLEGE_ADMIN" role) reset each other
+      // symmetrically, plus any of them can reset an HOD or a unit head -
+      // mirrors manual/route.ts's identical PRINCIPAL/VICE_PRINCIPAL treatment
+      // there.
+      const validTargetRoles = ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "HOD", ...COLLEGE_STAFF_UNIT_HEAD_ROLES];
       if (!target.role || !validTargetRoles.includes(target.role)) {
         return NextResponse.json(
           { error: "You can only reset face registration for an HOD, a unit head, or the Principal/Vice Principal" },

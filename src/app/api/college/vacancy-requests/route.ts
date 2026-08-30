@@ -120,12 +120,13 @@ export async function POST(request: Request) {
       timestamp: now,
     });
 
-    // Notify all Principals in the college
+    // Notify all Principals (and College Admins, who mirror Principal's
+    // authority - see UserRole's own doc-comment) in the college
     const principalsSnap = await db
       .collection("colleges")
       .doc(session.collegeId)
       .collection("users")
-      .where("role", "==", "PRINCIPAL")
+      .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN"])
       .get();
 
     const batch = db.batch();

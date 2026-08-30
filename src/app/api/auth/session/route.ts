@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     let name = (decoded.name as string) ?? "";
     let email = decoded.email ?? "";
 
-    let claimsWereSet = !!role; // already in token - no need to backfill
+    const claimsWereSet = !!role; // already in token - no need to backfill
 
     if (!role) {
       try {
@@ -50,6 +50,17 @@ export async function POST(request: Request) {
     // Firestore user doc itself keeps its real "COLLEGE_ADMIN" role so it still
     // shows up as its own entry in staff lists.
     if (role === "COLLEGE_ADMIN") role = "PRINCIPAL";
+
+    // `realRole` preserves the true underlying role for the rare feature that
+    // must tell College Admin apart from Principal despite the normalization
+    // above (see SessionPayload.realRole / FMSUser.realRole). Can't just
+    // capture `role` before the line above - once custom claims are backfilled
+    // (see below) a returning College Admin's JWT already carries the
+    // normalized "PRINCIPAL", so `role` never reads "COLLEGE_ADMIN" again on
+    // later logins. Instead this defaults to `role` and gets corrected below
+    // from the Firestore user doc, which always keeps the true role - that
+    // fetch already happens on every session call, not just the first.
+    let realRole: string = role;
 
     // Backfill Firebase Auth custom claims so client-side Firestore rules work.
     // Only write when claims were missing from the token (avoid redundant writes).
@@ -93,7 +104,10 @@ export async function POST(request: Request) {
           .get();
         if (userSnap.exists) {
           profile = { uid: userSnap.id, ...userSnap.data() };
-          if (profile.role === "COLLEGE_ADMIN") profile.role = "PRINCIPAL";
+          if (profile.role === "COLLEGE_ADMIN") {
+            realRole = "COLLEGE_ADMIN";
+            profile.role = "PRINCIPAL";
+          }
         }
       } catch { /* non-fatal */ }
     }
@@ -102,6 +116,7 @@ export async function POST(request: Request) {
       uid: decoded.uid,
       email,
       role,
+      realRole,
       collegeId,
       locationId,
       exp: decoded.exp,
@@ -110,7 +125,7 @@ export async function POST(request: Request) {
     const sessionPayload = Buffer.from(JSON.stringify(sessionData)).toString("base64");
     const sessionCookie = `header.${sessionPayload}.signature`;
 
-    const response = NextResponse.json({ ok: true, role, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
+    const response = NextResponse.json({ ok: true, role, realRole, collegeId, locationId, name, email, profile, refreshToken: !claimsWereSet });
     response.cookies.set("fms-session", sessionCookie, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

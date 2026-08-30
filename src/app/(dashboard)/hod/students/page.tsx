@@ -478,11 +478,20 @@ export default function HodStudentsPage() {
       });
       const json = await res.json() as {
         error?: string; distributed?: number; perBranch?: CohortBranchResult[];
+        invalidStudents?: { id: string; name?: string; branch?: string }[];
       };
       if (!res.ok) {
         // A failed run can still carry per-branch detail (e.g. every branch is
         // missing sections) - surface it rather than just the message.
         setCohortResult(json.perBranch ?? null);
+        if (res.status === 409) throw new Error(json.error ?? "Another distribution is already running for this year - try again shortly");
+        if (json.invalidStudents?.length) {
+          throw new Error(
+            `${json.invalidStudents.length} student(s) have a missing/blank name - fix them before distributing: ${
+              json.invalidStudents.map((s) => s.name || s.id).join(", ")
+            }`
+          );
+        }
         throw new Error(json.error ?? "Failed to distribute");
       }
       setCohortResult(json.perBranch ?? []);
@@ -613,10 +622,25 @@ export default function HodStudentsPage() {
           sectionIds: distSectionIds,
         }),
       });
-      const json = await res.json() as { error?: string; distributed?: number; perSection?: { section: string; count: number }[] };
-      if (!res.ok) throw new Error(json.error ?? "Failed to distribute");
-      const summary = (json.perSection ?? []).map((p) => `${p.section}: ${p.count}`).join(", ");
-      toast({ variant: "success", title: `Distributed ${json.distributed} students`, description: summary });
+      const json = await res.json() as {
+        error?: string;
+        moved?: number;
+        sections?: { sectionName: string; studentCount: number }[];
+        invalidStudents?: { id: string; name?: string }[];
+      };
+      if (!res.ok) {
+        if (res.status === 409) throw new Error(json.error ?? "Another distribution is already running for this department - try again shortly");
+        if (json.invalidStudents?.length) {
+          throw new Error(
+            `${json.invalidStudents.length} student(s) have a missing/blank name - fix them before distributing: ${
+              json.invalidStudents.map((s) => s.name || s.id).join(", ")
+            }`
+          );
+        }
+        throw new Error(json.error ?? "Failed to distribute");
+      }
+      const summary = (json.sections ?? []).map((s) => `${s.sectionName}: ${s.studentCount}`).join(", ");
+      toast({ variant: "success", title: `Distributed ${json.moved} students`, description: summary });
       setDistributeOpen(false);
       setDistCourseId("");
       setDistSectionIds([]);
@@ -709,7 +733,7 @@ export default function HodStudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Students"
-        description="Your department's students, plus every branch grouped under it. Divide unassigned students evenly across sections in full-name order."
+        description="Your department's students, plus every branch grouped under it. Distribute rebalances the whole roster evenly across sections in surname order."
         actions={!isFreshmanView && (
           <>
           {isCommonYearHod && (
@@ -728,10 +752,12 @@ export default function HodStudentsPage() {
                 </DialogHeader>
                 <div className="space-y-4">
                   <p className="text-xs text-muted-foreground">
-                    Every unassigned student is placed into a section of <strong>their own branch</strong> - an IT
-                    student always lands in an IT section, never in a sub-department. Within each branch they are
-                    sorted by full name and split evenly across that branch&apos;s sections. Branches with no
-                    sections yet are reported and left untouched.
+                    Every student lands in a section of <strong>their own branch</strong> - an IT student always
+                    lands in an IT section, never in a sub-department. Within each branch, the whole roster
+                    (unassigned students plus everyone already sectioned in that branch) is sorted by surname
+                    (first word of their name) and split evenly across that branch&apos;s sections - this can move
+                    an already-placed student to a different section so the branch stays in surname order as more
+                    students are imported later. Branches with no sections yet are reported and left untouched.
                   </p>
                   <p className="text-sm">
                     <strong>{cohortUnassignedCount}</strong> unassigned student
@@ -749,7 +775,7 @@ export default function HodStudentsPage() {
                             {b.skippedReason ? (
                               <Badge variant="outline" className="text-amber-600 border-amber-300">Skipped</Badge>
                             ) : (
-                              <span className="text-muted-foreground">{b.distributed} placed</span>
+                              <span className="text-muted-foreground">{b.distributed} moved</span>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
@@ -791,8 +817,11 @@ export default function HodStudentsPage() {
               </DialogHeader>
               <div className="space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  Unassigned students are sorted by full name and split evenly across the sections you pick - earliest
-                  names fill the first section, and so on. Roll numbers stay as imported.
+                  Every student in the sections you pick - unassigned plus already-sectioned - is sorted by
+                  surname (first word of their name) and split evenly across those sections, earliest surnames
+                  first. Re-running this can move a student who was already in one of the picked sections to
+                  another, so the whole group stays in surname order as new students are imported later.
+                  Sections you don&apos;t pick, and roll numbers, are left untouched.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -955,6 +984,7 @@ export default function HodStudentsPage() {
         onRowClick={(r) => router.push(`/hod/students/${r.id}`)}
         isLoading={isLoading}
         keyExtractor={(r) => r.id}
+        paginate
         searchPlaceholder="Search by roll number or name..."
         searchKeys={["rollNumber", "name"] as (keyof StudentRow)[]}
         emptyTitle={isFreshmanView ? "No incoming students here" : "No students yet"}

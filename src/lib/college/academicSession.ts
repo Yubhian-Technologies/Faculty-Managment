@@ -31,6 +31,21 @@ export function deriveBatch(admissionStartYear: number, durationYears: number): 
 }
 
 /**
+ * Candidate intake years for the Section Batch picker, given the intake year the
+ * picked course-year sits in for the current session: one intake ahead ("next
+ * year"), that year ("this year"), then the last 4. Newest first. Callers map
+ * each through deriveBatch() with the course's own durationYears.
+ *
+ * "This year" is only correct if callers anchor `centerIntakeYear` on the real
+ * current academic year (currentAcademicStartYear), not on a stored session
+ * pin that may be stale.
+ */
+export function sectionBatchIntakeYears(centerIntakeYear: number): number[] {
+  return [centerIntakeYear + 1, centerIntakeYear, centerIntakeYear - 1,
+          centerIntakeYear - 2, centerIntakeYear - 3, centerIntakeYear - 4];
+}
+
+/**
  * Every intake year a regulation's batch field covers. One regulation commonly
  * runs for several consecutive intakes ("2024-2028,2025-2029" - R23 governing
  * both the 2024 and 2025 admissions), so the field is a comma-separated list
@@ -43,6 +58,34 @@ export function parseBatchStartYears(batch: string): number[] {
     .filter((y): y is number => y != null);
 }
 
+// Which regulation code(s) cover a SPECIFIC intake batch (by its start year) -
+// the direct, ground-truth resolution: a batch's own admission year is fixed
+// forever once picked, so the regulation governing it never depends on "what
+// session is it now" at all. Every Section-facing consumer that already has
+// an actual batch in hand (picked, saved, or just normalized) should resolve
+// through here, not through the year+session indirection below - otherwise
+// changing the Batch field (e.g. an HOD deliberately picking an off-cycle
+// admission year) silently leaves the Regulation options showing whatever the
+// PREVIOUS batch resolved to, since nothing recomputes them.
+//
+// `fallbackRegulations` is the same backward-compatibility escape hatch as
+// regulationsForCourseYearByBatch below - see its own doc-comment.
+export function regulationsForBatchStartYear(
+  regulationBatches: Record<string, string>,
+  batchStartYear: number,
+  fallbackRegulations?: string[],
+): string[] {
+  const entries = Object.entries(regulationBatches ?? {});
+  if (entries.length === 0) {
+    return Array.from(new Set((fallbackRegulations ?? []).map((r) => r.trim()).filter(Boolean)));
+  }
+  const matches: string[] = [];
+  for (const [code, batch] of entries) {
+    if (parseBatchStartYears(batch).includes(batchStartYear)) matches.push(code);
+  }
+  return matches;
+}
+
 // Which regulation code(s) govern ordinal course-year `courseYear` (1-based -
 // 1st Year, 2nd Year, ...) AS OF a given session, derived purely from each
 // regulation's own batch coverage (CourseCatalogItem.regulationBatches)
@@ -53,20 +96,30 @@ export function parseBatchStartYears(batch: string): number[] {
 // regulation, but callers should treat more than one as "ambiguous, ask the
 // Dean to fix the batches" rather than silently picking the first.
 // `asOfStartYear` defaults to the real current session.
+//
+// Only for a consumer that has no actual batch to resolve against yet (e.g.
+// Subjects, which are scoped by course+year with no batch of their own) -
+// anything with a real Section.batch in hand should call
+// regulationsForBatchStartYear directly instead (see its own doc-comment).
+//
+// `fallbackRegulations` is a backward-compatibility escape hatch: a catalog
+// entry created under the earlier Principal-owned model stored only
+// `regulations` (plus an optional `regulationYears` narrowing that no longer
+// exists) and has NO `regulationBatches` at all. The pre-migration default
+// was "a regulation with no year restriction is offered for every year", so
+// when `regulationBatches` is empty we return the passed-in regulation list
+// unchanged rather than resolving to nothing - otherwise every downstream
+// picker silently shows "None assigned" for a course whose Dean has clearly
+// assigned R23. Once that course is re-saved from the Course Catalog card
+// (or scripts/backfill-regulation-batches.mjs runs), real batch coverage
+// exists and takes over.
 export function regulationsForCourseYearByBatch(
   regulationBatches: Record<string, string>,
   courseYear: number,
   asOfStartYear: number = currentAcademicStartYear(),
+  fallbackRegulations?: string[],
 ): string[] {
-  const matches: string[] = [];
-  for (const [code, batch] of Object.entries(regulationBatches)) {
-    // Any one of the regulation's batches landing on this course-year is
-    // enough - they're consecutive intakes of the same regulation, so at most
-    // one of them can occupy a given year in a given session anyway.
-    const hit = parseBatchStartYears(batch).some((start) => start === admissionStartYearForCourseYear(asOfStartYear, courseYear));
-    if (hit) matches.push(code);
-  }
-  return matches;
+  return regulationsForBatchStartYear(regulationBatches, admissionStartYearForCourseYear(asOfStartYear, courseYear), fallbackRegulations);
 }
 
 // A handful of sessions to choose from - two years back through one year

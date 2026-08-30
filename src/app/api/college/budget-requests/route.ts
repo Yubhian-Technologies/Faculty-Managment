@@ -210,7 +210,7 @@ export async function POST(request: Request) {
       .collection("colleges")
       .doc(session.collegeId)
       .collection("users")
-      .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL"])
+      .where("role", "in", ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"])
       .get();
 
     // Actionable - the Principal/VP is the next responsible party until they

@@ -7,7 +7,8 @@ import { getRelatedDepartmentIds } from "@/lib/departments/scope";
 import type { DepartmentWithId } from "@/lib/college/academicStructure";
 import { ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 import { deriveHodScope } from "@/lib/departments/hodScope";
-import type { Department } from "@/types";
+import { groupCoursesByIdentity } from "@/lib/departments/courseGrouping";
+import type { Department, Course } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -108,9 +109,20 @@ export async function GET(request: Request) {
     }
 
     const snap = await query.get();
-    const courses = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => ((a as { name?: string }).name ?? "").localeCompare((b as { name?: string }).name ?? ""));
+    const rawCourses = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Course & { id: string });
+
+    // Collapse duplicate docs for the same conceptual course WITHIN one
+    // department (a legacy pre-catalog doc alongside a properly catalog-
+    // linked one - see lib/departments/courseGrouping.ts) - every picker that
+    // reads this endpoint gets a clean list for free, and callers that need
+    // to match another collection's courseId against the full duplicate set
+    // (not just the one shown here) can use the returned mergedCourseIds.
+    // Deliberately does NOT collapse across different departmentIds - that's
+    // the separate, legitimate feeder-department case (getRelatedDepartmentIds
+    // above), which some callers show and annotate rather than hide.
+    const courses = groupCoursesByIdentity(rawCourses)
+      .map(({ primary, memberIds }) => ({ ...primary, mergedCourseIds: memberIds }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return NextResponse.json({ courses });
   } catch (err) {
