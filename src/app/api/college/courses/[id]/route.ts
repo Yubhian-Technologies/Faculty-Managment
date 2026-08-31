@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 export async function PATCH(
   request: Request,
@@ -98,6 +99,30 @@ export async function DELETE(
     const batch = db.batch();
     timingsSnap.docs.forEach((d) => batch.delete(d.ref));
     batch.delete(ref);
+
+    // Clean up the owning department's per-catalog cross-listing override for
+    // this course (Department.courseScopes[catalogId]) - creating a course
+    // seeds this from the department's flat secondaryDepartments (see
+    // courses/route.ts POST), and nothing ever cleared it back out on
+    // delete. Left behind, it keeps granting the SAME cross-listing/feed
+    // access (fedYears, resolveDepartmentCourseScope) for a catalog
+    // programme the department no longer even offers - e.g. a shared-first-
+    // year department's stray M.Tech override silently surviving after its
+    // (sectionless, so deletable) M.Tech course was removed, invisible in
+    // the Department page's own UI (which only shows scopes with a live
+    // Course doc) but still live in every scope-resolution code path.
+    const courseData = snap.data() as { departmentId?: string; catalogId?: string };
+    if (courseData.departmentId && courseData.catalogId) {
+      const deptRef = db.collection("colleges").doc(session.collegeId).collection("departments").doc(courseData.departmentId);
+      const deptSnap = await deptRef.get();
+      if (deptSnap.exists) {
+        batch.update(deptRef, {
+          [`courseScopes.${courseData.catalogId}`]: FieldValue.delete(),
+          updatedAt: new Date(),
+        });
+      }
+    }
+
     await batch.commit();
 
     return NextResponse.json({ success: true });

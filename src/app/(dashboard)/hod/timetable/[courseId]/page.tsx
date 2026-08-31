@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
-import { deriveHodScope, managedBranchYearsMap, yearsInScope } from "@/lib/departments/hodScope";
+import { deriveHodScope, managerEffectiveYears } from "@/lib/departments/hodScope";
 import type { Course, Department } from "@/types";
 
 function ordinalYear(year: number) {
@@ -39,27 +39,35 @@ export default function HODTimetableYearsPage() {
       .finally(() => setIsLoading(false));
   }, [courseId]);
 
-  // Scoped to the course's own department's "Years Taught" - but for a
-  // department reached through a managed-branch relationship (e.g. Basic
-  // Science's HOD viewing CSE's own course row, now reachable as its own
-  // tile - see the courses API's managed-branch union), also includes
-  // whatever shared year the manager (BS-Maths, or Basic Science itself)
-  // contributes via managedBranchYearsMap - otherwise the one year this HOD
-  // actually needs to build a timetable for (the shared first year) would
-  // never appear, even though the course tile itself is reachable. Mirrors
-  // hod/sections/page.tsx's identical need (yearsInScope).
-  // An HOD who heads more than one department may be viewing a course owned
-  // by any one of them - true if ANY of their own departments would view
-  // this relationship, since `years` below is already scoped to the course's
-  // own owning department alone; this only widens which shared years are
-  // included, never which department's data is shown.
+  // True if ANY of this HOD's own departments reaches branches through a
+  // managed relationship (Basic Science's cascade, or a sub-HOD who IS the
+  // grouping container) - decides which of the two branches below applies.
   const viewsManagedBranchYears = myDepartments.some((name) => deriveHodScope(departments, name).viewsManagedBranchYears);
-  const managedBranchYears = managedBranchYearsMap(departments, course?.catalogId);
+  // This HOD's own top-level department (their first, for the common
+  // single-department case - see hod/sections/page.tsx's identical `ownDept`).
+  const ownDept = useMemo(() => departments.find((d) => d.name === myDepartments[0]) ?? null, [departments, myDepartments]);
   const years = (() => {
     if (!course) return [];
+    // A viewer who reaches branches through a managed relationship can only
+    // ever BUILD a timetable for the shared year(s) THEY OWN - resolved from
+    // their own department, never unioned with a sibling branch's own
+    // (unrelated) later years, regardless of which sibling Course doc (this
+    // manager's own, or a branch's own) happens to be the id in this URL.
+    // Mirrors hod/sections/page.tsx's own "All Departments" aggregate view,
+    // which resolves the exact same way (managerEffectiveYears on ownDept
+    // directly, no union across branches - see its yearTabOptions). Unioning
+    // yearsInScope across manager+branches here was tried and reverted: a
+    // branch's own fedYears exclusion cancels the manager's shared year back
+    // out the moment both are in the same call.
+    if (viewsManagedBranchYears) {
+      if (!ownDept) return [];
+      return managerEffectiveYears(ownDept, departments, course.catalogId);
+    }
+    // Plain viewer: this course doc's own department's own effective years -
+    // same helper, just pointed at the doc's own department instead.
     const dept = departments.find((d) => d.id === course.departmentId);
     if (!dept) return [];
-    return yearsInScope(course.durationYears, [dept], managedBranchYears, viewsManagedBranchYears, course.catalogId, departments);
+    return managerEffectiveYears(dept, departments, course.catalogId);
   })();
 
   return (

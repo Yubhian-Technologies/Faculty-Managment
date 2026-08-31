@@ -14,6 +14,7 @@ import {
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { sectionDisplayLabel } from "@/lib/sections/sectionLabel";
+import { buildCourseGroups } from "@/lib/departments/hodScope";
 import type { Course, Department, FacultyMember, Section, SupportingStaffMember, TimetableIncharge } from "@/types";
 
 // One combined dropdown option, whichever roster it actually came from - see
@@ -69,17 +70,31 @@ export default function HODTimetableSectionsPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const [coursesData, sectionsData, deptsData] = await Promise.all([
+        const [coursesData, deptsData] = await Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
-          fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
-            .then((r) => r.json() as Promise<{ sections: Section[] }>),
-          fetch("/api/college/departments")
-            .then((r) => r.json() as Promise<{ departments: Department[] }>),
+          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
         ]);
         if (cancelled) return;
-        setCourse((coursesData.courses ?? []).find((c) => c.id === courseId) ?? null);
-        setSections((sectionsData.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
+        const allCourses = coursesData.courses ?? [];
+        setCourse(allCourses.find((c) => c.id === courseId) ?? null);
         setDepartments(deptsData.departments ?? []);
+
+        // Every Course doc for the SAME catalog programme, across departments
+        // (buildCourseGroups - same grouping the Sections page uses to show one
+        // "Bachelor of Technology" card instead of one per department). A
+        // shared-first-year section (e.g. a managed branch's own Year-1
+        // section, filed under that branch's OWN Course doc - see
+        // hod/sections/new's viaManagedBranch flow) never carries THIS course's
+        // id, so querying by courseId alone silently returns nothing for it
+        // even though it's clearly the same programme/year.
+        const group = buildCourseGroups(allCourses).find((g) => g.courseIds.includes(courseId));
+        const courseIdsForQuery = group ? group.courseIds : [courseId];
+
+        const sectionsData = await fetch(
+          `/api/college/sections?courseId=${encodeURIComponent(courseIdsForQuery.join(","))}&year=${encodeURIComponent(year)}`
+        ).then((r) => r.json() as Promise<{ sections: Section[] }>);
+        if (cancelled) return;
+        setSections((sectionsData.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
         if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
       } finally {
@@ -236,7 +251,13 @@ export default function HODTimetableSectionsPage() {
             <Card
               key={s.id}
               className="cursor-pointer transition-colors hover:border-primary/50"
-              onClick={() => router.push(`/hod/timetable/${courseId}/${year}/${s.id}`)}
+              // This section's OWN real courseId, not the (possibly sibling)
+              // one in the URL - the list above now joins every Course doc for
+              // this catalog programme, so a managed branch's section (e.g.
+              // BSC-CSE-A, filed under CSE's own Course doc) must still open
+              // under ITS OWN courseId, or its saved timetable would be keyed
+              // to the wrong Course doc entirely.
+              onClick={() => router.push(`/hod/timetable/${s.courseId}/${year}/${s.id}`)}
             >
               <CardContent className="p-4 flex items-center justify-between gap-2">
                 <div>

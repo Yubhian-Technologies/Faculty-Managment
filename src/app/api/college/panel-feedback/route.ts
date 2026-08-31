@@ -151,7 +151,8 @@ export async function POST(request: Request) {
     if (applicationIds.length === 0) {
       return NextResponse.json({ error: "This batch has no candidates" }, { status: 400 });
     }
-    const applicationSnaps = await Promise.all(applicationIds.map((aid) => collegeRef.collection("candidateApplications").doc(aid).get()));
+    const appRefs = applicationIds.map((aid) => collegeRef.collection("candidateApplications").doc(aid));
+    const applicationSnaps = await db.getAll(...appRefs);
     const matchingAppSnap = applicationSnaps.find((s) => s.exists && (s.data() as { candidateId?: string }).candidateId === candidateId);
     if (!matchingAppSnap) {
       return NextResponse.json({ error: "This candidate is not part of this batch" }, { status: 400 });
@@ -211,23 +212,17 @@ export async function POST(request: Request) {
       payload.comments = body.comments ?? "";
     }
 
-    // Upsert: one doc per panel member per candidate, shared across the demo
-    // and panel-interview modules - a later submission merges in rather than
-    // overwriting whichever module was already saved. Run as a transaction so
-    // two near-simultaneous submissions from the same panelist can't both miss
-    // the existing-doc read and create duplicate feedback docs (which would
-    // double-count in the accept/reject tally).
+    // Upsert: deterministic doc ID per candidate per panel member (${candidateId}_${panelUid})
+    // Run as a transaction so two near-simultaneous submissions merge atomically.
+    const feedbackDocRef = feedbackCol.doc(`${candidateId}_${session.uid}`);
     const docId = await db.runTransaction(async (tx) => {
-      const existingSnap = await tx.get(
-        feedbackCol.where("candidateId", "==", candidateId).where("panelUid", "==", session.uid)
-      );
-      if (!existingSnap.empty) {
-        tx.set(existingSnap.docs[0].ref, payload, { merge: true });
-        return existingSnap.docs[0].id;
+      const existingSnap = await tx.get(feedbackDocRef);
+      if (existingSnap.exists) {
+        tx.set(feedbackDocRef, payload, { merge: true });
+      } else {
+        tx.set(feedbackDocRef, { ...payload, submittedAt: now }, { merge: true });
       }
-      const newRef = feedbackCol.doc();
-      tx.set(newRef, { ...payload, submittedAt: now });
-      return newRef.id;
+      return feedbackDocRef.id;
     });
 
     await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({

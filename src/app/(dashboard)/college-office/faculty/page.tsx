@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet } from "lucide-react";
+import { Wallet, Share2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,12 @@ export default function CollegeOfficeFacultyPage() {
       .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }))
       .finally(() => setIsLoading(false));
   }, []);
+
+  function copyPublicProfileLink(row: FacultyRow) {
+    if (!row.employeeId) return;
+    void navigator.clipboard.writeText(`${window.location.origin}/faculty-public/facultyid=${encodeURIComponent(row.employeeId)}`);
+    toast({ variant: "success", title: "Public profile link copied" });
+  }
 
   const columns: Column<FacultyRow>[] = [
     {
@@ -59,9 +65,14 @@ export default function CollegeOfficeFacultyPage() {
       key: "actions",
       header: "",
       render: (row) => (
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/college-office/faculty/${row.id}/promotion-salary`); }}>
-          <Wallet className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Promotion & Salary</span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/college-office/faculty/${row.id}/promotion-salary`); }}>
+            <Wallet className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Promotion & Salary</span>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyPublicProfileLink(row); }}>
+            <Share2 className="h-3.5 w-3.5" /><span className="ml-1 hidden sm:inline">Copy Public Link</span>
+          </Button>
+        </div>
       ),
     },
   ];

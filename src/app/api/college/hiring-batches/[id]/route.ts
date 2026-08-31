@@ -174,10 +174,14 @@ export async function PATCH(
       if (body.currentPhase === "PANEL_INTERVIEW") {
         const appIds = batchData.applicationIds ?? [];
         if (appIds.length > 0) {
-          const appSnaps = await Promise.all(appIds.map((aid) => db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid).get()));
-          const candidateIds = appSnaps.map((s) => (s.data() as { candidateId?: string })?.candidateId).filter((cid): cid is string => !!cid);
+          const appRefs = appIds.map((aid) => db.collection("colleges").doc(session.collegeId).collection("candidateApplications").doc(aid));
+          const appSnaps = await db.getAll(...appRefs);
+          const candidateIds = Array.from(
+            new Set(appSnaps.map((s) => (s.data() as { candidateId?: string })?.candidateId).filter((cid): cid is string => !!cid))
+          );
           if (candidateIds.length > 0) {
-            const candidateSnaps = await Promise.all(candidateIds.map((cid) => db.collection("colleges").doc(session.collegeId).collection("candidates").doc(cid).get()));
+            const candidateRefs = candidateIds.map((cid) => db.collection("colleges").doc(session.collegeId).collection("candidates").doc(cid));
+            const candidateSnaps = await db.getAll(...candidateRefs);
             const pendingCandidates = candidateSnaps
               .filter((cs) => !cs.exists || !(cs.data() as { bioDataSubmitted?: boolean })?.bioDataSubmitted)
               .map((cs) => (cs.data() as { name?: string })?.name ?? cs.id);
