@@ -418,22 +418,39 @@ export default function TeachingAssignmentsPage() {
       })()
     : subjects;
 
-  // Faculty offered here are always this HOD's own/managed department's -
-  // never another department's, even for a shared 1st-year subject filed
-  // under a feeder like Basic Science (see college/faculty/route.ts).
-  // Staffing that instead goes through "Or ask another department to lend a
-  // faculty member" below, same as for any other subject with nobody free.
+  // Faculty offered here span this HOD's own department and true
+  // sub-departments only - never a grouped/managed "core" branch, for a
+  // sub-HOD or the main HOD alike (see canHodManageFacultyDepartment's own
+  // doc-comment, lib/departments/scope.ts). A managed branch's faculty
+  // roster is never this HOD's, so staffing one of its subjects always goes
+  // through the lend flow below, same as any genuinely outside department.
   const availableFacultyForAssign = faculty;
 
-  // Every top-level department in the college is askable, including ones this
-  // HOD can already assign from directly (e.g. a managed branch whose own
-  // faculty are all busy elsewhere) - only the section's own department is
-  // excluded, since requesting from yourself is a no-op. Sub-departments stay
-  // excluded: they don't run their own separate faculty pool to lend from.
+  // Names already inside this HOD's own department tree (own department and
+  // its real sub-departments) - excluded below since their faculty are
+  // already directly assignable (availableFacultyForAssign above), so
+  // offering a lend-request to one would just be a redundant, slower path to
+  // the same result (or, for the HOD's own department, a request to
+  // themselves). Grouped/managed branches (e.g. CSE, IT) deliberately stay
+  // OUT of this set - their faculty are never directly assignable, so the
+  // lend flow is the actual path to staff them, for a sub-HOD and the main
+  // HOD alike.
+  const ownScopeNames = useMemo(() => {
+    const names = new Set<string>();
+    if (scope.ownDept) names.add(scope.ownDept.name);
+    for (const c of scope.groupingChildren) names.add(c.name);
+    return names;
+  }, [scope]);
+
+  // Every top-level department in the college is askable except this HOD's
+  // own scope above - only a genuinely unrelated department (with its own
+  // separate HOD to fulfill the request) makes sense to ask.  Sub-departments
+  // stay excluded regardless: they don't run their own separate faculty pool
+  // to lend from.
   const requestSection = sections.find((s) => s.id === assignForm.sectionId);
   const requestableDepartments = useMemo(
-    () => departments.filter((d) => !d.parentDepartmentId && d.name !== requestSection?.department),
-    [departments, requestSection]
+    () => departments.filter((d) => !d.parentDepartmentId && d.name !== requestSection?.department && !ownScopeNames.has(d.name)),
+    [departments, requestSection, ownScopeNames]
   );
 
   async function handleAssign(e: React.FormEvent) {

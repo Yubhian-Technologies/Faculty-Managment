@@ -4,13 +4,14 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requiredFacultyCount } from "@/lib/college/facultyRatio";
-import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, canHodManageFacultyDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
+import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
-import type { TeachingAssignment, TimetableSlot } from "@/types";
+import type { Department, TeachingAssignment, TimetableSlot } from "@/types";
 
 export async function GET(request: Request) {
   try {
@@ -50,7 +51,27 @@ export async function GET(request: Request) {
 
     let assignmentQuery: FirebaseFirestore.Query = collegeRef.collection("teachingAssignments");
     let childAssignmentQuery: FirebaseFirestore.Query | null = null;
+    // Assignments for this HOD's own faculty roster (own department + true
+    // sub-departments, never a managed/grouped branch's roster - see
+    // facultyManageableDepartmentNames) regardless of which department or
+    // year the section actually belongs to. Needed because a faculty
+    // assignment request (see api/college/faculty-assignment-requests) can
+    // lend one of this HOD's own people out to teach a completely unrelated
+    // department's section, for a year this HOD has no edit access to at all
+    // - the department/child/managed queries above only ever surface
+    // assignments for sections this HOD can edit, so without this a lent-out
+    // faculty member's teaching load silently vanished from their own
+    // department's "Current Assignments" list. One query per roster chunk
+    // (Firestore "in" caps at 30, same limit already accepted elsewhere in
+    // this file for department-name lists).
+    const rosterAssignmentQueries: FirebaseFirestore.Query[] = [];
     let timetableSlots: (TimetableSlot & { id: string })[] = [];
+    // Populated only for the deptView HOD branch below - needed to year-gate
+    // childAssignmentQuery's results (a managed branch's own non-shared years
+    // must never surface to its manager - see canHodEditDepartmentYear).
+    let hodScopeForYearGate: Awaited<ReturnType<typeof getHodDepartmentScope>> | null = null;
+    let allDepartmentsForYearGate: (DepartmentYearRow & Pick<Department, "name">)[] = [];
+    let catalogIdByCourseId = new Map<string, string | undefined>();
 
     if (sectionId) {
       // Section-scoped view (e.g. "assign faculty per subject" on the section edit page) -
@@ -60,10 +81,18 @@ export async function GET(request: Request) {
       assignmentQuery = assignmentQuery.where("courseId", "==", courseIdParam).where("year", "==", Number(yearParam));
     } else if (deptView && session.role === "HOD") {
       // Resolve HOD's department scope, including any sub-departments. A parent
-      // HOD runs the whole tree, so child assignments come back as "primary" -
-      // fully editable - matching what the POST/PATCH/DELETE guards on this same
-      // route already allow via canHodEditDepartment().
+      // HOD runs the whole tree, so a real sub-department's assignments come
+      // back as "primary" - fully editable - matching what the POST/DELETE
+      // guards on this same route allow via canHodEditDepartment(). A grouped/
+      // managed branch is different: it's only owned for the specific year(s)
+      // actually fed to this manager (canHodEditDepartmentYear) - its own
+      // later years belong to that branch's own dedicated HOD, never this
+      // manager's to see or edit. Without the per-doc gate below, a
+      // shared-first-year manager (e.g. Basic Science) saw and could delete
+      // EVERY assignment a managed branch (CSE, IT) ever made for ANY year,
+      // not just the shared one.
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      hodScopeForYearGate = scope;
       if (scope.ownDepartmentNames.length > 0) {
         assignmentQuery = assignmentQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
       }
@@ -73,6 +102,29 @@ export async function GET(request: Request) {
       if (ownedDeptNames.length > 0) {
         childAssignmentQuery = collegeRef.collection("teachingAssignments")
           .where("department", "in", ownedDeptNames.slice(0, 30));
+      }
+      // Departments/courses are needed for the year-gate below regardless of
+      // whether a managed/child query exists - the roster query further down
+      // reuses the same gate for assignments outside this HOD's own scope.
+      const [deptsSnap, coursesSnap, rosterFacultySnap] = await Promise.all([
+        collegeRef.collection("departments").get(),
+        collegeRef.collection("courses").get(),
+        (() => {
+          const rosterDeptNames = facultyManageableDepartmentNames(scope);
+          return rosterDeptNames.length > 0
+            ? collegeRef.collection("facultyMembers").where("department", "in", rosterDeptNames.slice(0, 30)).get()
+            : Promise.resolve(null);
+        })(),
+      ]);
+      allDepartmentsForYearGate = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
+      catalogIdByCourseId = new Map(coursesSnap.docs.map((d) => [d.id, (d.data() as { catalogId?: string }).catalogId]));
+      if (rosterFacultySnap) {
+        const rosterIds = rosterFacultySnap.docs.map((d) => d.id);
+        for (let i = 0; i < rosterIds.length; i += 30) {
+          rosterAssignmentQueries.push(
+            collegeRef.collection("teachingAssignments").where("facultyId", "in", rosterIds.slice(i, i + 30))
+          );
+        }
       }
     } else {
       // Viewing a specific faculty member's assignments - HOD/Principal/SuperAdmin may look up anyone;
@@ -153,17 +205,52 @@ export async function GET(request: Request) {
       }
     }
 
-    const [assignmentsSnap, childAssignmentsSnap] = await Promise.all([
+    const [assignmentsSnap, childAssignmentsSnap, rosterAssignmentsSnaps] = await Promise.all([
       assignmentQuery.get(),
       childAssignmentQuery ? childAssignmentQuery.get() : Promise.resolve(null),
+      Promise.all(rosterAssignmentQueries.map((q) => q.get())),
     ]);
 
     let assignments: (TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" })[] = assignmentsSnap.docs
       .map((d) => ({ id: d.id, ...d.data(), accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" }));
+    const seenIds = new Set(assignments.map((a) => a.id));
     if (childAssignmentsSnap) {
       // "primary", not "secondary": a parent HOD owns their sub-departments and
       // may edit and delete these, so the UI must not mark them view-only.
+      // A managed branch (never a real sub-department) additionally has to
+      // pass the year gate - canHodEditDepartmentYear returns true outright
+      // for a real sub-department, so this is a no-op for those.
       for (const d of childAssignmentsSnap.docs) {
+        const raw = d.data();
+        const gateData = raw as { department?: string; year?: number; courseId?: string };
+        if (
+          hodScopeForYearGate &&
+          !canHodEditDepartmentYear(
+            hodScopeForYearGate,
+            allDepartmentsForYearGate,
+            gateData.department ?? "",
+            gateData.year as number,
+            catalogIdByCourseId.get(gateData.courseId ?? "")
+          )
+        ) {
+          continue;
+        }
+        seenIds.add(d.id);
+        assignments.push({ id: d.id, ...raw, accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" });
+      }
+    }
+    // This HOD's own faculty, teaching anywhere - including a section/year
+    // this HOD has no edit rights over at all (a different department
+    // entirely, or a managed branch's own non-shared year), reached via a
+    // fulfilled faculty-assignment-request. Every doc here was found BY
+    // querying this HOD's own roster's facultyIds (see rosterAssignmentQueries
+    // above), so it's always one of their own people - full "primary" access,
+    // same as a direct assignment, not just a view. The DELETE handler below
+    // grants the matching right (owns the faculty, not just the section).
+    for (const snap of rosterAssignmentsSnaps) {
+      for (const d of snap.docs) {
+        if (seenIds.has(d.id)) continue;
+        seenIds.add(d.id);
         assignments.push({ id: d.id, ...d.data(), accessLevel: "primary" } as TeachingAssignment & { id: string; accessLevel: "primary" | "secondary" });
       }
     }
@@ -248,7 +335,7 @@ export async function POST(request: Request) {
       if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
       if (!subjectSnap.exists) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
 
-      const course = courseSnap.data() as { name: string; departmentId: string };
+      const course = courseSnap.data() as { name: string; departmentId: string; catalogId?: string };
       const section = sectionSnap.data() as { name: string; year: number; department: string };
       const subject = subjectSnap.data() as { name: string; code: string; hoursPerWeek: number };
 
@@ -256,12 +343,17 @@ export async function POST(request: Request) {
       // every sub-department beneath it, so both the section and the faculty may
       // come from any of them (e.g. a shared Basic Science section staffed with a
       // BS-Physics specialist). A sub-HOD, having no children, is still limited to
-      // their own department.
+      // their own department. A managed branch (e.g. CSE, IT) is narrower still -
+      // only the specific year(s) actually fed to this manager (canHodEditDepartmentYear),
+      // never the branch's own later years, which belong to that branch's own
+      // dedicated HOD to staff.
       if (session.role === "HOD") {
         const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-        if (!canHodEditDepartment(scope, section.department)) {
+        const deptsSnap = await collegeRef.collection("departments").get();
+        const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
+        if (!canHodEditDepartmentYear(scope, allDepartments, section.department, section.year, course.catalogId)) {
           return NextResponse.json(
-            { error: "Section is not in your department or one of your sub-departments" },
+            { error: "Section is not in your department, one of your sub-departments, or a year your department manages" },
             { status: 403 },
           );
         }
@@ -556,11 +648,34 @@ export async function DELETE(request: Request) {
     if (session.role === "HOD") {
       const assignmentSnap = await ref.get();
       if (!assignmentSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
-      const assignmentDept = (assignmentSnap.data() as { department?: string }).department ?? "";
+      const assignmentData = assignmentSnap.data() as { department?: string; year?: number; courseId?: string; facultyId?: string };
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!canHodEditDepartment(scope, assignmentDept)) {
+      const deptsSnap = await collegeRef.collection("departments").get();
+      const allDepartments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as (DepartmentYearRow & Pick<Department, "name">)[];
+      // A managed branch's own non-shared year is never this manager's to
+      // remove either - same canHodEditDepartmentYear gate as POST/GET above.
+      let catalogId: string | undefined;
+      if (assignmentData.courseId) {
+        const courseSnap = await collegeRef.collection("courses").doc(assignmentData.courseId).get();
+        catalogId = (courseSnap.data() as { catalogId?: string } | undefined)?.catalogId;
+      }
+      const ownsSection = canHodEditDepartmentYear(scope, allDepartments, assignmentData.department ?? "", assignmentData.year as number, catalogId);
+      // Also allowed when this HOD owns the ASSIGNED FACULTY, even for a
+      // section/year they otherwise have no edit rights over - the case a
+      // fulfilled faculty-assignment-request creates (lending one of this
+      // HOD's own people to an unrelated department's section). The GET
+      // route surfaces that assignment to them as fully manageable, not
+      // view-only (see rosterAssignmentQueries above), so removal has to
+      // actually be allowed here to match, not just displayed as if it were.
+      let ownsFaculty = false;
+      if (!ownsSection && assignmentData.facultyId) {
+        const facultySnap = await collegeRef.collection("facultyMembers").doc(assignmentData.facultyId).get();
+        const facultyDept = (facultySnap.data() as { department?: string } | undefined)?.department ?? "";
+        ownsFaculty = canHodManageFacultyDepartment(scope, facultyDept);
+      }
+      if (!ownsSection && !ownsFaculty) {
         return NextResponse.json(
-          { error: "You can only remove assignments in your own department or its sub-departments" },
+          { error: "You can only remove assignments in your own department, its sub-departments, a year your department manages, or one of your own faculty's assignments elsewhere" },
           { status: 403 },
         );
       }

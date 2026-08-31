@@ -65,6 +65,31 @@ export function canHodEditDepartment(scope: HodDepartmentScope, departmentName: 
 }
 
 /**
+ * Narrower than `canHodEditDepartment`, for FACULTY specifically: a managed
+ * (grouped/"core") branch's actual faculty roster is never this HOD's to see
+ * or manage - not the sub-HOD who coordinates its shared-year sections/
+ * timetable/subjects, and not the main/root HOD either, even though
+ * `canHodEditDepartment` grants both full control of those other things.
+ * Faculty stays strictly within the real department tree - this HOD's own
+ * department(s) plus true child sub-departments (Department
+ * .parentDepartmentId) - until/unless that branch gets its own dedicated
+ * HOD login to manage its own roster directly.
+ */
+export function canHodManageFacultyDepartment(scope: HodDepartmentScope, departmentName: string): boolean {
+  if (!departmentName) return false;
+  return scope.ownDepartmentNames.includes(departmentName) || scope.childDepartmentNames.includes(departmentName);
+}
+
+/**
+ * Same idea as `canHodManageFacultyDepartment`, for a whole roster fetch -
+ * the department names a caller's faculty listing query should include (own
+ * + true children only, never a managed/"core" branch).
+ */
+export function facultyManageableDepartmentNames(scope: HodDepartmentScope): string[] {
+  return [...scope.ownDepartmentNames, ...scope.childDepartmentNames];
+}
+
+/**
  * This HOD's own identity in the literal department tree: their own
  * department plus true sub-departments beneath it. Deliberately excludes
  * `managedDepartmentNames` - a grouped/managed branch is a delegated

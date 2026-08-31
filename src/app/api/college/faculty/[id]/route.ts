@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
 export async function GET(
@@ -23,6 +24,17 @@ export async function GET(
 
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    // An HOD may only view faculty within their own scope - their own
+    // department and its true sub-departments, never a managed/"core"
+    // branch (see canHodManageFacultyDepartment's own doc-comment).
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const facultyDept = (snap.data() as { department?: string }).department ?? "";
+      if (!canHodManageFacultyDepartment(scope, facultyDept)) {
+        return NextResponse.json({ error: "That faculty member is outside your department scope" }, { status: 403 });
+      }
     }
 
     return NextResponse.json({ faculty: { id: snap.id, ...snap.data() } });
@@ -108,6 +120,14 @@ export async function PATCH(
     const snap = await ref.get();
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      const facultyDept = (snap.data() as { department?: string }).department ?? "";
+      if (!canHodManageFacultyDepartment(scope, facultyDept)) {
+        return NextResponse.json({ error: "That faculty member is outside your department scope" }, { status: 403 });
+      }
     }
 
     // Empty string clears the photo - everything else must be a real upload of ours.
@@ -245,7 +265,14 @@ export async function DELETE(
     if (!snap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const facultyData = snap.data() as { name?: string; userUid?: string };
+    const facultyData = snap.data() as { name?: string; userUid?: string; department?: string };
+
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+      if (!canHodManageFacultyDepartment(scope, facultyData.department ?? "")) {
+        return NextResponse.json({ error: "That faculty member is outside your department scope" }, { status: 403 });
+      }
+    }
 
     await ref.delete();
 

@@ -95,6 +95,14 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         setAssignmentRequests(requestsData.requests ?? []);
         const deptName = foundCourse ? deptsData.departments?.find((d: Department) => d.id === foundCourse.departmentId)?.name : undefined;
         if (deptName) {
+          // A parent HOD's true sub-departments are staffable directly here
+          // too, same as hod/teaching-assignments - a grouped/managed "core"
+          // branch's faculty never are (see canHodManageFacultyDepartment,
+          // lib/departments/scope.ts), so the lend/request flow below is the
+          // actual path to staff one. Only affects HOD sessions; the
+          // Timetable Incharge (PANEL_MEMBER/COLLEGE_STAFF) branch of
+          // college/faculty/route.ts already restricts to just their own
+          // department regardless.
           fetch(`/api/college/faculty?department=${encodeURIComponent(deptName)}&status=ACTIVE`)
             .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)
             .then((d) => setFaculty(d.faculty ?? []))
