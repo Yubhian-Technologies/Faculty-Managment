@@ -18,14 +18,22 @@ export async function GET(request: Request) {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_STAFF", "COLLEGE_OFFICE");
     const { searchParams } = new URL(request.url);
     const yearFilter = searchParams.get("year");
-    const courseFilter = searchParams.get("courseId");
+    // Comma-separated when a caller needs every Course doc that represents the
+    // SAME catalog programme across departments (e.g. Timetable, which -
+    // unlike Sections - queries Firestore directly by courseId rather than
+    // fetching everything and grouping client-side by catalogId; see
+    // hod/timetable's [courseId]/[year]/page.tsx). A single id keeps the old
+    // exact-match query.
+    const courseFilterRaw = searchParams.get("courseId");
+    const courseFilterIds = courseFilterRaw ? courseFilterRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
     const departmentIdFilter = searchParams.get("departmentId");
 
     const db = getAdminDb();
     const sectionsColl = db.collection("colleges").doc(session.collegeId).collection("sections");
     const withCommonFilters = (q: FirebaseFirestore.Query): FirebaseFirestore.Query => {
       let out = q;
-      if (courseFilter) out = out.where("courseId", "==", courseFilter);
+      if (courseFilterIds.length === 1) out = out.where("courseId", "==", courseFilterIds[0]);
+      else if (courseFilterIds.length > 1) out = out.where("courseId", "in", courseFilterIds.slice(0, 30));
       if (yearFilter) out = out.where("year", "==", Number(yearFilter));
       return out;
     };
@@ -143,8 +151,8 @@ export async function GET(request: Request) {
       // when the caller isn't the Incharge for this exact course-year (or
       // this isn't a single course-year lookup at all).
       let scopedAsIncharge = false;
-      if (courseFilter && yearFilter) {
-        scopedAsIncharge = await isTimetableIncharge(db, session.collegeId, session.uid, courseFilter, Number(yearFilter));
+      if (courseFilterIds.length === 1 && yearFilter) {
+        scopedAsIncharge = await isTimetableIncharge(db, session.collegeId, session.uid, courseFilterIds[0], Number(yearFilter));
       }
       if (!scopedAsIncharge) {
         const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);

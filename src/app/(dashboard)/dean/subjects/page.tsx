@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Plus, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -320,6 +320,11 @@ export default function DeanSubjectsPage() {
       <PageHeader
         title="Subjects"
         description="Manage subjects offered for each year of every department's courses"
+        actions={
+          <Button variant="outline" onClick={() => router.push("/dean/subjects/import")}>
+            <Upload className="h-4 w-4 mr-2" />Import Subjects
+          </Button>
+        }
       />
 
       {isLoading ? (
@@ -407,12 +412,21 @@ export default function DeanSubjectsPage() {
                     <BookOpen className="h-4 w-4" />
                     {selectedDepartment.name} · {selectedCourse.name} · {ordinalYear(Number(selectedYear))}
                   </h2>
-                  <Button
-                    size="sm"
-                    onClick={() => router.push(`/dean/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />Add Subject
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push(`/dean/subjects/import?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&courseName=${encodeURIComponent(selectedCourse.name)}`)}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />Import Subjects
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => router.push(`/dean/subjects/new?departmentId=${selectedDepartmentId}&courseId=${selectedCourseId}&year=${selectedYear}&academicYear=${encodeURIComponent(selectedAcademicYear)}&department=${encodeURIComponent(selectedDepartment.name)}&regulation=${encodeURIComponent(singleRegulation)}&nextSerialNumber=${nextSerialNumber}&catalogId=${encodeURIComponent(selectedCourse.catalogId ?? "")}`)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />Add Subject
+                    </Button>
+                  </div>
                 </div>
 
                 {isLoadingSubjects ? (

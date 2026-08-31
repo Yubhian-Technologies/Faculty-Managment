@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getRelatedDepartmentIds } from "@/lib/departments/scope";
-import type { DepartmentWithId } from "@/lib/college/academicStructure";
+import { fedYears, type DepartmentWithId } from "@/lib/college/academicStructure";
 import { ensureAssignedYearsOpen } from "@/lib/departments/courseScopeValidation";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import { groupCoursesByIdentity } from "@/lib/departments/courseGrouping";
@@ -20,6 +20,14 @@ export async function GET(request: Request) {
     // when their scope includes real branches reached via managedDepartments
     // (see below) - a wider set than the single `departmentId` above can express.
     let unionDepartmentIds: string[] | null = null;
+    // departmentIds this HOD reaches ONLY through a managed-branch relationship
+    // (never their own department or a real child/sub-department) - populated
+    // below, consumed by the post-filter after the query runs (see there for why).
+    const managedOnlyDeptIds: Set<string> = new Set();
+    // Every department in the college - only fetched for an HOD (see below);
+    // hoisted to this scope so the post-filter after the query can reuse it
+    // too, rather than fetching it a third time.
+    let allDepartments: Department[] = [];
 
     const db = getAdminDb();
 
@@ -32,10 +40,13 @@ export async function GET(request: Request) {
       const ownDeptNames = (userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""])
         .filter((n): n is string => !!n);
 
+      allDepartments = ownDeptNames.length > 0
+        ? (await db.collection("colleges").doc(session.collegeId).collection("departments").get())
+            .docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[]
+        : [];
+
       if (!explicitDepartmentId) {
         if (ownDeptNames.length > 0) {
-          const allDeptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
-          const allDepartments = allDeptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
           const byName = new Map(allDepartments.map((d) => [d.name, d]));
 
           const courseDeptIdSet = new Set<string>();
@@ -76,12 +87,31 @@ export async function GET(request: Request) {
         // within this HOD's own scope - own department, parent (sub-HOD),
         // real sub-departments, or managed branches - never an arbitrary
         // department elsewhere in the college. Was previously unchecked.
-        const deptsSnap = await db.collection("colleges").doc(session.collegeId).collection("departments").get();
-        const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) })) as Department[];
-        const inScope = ownDeptNames.some((name) => deriveHodScope(departments, name).deptOptions.some((d) => d.id === explicitDepartmentId));
+        const inScope = ownDeptNames.some((name) => deriveHodScope(allDepartments, name).deptOptions.some((d) => d.id === explicitDepartmentId));
         if (!inScope) {
           return NextResponse.json({ error: "That department is outside your scope" }, { status: 403 });
         }
+      }
+
+      // Every departmentId reached ONLY via managedDepartments (never this
+      // HOD's own department or a real child/sub-department) - mirrors
+      // resolveScopeDepartments's own two branches (hodScope.ts): the cascade
+      // case (a common department's sub-departments each managing branches)
+      // and the isGroupingContainer case (a sub-HOD who IS the manager).
+      // `managedDepartments` is deliberately course-blind (see its doc-comment
+      // in types/core.ts - "who's authorized to edit a branch's roster", not
+      // which of the branch's courses that covers), so a managed branch's own
+      // UNRELATED course (e.g. its independent Masters of Technology, never
+      // cross-listed to this manager at all) must not ride along just because
+      // the branch itself is reachable - the post-filter below closes that gap
+      // per-course via fedYears, the actual catalogId-aware cross-listing check.
+      for (const name of ownDeptNames) {
+        const scope = deriveHodScope(allDepartments, name);
+        const managedNames = scope.isGroupingContainer
+          ? (scope.ownDept?.managedDepartments ?? [])
+          : scope.groupingChildren.flatMap((c) => c.managedDepartments ?? []);
+        if (managedNames.length === 0) continue;
+        for (const d of allDepartments) if (managedNames.includes(d.name)) managedOnlyDeptIds.add(d.id);
       }
     }
 
@@ -109,7 +139,28 @@ export async function GET(request: Request) {
     }
 
     const snap = await query.get();
-    const rawCourses = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Course & { id: string });
+    let rawCourses = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Course & { id: string });
+
+    // Drop a managed branch's own course that isn't actually part of the
+    // managed relationship - e.g. a shared-first-year department reaching
+    // into a branch's Course docs above (managedOnlyDeptIds) gets that
+    // branch's shared "Bachelor of Technology" (its own courseScopes
+    // explicitly cross-list this manager for some year) but never its
+    // independent "Masters of Technology" (no such cross-listing exists for
+    // that catalogId, so fedYears comes back empty). Own/child departments
+    // are never filtered - only ids that got into the union purely via
+    // managedDepartments. See fedYears' own doc-comment (academicStructure.ts)
+    // for why this has to be checked per-catalogId rather than by department
+    // name alone.
+    if (managedOnlyDeptIds.size > 0) {
+      const deptNameById = new Map(allDepartments.map((d) => [d.id, d.name]));
+      rawCourses = rawCourses.filter((c) => {
+        if (!managedOnlyDeptIds.has(c.departmentId)) return true;
+        const deptName = deptNameById.get(c.departmentId);
+        if (!deptName) return false;
+        return fedYears({ name: deptName }, allDepartments, c.catalogId).length > 0;
+      });
+    }
 
     // Collapse duplicate docs for the same conceptual course WITHIN one
     // department (a legacy pre-catalog doc alongside a properly catalog-
