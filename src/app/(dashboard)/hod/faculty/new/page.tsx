@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,13 +28,19 @@ import { toast } from "@/hooks/useToast";
 import { EMPLOYMENT_TYPE_LABELS } from "@/types";
 import type { FacultyProfileFields } from "@/types";
 
+// collegeEmail/password are validated for FORMAT here but not required at the
+// zod level - they're only actually required when creating a brand new login
+// (the default flow). When completing a Sub-HOD's profile for an ALREADY
+// existing login (see `linkUid` below), those two fields don't apply at all
+// - that required-ness is instead checked manually in onSubmit, since it
+// depends on which mode the page is in.
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
   apaarFacultyId: z.string().optional(),
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  collegeEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
+  password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
   phone: z.string().regex(PHONE_REGEX, "Doesn't look like a valid phone number").optional().or(z.literal("")),
   designation: z.string().min(1, "Designation is required"),
   qualification: z.string().min(1, "Qualification is required"),
@@ -59,6 +65,7 @@ interface WizardStep {
 
 export default function NewFacultyPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { collegeType } = useCollegeType();
   const [academicProfile, setAcademicProfile] = useState<Partial<FacultyProfileFields>>({});
   const [personalDetails, setPersonalDetails] = useState<PersonalDetailsValue>({});
@@ -68,6 +75,17 @@ export default function NewFacultyPage() {
   const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
+  // Reached from the Faculty Register's "Sub-Department HODs" card when that
+  // sub-department's HOD login has no facultyMembers record yet (see
+  // hod/faculty/page.tsx) - completes their profile onto their EXISTING
+  // login instead of the default flow's "create a brand new one" (which
+  // would either fail on their already-registered email, or worse, silently
+  // create a second, disconnected account for the same person).
+  const linkUid = searchParams.get("linkUid") ?? "";
+  const linkDepartment = searchParams.get("department") ?? "";
+  const linkName = searchParams.get("name") ?? "";
+  const isLinkMode = !!(linkUid && linkDepartment);
+
   const {
     register,
     handleSubmit,
@@ -76,7 +94,10 @@ export default function NewFacultyPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", aicteEligible: false },
+    defaultValues: {
+      experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", aicteEligible: false,
+      ...(isLinkMode ? { name: linkName } : {}),
+    },
   });
   const [erroredSteps, setErroredSteps] = useState<Set<WizardStepKey>>(new Set());
 
@@ -130,13 +151,24 @@ export default function NewFacultyPage() {
   }
 
   const onSubmit = async (data: FormData) => {
+    // College Email/Password aren't in the zod schema's required set (they
+    // don't apply in link mode, see isLinkMode above) - so the default
+    // "create a new login" flow enforces their presence here instead.
+    if (!isLinkMode && (!data.collegeEmail?.trim() || !data.password?.trim())) {
+      setErroredSteps(new Set<WizardStepKey>(["core"]));
+      setStepIndex(steps.findIndex((s) => s.key === "core"));
+      const missing = [!data.collegeEmail?.trim() && "College Email", !data.password?.trim() && "Login Password"].filter(Boolean).join(", ");
+      toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${missing}` });
+      return;
+    }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/college/faculty", {
+      const res = await fetch(isLinkMode ? "/api/college/faculty/link-hod" : "/api/college/faculty", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
+          ...(isLinkMode ? { linkUid, department: linkDepartment, collegeEmail: undefined, password: undefined } : {}),
           academicProfile,
           ...personalDetails,
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
@@ -149,7 +181,7 @@ export default function NewFacultyPage() {
         return;
       }
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to add faculty", description: json.error });
+        toast({ variant: "destructive", title: isLinkMode ? "Failed to complete profile" : "Failed to add faculty", description: json.error });
         return;
       }
 
@@ -160,7 +192,13 @@ export default function NewFacultyPage() {
         }
       }
 
-      toast({ variant: "success", title: "Faculty member added", description: `${data.name} has been added to the register.` });
+      toast({
+        variant: "success",
+        title: isLinkMode ? "Profile completed" : "Faculty member added",
+        description: isLinkMode
+          ? `${data.name}'s faculty profile is now complete.`
+          : `${data.name} has been added to the register.`,
+      });
       router.push("/hod/faculty");
     } catch {
       toast({ variant: "destructive", title: "Network error", description: "Please try again." });
@@ -171,7 +209,12 @@ export default function NewFacultyPage() {
 
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Add Faculty Member" description="Add a new entry to your department's faculty register" />
+      <PageHeader
+        title={isLinkMode ? "Complete Faculty Profile" : "Add Faculty Member"}
+        description={isLinkMode
+          ? `Add the employment & profile details for ${linkName || "this Sub-HOD"}, already registered as ${linkDepartment}'s HOD`
+          : "Add a new entry to your department's faculty register"}
+      />
 
       {/* Step indicator - click any step to jump to it; steps with missing
           required fields (after a submit attempt) are outlined in red. */}
@@ -221,13 +264,25 @@ export default function NewFacultyPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="collegeEmail">College Email *</Label>
-                    <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@vishnu.edu.in" />
-                    {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
-                    <p className="text-xs text-muted-foreground">This is used as their login username.</p>
+                {isLinkMode && (
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                    <span className="text-muted-foreground">Department: </span>
+                    <span className="font-medium">{linkDepartment}</span>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      This profile links to {linkName || "their"} existing HOD login - no new account or password is created.
+                    </p>
                   </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {!isLinkMode && (
+                    <div className="space-y-2">
+                      <Label htmlFor="collegeEmail">College Email *</Label>
+                      <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@vishnu.edu.in" />
+                      {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
+                      <p className="text-xs text-muted-foreground">This is used as their login username.</p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="email">Personal Email</Label>
                     <Input id="email" type="email" {...register("email")} placeholder="faculty@example.com" />
@@ -240,14 +295,16 @@ export default function NewFacultyPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password">Login Password *</Label>
-                  <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
-                  {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-                  <p className="text-xs text-muted-foreground">
-                    Share this with the faculty member so they can log in with their college email as a Panel Member.
-                  </p>
-                </div>
+                {!isLinkMode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Login Password *</Label>
+                    <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
+                    {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Share this with the faculty member so they can log in with their college email as a Panel Member.
+                    </p>
+                  </div>
+                )}
 
                 <div className="pt-2 pb-1 border-t">
                   <p className="text-sm font-medium text-muted-foreground">Role Details</p>
@@ -330,7 +387,9 @@ export default function NewFacultyPage() {
             {step.key === "teaching-load" && <TeachingAssignmentsEditor value={teachingRows} onChange={setTeachingRows} />}
             {step.key === "review" && (
               <p className="text-sm text-muted-foreground">
-                Review the steps above using Back, then submit to create <strong>{name || "this faculty member"}</strong>&apos;s account and record.
+                {isLinkMode
+                  ? <>Review the steps above using Back, then submit to complete <strong>{name || "this Sub-HOD"}</strong>&apos;s faculty profile.</>
+                  : <>Review the steps above using Back, then submit to create <strong>{name || "this faculty member"}</strong>&apos;s account and record.</>}
               </p>
             )}
           </CardContent>
@@ -341,7 +400,7 @@ export default function NewFacultyPage() {
             <ChevronLeft className="h-4 w-4 mr-2" />{stepIndex === 0 ? "Cancel" : "Back"}
           </Button>
           {step.key === "review" ? (
-            <Button type="submit" loading={submitting}>Add to Register</Button>
+            <Button type="submit" loading={submitting}>{isLinkMode ? "Save Profile" : "Add to Register"}</Button>
           ) : (
             <Button type="button" onClick={goNext}>Next<ChevronRight className="h-4 w-4 ml-2" /></Button>
           )}

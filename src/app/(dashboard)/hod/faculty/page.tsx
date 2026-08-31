@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { UserPlus, Eye, Upload, Download, Trash2, LogIn, FileDown } from "lucide-react";
+import { UserPlus, Eye, Upload, Download, Trash2, LogIn, FileDown, UserCog } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Avatar } from "@/components/shared/Avatar";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { exportFacultyCsv } from "@/lib/faculty/exportFacultyCsv";
 import { downloadResumePdf } from "@/lib/pdf/downloadResume";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { DESIGNATION_LABELS, EMPLOYMENT_TYPE_LABELS, FACULTY_STATUS_LABELS } from "@/types";
-import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment, CollegeType } from "@/types";
+import type { FacultyMember, Designation, EmploymentType, FacultyStatus, TeachingAssignment, CollegeType, Department } from "@/types";
 
 function fmtDate(val: unknown): string {
   if (!val) return "-";
@@ -67,6 +70,8 @@ export default function HODFacultyPage() {
   const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
   const [collegeName, setCollegeName] = useState("");
   const [collegeType, setCollegeType] = useState<CollegeType | undefined>(undefined);
+  const myDepartments = useMyDepartments();
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
     fetch("/api/college/info")
@@ -75,14 +80,66 @@ export default function HODFacultyPage() {
       .catch(() => {});
   }, []);
 
+  // The faculty list below already includes every true sub-department's own
+  // faculty rows (see `load`'s comment), each tagged with its own department
+  // badge - but nothing on this page previously surfaced WHO runs each
+  // sub-department. A parent HOD managing e.g. "Basic Science" (split into
+  // "BS Mathematics", "BS Chemistry", ...) needs that at a glance here, not
+  // just on the separate Sub-Departments settings page. Mirrors that page's
+  // own child-lookup (parentDepartmentId === my department's id) and its
+  // `hodName` display (hod/settings/sub-departments/page.tsx).
+  useEffect(() => {
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments?: Department[] }>)
+      .then((d) => setDepartments(d.departments ?? []))
+      .catch(() => {});
+  }, []);
+
+  const subDepartments = useMemo(() => {
+    const ownIds = new Set(departments.filter((d) => myDepartments.includes(d.name)).map((d) => d.id));
+    if (ownIds.size === 0) return [];
+    return departments
+      .filter((d) => d.parentDepartmentId && ownIds.has(d.parentDepartmentId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [departments, myDepartments]);
+
+  // A Sub-HOD's login (Department.hodUid, role "HOD" on their own `users`
+  // doc) is never guaranteed to have a real facultyMembers record - no
+  // HOD-creation flow writes one, since "just a normal HOD account, no
+  // separate role" only ever touches `users`/`systemUsers` (see
+  // CreateHodDialog/POST /api/college/users). Fetched independently of the
+  // status-filterable `faculty` state above (unfiltered, status-agnostic) so
+  // a Sub-HOD whose own record happens to be e.g. "On Leave" doesn't wrongly
+  // look unlinked just because the current status pill filters it out.
+  const [allFacultyForHodLookup, setAllFacultyForHodLookup] = useState<FacultyRow[]>([]);
+  useEffect(() => {
+    fetch("/api/college/faculty")
+      .then((r) => r.json() as Promise<{ faculty?: FacultyRow[] }>)
+      .then((d) => setAllFacultyForHodLookup(d.faculty ?? []))
+      .catch(() => {});
+  }, []);
+  const facultyIdByUserUid = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const f of allFacultyForHodLookup) {
+      const uid = f.userUid as string | undefined;
+      if (uid) map.set(uid, f.id as string);
+    }
+    return map;
+  }, [allFacultyForHodLookup]);
+
   async function load(status: string) {
     setIsLoading(true);
     try {
-      // scope=own: this is "my department's roster", not the wider set a
-      // parent/managing HOD administers (sub-departments/managed branches
-      // still show up in Teaching Assignments' faculty picker, which does
-      // not pass this) - see college/faculty/route.ts.
-      const params = new URLSearchParams({ scope: "own" });
+      // Default (unscoped) roster: a parent HOD runs their whole real
+      // department tree, so true sub-departments' faculty belong here too -
+      // but never a grouped/managed "core" branch's (CSE, IT, ...): unlike
+      // Sections/Teaching Assignments (canHodEditDepartment), a managed
+      // branch's actual faculty roster stays that branch's own business, for
+      // the sub-HOD who coordinates it and the main HOD alike (see
+      // canHodManageFacultyDepartment, lib/departments/scope.ts). Each row's
+      // own department badge (below) keeps it clear which one a given
+      // faculty member actually belongs to.
+      const params = new URLSearchParams();
       if (status) params.set("status", status);
       const res = await fetch(`/api/college/faculty?${params.toString()}`);
       const data = await res.json() as { faculty: FacultyRow[] };
@@ -180,8 +237,16 @@ export default function HODFacultyPage() {
         <div className="flex items-start gap-3 min-w-0">
           <Avatar name={row.name as string} photoUrl={row.profilePhotoUrl as string | undefined} size="sm" className="mt-0.5" />
           <div className="space-y-0.5 min-w-0">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-medium leading-tight">{row.name as string}</p>
+              {/* Which department this faculty member actually belongs to -
+                  now that the roster spans sub-departments/managed branches
+                  too (not just this HOD's own), without this a faculty added
+                  under a branch reads as if they belonged to the HOD's own
+                  department instead. */}
+              {(row.department as string) && (
+                <Badge variant="secondary" className="text-[10px]">{row.department as string}</Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">{(row.collegeEmail as string) || (row.email as string)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId as string}</p>
@@ -324,6 +389,43 @@ export default function HODFacultyPage() {
           </button>
         ))}
       </div>
+
+      {subDepartments.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Sub-Department HODs</p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Click a Sub-HOD to view their full faculty profile, or complete it if it hasn&apos;t been added yet.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {subDepartments.map((d) => {
+                const facultyId = d.hodUid ? facultyIdByUserUid.get(d.hodUid) : undefined;
+                const href = !d.hodUid
+                  ? null
+                  : facultyId
+                    ? `/hod/faculty/${facultyId}`
+                    : `/hod/faculty/new?linkUid=${encodeURIComponent(d.hodUid)}&department=${encodeURIComponent(d.name)}&name=${encodeURIComponent(d.hodName ?? "")}`;
+                const body = (
+                  <div className={`flex items-center gap-2 text-sm border rounded-lg px-3 py-2 h-full ${href ? "transition-colors hover:bg-muted/50 hover:border-primary/40 cursor-pointer" : ""}`}>
+                    <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{d.name}</p>
+                      {d.hodName
+                        ? (
+                          <p className="text-muted-foreground text-xs truncate">
+                            {d.hodName} · Sub-HOD{href && !facultyId ? " · Complete profile" : ""}
+                          </p>
+                        )
+                        : <p className="text-muted-foreground text-xs italic">No Sub-HOD assigned</p>}
+                    </div>
+                  </div>
+                );
+                return href ? <Link key={d.id} href={href}>{body}</Link> : <div key={d.id}>{body}</div>;
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <DataTable
         data={faculty}
