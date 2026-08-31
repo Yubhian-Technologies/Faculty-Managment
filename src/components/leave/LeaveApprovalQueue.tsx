@@ -408,14 +408,15 @@ export function LeaveApprovalQueue() {
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
                           <SelectContent>
-                            {/* Maternity only for female staff - the server
-                                rejects it for anyone else regardless (see the
+                            {/* Maternity only for female staff with at least
+                                1 completed year of service - the server
+                                rejects it otherwise regardless (see the
                                 APPROVE guard in applications/[id]), so this
                                 keeps the picker from offering a choice that
                                 can't be saved. Requesters with no gender on
                                 record don't get it either. */}
                             {OTHER_LEAVE_CATEGORY_ORDER
-                              .filter((c) => c !== "MATERNITY" || r.requesterGender === "Female")
+                              .filter((c) => c !== "MATERNITY" || (r.requesterGender === "Female" && r.requesterHasOneYearService))
                               .map((c) => (
                                 <SelectItem key={c} value={c}>{OTHER_LEAVE_CATEGORY_LABELS[c]}</SelectItem>
                               ))}

@@ -5,7 +5,7 @@ import { CalendarClock, Info, Lock, Pencil, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
@@ -64,23 +64,19 @@ function formatTime12h(hhmm: string) {
   return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
-// The faculty picks exactly one of these four modes to mark the whole class
-// in one step: the two "Check ..." modes start everyone on the opposite
-// status and let the faculty flip just the exceptions; the two "Mark All ..."
-// modes apply a single status to everyone immediately (attendance is
-// complete as soon as the mode is picked).
-type AttendanceMode = "PRESENTEES" | "ABSENTEES" | "ALL_PRESENT" | "ALL_ABSENT";
+// The faculty picks exactly one of these two modes to mark the whole class
+// in one step — attendance is complete for everyone as soon as the mode is
+// picked, with each row still individually overridable afterward.
+type AttendanceMode = "ALL_PRESENT" | "ALL_ABSENT";
 
 function checkedMeaningFor(mode: AttendanceMode | null): StudentAttendanceMark {
-  return mode === "ABSENTEES" || mode === "ALL_ABSENT" ? "ABSENT" : "PRESENT";
+  return mode === "ALL_ABSENT" ? "ABSENT" : "PRESENT";
 }
 
 function defaultFillFor(mode: AttendanceMode): StudentAttendanceMark {
   switch (mode) {
     case "ALL_PRESENT": return "PRESENT";
     case "ALL_ABSENT": return "ABSENT";
-    case "PRESENTEES": return "ABSENT"; // starts absent; faculty checks the present ones
-    case "ABSENTEES": return "PRESENT"; // starts present; faculty checks the absent ones
   }
 }
 
@@ -184,11 +180,11 @@ export default function MarkAttendancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPeriod?.active, currentPeriod?.assignmentId, currentPeriod?.periodNumber]);
 
-  // Only one of the four modes is active at a time. Picking a mode fills
-  // every row with that mode's default status immediately — for "Mark All
-  // ..." that's the whole class in one shot; for "Check ..." it's a starting
-  // point the faculty then flips exceptions on. Un-picking the active mode
-  // just hides the row checkboxes again without touching what's been marked.
+  // Only one of the two modes is active at a time. Picking a mode fills
+  // every row with that mode's default status immediately, so attendance
+  // is complete for the whole class in one shot. Un-picking the active
+  // mode just hides the row controls again without touching what's been
+  // marked.
   function handleModeToggle(next: AttendanceMode, checked: boolean) {
     if (!attendanceSession) return;
     if (checked) {
@@ -351,33 +347,17 @@ export default function MarkAttendancePage() {
                   {!isReadOnly && (
                     <div className="flex flex-wrap items-center justify-end gap-6 border-b px-4 py-3">
                       <label className="flex items-center gap-2 text-sm font-medium">
-                        <Checkbox
-                          checked={mode === "PRESENTEES"}
-                          onCheckedChange={(c) => handleModeToggle("PRESENTEES", c === true)}
-                          aria-label="Check presentees"
-                        />
-                        Check Presentees
-                      </label>
-                      <label className="flex items-center gap-2 text-sm font-medium">
-                        <Checkbox
-                          checked={mode === "ABSENTEES"}
-                          onCheckedChange={(c) => handleModeToggle("ABSENTEES", c === true)}
-                          aria-label="Check absentees"
-                        />
-                        Check Absentees
-                      </label>
-                      <label className="flex items-center gap-2 text-sm font-medium">
-                        <Checkbox
+                        <Switch
                           checked={mode === "ALL_PRESENT"}
-                          onCheckedChange={(c) => handleModeToggle("ALL_PRESENT", c === true)}
+                          onCheckedChange={(c) => handleModeToggle("ALL_PRESENT", c)}
                           aria-label="Mark all present"
                         />
                         Mark All Present
                       </label>
                       <label className="flex items-center gap-2 text-sm font-medium">
-                        <Checkbox
+                        <Switch
                           checked={mode === "ALL_ABSENT"}
-                          onCheckedChange={(c) => handleModeToggle("ALL_ABSENT", c === true)}
+                          onCheckedChange={(c) => handleModeToggle("ALL_ABSENT", c)}
                           aria-label="Mark all absent"
                         />
                         Mark All Absent
@@ -386,7 +366,7 @@ export default function MarkAttendancePage() {
                   )}
                   {!isReadOnly && !mode && (
                     <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-                      Pick one option above to mark the whole class — the roster checkboxes unlock once you do.
+                      Pick one option above to mark the whole class — the roster controls unlock once you do.
                     </p>
                   )}
                   <div className="overflow-x-auto">
@@ -409,10 +389,10 @@ export default function MarkAttendancePage() {
                               <td className="px-4 py-2.5">{entry.rollNumber}</td>
                               <td className="px-4 py-2.5 font-medium text-foreground">{entry.name}</td>
                               <td className="px-4 py-2.5 text-center">
-                                <Checkbox
+                                <Switch
                                   checked={value === meaning}
                                   disabled={isReadOnly || !mode}
-                                  onCheckedChange={(c) => handleRowCheck(entry.studentId, c === true)}
+                                  onCheckedChange={(c) => handleRowCheck(entry.studentId, c)}
                                   aria-label={`Mark ${entry.name} ${meaning === "PRESENT" ? "present" : "absent"}`}
                                 />
                               </td>
