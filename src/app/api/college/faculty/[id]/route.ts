@@ -142,17 +142,17 @@ export async function PATCH(
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
-    // Employee ID must stay unique within the college - checked separately from
-    // the other string fields since it needs a duplicate lookup (mirrors the
-    // check on creation in POST /api/college/faculty).
+    // Employee ID must stay unique across every college, not just this one -
+    // checked separately from the other string fields since it needs a
+    // duplicate lookup (mirrors the check on creation in POST /api/college/faculty).
+    // Cross-college because the public faculty-profile link is keyed on
+    // employeeId alone (see /api/public/faculty-public).
     if (body.employeeId !== undefined && body.employeeId.trim()) {
       const newEmployeeId = body.employeeId.trim();
       const currentEmployeeId = (snap.data() as { employeeId?: string }).employeeId;
       if (newEmployeeId !== currentEmployeeId) {
         const dupSnap = await db
-          .collection("colleges")
-          .doc(session.collegeId)
-          .collection("facultyMembers")
+          .collectionGroup("facultyMembers")
           .where("employeeId", "==", newEmployeeId)
           .limit(1)
           .get();
