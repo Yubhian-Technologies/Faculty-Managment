@@ -9,7 +9,9 @@ import { canHodEditDepartmentYear } from "@/lib/departments/managedBranches";
 import { groupSectionsByBranch, sectionsForBranch } from "@/lib/sections/sectionLabel";
 import { getAcademicStructure } from "@/lib/college/academicStructure";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
-import { evenSplit } from "@/lib/students/evenSplit";
+import { compareSectionsByName } from "@/lib/students/evenSplit";
+import { buildDistributionPlan, validateDistributionPlan, validateStudentNames, type DistributionMove } from "@/lib/students/distributionPlan";
+import { acquireDistributionLock, releaseDistributionLock, DistributionLockHeldError } from "@/lib/students/distributionLock";
 import type { Section, StudentRecord } from "@/types";
 
 // Sections a whole shared first-year intake in ONE action, for a college that
@@ -19,6 +21,21 @@ import type { Section, StudentRecord } from "@/types";
 // all land unassigned (section == "") across IT, CSE, CSBS, ... The main
 // first-year HOD would otherwise have to run the per-department distribute
 // once for every branch; this does the whole year at once.
+//
+// Each branch's cohort is unassigned students plus everyone already sitting in
+// one of that branch's OWN sections (never a student sitting in some other
+// branch's section) - sorted by surname (surname -> full name -> id, see
+// compareStudentsBySurname) and dealt back out evenly across all of the
+// branch's sections (sorted by compareSectionsByName - natural name order,
+// never database/query order), same as the per-department distribute route.
+// This can move an already-placed student to a different section of the same
+// branch so the whole branch stays in surname order as more students are
+// imported later; only students who actually change section get written or
+// get a departmentHistory entry (which is what makes re-running this with
+// nothing new a no-op). Pass `dryRun: true` to get the computed plan back
+// without writing anything - the exact same calculation the real run uses. A
+// single `distributionLocks` doc for the whole year (see distributionLock.ts)
+// blocks two concurrent runs of this route for the same year from racing.
 //
 // Crucially, every student ends up in their OWN branch: an IT student is placed
 // into an IT section, never into a sub-department. The sub-department
@@ -41,7 +58,7 @@ import type { Section, StudentRecord } from "@/types";
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
-    const body = (await request.json()) as { year?: number };
+    const body = (await request.json()) as { year?: number; dryRun?: boolean };
 
     const year = Number(body.year);
     if (!year || !Number.isFinite(year)) {
@@ -65,15 +82,17 @@ export async function POST(request: Request) {
       ? await getHodDepartmentScope(db, session.collegeId, session.uid)
       : null;
 
-    // The whole unassigned cohort for the year, across every branch. Served by
-    // the existing students `section + year` composite index.
-    const unassignedSnap = await collegeRef.collection("students")
+    // Every student for the year, across every branch (a plain single-field
+    // query, always served without a composite index) - narrowed per-branch
+    // below to unassigned-or-already-in-that-branch's-own-sections, so a
+    // student already sitting in some OTHER branch's section never gets
+    // pulled into this branch's cohort.
+    const yearSnap = await collegeRef.collection("students")
       .where("year", "==", year)
-      .where("section", "==", "")
       .get();
 
     const byBranch = new Map<string, (StudentRecord & { id: string })[]>();
-    for (const d of unassignedSnap.docs) {
+    for (const d of yearSnap.docs) {
       const student = { id: d.id, ...(d.data() as Omit<StudentRecord, "id">) };
       const branch = (student.secondaryDepartment ?? student.department ?? "").trim();
       if (!branch) continue;
@@ -84,7 +103,7 @@ export async function POST(request: Request) {
 
     if (byBranch.size === 0) {
       return NextResponse.json(
-        { error: `No unassigned students to distribute for year ${year}` },
+        { error: `No students to distribute for year ${year}` },
         { status: 400 }
       );
     }
@@ -119,8 +138,6 @@ export async function POST(request: Request) {
     const coursesSnap = await collegeRef.collection("courses").get();
     const catalogIdByCourseId = new Map(coursesSnap.docs.map((c) => [c.id, (c.data() as { catalogId?: string }).catalogId]));
 
-    const now = new Date();
-    const batch = new ChunkedBatch(db);
     const perBranch: {
       branch: string;
       managedBy?: string;
@@ -128,20 +145,37 @@ export async function POST(request: Request) {
       perSection: { section: string; count: number }[];
       skippedReason?: string;
     }[] = [];
-    let distributed = 0;
+
+    // Phase 1 (resolve): work out, per branch, which students are actually
+    // in scope and whether the branch can be processed at all - skip
+    // reasons are recorded but nothing is written or even sorted/split yet.
+    // Kept separate from Phase 2 so every branch's students can be
+    // name-validated up front (see below) before ANY branch's writes start -
+    // one bad record in branch Y must not leave branch X already
+    // half-distributed.
+    const readyBranches: { branch: string; managedBy?: string; sections: Section[]; students: (StudentRecord & { id: string })[] }[] = [];
 
     for (const [branch, students] of Array.from(byBranch.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
       const managedBy = structure.managedBranchOwner.get(branch);
       const base = { branch, ...(managedBy ? { managedBy } : {}), distributed: 0, perSection: [] };
 
-      const sections = sectionsForBranch(sectionsByBranch, branch).sort((a, b) =>
-        (a.name ?? "").localeCompare(b.name ?? "")
-      );
+      // Never trust database/query order for section order - sections here
+      // are re-sorted by natural name (compareSectionsByName), same as the
+      // per-department distribute route.
+      const sections = sectionsForBranch(sectionsByBranch, branch).sort(compareSectionsByName);
 
       if (sections.length === 0) {
         perBranch.push({ ...base, skippedReason: `No Year ${year} sections created yet` });
         continue;
       }
+
+      // Out of scope for this branch's run: a student sitting in some OTHER
+      // branch's section (byBranch only grouped by declared department/
+      // secondaryDepartment, not by current section) never belongs here, even
+      // if that other section happens to share this branch's name - only
+      // unassigned or already-in-one-of-THIS-branch's-own-sections qualifies.
+      const branchSectionNames = new Set(sections.map((s) => s.name));
+      const inScope = students.filter((s) => s.section === "" || branchSectionNames.has(s.section));
 
       // This route has no per-section picker (it auto-distributes the whole
       // year at once) - it can't safely decide which of two different
@@ -162,12 +196,12 @@ export async function POST(request: Request) {
       // student here.
       const branchCatalogId = branchCourseId ? catalogIdByCourseId.get(branchCourseId) : undefined;
       const branchStudents = branchCourseId
-        ? students.filter((s) =>
+        ? inScope.filter((s) =>
             !s.courseId
             || s.courseId === branchCourseId
             || (!!branchCatalogId && catalogIdByCourseId.get(s.courseId) === branchCatalogId)
           )
-        : students;
+        : inScope;
       if (branchStudents.length === 0) {
         perBranch.push({ ...base, skippedReason: "No students declared for this branch's course" });
         continue;
@@ -195,15 +229,80 @@ export async function POST(request: Request) {
         }
       }
 
-      // Same name-ordered even split the per-department distribute uses, so
-      // both paths section a branch identically.
-      const sorted = branchStudents.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-      const slices = evenSplit(sorted, sections.length);
-      const perSection: { section: string; count: number }[] = [];
+      readyBranches.push({ branch, managedBy, sections, students: branchStudents });
+    }
 
-      for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-        for (const student of slices[i]) {
+    if (readyBranches.length === 0) {
+      return NextResponse.json(
+        { error: "Nothing could be distributed - no branch had sections you can section into", perBranch },
+        { status: 400 }
+      );
+    }
+
+    // Reject the WHOLE run rather than silently sort an invalid record -
+    // checked across every ready branch up front, before any branch's writes
+    // start, so a bad record in one branch can't leave another half-done.
+    const invalidNames = readyBranches.flatMap((b) => validateStudentNames(b.students).invalid.map((s) => ({ ...s, branch: b.branch })));
+    if (invalidNames.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Some students have a missing or blank name and can't be sorted - fix them before distributing",
+          invalidStudents: invalidNames,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Blocks a second concurrent whole-year cohort distribute while this one
+    // is in flight (see distributionLock.ts). Locked at the whole-year level,
+    // not per-branch - simpler, and the per-branch writes below are
+    // idempotent regardless.
+    const lockKey = `cohort::${year}`;
+    try {
+      await acquireDistributionLock(db, session.collegeId, lockKey, session.uid);
+    } catch (lockErr) {
+      if (lockErr instanceof DistributionLockHeldError) {
+        return NextResponse.json(
+          { error: "Another distribution is already running for this year - try again shortly" },
+          { status: 409 }
+        );
+      }
+      throw lockErr;
+    }
+
+    try {
+      // Phase 2 (plan): build and validate each ready branch's plan - same
+      // pure calculation a future preview would use.
+      const branchPlans = readyBranches.map((b) => {
+        const plan = buildDistributionPlan(b.students, b.sections);
+        validateDistributionPlan(plan, new Set(b.students.map((s) => s.id)), new Set(b.sections.map((s) => s.id)));
+        return { ...b, plan };
+      });
+
+      for (const { branch, managedBy, plan } of branchPlans) {
+        perBranch.push({
+          branch,
+          ...(managedBy ? { managedBy } : {}),
+          distributed: plan.movedCount,
+          perSection: plan.perSection.map((s) => ({ section: s.sectionName, count: s.studentIds.length })),
+        });
+      }
+      const distributed = branchPlans.reduce((sum, b) => sum + b.plan.movedCount, 0);
+
+      if (body.dryRun) {
+        return NextResponse.json({ success: true, dryRun: true, distributed, perBranch });
+      }
+
+      const now = new Date();
+      const batch = new ChunkedBatch(db);
+      const allMoves: (DistributionMove & { branch: string })[] = [];
+
+      for (const { branch, sections, plan } of branchPlans) {
+        const sectionById = new Map(sections.map((s) => [s.id, s]));
+        for (const move of plan.moves) {
+          const section = sectionById.get(move.toSectionId);
+          if (!section) continue;
+          allMoves.push({ ...move, branch });
           // department/secondaryDepartment are deliberately left untouched -
           // this route only ever processes the shared-year cohort, so every
           // student here stays enrolled under their original grouping
@@ -213,7 +312,7 @@ export async function POST(request: Request) {
           // courseId/course DO get set - see distribute/route.ts's identical
           // comment; StudentRecord.courseId always mirrors the section a
           // student is actually, currently sitting in.
-          batch.update(collegeRef.collection("students").doc(student.id), {
+          batch.update(collegeRef.collection("students").doc(move.studentId), {
             section: section.name,
             year,
             // One-time snapshot - see distribute/route.ts's own comment.
@@ -223,41 +322,65 @@ export async function POST(request: Request) {
             updatedAt: now,
           });
           const history = departmentHistoryEntry(
-            db, session.collegeId, student.id, student.department, section.name, year, now
+            db, session.collegeId, move.studentId, branch, section.name, year, now, move.fromSectionName
           );
           batch.set(history.ref, history.data);
         }
-        perSection.push({ section: section.name, count: slices[i].length });
       }
 
-      distributed += sorted.length;
-      perBranch.push({ ...base, distributed: sorted.length, perSection });
-    }
+      try {
+        await batch.commit();
+      } catch (commitErr) {
+        console.error("[college/students/distribute-cohort POST] partial commit failure", commitErr);
+        // See distribute/route.ts's identical comment - ChunkedBatch has no
+        // cross-chunk atomicity, but distribution is idempotent, so a plain
+        // re-run of Distribute All safely finishes whatever this run didn't.
+        return NextResponse.json(
+          {
+            error: "Distribution failed partway through - it's safe to re-run Distribute All, which will only move students not already in place",
+            partial: true,
+          },
+          { status: 500 }
+        );
+      }
 
-    if (distributed === 0) {
-      return NextResponse.json(
-        { error: "Nothing could be distributed - no branch had sections you can section into", perBranch },
-        { status: 400 }
+      // Post-write verification, same as distribute/route.ts - defense
+      // against a concurrent, non-Distribute write racing in between
+      // planning and commit.
+      const verifySnaps = await Promise.all(
+        allMoves.map((m) => collegeRef.collection("students").doc(m.studentId).get())
       );
+      const unverified: string[] = [];
+      verifySnaps.forEach((snap, i) => {
+        const move = allMoves[i];
+        if ((snap.data() as { section?: string } | undefined)?.section !== move.toSectionName) {
+          unverified.push(move.studentId);
+        }
+      });
+      const verified = unverified.length === 0;
+      if (!verified) {
+        console.error("[college/students/distribute-cohort POST] post-write verification mismatch", { unverified });
+      }
+
+      const auditRef = collegeRef.collection("auditLogs").doc();
+      await auditRef.set({
+        collegeId: session.collegeId,
+        action: "STUDENT_SECTION_DISTRIBUTED",
+        performedBy: session.uid,
+        performedByName: session.role,
+        details: {
+          kind: "COHORT_DISTRIBUTED",
+          year,
+          distributed,
+          branches: perBranch.map((b) => ({ branch: b.branch, count: b.distributed })),
+        },
+        timestamp: now,
+      });
+
+      return NextResponse.json({ success: true, distributed, perBranch, verified, distributionId: auditRef.id });
+    } finally {
+      await releaseDistributionLock(db, session.collegeId, lockKey);
     }
-
-    await batch.commit();
-
-    await collegeRef.collection("auditLogs").add({
-      collegeId: session.collegeId,
-      action: "STUDENT_PROMOTED",
-      performedBy: session.uid,
-      performedByName: session.role,
-      details: {
-        kind: "COHORT_DISTRIBUTED",
-        year,
-        distributed,
-        branches: perBranch.map((b) => ({ branch: b.branch, count: b.distributed })),
-      },
-      timestamp: now,
-    });
-
-    return NextResponse.json({ distributed, perBranch });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

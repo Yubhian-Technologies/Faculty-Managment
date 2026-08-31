@@ -47,7 +47,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
 
   if (!user) return null;
 
-  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
+  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems, user.realRole)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments");
   let navItems = baseNavItems;
   {

@@ -59,7 +59,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
   // "Supporting Staff" is hidden for college types with no Technical/Non-
   // Technical split (School) - HOD has nothing to manage there, it's all
   // centrally owned by Principal (see hasSupportingStaffSplit).
-  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems)
+  const baseNavItems = filterVisibleNavItems(getNavItemsForRole(user.role), hiddenModules, hiddenItems, user.realRole)
     .filter((item) => !hideSubDepartmentsLink || item.href !== "/hod/settings/sub-departments")
     .filter((item) => hasSupportingStaffSplit(collegeType) || item.href !== "/hod/supporting-staff");
 

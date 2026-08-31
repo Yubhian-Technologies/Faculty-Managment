@@ -12,8 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { buildCourseGroups } from "@/lib/departments/hodScope";
-import { regulationsForYear } from "@/lib/college/academicStructure";
-import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, parseAcademicYearStart } from "@/lib/college/academicSession";
+import { regulationsForBatchStartYear } from "@/lib/college/academicStructure";
+import { currentAcademicStartYear, admissionStartYearForCourseYear, deriveBatch, sectionBatchIntakeYears, parseBatchStartYear } from "@/lib/college/academicSession";
 import type { Course, CourseCatalogItem, Department, Section, Subject, TeachingAssignment } from "@/types";
 
 type SectionRow = Section & { id: string };
@@ -67,10 +67,6 @@ export default function EditSectionPage() {
   const [ownerDept, setOwnerDept] = useState("");
   const [branch, setBranch] = useState("");
   const [catalogItems, setCatalogItems] = useState<CourseCatalogItem[]>([]);
-  // The college's configured current session (see the New Section page's own
-  // doc-comment on this same fetch) - centers the Batch picker's default on
-  // the right intake year for a new cohort moving into this fixed year-slot.
-  const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
 
   // Class Leader (CR) login - bound to this section via Section.classLeaderUid.
   const [classLeaderUid, setClassLeaderUid] = useState<string | undefined>(undefined);
@@ -128,14 +124,6 @@ export default function EditSectionPage() {
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => setCatalogItems(d.items ?? []))
       .catch(() => { /* non-critical - regulation picker just stays empty */ });
-
-    fetch("/api/college/academic-sessions")
-      .then((r) => r.json() as Promise<{ academicSessions?: { label: string; isCurrent: boolean }[] }>)
-      .then((d) => {
-        const current = (d.academicSessions ?? []).find((s) => s.isCurrent);
-        setCurrentSessionStart(current ? parseAcademicYearStart(current.label) ?? null : null);
-      })
-      .catch(() => { /* non-critical - Batch picker falls back to the date-based session */ });
 
     fetch("/api/college/sections")
       .then((r) => r.json() as Promise<{ sections: SectionRow[] }>)
@@ -378,26 +366,46 @@ export default function EditSectionPage() {
 
   // Candidate intake years for the Batch picker (same derivation as the New
   // Section page), centered on this fixed year-slot's admission year for the
-  // college's current session - plus, whenever this section's ALREADY-SAVED
-  // batch doesn't match any derivable candidate (older free-typed data),
-  // that saved value is kept in the list too, so opening Edit on a legacy
-  // section never silently blanks/discards it.
+  // real current academic year - plus, whenever this section's ALREADY-SAVED
+  // batch doesn't match any derivable candidate (older free-typed data, or a
+  // batch that's simply aged out of the window), that saved value is kept in
+  // the list too, so opening Edit on a legacy section never silently
+  // blanks/discards it. Anchored on currentAcademicStartYear rather than the
+  // stored session pin (currentSessionStart), which can be years stale.
   const batchOptions = useMemo(() => {
     if (!formCourse || !form.year) return form.batch ? [form.batch] : [];
-    const sessionStart = currentSessionStart ?? currentAcademicStartYear();
-    const center = admissionStartYearForCourseYear(sessionStart, Number(form.year));
-    const derived = [center + 1, center, center - 1, center - 2, center - 3].map((y) => deriveBatch(y, formCourse.durationYears));
+    const center = admissionStartYearForCourseYear(currentAcademicStartYear(), Number(form.year));
+    const derived = sectionBatchIntakeYears(center).map((y) => deriveBatch(y, formCourse.durationYears));
     return form.batch && !derived.includes(form.batch) ? [form.batch, ...derived] : derived;
-  }, [formCourse, form.year, form.batch, currentSessionStart]);
+  }, [formCourse, form.year, form.batch]);
 
-  // This course's own assigned regulations, narrowed to whichever are
-  // actually offered for this section's (fixed) year - same set the Dean's
-  // Add Subject page and Add Section form offer.
-  const regulationOptions = useMemo(() => {
-    if (!formCourse?.catalogId || !form.year) return [];
+  // This course's own regulations, resolved directly from the SELECTED
+  // batch's own admission year - not from "current session as of now" - so
+  // picking a different Batch (an HOD deliberately choosing an off-cycle
+  // admission year, or correcting a transition-year section - see
+  // Section.regulation's own doc-comment) immediately re-narrows Regulation
+  // to whatever actually covers THAT batch, instead of staying stuck on
+  // whatever the previous batch resolved to. Same resolution the Add Section
+  // form and Dean's Add Subject page use. Also called directly (not just via
+  // the memo below) from the Batch picker's onValueChange, to decide whether
+  // the currently-picked regulation survives the change.
+  const regulationsForBatch = useCallback((batchValue: string): string[] => {
+    if (!formCourse?.catalogId || !batchValue) return form.regulation ? [form.regulation] : [];
+    const batchStart = parseBatchStartYear(batchValue);
+    if (batchStart == null) return form.regulation ? [form.regulation] : [];
     const catalogItem = catalogItems.find((c) => c.id === formCourse.catalogId);
-    return regulationsForYear(catalogItem, Number(form.year));
-  }, [formCourse, catalogItems, form.year]);
+    return regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, batchStart, catalogItem?.regulations);
+  }, [formCourse, catalogItems, form.regulation]);
+  const regulationOptions = useMemo(() => regulationsForBatch(form.batch), [regulationsForBatch, form.batch]);
+  // A section's already-saved regulation can disagree in CASE with the
+  // catalog's own canonical code (e.g. a legacy write of "r23" against the
+  // catalog's "R23" - see sections/[id]/route.ts PATCH's own case-insensitive
+  // match/self-heal) - resolve that here too, so the Select shows the
+  // existing selection instead of rendering blank as if nothing were set.
+  const regulationSelectValue = useMemo(
+    () => regulationOptions.find((r) => r.toLowerCase() === form.regulation.toLowerCase()) ?? form.regulation,
+    [regulationOptions, form.regulation]
+  );
 
   // Collapse the several Course docs that represent one catalog programme into
   // a single dropdown choice - `courses` legitimately holds one row per related
@@ -564,7 +572,18 @@ export default function EditSectionPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Batch *</Label>
-                <Select value={form.batch} onValueChange={(v) => setF({ batch: v })}>
+                <Select
+                  value={form.batch}
+                  onValueChange={(v) => {
+                    // Keep the current regulation only if it still covers the
+                    // newly-picked batch - otherwise it's stale (belonged to
+                    // the previous batch) and must be re-picked.
+                    const stillValid = regulationsForBatch(v).some((r) => r.toLowerCase() === form.regulation.toLowerCase());
+                    const nextRegulation = stillValid ? form.regulation : "";
+                    setF({ batch: v, regulation: nextRegulation });
+                    loadSubjects(form.courseId, form.year, nextRegulation);
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
                   <SelectContent>
                     {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
@@ -575,12 +594,12 @@ export default function EditSectionPage() {
               <div className="space-y-2">
                 <Label>Regulation</Label>
                 <Select
-                  value={form.regulation}
+                  value={regulationSelectValue}
                   onValueChange={(v) => { setF({ regulation: v }); loadSubjects(form.courseId, form.year, v); }}
-                  disabled={!form.year || regulationOptions.length === 0}
+                  disabled={!form.batch || regulationOptions.length === 0}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={regulationOptions.length ? "Select regulation" : "None assigned for this year"} />
+                    <SelectValue placeholder={regulationOptions.length ? "Select regulation" : "None assigned for this batch"} />
                   </SelectTrigger>
                   <SelectContent>
                     {regulationOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}

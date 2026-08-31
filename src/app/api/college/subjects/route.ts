@@ -143,32 +143,24 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `Year must be between 1 and ${course.durationYears} for ${course.name}` }, { status: 400 });
       }
 
+      // Optional - a subject can be added for a course-year even when no
+      // regulation (or more than one) currently resolves for it; the Dean's
+      // subject list is scoped by Academic Year session, not regulation (see
+      // dean/subjects/page.tsx). When one IS provided, it must still belong
+      // to this course's own Course Catalog entry - a Pharmacy-only code
+      // should never be accepted for a B.Tech subject.
       const regulation = body.regulation?.trim();
-      if (!regulation) {
-        return NextResponse.json({ error: "Regulation is required" }, { status: 400 });
-      }
-      // Validated against this course's OWN assigned regulations (Course
-      // Catalog > Regulations), not just the college's full declared list -
-      // a Pharmacy-only code should never be accepted for a B.Tech subject.
-      if (!course.catalogId) {
-        return NextResponse.json(
-          { error: "This course isn't linked to a Course Catalog entry. Ask the Principal to fix this under Settings > Course Catalog." },
-          { status: 400 },
-        );
-      }
-      const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
-      const catalogRegulations = catalogSnap.exists ? ((catalogSnap.data() as { regulations?: string[] }).regulations ?? []) : [];
-      if (catalogRegulations.length === 0) {
-        return NextResponse.json(
-          { error: `${course.name} has no regulations assigned yet. Ask the Principal to assign them under Settings > Course Catalog.` },
-          { status: 400 },
-        );
-      }
-      if (!catalogRegulations.includes(regulation)) {
-        return NextResponse.json(
-          { error: `That regulation isn't assigned to ${course.name}. Check Settings > Course Catalog.` },
-          { status: 400 },
-        );
+      if (regulation) {
+        const catalogSnap = course.catalogId
+          ? await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get()
+          : null;
+        const catalogRegulations = catalogSnap?.exists ? ((catalogSnap.data() as { regulations?: string[] }).regulations ?? []) : [];
+        if (!catalogRegulations.includes(regulation)) {
+          return NextResponse.json(
+            { error: `That regulation isn't assigned to ${course.name}. Check Course Catalog.` },
+            { status: 400 },
+          );
+        }
       }
 
       if (body.serialNumber == null || Number.isNaN(Number(body.serialNumber))) {
@@ -280,7 +272,7 @@ export async function POST(request: Request) {
           credits: body.credits != null ? Number(body.credits) : 0,
           type: body.type ?? "THEORY",
           ...(body.academicYear ? { academicYear: body.academicYear } : {}),
-          regulation,
+          ...(regulation ? { regulation } : {}),
           isActive: true,
           createdAt: now,
           updatedAt: now,

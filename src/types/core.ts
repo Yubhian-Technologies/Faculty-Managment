@@ -317,6 +317,15 @@ export interface FMSUser {
   collegeEmail?: string; // same field name as FacultyMember below, for consistency
   phone?: string;
   role: UserRole;
+  // The Firestore doc's real, un-normalized role - only ever differs from
+  // `role` for COLLEGE_ADMIN, which `role` always reports as "PRINCIPAL" (see
+  // useAuth.ts / api/auth/session). Exists solely so a specific feature can
+  // opt out College Admin from something Principal sees (e.g. navConfig's
+  // NavItem.hideForRealRoles) without disturbing the "College Admin behaves
+  // exactly like Principal" normalization everywhere else. Don't use this for
+  // anything other than that kind of narrow exclusion - `role` remains the
+  // one source of truth for permissions.
+  realRole?: UserRole;
   // for HOD / LOCATION_DEPT_HEAD - kept as the first entry of `departments`
   // (the HOD's "primary" department) for every screen that hasn't been
   // updated to the multi-department list below; always write both together.
@@ -544,19 +553,23 @@ export interface CourseCatalogItem {
   // Curriculum regulation codes (e.g. R20, R23) this course uses - a different
   // course can have an entirely different set. Created directly here (typing a
   // new code registers it, typing an existing one reuses it - no separate
-  // college-wide "declare a regulation" step). Empty/absent until the
-  // Principal assigns at least one here, which blocks the Dean from adding
-  // subjects to any Course created from this catalog entry (see
+  // college-wide "declare a regulation" step). Empty/absent until the Dean
+  // (or Principal/Super Admin) assigns at least one here, which blocks
+  // adding subjects to any Course created from this catalog entry (see
   // api/college/subjects POST) until it's set.
   regulations?: string[];
-  // Which years (within 1..durationYears) each of the above `regulations` is
-  // currently offered for - e.g. during a transition, R20 -> [3, 4] (existing
-  // senior batches) while R23 -> [1, 2] (new intakes), both active for this
-  // course at once. A regulation present in `regulations` but absent (or with
-  // an empty array) here is unrestricted - offered for every year - which is
-  // also the default for every course until a Principal opts into narrowing
-  // it, so nothing already relying on the old flat `regulations` list breaks.
-  regulationYears?: Record<string, number[]>;
+  // Every intake batch each of the above `regulations` covers, as a
+  // comma-separated list of "start-end" ranges (e.g. R23 ->
+  // "2023-2027,2024-2028,2025-2029" - a regulation adopted for the 2023
+  // intake still covering the 2024 and 2025 intakes until superseded). Each
+  // entry's END year is descriptive only (this course's own durationYears at
+  // the time it was added) - only the START year is ever read
+  // (parseBatchStartYear/regulationsForCourseYearByBatch), so which ordinal
+  // year of THIS course a regulation currently governs is resolved from the
+  // start year versus today's session, not stored directly - the same
+  // student cohort's ordinal year keeps advancing every session while their
+  // regulation stays fixed to their intake year.
+  regulationBatches?: Record<string, string>;
   isActive: boolean;
   createdBy?: string;
   createdByName?: string;
@@ -577,6 +590,16 @@ export interface Course {
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+  // Response-only, never persisted - set by GET /api/college/courses when this
+  // doc represents a group of duplicate Course docs for the same department +
+  // conceptual course (see lib/departments/courseGrouping.ts). Every doc id in
+  // the group, including this course's own `id` - callers that filter
+  // Firestore queries by an exact courseId picked from this list should widen
+  // to `where("courseId", "in", mergedCourseIds)` instead of a single `==`,
+  // since teachingAssignments/sections/etc. may be split across the group
+  // (a legacy pre-catalog course doc alongside a properly catalog-linked one -
+  // see scripts/fix-course-catalog-duplicates.mjs for the root cause).
+  mergedCourseIds?: string[];
 }
 
 // ─── Course-Year Timing (college timings, periods, breaks — per course, per year) ──
@@ -1278,9 +1301,9 @@ export interface Section {
   secondaryDepartments?: string[];
   // The curriculum regulation (e.g. "R20", "R23") the batch CURRENTLY
   // occupying this year-slot follows - one of the owning course's
-  // CourseCatalogItem.regulations (narrowed by regulationYears for this
-  // section's own `year`, same validation as Subject.regulation). Like
-  // `batch` above, this is edited by the HOD whenever a new cohort starts
+  // CourseCatalogItem.regulations, resolved by which of its regulationBatches
+  // lands on this section's own `year` (same validation as Subject.regulation).
+  // Like `batch` above, this is edited by the HOD whenever a new cohort starts
   // occupying the slot (e.g. a fresh intake reaching this year, or a
   // transition-year correction) and is left untouched by promotion/
   // advance-year - those only ever move students, never edit Section docs.
@@ -1657,7 +1680,8 @@ export type AuditAction =
   | "ACADEMIC_YEAR_ADVANCED"
   // Student promotion module
   | "STUDENT_PROMOTED"
-  | "STUDENT_GRADUATED";
+  | "STUDENT_GRADUATED"
+  | "STUDENT_SECTION_DISTRIBUTED";
 
 export interface AuditLog {
   id: string;

@@ -8,8 +8,8 @@ import { resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/department
 import { departmentHistoryEntry } from "@/lib/students/departmentHistory";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope, regulationsForYear } from "@/lib/college/academicStructure";
-import { parseBatchStartYear, deriveBatch } from "@/lib/college/academicSession";
+import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulationsForBatchStartYear } from "@/lib/college/academicStructure";
+import { parseBatchStartYear, deriveBatch, parseAcademicYearStart, currentAcademicStartYear } from "@/lib/college/academicSession";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import type { DepartmentCourseScope } from "@/types";
 
@@ -76,7 +76,7 @@ export async function PATCH(
     const snap = await ref.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const oldSection = snap.data() as { department?: string; name?: string; year?: number; courseId?: string };
+    const oldSection = snap.data() as { department?: string; name?: string; year?: number; courseId?: string; batch?: string };
     const sectionDept = oldSection.department ?? "";
     const sectionYear = oldSection.year ?? 0;
 
@@ -126,7 +126,20 @@ export async function PATCH(
       // fixed year is 3. Only checked against the section's own department -
       // the departmentId-reassignment block below validates the target
       // department separately when that's also changing.
-      if (targetYear != null && sectionDept) {
+      //
+      // Only re-run this when the section's year or course is actually
+      // changing. An unchanged (year, course) pair on an existing section was
+      // already validated at creation - re-checking it on every unrelated edit
+      // (faculty incharge, name, regulation, batch) would retroactively lock a
+      // section whose department's scope was later narrowed (e.g. a Year-1
+      // managed-branch section once its manager grouping was removed, or a flat
+      // assignedYears frozen into a tighter per-course courseScopes), with no
+      // UI path for a branch HOD to widen their own courseScopes. The
+      // course-switch case (this guard's real purpose, above) still sets
+      // body.courseId; an HOD year change is already rejected further up.
+      const courseChanging = body.courseId != null && body.courseId !== oldSection.courseId;
+      const yearChanging = body.year != null && Number(body.year) !== sectionYear;
+      if (targetYear != null && sectionDept && (courseChanging || yearChanging)) {
         const deptSnap = await db.collection("colleges").doc(session.collegeId)
           .collection("departments").where("name", "==", sectionDept).limit(1).get();
         if (!deptSnap.empty) {
@@ -164,7 +177,7 @@ export async function PATCH(
     // (per the course's catalog entry, narrowed to the section's own year)
     // for the year this section actually ends up at. "" / null clears it.
     if (body.regulation !== undefined) {
-      const regulation = body.regulation?.trim() || null;
+      let regulation = body.regulation?.trim() || null;
       if (regulation) {
         if (!course) {
           const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses").doc(courseId ?? "").get();
@@ -178,14 +191,45 @@ export async function PATCH(
           );
         }
         const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
-        const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulations?: string[]; regulationYears?: Record<string, number[]> }) : null;
-        const allowed = regulationsForYear(catalogItem, targetYear ?? sectionYear);
-        if (!allowed.includes(regulation)) {
+        const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulationBatches?: Record<string, string>; regulations?: string[] }) : null;
+        // Resolved from the EFFECTIVE batch's own admission year - the batch
+        // this PATCH is setting it to, if it's touching batch, else the
+        // section's already-saved one - not from "current session as of
+        // now", so the regulation offered always matches the actual batch,
+        // the same way the client Edit Section picker resolves it (see
+        // hod/sections/[id]/edit/page.tsx's regulationsForBatch). Parsing the
+        // raw (not yet duration-normalized) batch string is fine here - only
+        // its leading start year matters. Falls back to the year+session
+        // resolution only when neither batch parses (legacy free-typed
+        // data), reading the college's real current session the same way
+        // the client pickers and sections POST do.
+        const effectiveBatchRaw = body.batch != null ? body.batch.trim() : (oldSection.batch ?? "");
+        const effectiveBatchStart = effectiveBatchRaw ? parseBatchStartYear(effectiveBatchRaw) : null;
+        let allowed: string[];
+        if (effectiveBatchStart != null) {
+          allowed = regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, effectiveBatchStart, catalogItem?.regulations);
+        } else {
+          const sessionSnap = await db.collection("colleges").doc(session.collegeId)
+            .collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+          const asOfStartYear = parseAcademicYearStart(
+            sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
+          ) ?? currentAcademicStartYear();
+          allowed = regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, targetYear ?? sectionYear, asOfStartYear, catalogItem?.regulations);
+        }
+        // Case-insensitive, same as sections POST - a section carrying an
+        // older/differently-cased stored value (e.g. "r23" from a legacy
+        // one-time script, against the catalog's own "R23") would otherwise
+        // 400 here even on an edit that doesn't touch Regulation at all,
+        // since this field's current value round-trips on every PATCH.
+        // Storing the catalog's own canonical casing self-heals it.
+        const canonical = allowed.find((r) => r.toLowerCase() === regulation!.toLowerCase());
+        if (!canonical) {
           return NextResponse.json(
             { error: `"${regulation}" isn't offered for Year ${targetYear ?? sectionYear} of ${course.name}. Check Settings > Course Catalog.` },
             { status: 400 },
           );
         }
+        regulation = canonical;
       }
       updates.regulation = regulation;
     }

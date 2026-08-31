@@ -25,9 +25,13 @@ export async function GET() {
     const snap = await db.collection("colleges").doc(session.collegeId)
       .collection("users").where("department", "==", department).get();
 
+    // Handover is a staff-to-staff point-of-contact - never offer a Student
+    // or Class Leader login even though both carry a `department` field.
     const candidates = snap.docs
       .filter((d) => d.id !== session.uid)
-      .map((d) => ({ uid: d.id, name: (d.data() as { name?: string }).name ?? "Unknown" }))
+      .map((d) => ({ uid: d.id, ...(d.data() as { name?: string; role?: string }) }))
+      .filter((c) => c.role !== "STUDENT" && c.role !== "CLASS_LEADER")
+      .map((c) => ({ uid: c.uid, name: c.name ?? "Unknown" }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     return NextResponse.json({ candidates });

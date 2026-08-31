@@ -477,11 +477,12 @@ ${batch.hodName}
 Head of Department – ${batch.department}
 ${institution}`;
 
-    // CC: Principal, Vice Principal, College Office, and this batch's selected panel members
+    // CC: Principal, Vice Principal, College Admin (mirrors Principal's
+    // authority), College Office, and this batch's selected panel members
     const panelEmails = batch.panelMemberUids.map((uid) => userMap[uid]?.email).filter(Boolean) as string[];
     const ccEmails = Array.from(new Set([
       ...allUsers
-        .filter((u) => u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "COLLEGE_OFFICE")
+        .filter((u) => u.role === "PRINCIPAL" || u.role === "VICE_PRINCIPAL" || u.role === "COLLEGE_ADMIN" || u.role === "COLLEGE_OFFICE")
         .map((u) => u.email)
         .filter(Boolean),
       ...panelEmails,
@@ -950,12 +951,14 @@ ${institution}`;
                   ) : (
                     allUsers
                       // Hide other departments' faculty from the picker - keep
-                      // Principal/VP (college-wide defaults) and anyone already
-                      // on this batch's panel (so existing picks don't vanish).
+                      // Principal/VP/College Admin (college-wide defaults) and
+                      // anyone already on this batch's panel (so existing
+                      // picks don't vanish).
                       .filter(
                         (u) =>
                           u.role === "PRINCIPAL" ||
                           u.role === "VICE_PRINCIPAL" ||
+                          u.role === "COLLEGE_ADMIN" ||
                           u.department === myDepartment ||
                           editPanel.includes(u.uid)
                       )

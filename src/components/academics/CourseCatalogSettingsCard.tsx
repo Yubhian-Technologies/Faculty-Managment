@@ -10,35 +10,33 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Pencil, Trash2, Check, X, GraduationCap, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/useToast";
 import { stripLeadingZeros } from "@/lib/utils";
+import { currentAcademicStartYear, deriveBatch } from "@/lib/college/academicSession";
 import type { CourseCatalogItem } from "@/types";
 
-type Draft = { name: string; code: string; durationYears: string; regulations: string[]; regulationYears: Record<string, number[]> };
-const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [], regulationYears: {} };
+type Draft = { name: string; code: string; durationYears: string; regulations: string[]; regulationBatches: Record<string, string> };
+const EMPTY_DRAFT: Draft = { name: "", code: "", durationYears: "4", regulations: [], regulationBatches: {} };
 
-/** Starting Year N for `duration` years, clipped to the course's own 1..durationYears span. */
-function computeRegulationYears(start: number, duration: number, courseDurationYears: number): number[] {
-  const years: number[] = [];
-  for (let y = start; y < start + duration; y++) {
-    if (y >= 1 && y <= courseDurationYears) years.push(y);
-  }
-  return years;
-}
-
-function yearRangeLabel(years: number[]): string {
-  if (years.length === 0) return "";
-  const [min, max] = [Math.min(...years), Math.max(...years)];
-  return min === max ? `Year ${min}` : `Year ${min}–${max}`;
+/**
+ * "2023-2027,2024-2028,2025-2029" - every consecutive intake starting
+ * `startYear` for `numBatches` admission years, each spanning the course's
+ * own duration (deriveBatch).
+ */
+function computeRegulationBatches(startYear: number, numBatches: number, courseDurationYears: number): string {
+  const years = Array.from({ length: numBatches }, (_, i) => startYear + i);
+  return years.map((y) => deriveBatch(y, courseDurationYears)).join(",");
 }
 
 /**
  * Add/remove regulations for a course draft (used identically for the "Add
  * new course" panel and each item's Edit mode) - a regulation is created
- * right here, by giving it a starting year and a duration, rather than
- * declared standalone elsewhere and attached afterward. Typing a code
- * already used by another course reuses it (`knownCodes` just offers it back
- * via the datalist); there is no separate registry to keep it in sync with.
+ * right here, by giving it an intake starting year (e.g. 2023) and how many
+ * consecutive intakes follow it (e.g. 3 -> 2023, 2024, 2025 all fall under
+ * this regulation, until a newer one supersedes it), rather than declared
+ * standalone elsewhere and attached afterward. Typing a code already used by
+ * another course reuses it (`knownCodes` just offers it back via the
+ * datalist); there is no separate registry to keep it in sync with.
  */
-function RegulationYearsEditor({
+function RegulationBatchesEditor({
   draft, setDraft, courseDurationYears, knownCodes, listId,
 }: {
   draft: Draft;
@@ -48,37 +46,37 @@ function RegulationYearsEditor({
   listId: string;
 }) {
   const [code, setCode] = useState("");
-  const [start, setStart] = useState("1");
-  const [duration, setDuration] = useState("1");
+  const [startYear, setStartYear] = useState(String(currentAcademicStartYear()));
+  const [numBatches, setNumBatches] = useState("1");
 
   function addRegulation() {
     const trimmed = code.trim().toUpperCase();
     if (!trimmed) { toast({ variant: "destructive", title: "Enter a regulation code" }); return; }
-    const startYear = Number(start);
-    const durationYears = Number(duration);
-    if (!startYear || startYear < 1 || startYear > courseDurationYears) {
-      toast({ variant: "destructive", title: `Starting year must be between 1 and ${courseDurationYears}` });
+    const start = Number(startYear);
+    const count = Number(numBatches);
+    if (!start || String(start).length !== 4) {
+      toast({ variant: "destructive", title: "Starting year must be a 4-digit year, e.g. 2023" });
       return;
     }
-    if (!durationYears || durationYears < 1) {
-      toast({ variant: "destructive", title: "Duration must be at least 1 year" });
+    if (!count || count < 1) {
+      toast({ variant: "destructive", title: "Number of batches must be at least 1" });
       return;
     }
-    const years = computeRegulationYears(startYear, durationYears, courseDurationYears);
+    const batches = computeRegulationBatches(start, count, courseDurationYears);
     setDraft({
       ...draft,
       regulations: draft.regulations.includes(trimmed) ? draft.regulations : [...draft.regulations, trimmed],
-      regulationYears: { ...draft.regulationYears, [trimmed]: years },
+      regulationBatches: { ...draft.regulationBatches, [trimmed]: batches },
     });
     setCode("");
-    setStart("1");
-    setDuration("1");
+    setStartYear(String(currentAcademicStartYear()));
+    setNumBatches("1");
   }
 
   function removeRegulation(regCode: string) {
-    const regulationYears = { ...draft.regulationYears };
-    delete regulationYears[regCode];
-    setDraft({ ...draft, regulations: draft.regulations.filter((r) => r !== regCode), regulationYears });
+    const regulationBatches = { ...draft.regulationBatches };
+    delete regulationBatches[regCode];
+    setDraft({ ...draft, regulations: draft.regulations.filter((r) => r !== regCode), regulationBatches });
   }
 
   return (
@@ -87,7 +85,7 @@ function RegulationYearsEditor({
         <div className="flex flex-wrap gap-1.5">
           {draft.regulations.map((r) => (
             <span key={r} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
-              {r}{draft.regulationYears[r]?.length ? ` — ${yearRangeLabel(draft.regulationYears[r])}` : ""}
+              {r}{draft.regulationBatches[r] ? ` — ${draft.regulationBatches[r]}` : ""}
               <button type="button" onClick={() => removeRegulation(r)} className="rounded-full hover:bg-muted-foreground/20" title={`Remove ${r}`}>
                 <X className="h-3 w-3" />
               </button>
@@ -105,16 +103,19 @@ function RegulationYearsEditor({
         </div>
         <div className="space-y-1">
           <Label className="text-[11px]">Starting Year</Label>
-          <Input type="number" min={1} max={courseDurationYears} value={start} onChange={(e) => setStart(stripLeadingZeros(e.target.value))} className="w-20" />
+          <Input value={startYear} onChange={(e) => setStartYear(stripLeadingZeros(e.target.value))} placeholder="2023" className="w-24" maxLength={4} />
         </div>
         <div className="space-y-1">
-          <Label className="text-[11px]">Duration (years)</Label>
-          <Input type="number" min={1} value={duration} onChange={(e) => setDuration(stripLeadingZeros(e.target.value))} className="w-20" />
+          <Label className="text-[11px]">No. of Batches</Label>
+          <Input type="number" min={1} value={numBatches} onChange={(e) => setNumBatches(stripLeadingZeros(e.target.value))} className="w-24" />
         </div>
         <Button type="button" size="sm" variant="outline" onClick={addRegulation}>
           <Plus className="h-3.5 w-3.5 mr-1" />Add
         </Button>
       </div>
+      <p className="text-[11px] text-muted-foreground">
+        E.g. Starting Year 2023, 3 batches - the 2023, 2024 and 2025 intakes all follow this regulation.
+      </p>
     </div>
   );
 }
@@ -131,7 +132,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
   const [items, setItems] = useState<CourseCatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // Every regulation code any course already uses - purely a reuse/autocomplete
-  // suggestion for RegulationYearsEditor's Code field (see its own doc-comment),
+  // suggestion for RegulationBatchesEditor's Code field (see its own doc-comment),
   // not a separate registry: typing a new code there is the only way one gets
   // created at all.
   const knownRegulationCodes = useMemo(
@@ -182,7 +183,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
           code: newDraft.code.trim(),
           durationYears: Number(newDraft.durationYears),
           regulations: newDraft.regulations,
-          regulationYears: newDraft.regulationYears,
+          regulationBatches: newDraft.regulationBatches,
         }),
       });
       if (!res.ok) {
@@ -206,7 +207,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
       code: item.code,
       durationYears: String(item.durationYears),
       regulations: item.regulations ?? [],
-      regulationYears: item.regulationYears ?? {},
+      regulationBatches: item.regulationBatches ?? {},
     });
   }
 
@@ -223,7 +224,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
           code: editDraft.code.trim(),
           durationYears: Number(editDraft.durationYears),
           regulations: editDraft.regulations,
-          regulationYears: editDraft.regulationYears,
+          regulationBatches: editDraft.regulationBatches,
         }),
       });
       if (!res.ok) {
@@ -330,7 +331,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-foreground">2. Regulations (optional - can add after too)</Label>
-              <RegulationYearsEditor
+              <RegulationBatchesEditor
                 draft={newDraft}
                 setDraft={setNewDraft}
                 courseDurationYears={Number(newDraft.durationYears) || 10}
@@ -419,7 +420,7 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                   {isEditing ? (
                     <div className="space-y-1">
                       <Label className="text-[11px] text-muted-foreground">Regulations for this course</Label>
-                      <RegulationYearsEditor
+                      <RegulationBatchesEditor
                         draft={editDraft}
                         setDraft={setEditDraft}
                         courseDurationYears={Number(editDraft.durationYears) || item.durationYears || 10}
@@ -432,15 +433,23 @@ export function CourseCatalogSettingsCard({ readOnly = false }: CourseCatalogSet
                       <AlertTriangle className="h-3 w-3" /> No regulations assigned yet - subjects can&apos;t be added to this course until you add at least one.
                     </p>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {(item.regulations ?? []).map((r) => {
-                        const years = item.regulationYears?.[r];
-                        return (
-                          <Badge key={r} variant="secondary" className="text-xs">
-                            {r}{years?.length ? ` — ${yearRangeLabel(years)}` : ""}
-                          </Badge>
-                        );
-                      })}
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(item.regulations ?? []).map((r) => {
+                          const batches = item.regulationBatches?.[r];
+                          return (
+                            <Badge key={r} variant="secondary" className="text-xs">
+                              {r}{batches ? ` — ${batches}` : ""}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                      {(item.regulations ?? []).some((r) => !item.regulationBatches?.[r]) && (
+                        <p className="flex items-center gap-1 text-xs text-amber-600">
+                          <AlertTriangle className="h-3 w-3" /> Some regulations have no intake batches set (carried over from the
+                          old catalog). Edit this course and re-add each one with a starting year so it shows up in Sections and Subjects.
+                        </p>
+                      )}
                     </div>
                   )}
                 </li>

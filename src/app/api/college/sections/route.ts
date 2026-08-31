@@ -6,8 +6,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { findBranchManager, resolveBranchYearOwner, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyIdCandidates, resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
-import { resolveDepartmentCourseScope, regulationsForYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
-import { parseBatchStartYear, deriveBatch } from "@/lib/college/academicSession";
+import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch, regulationsForBatchStartYear, isDeclaredFeederFor } from "@/lib/college/academicStructure";
+import { parseBatchStartYear, deriveBatch, parseAcademicYearStart, currentAcademicStartYear } from "@/lib/college/academicSession";
 import { deriveHodScope } from "@/lib/departments/hodScope";
 import { isNameOrChildAmong } from "@/lib/departments/codeOrNameResolver";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
@@ -370,7 +370,7 @@ export async function POST(request: Request) {
     // catalog entry, narrowed to this year), but optional: a course with no
     // regulations assigned yet still lets a section be created (backward
     // compatible), same leniency as everywhere else this pattern shows up.
-    const regulation = body.regulation?.trim() || null;
+    let regulation = body.regulation?.trim() || null;
     if (regulation) {
       if (!course.catalogId) {
         return NextResponse.json(
@@ -379,14 +379,42 @@ export async function POST(request: Request) {
         );
       }
       const catalogSnap = await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get();
-      const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulations?: string[]; regulationYears?: Record<string, number[]> }) : null;
-      const allowed = regulationsForYear(catalogItem, Number(body.year));
-      if (!allowed.includes(regulation)) {
+      const catalogItem = catalogSnap.exists ? (catalogSnap.data() as { regulationBatches?: Record<string, string>; regulations?: string[] }) : null;
+      // Resolved from the ACTUAL submitted batch's own admission year
+      // (parsedBatchStart, above) - not from "current session as of now" -
+      // so the regulation offered always matches the specific batch being
+      // saved, the same way the client pickers (HOD/Dean) resolve it. Falls
+      // back to the year+session resolution only for a batch that doesn't
+      // parse as a leading 4-digit year (legacy free-typed data), reading
+      // the college's real current session the same way the client pickers
+      // and teaching-assignments/route.ts do.
+      let allowed: string[];
+      if (parsedBatchStart != null) {
+        allowed = regulationsForBatchStartYear(catalogItem?.regulationBatches ?? {}, parsedBatchStart, catalogItem?.regulations);
+      } else {
+        const sessionSnap = await db.collection("colleges").doc(session.collegeId)
+          .collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
+        const asOfStartYear = parseAcademicYearStart(
+          sessionSnap.empty ? undefined : (sessionSnap.docs[0].data() as { label?: string }).label
+        ) ?? currentAcademicStartYear();
+        allowed = regulationsForCourseYearByBatch(catalogItem?.regulationBatches ?? {}, Number(body.year), asOfStartYear, catalogItem?.regulations);
+      }
+      // Case-insensitive: a regulation code is free-typed once into the
+      // Course Catalog (e.g. "R23") and every other picker/legacy-data write
+      // since has been free to disagree on casing (e.g. "r23" - see
+      // scripts/set-firstyear-batch-regulation.mjs's own lowercase target).
+      // Match loosely but store the catalog's own canonical casing, so a
+      // regulation the Dean clearly configured never 400s here over case
+      // alone, and every section that resolves through here self-heals to
+      // the canonical form going forward.
+      const canonical = allowed.find((r) => r.toLowerCase() === regulation!.toLowerCase());
+      if (!canonical) {
         return NextResponse.json(
           { error: `"${regulation}" isn't offered for Year ${body.year} of ${course.name}. Check Settings > Course Catalog.` },
           { status: 400 },
         );
       }
+      regulation = canonical;
     }
 
     // Reject years the college hasn't opened via Academic Years. Colleges that have

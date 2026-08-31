@@ -165,12 +165,12 @@ export async function POST(request: Request) {
 
     const ref = batchRef;
 
-    // Notify Principal
+    // Notify Principal (and College Admin, who mirrors Principal's authority)
     const principalsSnap = await db
       .collection("colleges")
       .doc(session.collegeId)
       .collection("users")
-      .where("role", "==", "PRINCIPAL")
+      .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN"])
       .get();
 
     const notifBatch = db.batch();

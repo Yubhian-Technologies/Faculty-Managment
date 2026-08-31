@@ -111,6 +111,57 @@ export async function getCurrentTimetableSlot(
   return null;
 }
 
+export interface FacultyPeriodOnDate {
+  slot: TimetableSlot & { id: string };
+  startTime: string; // "HH:MM" 24h, resolved from the slot's own CourseYearTiming
+  endTime: string;
+}
+
+/**
+ * Every published TimetableSlot a faculty member has on an arbitrary calendar
+ * date (past, today, or future) - not just "now" (see getCurrentTimetableSlot
+ * above). Used by attendance-completion reporting, where a Principal/HOD picks
+ * a specific date and needs the faculty's full day, not just whichever single
+ * period happens to be in session right now. Sorted by period start time.
+ *
+ * Note: like getCurrentTimetableSlot, this filters each slot through
+ * resolvePeriodWindow's matchesCurrentSemester check, which compares against
+ * the semester that's active RIGHT NOW, not the one active on `dateISO` - a
+ * date from a since-ended semester can under-report periods. Acceptable for
+ * this feature's use (recent-date attendance-completion checks); revisit if a
+ * caller ever needs an accurate report far into a past semester.
+ */
+export async function getFacultyPeriodsForDate(
+  db: Firestore,
+  collegeId: string,
+  facultyId: string,
+  dateISO: string,
+): Promise<FacultyPeriodOnDate[]> {
+  // Same weekday-from-date convention as class-work-records/route.ts's
+  // resolvePeriodNumber - a plain JS Date parsed from "YYYY-MM-DD" components
+  // (not `new Date(dateISO)`, which parses as UTC midnight and can land on
+  // the wrong local weekday).
+  const [y, m, d] = dateISO.split("-").map(Number);
+  const day = DAY_BY_JS_DAY[new Date(y, m - 1, d).getDay()];
+  if (!day) return []; // Sunday - nothing scheduled
+
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const slotsSnap = await collegeRef.collection("timetableSlots")
+    .where("facultyId", "==", facultyId)
+    .get();
+  const daySlots = slotsSnap.docs
+    .map((s) => ({ id: s.id, ...s.data() }) as TimetableSlot & { id: string })
+    .filter((s) => s.day === day);
+
+  const resolved: FacultyPeriodOnDate[] = [];
+  for (const slot of daySlots) {
+    const window = await resolvePeriodWindow(collegeRef, slot);
+    if (window) resolved.push({ slot, ...window });
+  }
+  resolved.sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
+  return resolved;
+}
+
 export type PeriodWindowCheck =
   | { ok: true; slot: TimetableSlot & { id: string }; startTime: string; endTime: string }
   // `date` isn't today - a stale/replayed request against an old (or future) session.

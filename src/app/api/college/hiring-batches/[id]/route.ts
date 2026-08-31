@@ -358,13 +358,14 @@ export async function PATCH(
       }
     }
 
-    // If transitioning to PRINCIPAL_FINAL_REVIEW, notify all Principals
+    // If transitioning to PRINCIPAL_FINAL_REVIEW, notify all Principals (and
+    // College Admins, who mirror Principal's authority)
     if (body.currentPhase === "PRINCIPAL_FINAL_REVIEW") {
       const principalSnap = await db
         .collection("colleges")
         .doc(session.collegeId)
         .collection("users")
-        .where("role", "==", "PRINCIPAL")
+        .where("role", "in", ["PRINCIPAL", "COLLEGE_ADMIN"])
         .get();
       for (const d of principalSnap.docs) {
         const ref = db.collection("colleges").doc(session.collegeId).collection("notifications").doc();

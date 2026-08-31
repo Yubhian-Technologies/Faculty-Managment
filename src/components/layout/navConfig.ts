@@ -9,6 +9,14 @@ export interface NavItem {
   roles: UserRole[];
   badge?: string;
   section?: string; // optional section header rendered above this item
+  // Hides this item for a login whose real, un-normalized role (FMSUser.realRole)
+  // is one of these - even though `roles` above still matches its normalized
+  // `role`. Exists for COLLEGE_ADMIN, which reads as "PRINCIPAL" in `role`
+  // everywhere (see FMSUser.realRole) but must not see a specific Principal-only
+  // item. Leave unset for every ordinary item - this is a narrow exception, not
+  // a general per-item permission system (that's filterVisibleNavItems' own
+  // Super-Admin-configurable hiddenModules/hiddenItems).
+  hideForRealRoles?: UserRole[];
 }
 
 // A nav item is "active" if its href exactly matches the current path, or —
@@ -141,6 +149,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Leave History", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Attendance Report", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Views whether faculty submitted student attendance for their scheduled
+  // periods, and whether it was on time - distinct from "Attendance Report"
+  // above (staff self check-in/out). Hidden from COLLEGE_ADMIN even though it
+  // shares every other Principal item (see NavItem.hideForRealRoles).
+  { label: "Attendance Completion", href: "/principal/attendance-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
   { label: "Import Attendance", href: "/principal/attendance-import", iconName: "Upload", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Payroll & Budget" },
   { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
@@ -172,6 +185,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals" },
   { label: "Leave History", href: "/hod/leave-history", iconName: "History", roles: ["HOD"] },
   { label: "Faculty Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
+  // Same view as Principal's "Attendance Completion" - own department's
+  // faculty only (see faculty-attendance-completion/route.ts's HOD scoping).
+  { label: "Attendance Completion", href: "/hod/attendance-completion", iconName: "ClipboardCheck", roles: ["HOD"] },
   { label: "Import Attendance", href: "/hod/attendance-import", iconName: "Upload", roles: ["HOD"] },
   { label: "Leave Profiles", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchase" },
@@ -378,14 +394,23 @@ export function groupNavItemsByModule(items: NavItem[]): NavModuleGroup[] {
 export function filterVisibleNavItems(
   items: NavItem[],
   hiddenModules: string[] = [],
-  hiddenItems: string[] = []
+  hiddenItems: string[] = [],
+  // The caller's real, un-normalized role (FMSUser.realRole) - see
+  // NavItem.hideForRealRoles. Independent of hiddenModules/hiddenItems (a
+  // per-college Super Admin setting): this check is hardcoded, not
+  // configurable, and applies regardless of it.
+  realRole?: UserRole
 ): NavItem[] {
-  if (hiddenModules.length === 0 && hiddenItems.length === 0) return items;
+  const roleFiltered = realRole
+    ? items.filter((item) => !item.hideForRealRoles?.includes(realRole))
+    : items;
+
+  if (hiddenModules.length === 0 && hiddenItems.length === 0) return roleFiltered;
 
   const kept: { item: NavItem; module: string }[] = [];
-  items.forEach((item, i) => {
+  roleFiltered.forEach((item, i) => {
     if (hiddenItems.includes(item.href)) return;
-    const moduleName = computeItemModule(items, i);
+    const moduleName = computeItemModule(roleFiltered, i);
     if (hiddenModules.includes(moduleName)) return;
     kept.push({ item, module: moduleName });
   });
