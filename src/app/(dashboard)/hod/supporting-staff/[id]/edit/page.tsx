@@ -209,7 +209,7 @@ export default function EditHodSupportingStaffPage() {
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Years of Experience</Label>
+                <Label>Total Years of Experience</Label>
                 <Input type="number" min={0} value={form.experienceYears} onChange={(e) => set({ experienceYears: e.target.value === "" ? 0 : Number(e.target.value) })} />
               </div>
               <div className="space-y-2">

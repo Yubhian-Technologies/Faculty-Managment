@@ -18,7 +18,7 @@ type ImportResult = {
   warnings: { row: number; employeeId: string; warning: string }[];
 };
 
-const COLUMNS = getSupportingStaffColumns();
+const COLUMNS = getSupportingStaffColumns("non-technical");
 const HINTS = getSupportingStaffHints();
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
