@@ -4,6 +4,7 @@ const SIZE_CLASSES = {
   sm: "h-8 w-8 text-xs",
   md: "h-10 w-10 text-sm",
   lg: "h-24 w-24 text-2xl",
+  xl: "h-32 w-32 text-4xl",
 } as const;
 
 interface AvatarProps {

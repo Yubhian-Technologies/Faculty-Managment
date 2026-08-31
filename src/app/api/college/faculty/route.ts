@@ -205,11 +205,12 @@ export async function POST(request: Request) {
       department = (hodSnap.data() as { department?: string } | undefined)?.department ?? department;
     }
 
-    // Check employee ID uniqueness within college
+    // Check employee ID uniqueness across every college, not just this one -
+    // the public faculty-profile link is keyed on employeeId alone (see
+    // /api/public/faculty-public), so a collision between colleges would let
+    // one person's link resolve to a different person's profile.
     const existing = await db
-      .collection("colleges")
-      .doc(collegeId)
-      .collection("facultyMembers")
+      .collectionGroup("facultyMembers")
       .where("employeeId", "==", employeeId)
       .limit(1)
       .get();
