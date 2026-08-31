@@ -24,7 +24,7 @@ interface PeriodCoverageEntry {
   timetableSlotId: string;
   sectionName?: string;
   subjectName: string;
-  candidates: { facultyId: string; facultyName: string }[];
+  candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
 }
 
 // "Replacement" mode needs ONE faculty member who is actually free for every
@@ -32,7 +32,7 @@ interface PeriodCoverageEntry {
 // list (buildPeriodCoverage) already excludes anyone busy or on leave for
 // that specific day/period, so the only faculty safe to assign across the
 // whole leave are the ones appearing in ALL of them.
-function intersectCandidates(periods: PeriodCoverageEntry[]): { facultyId: string; facultyName: string }[] {
+function intersectCandidates(periods: PeriodCoverageEntry[]): { facultyId: string; facultyName: string; facultyDepartment?: string }[] {
   if (periods.length === 0) return [];
   let ids: Set<string> = new Set(periods[0].candidates.map((c) => c.facultyId));
   const nameById = new Map<string, string>();
@@ -349,7 +349,12 @@ export function LeaveApprovalQueue() {
                                   </SelectTrigger>
                                   <SelectContent>
                                     {replacementCandidates.map((c) => (
-                                      <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>
+                                      <SelectItem key={c.facultyId} value={c.facultyId}>
+                          {c.facultyName}
+                          {c.facultyDepartment && (
+                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
+                          )}
+                        </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
@@ -384,7 +389,12 @@ export function LeaveApprovalQueue() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       {p.candidates.map((c) => (
-                                        <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>
+                                        <SelectItem key={c.facultyId} value={c.facultyId}>
+                          {c.facultyName}
+                          {c.facultyDepartment && (
+                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
+                          )}
+                        </SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>

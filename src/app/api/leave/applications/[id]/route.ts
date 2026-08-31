@@ -16,7 +16,7 @@ import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
 import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import { validatePeriodSubstitutions, notifySubstitutes, type PeriodSubstitutionInput } from "@/lib/leave/periodCoverage";
-import { notifyAdjustmentAssignees, mergeSubstituteEntry } from "@/lib/leave/adjustmentRequests";
+import { notifyAdjustmentAssignees, mergeSubstituteEntry, withdrawSupersededPeriods } from "@/lib/leave/adjustmentRequests";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
 import { OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { AdjustmentRequest, LeaveRequest, LeaveActionRecord, OtherLeaveCategory } from "@/types/leave";
@@ -339,6 +339,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         adjustmentRequests = mergeSubstituteEntry(
           adjustmentRequests, { uid, name, facultyId },
           facultyPeriods.map((p) => ({ date: p.date, timetableSlotId: p.timetableSlotId, status: "PENDING" as const }))
+        );
+        // These periods are now this person's, so take them off whoever held
+        // them before - otherwise the superseded assignee stays PENDING on
+        // slots they no longer cover, and accepting would record two people
+        // covering the same period.
+        adjustmentRequests = withdrawSupersededPeriods(
+          adjustmentRequests, uid,
+          new Set(facultyPeriods.map((p) => `${p.date}|${p.timetableSlotId}`))
         );
       }
 

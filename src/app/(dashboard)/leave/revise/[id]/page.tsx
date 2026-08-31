@@ -14,7 +14,7 @@ interface PeriodCoverageEntry {
   date: string;
   timetableSlotId: string;
   subjectName: string;
-  candidates: { facultyId: string; facultyName: string }[];
+  candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
 }
 interface HandoverCandidate {
   uid: string;
@@ -69,7 +69,7 @@ export default function ReviseAdjustmentPage() {
   // Candidates eligible for every period the declined substitute actually
   // turned down - periods they already accepted within the same bundle stay
   // theirs and aren't touched here (see the PARTIAL response).
-  function candidatesFor(a: AdjustmentRequest): { facultyId: string; facultyName: string }[] {
+  function candidatesFor(a: AdjustmentRequest): { facultyId: string; facultyName: string; facultyDepartment?: string }[] {
     const keys = (a.periods ?? []).filter((p) => p.status === "DECLINED").map((p) => `${p.date}|${p.timetableSlotId}`);
     const matching = periods.filter((p) => keys.includes(`${p.date}|${p.timetableSlotId}`));
     if (matching.length === 0) return [];
@@ -131,7 +131,7 @@ export default function ReviseAdjustmentPage() {
       ) : (
         <div className="space-y-3">
           {declined.map((a) => {
-            const options = a.kind === "SUBSTITUTE" ? candidatesFor(a) : handoverCandidates.map((c) => ({ facultyId: c.uid, facultyName: c.name }));
+            const options = a.kind === "SUBSTITUTE" ? candidatesFor(a) : handoverCandidates.map((c) => ({ facultyId: c.uid, facultyName: c.name, facultyDepartment: undefined }));
             return (
               <Card key={a.assigneeUid}>
                 <CardContent className="p-4 space-y-3">
@@ -147,7 +147,12 @@ export default function ReviseAdjustmentPage() {
                   <Select value={pickByAssignee[a.assigneeUid] ?? ""} onValueChange={(v) => setPickByAssignee((prev) => ({ ...prev, [a.assigneeUid]: v }))}>
                     <SelectTrigger><SelectValue placeholder={options.length === 0 ? "None available" : "Select a replacement"} /></SelectTrigger>
                     <SelectContent>
-                      {options.map((c) => <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>)}
+                      {options.map((c) => <SelectItem key={c.facultyId} value={c.facultyId}>
+                          {c.facultyName}
+                          {c.facultyDepartment && (
+                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
+                          )}
+                        </SelectItem>)}
                     </SelectContent>
                   </Select>
                   <div className="flex justify-end">

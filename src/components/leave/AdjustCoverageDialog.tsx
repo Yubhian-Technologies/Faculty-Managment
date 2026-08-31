@@ -15,7 +15,7 @@ interface PeriodCoverageEntry {
   timetableSlotId: string;
   sectionName?: string;
   subjectName: string;
-  candidates: { facultyId: string; facultyName: string }[];
+  candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
 }
 
 // Every substitute pick is a snapshot taken at decision time (submission, or
@@ -132,7 +132,12 @@ export function AdjustCoverageDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {p.candidates.map((c) => (
-                        <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>
+                        <SelectItem key={c.facultyId} value={c.facultyId}>
+                          {c.facultyName}
+                          {c.facultyDepartment && (
+                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
+                          )}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

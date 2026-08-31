@@ -6,7 +6,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartmentId } from "@/lib/departments/scope";
 import { isTimetableIncharge } from "@/lib/departments/timetableIncharge";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
-import type { BreakConfig, CourseYearTiming, PeriodTiming } from "@/types";
+import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
+import type { BreakConfig, Course, CourseYearTiming, Department, PeriodTiming } from "@/types";
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -30,7 +31,41 @@ export async function GET(request: Request) {
     if (courseId) query = query.where("courseId", "==", courseId);
 
     const snap = await query.get();
-    const timings = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const timings = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
+
+    // A shared first year is configured once, on the common department that
+    // runs it (e.g. Basic Science), but a section routed to a managed branch
+    // asks by the BRANCH's course id - which has no row of its own for that
+    // year. Add the owning course's row for any such year so the timetable
+    // editor sees the timings that actually govern it. Only years a manager
+    // genuinely owns are filled in (see inheritedTimingCourseId), so a
+    // department merely missing its own year stays unconfigured, as before.
+    if (courseId) {
+      const collegeRef = db.collection("colleges").doc(session.collegeId);
+      const [coursesSnap, deptsSnap, allTimingsSnap] = await Promise.all([
+        collegeRef.collection("courses").get(),
+        collegeRef.collection("departments").get(),
+        collegeRef.collection("courseYearTimings").get(),
+      ]);
+      const courses = coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Course[];
+      const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
+      const ownCourse = courses.find((c) => c.id === courseId);
+      if (ownCourse) {
+        const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (CourseYearTiming & { id: string })[];
+        const haveYears = new Set(timings.map((t) => Number(t.year)));
+        const span = Number(ownCourse.durationYears) || 0;
+        for (let year = 1; year <= span; year++) {
+          if (haveYears.has(year)) continue;
+          const inheritedId = inheritedTimingCourseId(ownCourse, year, departments, courses);
+          if (!inheritedId) continue;
+          const inherited = allTimings.find((t) => t.courseId === inheritedId && Number(t.year) === year);
+          // Reported under the course that was asked for, with its own id kept
+          // so a later edit still writes to the row it came from rather than
+          // silently forking a copy.
+          if (inherited) timings.push({ ...inherited, inheritedFromCourseId: inheritedId } as typeof inherited);
+        }
+      }
+    }
 
     return NextResponse.json({ timings });
   } catch (err) {

@@ -77,6 +77,44 @@ export function mergeSubstituteEntry(
   return out;
 }
 
+/**
+ * Takes a set of periods away from every substitute EXCEPT the one they were
+ * just reassigned to.
+ *
+ * Reassigning coverage moved the periods but left the previous assignee's
+ * entry untouched, so they stayed PENDING on slots that were no longer theirs:
+ * a superseded colleague was still asked to accept 39 periods someone else had
+ * taken over, and accepting would have recorded two people covering the same
+ * slots. Already-ACCEPTED periods are withdrawn too - the coverage genuinely
+ * moved, so a prior acceptance no longer stands.
+ *
+ * An entry left with no periods is dropped rather than kept empty, since
+ * deriveSubstituteStatus reads "no periods" as ACCEPTED and it would linger in
+ * the assignee's inbox as a request with nothing in it. HANDOVER entries carry
+ * no periods at all and are never touched.
+ */
+export function withdrawSupersededPeriods(
+  list: AdjustmentRequest[],
+  keepUid: string,
+  periodKeys: Set<string>
+): AdjustmentRequest[] {
+  const out: AdjustmentRequest[] = [];
+  for (const a of list) {
+    if (a.kind !== "SUBSTITUTE" || a.assigneeUid === keepUid) {
+      out.push(a);
+      continue;
+    }
+    const kept = (a.periods ?? []).filter((p) => !periodKeys.has(`${p.date}|${p.timetableSlotId}`));
+    if (kept.length === (a.periods ?? []).length) {
+      out.push(a);
+      continue;
+    }
+    if (kept.length === 0) continue;
+    out.push({ ...a, periods: kept, status: deriveSubstituteStatus(kept) });
+  }
+  return out;
+}
+
 // Same routing rule applications/route.ts POST already uses to pick a fresh
 // request's first real approval stage - factored out so both that route and
 // the accept/decline endpoint (which runs under the ASSIGNEE's session, not

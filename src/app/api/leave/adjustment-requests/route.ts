@@ -4,13 +4,24 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
-import type { LeaveRequest } from "@/types/leave";
+import type { LeaveRequest, PeriodSubstitution } from "@/types/leave";
 
 // Every still-open adjustment request (substitute/handover) addressed to the
 // caller - one row per LeaveRequest they've been named on, trimmed to just
 // what they need to decide (not the requester's full leave record). Feeds
 // the accept/decline inbox at /leave/adjustments - see
 // /api/leave/applications/[id]/adjustment-response for the actual response.
+// The display detail (day, period number, subject, section) for each covered
+// period, taken from whichever substitution list holds it. A proposal awaiting
+// acceptance is in pendingPeriodSubstitutions; one already in force is in
+// periodSubstitutions.
+function detailByKey(r: LeaveRequest) {
+  const map = new Map<string, PeriodSubstitution>();
+  for (const p of r.periodSubstitutions ?? []) map.set(`${p.date}|${p.timetableSlotId}`, p);
+  for (const p of r.pendingPeriodSubstitutions ?? []) map.set(`${p.date}|${p.timetableSlotId}`, p);
+  return map;
+}
+
 export async function GET() {
   try {
     const session = await requireCollegeMember(
@@ -20,10 +31,19 @@ export async function GET() {
       "LIBRARY", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const db = getAdminDb();
-    // Bounded to PENDING_ACCEPTANCE - the only status where any entry can
-    // still be PENDING (a request only leaves this status once every entry
-    // is ACCEPTED).
-    const snap = await REQUESTS_COL(session.collegeId, db).where("status", "==", "PENDING_ACCEPTANCE").get();
+    // PENDING_ACCEPTANCE was once the only status that could hold a PENDING
+    // entry, but PROPOSE_COVERAGE (a HOD/Principal naming a substitute from
+    // the approval queue, or adjusting an already-approved leave) adds them
+    // while the request sits at PENDING_HOD or APPROVED. Bounding the query to
+    // PENDING_ACCEPTANCE hid exactly those: the assignee was notified and had
+    // a PENDING entry on record, but their inbox said "Nothing pending your
+    // response". REJECTED/CANCELLED are excluded - a pending entry there is
+    // moot.
+    const snap = await REQUESTS_COL(session.collegeId, db)
+      .where("status", "in", [
+        "PENDING_ACCEPTANCE", "PENDING_HOD", "PENDING_PRINCIPAL", "PENDING_MANAGEMENT", "APPROVED",
+      ])
+      .get();
 
     const items = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
@@ -39,13 +59,24 @@ export async function GET() {
             toDate: r.toDate,
             totalDays: r.totalDays,
             reason: r.reason,
+            // Driven by the entry's own still-PENDING periods rather than by
+            // filtering periodSubstitutions on assigneeFacultyId: a proposal
+            // that hasn't been accepted yet lives in pendingPeriodSubstitutions
+            // (periodSubstitutions only takes effect on acceptance), so keying
+            // off the committed list alone showed an empty period list for
+            // every HOD-proposed cover. Both lists feed the lookup, the
+            // pending one winning where a period appears in both.
             periods: a.kind === "SUBSTITUTE"
-              ? (r.periodSubstitutions ?? [])
-                  .filter((p) => p.substituteFacultyId === a.assigneeFacultyId)
-                  .map((p) => ({
-                    date: p.date, timetableSlotId: p.timetableSlotId, day: p.day, periodNumber: p.periodNumber,
-                    subjectName: p.subjectName, sectionName: p.sectionName ?? null,
-                  }))
+              ? (a.periods ?? [])
+                  .filter((p) => p.status === "PENDING")
+                  .map((p) => {
+                    const detail = detailByKey(r).get(`${p.date}|${p.timetableSlotId}`);
+                    return {
+                      date: p.date, timetableSlotId: p.timetableSlotId,
+                      day: detail?.day, periodNumber: detail?.periodNumber,
+                      subjectName: detail?.subjectName, sectionName: detail?.sectionName ?? null,
+                    };
+                  })
               : undefined,
             handoverNote: a.kind === "HANDOVER" ? r.handoverNote ?? null : undefined,
           }))
