@@ -10,7 +10,7 @@ import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
 import { resolveStaffGender } from "@/lib/leave/identity";
 import { computeEffectiveCategory } from "@/lib/leave/categoryEngine";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
-import { countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
+import { countWorkingDays, todayISODate, yearsOfService } from "@/lib/leave/dayCounter";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import { LEAVE_TYPE_SEED, HALF_DAY_ELIGIBLE_TYPES } from "@/lib/leave/seedData";
@@ -33,18 +33,22 @@ function sortByCreatedAtDesc(requests: LeaveRequest[]): LeaveRequest[] {
   });
 }
 
-// Attaches, per request, the two things the approvals queue needs about the
+// Attaches, per request, the things the approvals queue needs about the
 // requester that the request document itself doesn't carry:
 //
 //  - their current effective category (New Joining / Vacation / Non-Vacation),
 //    computed the same way the Leave Profiles roster and Leave History
 //    register do, for the three-way tab split;
 //  - their gender, read from their own user record, so the Principal's "Other"
-//    leave-category picker can hide Maternity for anyone who isn't female.
+//    leave-category picker can hide Maternity for anyone who isn't female;
+//  - whether they've completed at least 1 year of service, off the same
+//    dateOfJoining/yearsOfService rule the New Joining leave category itself
+//    uses - Maternity also requires this alongside gender.
 //
-// Gender is deliberately read live rather than copied onto the request at
-// submission: it's a correction-prone field, and a stale copy would decide
-// eligibility from whatever was recorded on the day the leave was applied for.
+// Gender and service length are deliberately read live rather than copied
+// onto the request at submission: both are correction-prone (gender) or
+// change over time (service length), and a stale copy would decide
+// eligibility from whatever was true on the day the leave was applied for.
 async function attachRequesterContext(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
@@ -53,14 +57,16 @@ async function attachRequesterContext(
   const settings = await loadCollegeSettings(db, collegeId);
   return Promise.all(
     requests.map(async (r) => {
-      const [profile, requesterGender] = await Promise.all([
+      const [profile, requesterGender, identity] = await Promise.all([
         getOrCreateProfile(db, collegeId, r.uid),
         resolveStaffGender(db, collegeId, r.uid),
+        resolveEmployeeIdentity(db, collegeId, r.uid),
       ]);
       return {
         ...r,
         category: profile ? computeEffectiveCategory(profile, settings.newJoiningYears) : undefined,
         requesterGender,
+        requesterHasOneYearService: identity ? yearsOfService(identity.dateOfJoining, new Date()) >= 1 : false,
       };
     })
   );
