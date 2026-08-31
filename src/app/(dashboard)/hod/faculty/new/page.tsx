@@ -129,7 +129,7 @@ export default function NewFacultyPage() {
   const FIELD_LABELS: Record<string, string> = {
     employeeId: "Employee ID", name: "Full Name", collegeEmail: "College Email",
     password: "Login Password", phone: "Phone", designation: "Designation",
-    qualification: "Highest Qualification", experienceYears: "Years of Experience",
+    qualification: "Highest Qualification", experienceYears: "Total Years of Experience",
     joiningDate: "Date of Joining Institution", employmentType: "Employment Type",
   };
 
@@ -332,8 +332,11 @@ export default function NewFacultyPage() {
                     <Input id="specialization" {...register("specialization")} placeholder="e.g. Machine Learning, VLSI" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="experienceYears">Years of Experience *</Label>
-                    <Input id="experienceYears" type="number" min={0} {...register("experienceYears", { valueAsNumber: true })} />
+                    <Label htmlFor="experienceYears">Total Years of Experience *</Label>
+                    <Input id="experienceYears" type="number" min={0} placeholder="e.g. 10" {...register("experienceYears", { valueAsNumber: true })} />
+                    <p className="text-xs text-muted-foreground">
+                      Their whole career, including previous institutions - not just years served here.
+                    </p>
                     {errors.experienceYears && <p className="text-sm text-destructive">{errors.experienceYears.message}</p>}
                   </div>
                 </div>

@@ -89,7 +89,7 @@ export default function NewHodSupportingStaffPage() {
   const FIELD_LABELS: Record<string, string> = {
     employeeId: "Employee ID", name: "Full Name", collegeEmail: "College Email",
     password: "Login Password", designation: "Designation",
-    experienceYears: "Years of Experience", joiningDate: "Joining Date",
+    experienceYears: "Total Years of Experience", joiningDate: "Joining Date",
     employmentType: "Employment Type",
   };
 
@@ -253,8 +253,11 @@ export default function NewHodSupportingStaffPage() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="experienceYears">Years of Experience *</Label>
-                    <Input id="experienceYears" type="number" min={0} {...register("experienceYears", { valueAsNumber: true })} />
+                    <Label htmlFor="experienceYears">Total Years of Experience *</Label>
+                    <Input id="experienceYears" type="number" min={0} placeholder="e.g. 10" {...register("experienceYears", { valueAsNumber: true })} />
+                    <p className="text-xs text-muted-foreground">
+                      Their whole career, including previous institutions - not just years served here.
+                    </p>
                     {errors.experienceYears && <p className="text-sm text-destructive">{errors.experienceYears.message}</p>}
                   </div>
                 </div>
