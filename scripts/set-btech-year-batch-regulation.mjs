@@ -1,6 +1,6 @@
 /**
- * One-time data fix, scoped to VISHNU INSTITUTE OF TECHNOLOGY, Bachelor of
- * Technology sections only.
+ * One-time data fix, Bachelor of Technology sections only, for a college
+ * from KNOWN_COLLEGES below.
  *
  * Sets each section's `batch` and `regulation` from a fixed per-year mapping
  * (YEAR_CONFIG below), matching the college's real intake plan:
@@ -10,19 +10,22 @@
  *   Year 4 -> batch 2023-2027, regulation R23
  *
  * Before writing either field, re-validates the target regulation is
- * actually offered for that section's year per the course's own Course
- * Catalog entry (regulationsForCourseYearByBatch, same resolution
- * sections/[id]/route.ts PATCH enforces) - a section that doesn't resolve
- * (catalog/session drift) is reported and left untouched rather than forced.
- * Regulation comparison/write is case-insensitive against the catalog's own
- * canonical code (mirrors the sections routes' own self-heal), so an
- * existing lowercase "r23" is corrected to "R23" in the same pass.
+ * actually offered for that TARGET batch's own admission year per the
+ * course's own Course Catalog entry (regulationsForBatchStartYear - the same
+ * batch-driven resolution the Add/Edit Section pickers and the sections
+ * POST/PATCH routes use, not year+session) - a section whose catalog entry
+ * doesn't actually offer that regulation for that batch is reported and left
+ * untouched rather than forced, so this only ever applies what the Dean has
+ * genuinely configured in Course Catalog. Regulation comparison/write is
+ * case-insensitive against the catalog's own canonical code (mirrors the
+ * sections routes' own self-heal), so an existing lowercase "r23" is
+ * corrected to "R23" in the same pass.
  *
  * Dry-run by default - prints a report and writes nothing. Pass --apply to write.
  *
  * Usage:
- *   node scripts/set-btech-year-batch-regulation.mjs
- *   node scripts/set-btech-year-batch-regulation.mjs --apply
+ *   node scripts/set-btech-year-batch-regulation.mjs --college=vit
+ *   node scripts/set-btech-year-batch-regulation.mjs --college=svecw --apply
  */
 
 import "dotenv/config";
@@ -37,8 +40,17 @@ if (!getApps().length) {
 const db = getFirestore();
 const APPLY = process.argv.includes("--apply");
 
-const COLLEGE_ID = "bc77d03b57194edeb006"; // VISHNU INSTITUTE OF TECHNOLOGY
-const EXPECTED_NAME_MATCH = "VISHNU INSTITUTE OF TECHNOLOGY";
+const KNOWN_COLLEGES = {
+  vit: { id: "bc77d03b57194edeb006", name: "VISHNU INSTITUTE OF TECHNOLOGY" },
+  svecw: { id: "6df56a45a69244238ca0", name: "SHRI VISHNU ENGINEERING COLLEGE FOR WOMEN" },
+};
+const collegeArg = process.argv.find((a) => a.startsWith("--college="));
+const collegeKey = collegeArg ? collegeArg.slice("--college=".length) : null;
+const college = collegeKey ? KNOWN_COLLEGES[collegeKey] : null;
+if (!college) {
+  console.log(`Usage: node scripts/set-btech-year-batch-regulation.mjs --college=<${Object.keys(KNOWN_COLLEGES).join("|")}> [--apply]`);
+  process.exit(1);
+}
 
 const YEAR_CONFIG = {
   1: { batch: "2026-2030", regulation: "R26" },
@@ -51,51 +63,37 @@ const normalizeCode = (code) => (code ?? "").toUpperCase().replace(/[^A-Z]/g, ""
 const isBtech = (c) => normalizeCode(c?.code) === "BTECH" || /bachelor'?s?\s+of\s+technology/i.test(c?.name ?? "");
 
 // --- mirrors src/lib/college/academicSession.ts ---
-function parseAcademicYearStart(label) {
-  const m = /^(\d{4})\s*-\s*(\d{2}|\d{4})$/.exec((label ?? "").trim());
-  return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : undefined;
-}
-function currentAcademicStartYear() {
-  const d = new Date();
-  return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
-}
-function admissionStartYearForCourseYear(asOfStartYear, courseYear) {
-  return asOfStartYear - courseYear + 1;
+function parseBatchStartYear(batch) {
+  const m = String(batch ?? "").trim().match(/^(\d{4})/);
+  return m ? Number(m[1]) : null;
 }
 function parseBatchStartYears(batch) {
   return String(batch ?? "")
     .split(",")
-    .map((part) => { const m = part.trim().match(/^(\d{4})/); return m ? Number(m[1]) : null; })
+    .map((part) => parseBatchStartYear(part))
     .filter((y) => y != null);
 }
-function regulationsForCourseYearByBatch(regulationBatches, courseYear, asOfStartYear, fallbackRegulations) {
+function regulationsForBatchStartYear(regulationBatches, batchStartYear, fallbackRegulations) {
   const entries = Object.entries(regulationBatches ?? {});
   if (entries.length === 0) {
     return Array.from(new Set((fallbackRegulations ?? []).map((r) => r.trim()).filter(Boolean)));
   }
   const matches = [];
   for (const [code, batch] of entries) {
-    const hit = parseBatchStartYears(batch).some((start) => start === admissionStartYearForCourseYear(asOfStartYear, courseYear));
-    if (hit) matches.push(code);
+    if (parseBatchStartYears(batch).includes(batchStartYear)) matches.push(code);
   }
   return matches;
 }
 
 async function run() {
-  const collegeRef = db.collection("colleges").doc(COLLEGE_ID);
+  const collegeRef = db.collection("colleges").doc(college.id);
   const collegeSnap = await collegeRef.get();
-  if (!collegeSnap.exists) { console.log(`College ${COLLEGE_ID} not found - aborting.`); process.exit(1); }
+  if (!collegeSnap.exists) { console.log(`College ${college.id} not found - aborting.`); process.exit(1); }
   const collegeName = collegeSnap.data().name ?? "?";
-  console.log(`College: ${collegeName} (${COLLEGE_ID})`);
-  if (collegeName.trim().toUpperCase() !== EXPECTED_NAME_MATCH) {
-    console.log(`  WARNING: college name doesn't match expected "${EXPECTED_NAME_MATCH}" - double-check before using --apply.`);
+  console.log(`College: ${collegeName} (${college.id})`);
+  if (collegeName.trim().toUpperCase() !== college.name) {
+    console.log(`  WARNING: college name doesn't match expected "${college.name}" - double-check before using --apply.`);
   }
-
-  const sessionsSnap = await collegeRef.collection("academicSessions").where("isCurrent", "==", true).limit(1).get();
-  const asOfStartYear = sessionsSnap.empty
-    ? currentAcademicStartYear()
-    : parseAcademicYearStart(sessionsSnap.docs[0].data().label) ?? currentAcademicStartYear();
-  console.log(`  Resolving "as of" intake year: ${asOfStartYear} (${sessionsSnap.empty ? "no isCurrent session doc, using clock" : `from isCurrent session "${sessionsSnap.docs[0].data().label}"`})\n`);
 
   const [sectionsSnap, coursesSnap, catalogSnap] = await Promise.all([
     collegeRef.collection("sections").where("year", "in", [1, 2, 3, 4]).get(),
@@ -133,10 +131,11 @@ async function run() {
       skippedUnresolved++;
       continue;
     }
-    const offered = regulationsForCourseYearByBatch(catalogItem.regulationBatches ?? {}, sectionYear, asOfStartYear, catalogItem.regulations);
+    const targetBatchStart = parseBatchStartYear(config.batch);
+    const offered = regulationsForBatchStartYear(catalogItem.regulationBatches ?? {}, targetBatchStart, catalogItem.regulations);
     const canonical = offered.find((r) => r.toLowerCase() === config.regulation.toLowerCase());
     if (!canonical) {
-      console.log(`  SKIP  ${label}: "${config.regulation}" not offered for Year ${sectionYear} as of intake ${asOfStartYear} (catalog offers: ${offered.join(", ") || "none"})`);
+      console.log(`  SKIP  ${label}: "${config.regulation}" not offered for batch ${config.batch} per Course Catalog (offers: ${offered.join(", ") || "none"})`);
       skippedUnresolved++;
       continue;
     }

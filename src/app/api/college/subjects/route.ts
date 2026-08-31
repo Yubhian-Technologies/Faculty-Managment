@@ -8,7 +8,8 @@ import { SUBJECT_CATEGORY_LABELS } from "@/types";
 import {
   getHodDepartmentScope, canHodEditDepartment, getRelatedDepartmentNames, resolveSubjectDepartment,
 } from "@/lib/departments/scope";
-import { resolveDepartmentCourseScope } from "@/lib/college/academicStructure";
+import { resolveDepartmentCourseScope, regulationsForCourseYearByBatch } from "@/lib/college/academicStructure";
+import { parseAcademicYearStart } from "@/lib/college/academicSession";
 
 export async function GET(request: Request) {
   try {
@@ -154,8 +155,36 @@ export async function POST(request: Request) {
         const catalogSnap = course.catalogId
           ? await db.collection("colleges").doc(session.collegeId).collection("courseCatalog").doc(course.catalogId).get()
           : null;
-        const catalogRegulations = catalogSnap?.exists ? ((catalogSnap.data() as { regulations?: string[] }).regulations ?? []) : [];
-        if (!catalogRegulations.includes(regulation)) {
+        const catalogData = catalogSnap?.exists
+          ? (catalogSnap.data() as { regulations?: string[]; regulationBatches?: Record<string, string> })
+          : undefined;
+        const catalogRegulations = catalogData?.regulations ?? [];
+        // Must match what THIS year/academic-session actually resolves to
+        // under Course Catalog's batch assignments (same resolution the
+        // form's own Regulation dropdown pre-filters against, see
+        // dean/subjects/new/page.tsx) - not merely be some regulation the
+        // course has ever been assigned. A course can carry two regulations
+        // (e.g. R23 covering intakes 2023-2025, R26 covering 2026-2028);
+        // accepting either regardless of which one this specific Year+
+        // Academic Year falls under is how a 2026-intake 1st Year subject
+        // could get silently tagged R23. Only when NOTHING resolves (no
+        // batch data configured at all - the pre-migration case, see
+        // regulationsForCourseYearByBatch's own doc-comment) does this fall
+        // back to the looser "assigned to the course at all" check.
+        const resolvedRegulations = regulationsForCourseYearByBatch(
+          catalogData?.regulationBatches ?? {},
+          Number(year),
+          body.academicYear ? (parseAcademicYearStart(body.academicYear) ?? undefined) : undefined,
+          catalogData?.regulations,
+        );
+        if (resolvedRegulations.length > 0) {
+          if (!resolvedRegulations.includes(regulation)) {
+            return NextResponse.json(
+              { error: `Regulation "${regulation}" doesn't match the batch assigned to Year ${year}${body.academicYear ? ` for ${body.academicYear}` : ""} - this year resolves to ${resolvedRegulations.join(", ")}. Check Course Catalog batches.` },
+              { status: 400 },
+            );
+          }
+        } else if (!catalogRegulations.includes(regulation)) {
           return NextResponse.json(
             { error: `That regulation isn't assigned to ${course.name}. Check Course Catalog.` },
             { status: 400 },
