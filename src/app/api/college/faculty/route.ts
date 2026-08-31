@@ -5,7 +5,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
-import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment } from "@/lib/departments/scope";
+import { getHodDepartmentScope, getDepartmentTreeNames, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import type { Designation, EmploymentType, FacultyStatus } from "@/types";
 
@@ -16,11 +16,14 @@ export async function GET(request: Request) {
     const deptFilter = searchParams.get("department");
     const statusFilter = searchParams.get("status");
     // Opt-in for a plain HOD's own Faculty roster (see hod/faculty/page.tsx) -
-    // a parent/managing HOD's sub-departments' and managed branches' faculty
-    // were showing up unannounced in what reads as "my department's roster",
-    // confusing an HOD who created someone under a different department into
-    // thinking it landed in their own. Every other caller (Teaching
-    // Assignments' faculty picker, etc.) keeps the roll-up by not passing this.
+    // a parent/managing HOD's sub-departments' faculty were showing up
+    // unannounced in what reads as "my department's roster", confusing an
+    // HOD who created someone under a different department into thinking it
+    // landed in their own. Every other caller (Sections/Batches' Faculty
+    // Incharge pickers, the Timetable grid, etc.) keeps the roll-up by not
+    // passing this. A managed/"core" branch's faculty never appear here
+    // regardless (see facultyManageableDepartmentNames below), so this only
+    // ever narrows between "own department" and "own + true sub-departments".
     const ownOnly = searchParams.get("scope") === "own";
 
     const db = getAdminDb();
@@ -40,19 +43,22 @@ export async function GET(request: Request) {
     // that used to be included view-only via secondaryDepartments, but a
     // department's faculty register only ever shows faculty who actually
     // belong to that department (or a sub-department/managed branch it fully
-    // owns). Staffing a shared subject with another department's faculty now
-    // goes through the explicit lend/request flow (faculty-assignment-requests)
-    // instead - see hod/teaching-assignments/page.tsx.
+    // owns).
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (scope.ownDepartmentNames.length > 0) {
         primaryQuery = primaryQuery.where("department", "in", scope.ownDepartmentNames.slice(0, 30));
       }
 
-      // Sub-departments (parent HOD) and grouped/managed branches (sub-HOD)
-      // are both fully-owned, so one query covers both, tagged "primary" below -
-      // skipped entirely for the own-only roster (see ownOnly above).
-      const ownedNames = ownOnly ? [] : [...scope.childDepartmentNames, ...scope.managedDepartmentNames];
+      // Sub-departments only (facultyManageableDepartmentNames) - a managed/
+      // "core" branch's own faculty roster is never this HOD's, sub-HOD or
+      // main HOD alike (see its own doc-comment in lib/departments/scope.ts),
+      // so `excludeManaged` has nothing left to do here; kept as a no-op for
+      // any existing caller still passing it. Skipped entirely for the
+      // own-only roster (see ownOnly above).
+      const ownedNames = ownOnly
+        ? []
+        : facultyManageableDepartmentNames(scope).filter((n) => !scope.ownDepartmentNames.includes(n));
       if (ownedNames.length > 0) {
         childDeptQuery = withStatus(facultyColl.where("department", "in", ownedNames.slice(0, 30)));
       }
