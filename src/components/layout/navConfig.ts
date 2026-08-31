@@ -89,6 +89,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/placement-dept", iconName: "LayoutDashboard", roles: ["PLACEMENT_DEPT"] },
   { label: "My Profile", href: "/placement-dept/profile", iconName: "UserCircle", roles: ["PLACEMENT_DEPT"], section: "Personal" },
   { label: "My Leave", href: "/placement-dept/leave", iconName: "CalendarClock", roles: ["PLACEMENT_DEPT"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PLACEMENT_DEPT"] },
 
   // Library
   { label: "Dashboard", href: "/library", iconName: "LayoutDashboard", roles: ["LIBRARY"] },
@@ -96,6 +97,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Import Attendance", href: "/library/attendance-import", iconName: "Upload", roles: ["LIBRARY"] },
   { label: "My Profile", href: "/library/profile", iconName: "UserCircle", roles: ["LIBRARY"], section: "Personal" },
   { label: "My Leave", href: "/library/leave", iconName: "CalendarClock", roles: ["LIBRARY"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["LIBRARY"] },
   { label: "My Attendance", href: "/library/attendance", iconName: "ClipboardCheck", roles: ["LIBRARY"], section: "My Work" },
 
   // College Accounts
@@ -112,6 +114,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Import Attendance", href: "/exam-cell/attendance-import", iconName: "Upload", roles: ["EXAM_CELL"] },
   { label: "My Profile", href: "/exam-cell/profile", iconName: "UserCircle", roles: ["EXAM_CELL"], section: "Personal" },
   { label: "My Leave", href: "/exam-cell/leave", iconName: "CalendarClock", roles: ["EXAM_CELL"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["EXAM_CELL"] },
   { label: "My Attendance", href: "/exam-cell/attendance", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], section: "My Work" },
 
   // Location Dept Head
@@ -162,6 +165,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal" },
   { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
 
   // HOD
@@ -200,6 +204,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"] },
   { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "My Work" },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["HOD"] },
   { label: "Teaching Load", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"] },
   { label: "My Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"], section: "Personal" },
 
@@ -223,6 +228,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Import Attendance", href: "/college-office/attendance-import", iconName: "Upload", roles: ["COLLEGE_OFFICE"] },
   { label: "My Profile", href: "/college-office/profile", iconName: "UserCircle", roles: ["COLLEGE_OFFICE"], section: "Personal" },
   { label: "My Leave", href: "/college-office/leave", iconName: "CalendarClock", roles: ["COLLEGE_OFFICE"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_OFFICE"] },
   { label: "My Attendance", href: "/college-office/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_OFFICE"], section: "My Work" },
 
   // College Staff (generic fallback for titles that don't warrant their own role)
@@ -236,6 +242,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Assignment Requests", href: "/college-staff/assignment-requests", iconName: "Send", roles: ["COLLEGE_STAFF"] },
   { label: "My Profile", href: "/college-staff/profile", iconName: "UserCircle", roles: ["COLLEGE_STAFF"], section: "Personal" },
   { label: "My Leave", href: "/college-staff/leave", iconName: "CalendarClock", roles: ["COLLEGE_STAFF"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["COLLEGE_STAFF"] },
   { label: "My Attendance", href: "/college-staff/attendance", iconName: "ClipboardCheck", roles: ["COLLEGE_STAFF"], section: "My Work" },
 
   // Dean
@@ -243,11 +250,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Subjects", href: "/dean/subjects", iconName: "Library", roles: ["DEAN"], section: "Academics" },
   { label: "My Profile", href: "/dean/profile", iconName: "UserCircle", roles: ["DEAN"], section: "Personal" },
   { label: "My Leave", href: "/dean/leave", iconName: "CalendarClock", roles: ["DEAN"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["DEAN"] },
 
   // IQAC Coordinator
   { label: "Dashboard", href: "/iqac-coordinator", iconName: "LayoutDashboard", roles: ["IQAC_COORDINATOR"] },
   { label: "My Profile", href: "/iqac-coordinator/profile", iconName: "UserCircle", roles: ["IQAC_COORDINATOR"], section: "Personal" },
   { label: "My Leave", href: "/iqac-coordinator/leave", iconName: "CalendarClock", roles: ["IQAC_COORDINATOR"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["IQAC_COORDINATOR"] },
 
   // T&P
   { label: "Dashboard", href: "/t-and-p", iconName: "LayoutDashboard", roles: ["T_AND_P"] },
@@ -255,6 +264,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Import Attendance", href: "/t-and-p/attendance-import", iconName: "Upload", roles: ["T_AND_P"] },
   { label: "My Profile", href: "/t-and-p/profile", iconName: "UserCircle", roles: ["T_AND_P"], section: "Personal" },
   { label: "My Leave", href: "/t-and-p/leave", iconName: "CalendarClock", roles: ["T_AND_P"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["T_AND_P"] },
   { label: "My Attendance", href: "/t-and-p/attendance", iconName: "ClipboardCheck", roles: ["T_AND_P"], section: "My Work" },
 
   // R&D
@@ -262,6 +272,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Publications", href: "/r-and-d/publications", iconName: "FlaskConical", roles: ["R_AND_D"], section: "Research" },
   { label: "My Profile", href: "/r-and-d/profile", iconName: "UserCircle", roles: ["R_AND_D"], section: "Personal" },
   { label: "My Leave", href: "/r-and-d/leave", iconName: "CalendarClock", roles: ["R_AND_D"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["R_AND_D"] },
 
   // Faculty (PANEL_MEMBER) — My Interviews is injected dynamically in Sidebar when assigned
   // Full module set — Super Admin controls which modules/items are actually
@@ -284,6 +295,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Students", href: "/panel/students", iconName: "GraduationCap", roles: ["PANEL_MEMBER"] },
   { label: "My Feedback", href: "/panel/feedback", iconName: "MessageSquare", roles: ["PANEL_MEMBER"] },
   { label: "Leave", href: "/panel/leave", iconName: "CalendarClock", roles: ["PANEL_MEMBER"], section: "Leave & Attendance" },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Attendance", href: "/panel/attendance", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"] },
   { label: "My Profile", href: "/panel/profile", iconName: "UserCircle", roles: ["PANEL_MEMBER"], section: "Personal" },
 
@@ -294,6 +306,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
   { label: "My Profile", href: "/accounts/profile", iconName: "UserCircle", roles: ["ACCOUNTS"], section: "Personal" },
   { label: "My Leave", href: "/accounts/leave", iconName: "CalendarClock", roles: ["ACCOUNTS"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACCOUNTS"] },
 
   // Finance
   { label: "Dashboard", href: "/finance", iconName: "LayoutDashboard", roles: ["FINANCE"] },
@@ -312,6 +325,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Browse by Location", href: "/finance/browse", iconName: "MapPin", roles: ["FINANCE"], section: "Organization" },
   { label: "My Profile", href: "/finance/profile", iconName: "UserCircle", roles: ["FINANCE"], section: "Personal" },
   { label: "My Leave", href: "/finance/leave", iconName: "CalendarClock", roles: ["FINANCE"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["FINANCE"] },
 
   // Class Leader
   { label: "Dashboard", href: "/class-leader", iconName: "LayoutDashboard", roles: ["CLASS_LEADER"] },
@@ -323,6 +337,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"], section: "Accounts" },
   { label: "My Profile", href: "/webmaster/profile", iconName: "UserCircle", roles: ["WEBMASTER"], section: "Personal" },
   { label: "My Leave", href: "/webmaster/leave", iconName: "CalendarClock", roles: ["WEBMASTER"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["WEBMASTER"] },
 
   // Purchase Department
   { label: "Dashboard", href: "/purchase", iconName: "LayoutDashboard", roles: ["PURCHASE_DEPT"] },
@@ -334,6 +349,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Browse by Location", href: "/purchase/browse", iconName: "MapPin", roles: ["PURCHASE_DEPT"], section: "Organization" },
   { label: "My Profile", href: "/purchase/profile", iconName: "UserCircle", roles: ["PURCHASE_DEPT"], section: "Personal" },
   { label: "My Leave", href: "/purchase/leave", iconName: "CalendarClock", roles: ["PURCHASE_DEPT"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PURCHASE_DEPT"] },
 ];
 
 export function getNavItemsForRole(role: UserRole): NavItem[] {
