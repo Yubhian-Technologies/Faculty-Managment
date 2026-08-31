@@ -163,14 +163,24 @@ export async function POST(request: Request) {
     // Load existing employeeIds/collegeEmails to detect duplicates - lowercased,
     // since "VIT001"/"vit001" or two different casings of the same email are
     // the same real-world identifier and Firestore would otherwise let both
-    // through as separate documents.
-    const existingSnap = await db.collection("colleges").doc(collegeId).collection("facultyMembers")
-      .select("employeeId", "collegeEmail").get();
+    // through as separate documents. employeeId is checked across every
+    // college, not just this one - the public faculty-profile link is keyed
+    // on employeeId alone (see /api/public/faculty-public), so a collision
+    // between colleges would let one person's link resolve to a different
+    // person's profile.
+    // ponytail: full collectionGroup scan on every import, not an indexed
+    // per-ID lookup - fine at hundreds of faculty across all colleges,
+    // revisit (e.g. a global employeeId registry doc) if that grows to
+    // thousands and imports start feeling slow.
+    const [collegeSnap, employeeIdSnap] = await Promise.all([
+      db.collection("colleges").doc(collegeId).collection("facultyMembers").select("collegeEmail").get(),
+      db.collectionGroup("facultyMembers").select("employeeId").get(),
+    ]);
     const existingIds = new Set(
-      existingSnap.docs.map((d) => (d.data() as { employeeId?: string }).employeeId?.toLowerCase()).filter((v): v is string => !!v)
+      employeeIdSnap.docs.map((d) => (d.data() as { employeeId?: string }).employeeId?.toLowerCase()).filter((v): v is string => !!v)
     );
     const existingEmails = new Set(
-      existingSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
+      collegeSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
     );
 
     const now = new Date();

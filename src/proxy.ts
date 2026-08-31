@@ -18,6 +18,7 @@ const PUBLIC_PATHS = [
   "/location-interview",
   "/candidate-form",
   "/offer-acceptance",
+  "/faculty-public",
   "/about-team-illustration.png",
   // face-api.js model weights (public/models/) - fetched client-side by
   // MarkAttendanceDialog regardless of which authenticated role is checking

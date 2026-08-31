@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronRight, Pencil, ScanFace, ClipboardCheck } from "lucide-react";
+import { ArrowLeft, ChevronRight, Pencil, ScanFace, ClipboardCheck, Share2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -99,6 +99,12 @@ export function FacultyProfileHub({
   const designationLabel = faculty.designation ? (DESIGNATION_LABELS[faculty.designation] ?? faculty.designation) : undefined;
   const [photoUrl, setPhotoUrl] = useState(faculty.profilePhotoUrl);
 
+  function copyPublicProfileLink() {
+    if (!faculty.employeeId) return;
+    void navigator.clipboard.writeText(`${window.location.origin}/faculty-public/facultyid=${encodeURIComponent(faculty.employeeId)}`);
+    toast({ variant: "success", title: "Public profile link copied" });
+  }
+
   // AvatarUploadField only uploads to Storage - this persists the resulting URL
   // onto the faculty record itself (and, server-side, syncs it to their login
   // account if they have one - see PATCH /api/college/faculty/[id]).
@@ -137,6 +143,11 @@ export function FacultyProfileHub({
             {viewAttendanceHref && (
               <Button variant="outline" asChild>
                 <Link href={viewAttendanceHref}><ClipboardCheck className="h-4 w-4 mr-2" />View Attendance</Link>
+              </Button>
+            )}
+            {faculty.employeeId && (
+              <Button variant="outline" onClick={copyPublicProfileLink}>
+                <Share2 className="h-4 w-4 mr-2" />Copy Public Profile Link
               </Button>
             )}
             {editHref && (
