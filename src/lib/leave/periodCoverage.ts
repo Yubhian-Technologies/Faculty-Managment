@@ -116,6 +116,10 @@ export interface RequiredPeriod {
 export interface SubstituteCandidate {
   facultyId: string;
   facultyName: string;
+  /** Shown beside the name in every substitute picker - candidates now span
+   *  the whole college, so two colleagues can share a name and the department
+   *  is what tells them apart. */
+  facultyDepartment: string;
 }
 
 export interface PeriodCoverageEntry extends RequiredPeriod {
@@ -196,9 +200,17 @@ export async function buildPeriodCoverage(
   const collegeRef = db.collection("colleges").doc(collegeId);
   const [collegeSnap, deptFacultySnap, allSlotsSnap, leaveSnap] = await Promise.all([
     collegeRef.get(),
-    collegeRef.collection("facultyMembers").where("department", "==", department).get(),
+    // Every teaching faculty member in the college, not just the applicant's
+    // own department: cover is routinely arranged across departments (a
+    // shared first-year subject especially), and restricting the list to one
+    // department left an applicant with "None available" whenever their own
+    // colleagues were all teaching that period. `department` still matters -
+    // it orders the list below, own department first.
+    collegeRef.collection("facultyMembers").get(),
     collegeRef.collection("timetableSlots").get(),
-    collegeRef.collection("leaveRequests").where("department", "==", department).where("status", "==", "APPROVED").get(),
+    // Widened to match: a candidate from another department who is themselves
+    // on approved leave must not be offered either.
+    collegeRef.collection("leaveRequests").where("status", "==", "APPROVED").get(),
   ]);
 
   const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
@@ -223,8 +235,15 @@ export async function buildPeriodCoverage(
     const onLeaveUids = new Set(approvedLeaves.filter((r) => isDateWithinLeave(r, period.date)).map((r) => r.uid));
     const candidates = eligibleFaculty
       .filter((f) => !busyFacultyIds.has(f.id) && !(f.userUid && onLeaveUids.has(f.userUid)))
-      .map((f) => ({ facultyId: f.id, facultyName: f.name }))
-      .sort((a, b) => a.facultyName.localeCompare(b.facultyName));
+      .map((f) => ({ facultyId: f.id, facultyName: f.name, facultyDepartment: f.department ?? "" }))
+      // Own department first - the usual choice stays at the top of a list
+      // that now spans the college - then by name within each group.
+      .sort((a, b) => {
+        const own = (d: string) => (d === department ? 0 : 1);
+        return own(a.facultyDepartment) - own(b.facultyDepartment)
+          || a.facultyDepartment.localeCompare(b.facultyDepartment)
+          || a.facultyName.localeCompare(b.facultyName);
+      });
     return { ...period, candidates };
   });
 }

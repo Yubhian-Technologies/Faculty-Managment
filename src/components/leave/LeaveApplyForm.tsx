@@ -34,7 +34,7 @@ interface PeriodCoverageEntry {
   timetableSlotId: string;
   sectionName?: string;
   subjectName: string;
-  candidates: { facultyId: string; facultyName: string }[];
+  candidates: { facultyId: string; facultyName: string; facultyDepartment?: string }[];
 }
 
 interface LeaveApplyFormProps {
@@ -498,7 +498,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <Label>Who&rsquo;s covering your classes?</Label>
               </div>
               <p className="text-xs text-muted-foreground">
-                Pick a substitute from your department for each period you&rsquo;d otherwise teach on this leave.
+                Pick a substitute for each period you&rsquo;d otherwise teach on this leave. Anyone free that period is listed, across departments - your own department comes first.
               </p>
               <div className="space-y-2 rounded-lg border p-3">
                 {periods.map((p) => {
@@ -519,7 +519,12 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                         </SelectTrigger>
                         <SelectContent>
                           {p.candidates.map((c) => (
-                            <SelectItem key={c.facultyId} value={c.facultyId}>{c.facultyName}</SelectItem>
+                            <SelectItem key={c.facultyId} value={c.facultyId}>
+                          {c.facultyName}
+                          {c.facultyDepartment && (
+                            <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
+                          )}
+                        </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
