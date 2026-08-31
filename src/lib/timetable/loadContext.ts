@@ -4,6 +4,8 @@ import type {
 } from "@/types";
 import { DEFAULT_TIMETABLE_RULES } from "@/types";
 import { resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
+import { inheritedTimingCourseId } from "@/lib/timetable/sharedYearTiming";
+import type { Course, Department } from "@/types";
 
 // Everything the preflight and the solver need for one section, loaded once.
 // Kept server-side (takes an admin Firestore) so the solver itself stays pure.
@@ -70,7 +72,28 @@ export async function loadTimetableContext(
   ]);
 
   const allTimings = allTimingsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as CourseYearTiming);
-  const timing = allTimings.find((t) => t.courseId === section.courseId && Number(t.year) === Number(section.year)) ?? null;
+  let timing = allTimings.find((t) => t.courseId === section.courseId && Number(t.year) === Number(section.year)) ?? null;
+
+  // A shared first year is configured once, on the common department that runs
+  // it - but a section routed to a managed branch stores the BRANCH's course
+  // id, so the exact match above misses it. Fall back to the course doc that
+  // actually owns this year (see inheritedTimingCourseId, which returns null
+  // for any year the department owns itself, so nothing else is affected).
+  if (!timing) {
+    const [coursesSnap, deptsSnap] = await Promise.all([
+      collegeRef.collection("courses").get(),
+      collegeRef.collection("departments").get(),
+    ]);
+    const courses = coursesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Course[];
+    const departments = deptsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Department & { id: string })[];
+    const ownCourse = courses.find((c) => c.id === section.courseId);
+    const inheritedId = ownCourse
+      ? inheritedTimingCourseId(ownCourse, Number(section.year), departments, courses)
+      : null;
+    if (inheritedId) {
+      timing = allTimings.find((t) => t.courseId === inheritedId && Number(t.year) === Number(section.year)) ?? null;
+    }
+  }
 
   const now = new Date();
   // Every distinct course-year's OWN current semester, keyed the same way a
