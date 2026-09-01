@@ -51,7 +51,14 @@ export default function HODSupportingStaffPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/college/supporting-staff?scope=own");
+      // Not scope=own: the importer accepts any department this HOD may edit
+      // (their own, their sub-departments, and the branches those manage - see
+      // canHodEditDepartment in supporting-staff/import), so restricting the
+      // list to the HOD's own department alone meant staff they had just
+      // imported into a managed branch were accepted and then invisible here,
+      // reading as "the import didn't work". The list now covers the same
+      // scope the importer allows, which is also what the HOD can already edit.
+      const res = await fetch("/api/college/supporting-staff");
       const data = await res.json() as { staff: StaffRow[] };
       setStaff(data.staff ?? []);
     } catch {
@@ -169,7 +176,7 @@ export default function HODSupportingStaffPage() {
     <div className="space-y-6">
       <PageHeader
         title="Supporting Staff"
-        description="Technical staff records for your department"
+        description="Technical staff records for your department and the branches you manage"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => router.push("/hod/supporting-staff/import")}>
