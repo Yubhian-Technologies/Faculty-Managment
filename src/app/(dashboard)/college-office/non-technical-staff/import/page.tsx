@@ -6,10 +6,15 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { getSupportingStaffColumns, getSupportingStaffHints, getSupportingStaffSampleRows } from "@/lib/supportingStaff/csvColumns";
-import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
 type ImportResult = {
@@ -17,6 +22,12 @@ type ImportResult = {
   failed: { row: number; employeeId: string; error: string }[];
   warnings: { row: number; employeeId: string; warning: string }[];
 };
+// A skipped row plus its own original field values (snapshotted from `rows`
+// before it's cleared on partial success - see handleImport) and the row's
+// live status: "failed" until fixed and retried, then "fixed" (kept in the
+// list, struck through, rather than vanishing) - same pattern as the Faculty
+// importer's fix-and-retry flow (hod/faculty/import).
+type FailedRow = { row: number; employeeId: string; error: string; data: ParsedRow; status: "failed" | "fixed" };
 
 const COLUMNS = getSupportingStaffColumns("non-technical");
 const HINTS = getSupportingStaffHints();
@@ -30,6 +41,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const [isBuildingTemplate, setIsBuildingTemplate] = useState(false);
   const [templateError, setTemplateError] = useState("");
 
@@ -86,6 +98,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
     setParseError("");
     setRows([]);
     setResult(null);
+    setFailedRows([]);
 
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
@@ -140,6 +153,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
     if (rows.length === 0) return;
     setIsImporting(true);
     setResult(null);
+    setFailedRows([]);
     try {
       const res = await fetch("/api/college/supporting-staff/import", {
         method: "POST",
@@ -149,6 +163,10 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
       setResult(json);
+      // Snapshot each failed row's own original values before `rows` is
+      // cleared below (on any partial success) - the "fix and retry" dialog
+      // needs them, and this is the only place they still exist.
+      setFailedRows(json.failed.map((f) => ({ ...f, data: rows[f.row - 2] ?? {}, status: "failed" as const })));
       if (json.created > 0) {
         toast({ variant: "success", title: `${json.created} staff member${json.created !== 1 ? "s" : ""} imported successfully` });
         setRows([]);
@@ -157,6 +175,53 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
       toast({ variant: "destructive", title: "Network error - import failed" });
     } finally {
       setIsImporting(false);
+    }
+  }
+
+  // ── Failed-row "fix and retry" dialog - reuses this SAME bulk import
+  // endpoint with a single-row `records` array, which already has the right
+  // semantics for one row of CSV-shaped data (optional password, designation
+  // text mapping, lenient date parsing), so re-running the corrected row
+  // through it is both simpler and guaranteed consistent with why the row
+  // failed the first time. ─────────────────────────────────────────────────
+  const [fixTarget, setFixTarget] = useState<{ row: number; form: ParsedRow } | null>(null);
+  const [fixSaving, setFixSaving] = useState(false);
+  const [fixError, setFixError] = useState("");
+
+  function openFix(f: FailedRow) {
+    setFixError("");
+    setFixTarget({ row: f.row, form: { ...f.data } });
+  }
+
+  function setFixField(key: string, value: string) {
+    setFixTarget((prev) => (prev ? { ...prev, form: { ...prev.form, [key]: value } } : prev));
+  }
+
+  async function handleFixSave() {
+    if (!fixTarget) return;
+    setFixSaving(true);
+    setFixError("");
+    try {
+      const res = await fetch("/api/college/supporting-staff/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: [fixTarget.form] }),
+      });
+      const json = await res.json() as ImportResult & { error?: string };
+      if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
+      if (json.created >= 1) {
+        toast({ variant: "success", title: `${fixTarget.form.name || "Staff member"} imported` });
+        setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
+        setFixTarget(null);
+        return;
+      }
+      // Still failed (or only produced a warning, no created row) - surface
+      // the specific reason and let them keep correcting in place.
+      setFixError(json.failed?.[0]?.error ?? "Failed to save - please check the fields and try again");
+    } catch {
+      setFixError("Network error - please try again");
+    } finally {
+      setFixSaving(false);
     }
   }
 
@@ -304,58 +369,123 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
       )}
 
       {/* Result */}
-      {result && (
-        <Card className={result.created > 0 ? "border-green-200" : "border-red-200"}>
-          <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              {result.created > 0
-                ? <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
-                : <XCircle className="h-6 w-6 text-red-600 shrink-0" />
-              }
-              <div>
-                <p className="font-semibold">{result.created} record{result.created !== 1 ? "s" : ""} imported successfully</p>
-                {result.failed.length > 0 && (
-                  <p className="text-sm text-muted-foreground">{result.failed.length} row{result.failed.length !== 1 ? "s" : ""} skipped</p>
-                )}
-                {result.warnings.length > 0 && (
-                  <p className="text-sm text-amber-700">{result.warnings.length} field{result.warnings.length !== 1 ? "s" : ""} ignored due to invalid values</p>
-                )}
+      {result && (() => {
+        const stillFailed = failedRows.filter((f) => f.status === "failed");
+        const fixed = failedRows.filter((f) => f.status === "fixed");
+        return (
+          <Card className={result.created > 0 || fixed.length > 0 ? "border-green-200" : "border-red-200"}>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                {result.created > 0
+                  ? <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
+                  : <XCircle className="h-6 w-6 text-red-600 shrink-0" />
+                }
+                <div>
+                  <p className="font-semibold">{result.created} record{result.created !== 1 ? "s" : ""} imported successfully</p>
+                  {failedRows.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {stillFailed.length} row{stillFailed.length !== 1 ? "s" : ""} skipped
+                      {fixed.length > 0 ? ` · ${fixed.length} fixed just now` : ""}
+                    </p>
+                  )}
+                  {result.warnings.length > 0 && (
+                    <p className="text-sm text-amber-700">{result.warnings.length} field{result.warnings.length !== 1 ? "s" : ""} ignored due to invalid values</p>
+                  )}
+                </div>
               </div>
+              {failedRows.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Skipped rows</p>
+                  <p className="text-xs text-muted-foreground">
+                    Click <Pencil className="h-3 w-3 inline" /> on a row to correct it and import it on its own, without re-uploading the file.
+                  </p>
+                  <div className="rounded-lg border divide-y max-h-64 overflow-y-auto">
+                    {failedRows.map((f) => (
+                      <div key={f.row} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm ${f.status === "fixed" ? "opacity-50" : ""}`}>
+                        <div className="min-w-0">
+                          <span className="text-muted-foreground">Row {f.row} · {f.data.name || f.employeeId}</span>
+                          {f.status === "fixed" ? (
+                            <span className="ml-2 text-green-600 text-xs">Fixed and imported</span>
+                          ) : (
+                            <span className="block text-red-600 text-xs">{f.error}</span>
+                          )}
+                        </div>
+                        {f.status === "failed" && (
+                          <button
+                            onClick={() => openFix(f)}
+                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                            title="Edit and retry this row"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {result.warnings.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
+                  <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
+                    {result.warnings.map((w, i) => (
+                      <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <span className="text-muted-foreground">Row {w.row} · {w.employeeId}</span>
+                        <span className="text-amber-700 text-xs">{w.warning}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(result.created > 0 || fixed.length > 0) && (
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/college-office/non-technical-staff">View Non-Technical Staff List</Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      <Dialog open={!!fixTarget} onOpenChange={(o) => !o && setFixTarget(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fix Row {fixTarget?.row}</DialogTitle>
+            <DialogDescription>
+              Correct the field(s) that failed and save - this imports just this one staff member, the same as the rest of the file.
+            </DialogDescription>
+          </DialogHeader>
+
+          {fixTarget && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {COLUMNS.map((c) => (
+                <div key={c.key} className="space-y-1.5">
+                  <Label htmlFor={`fix-${c.key}`}>{c.label}{c.required && <span className="text-destructive ml-0.5">*</span>}</Label>
+                  <Input
+                    id={`fix-${c.key}`}
+                    type={c.key === "password" ? "password" : "text"}
+                    value={fixTarget.form[c.key] ?? ""}
+                    onChange={(e) => setFixField(c.key, e.target.value)}
+                    placeholder={c.sample || undefined}
+                  />
+                </div>
+              ))}
             </div>
-            {result.failed.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Skipped rows</p>
-                <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
-                  {result.failed.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span className="text-muted-foreground">Row {f.row} · {f.employeeId}</span>
-                      <span className="text-red-600 text-xs">{f.error}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {result.warnings.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
-                <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
-                  {result.warnings.map((w, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span className="text-muted-foreground">Row {w.row} · {w.employeeId}</span>
-                      <span className="text-amber-700 text-xs">{w.warning}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {result.created > 0 && (
-              <Button asChild variant="outline" size="sm">
-                <Link href="/college-office/non-technical-staff">View Non-Technical Staff List</Link>
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
+          )}
+
+          {fixError && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              {fixError}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFixTarget(null)}>Cancel</Button>
+            <Button onClick={() => void handleFixSave()} loading={fixSaving}>Save &amp; Import</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
