@@ -12,7 +12,8 @@ import {
 } from "@/lib/import/fieldConstraints";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import type { Designation, EmploymentType } from "@/types";
+import { getTeachingDesignations } from "@/lib/designations/config";
+import type { Designation, EmploymentType, CollegeType } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -177,16 +178,23 @@ export async function POST(request: Request) {
     // per-ID lookup - fine at hundreds of faculty across all colleges,
     // revisit (e.g. a global employeeId registry doc) if that grows to
     // thousands and imports start feeling slow.
-    const [collegeSnap, employeeIdSnap] = await Promise.all([
+    const [facultyEmailSnap, employeeIdSnap, collegeDocSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("facultyMembers").select("collegeEmail").get(),
       db.collectionGroup("facultyMembers").select("employeeId").get(),
+      db.collection("colleges").doc(collegeId).get(),
     ]);
     const existingIds = new Set(
       employeeIdSnap.docs.map((d) => (d.data() as { employeeId?: string }).employeeId?.toLowerCase()).filter((v): v is string => !!v)
     );
     const existingEmails = new Set(
-      collegeSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
+      facultyEmailSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
     );
+
+    // The designation catalogue this college's Faculty template allows - the
+    // same per-college-type list the manual Add/Edit form's dropdown offers
+    // (src/lib/designations/config.ts), plus the always-available "Other".
+    const collegeType = (collegeDocSnap.data() as { type?: CollegeType } | undefined)?.type;
+    const allowedTeachingDesignations = getTeachingDesignations(collegeType);
 
     const now = new Date();
     const created: string[] = [];
@@ -237,23 +245,46 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Map designation - free text (see src/lib/designations/config.ts),
-      // since it varies by the college's type. DESIGNATION_MAP only
-      // normalizes common Engineering-style abbreviations ("Asst. Prof." ->
-      // "ASSISTANT_PROFESSOR", the legacy code every existing Engineering/
-      // Pharmacy/Dental record and the AICTE cadre-ratio report expect) -
-      // anything else (e.g. "PGT", "Controller of Examinations") is stored
-      // exactly as typed rather than being forced into that list or
-      // defaulted to a designation the row never actually specified.
-      const designationKey = row.designation.trim().toLowerCase();
-      const designation: Designation = DESIGNATION_MAP[designationKey] ?? row.designation.trim();
-
-      // Map employment type
-      const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
-      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
-      if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
-        warnings.push({ row: rowNum, employeeId: empId, warning: `Employment Type not recognized ("${row.employmentType?.trim()}") - defaulted to Permanent` });
+      // Map designation - held to the template's own stated catalogue for
+      // this college type (allowedTeachingDesignations), not free text.
+      // DESIGNATION_MAP normalizes common Engineering-style abbreviations
+      // ("Asst. Prof." -> "ASSISTANT_PROFESSOR") before checking membership,
+      // so a value only counts if it's either a recognized abbreviation for
+      // an allowed title, or already matches one of the allowed titles
+      // directly (case/punctuation-insensitive) - e.g. "PGT" for a School
+      // college. Anything else (including a Supporting Staff title like "Lab
+      // Assistant", which belongs on that import instead) rejects the row
+      // rather than being stored as whatever text was typed.
+      const designationRaw = row.designation.trim();
+      const designationKey = designationRaw.toLowerCase();
+      let designation: Designation;
+      if (designationKey === "other") {
+        designation = "OTHER";
+      } else {
+        const mappedAbbreviation = DESIGNATION_MAP[designationKey];
+        const matched = (mappedAbbreviation && allowedTeachingDesignations.includes(mappedAbbreviation))
+          ? mappedAbbreviation
+          : matchOption(designationRaw, allowedTeachingDesignations);
+        if (!matched) {
+          failed.push({
+            row: rowNum, employeeId: empId,
+            error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.join(" / ")} / Other)`,
+          });
+          continue;
+        }
+        designation = matched;
       }
+
+      // Map employment type - blank still takes the documented default; an
+      // unrecognised value fails the row instead of quietly becoming
+      // Permanent, which turned a typo into a real employment type (matches
+      // the Supporting Staff importer's behavior).
+      const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
+      if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
+        failed.push({ row: rowNum, employeeId: empId, error: `Employment Type "${row.employmentType?.trim()}" is not one of Regular / Permanent / Contract / Visiting / Part-Time` });
+        continue;
+      }
+      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
 
       // Parse dates
       const joiningDate = parseDate(row.joiningDate);

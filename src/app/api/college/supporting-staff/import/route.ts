@@ -8,7 +8,7 @@ import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { splitDegreeAndBranch } from "@/lib/faculty/legacyProfileFallbacks";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
-import { getHodTechnicalDesignations } from "@/lib/designations/config";
+import { getHodTechnicalDesignations, getNonTechnicalDesignations } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
 import {
   matchOption, parseYesNoStrict, normalizeDigits, isScientificNotation,
@@ -290,19 +290,26 @@ export async function POST(request: Request) {
     const collegeId = session.collegeId;
     const staffCategory: SupportingStaffCategory = session.role === "HOD" ? "TECHNICAL" : "NON_TECHNICAL";
 
+    const collegeDocSnap = await db.collection("colleges").doc(collegeId).get();
+    const collegeType = (collegeDocSnap.data() as { type?: CollegeType } | undefined)?.type;
+
     // Some college types (School) have no Technical/Non-Technical split -
     // Supporting Staff there is centrally managed by Principal, so HOD has
     // nothing to import. Backstops the nav-hide in Sidebar.tsx.
-    if (session.role === "HOD") {
-      const collegeSnap = await db.collection("colleges").doc(collegeId).get();
-      const collegeType = (collegeSnap.data() as { type?: CollegeType } | undefined)?.type;
-      if (getHodTechnicalDesignations(collegeType).length === 0) {
-        return NextResponse.json(
-          { error: "Supporting Staff for your college type is managed centrally by Principal" },
-          { status: 403 },
-        );
-      }
+    if (session.role === "HOD" && getHodTechnicalDesignations(collegeType).length === 0) {
+      return NextResponse.json(
+        { error: "Supporting Staff for your college type is managed centrally by Principal" },
+        { status: 403 },
+      );
     }
+
+    // The designation catalogue this import is allowed to use - the
+    // Technical subset (HOD's Supporting Staff) or Non-Technical subset
+    // (College Office's Non-Technical Staff) for this college's type, same
+    // split the manual Add/Edit forms enforce (src/lib/designations/config.ts).
+    const allowedDesignations = staffCategory === "TECHNICAL"
+      ? getHodTechnicalDesignations(collegeType)
+      : getNonTechnicalDesignations(collegeType);
 
     // HOD's imported rows are confined to their own (or owned sub-)
     // department, same as the single "Add Staff" form and the Faculty import.
@@ -391,8 +398,40 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const designationKey = row.designation.trim().toLowerCase();
-      const designation: SupportingStaffDesignation = NON_TECHNICAL_DESIGNATION_MAP[designationKey] ?? row.designation.trim();
+      // Map designation - held to the template's own stated catalogue for
+      // this college type AND this importer's Technical/Non-Technical
+      // category (allowedDesignations), not free text. This is what stopped
+      // an HOD's Technical Supporting Staff import from accepting "Office
+      // Staff" (a Non-Technical title, mapped to a real code but not one
+      // this category is allowed to use) or an arbitrary string like
+      // "Technical Support Executive" that matches nothing at all - either
+      // case now rejects the row instead of storing it as typed.
+      const designationRaw = row.designation.trim();
+      const designationKey = designationRaw.toLowerCase();
+      let designation: SupportingStaffDesignation;
+      if (designationKey === "other") {
+        designation = "OTHER";
+      } else {
+        const mappedAbbreviation = NON_TECHNICAL_DESIGNATION_MAP[designationKey];
+        const matched = (mappedAbbreviation && allowedDesignations.includes(mappedAbbreviation))
+          ? mappedAbbreviation
+          : matchOption(designationRaw, allowedDesignations);
+        if (!matched) {
+          failed.push({
+            row: rowNum, employeeId: empId,
+            error: `Designation "${designationRaw}" is not one of the ${staffCategory === "TECHNICAL" ? "Technical" : "Non-Technical"} titles your college allows (${allowedDesignations.join(" / ")} / Other)`,
+          });
+          continue;
+        }
+        designation = matched;
+      }
+      // The template documents this column as required only when Designation
+      // is Other - enforced here, since a blank one otherwise leaves no way
+      // to tell what the actual title was meant to be.
+      if (designation === "OTHER" && !row.otherDesignationTitle?.trim()) {
+        failed.push({ row: rowNum, employeeId: empId, error: "Designation Title (if Other) is required when Designation is Other" });
+        continue;
+      }
 
       // Blank still takes the documented default; an unrecognised value fails
       // the row instead of quietly becoming Permanent/Active, which turned a
