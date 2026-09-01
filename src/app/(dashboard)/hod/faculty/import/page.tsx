@@ -10,11 +10,23 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
-import { toCSV, parseCSV, downloadCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { IMPORT_COLUMNS as COLUMNS, IMPORT_HINTS as HINTS } from "@/lib/faculty/csvColumns";
-import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
+import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { IMPORT_COLUMNS as COLUMNS, IMPORT_HINTS as HINTS, IMPORT_SAMPLE_ROWS } from "@/lib/faculty/csvColumns";
+import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 type ParsedRow = Record<string, string>;
+
+// A skipped row plus the cells it came in with, and whether it has since been
+// corrected. Mirrors the students importer's own skipped-row flow.
+type FailedRow = {
+  row: number;
+  employeeId: string;
+  error: string;
+  data: ParsedRow;
+  status: "failed" | "fixed";
+};
 type ImportResult = {
   created: number;
   failed: { row: number; employeeId: string; error: string }[];
@@ -29,6 +41,13 @@ export default function FacultyImportPage() {
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
+  const [fixTarget, setFixTarget] = useState<FailedRow | null>(null);
+  const [fixForm, setFixForm] = useState<ParsedRow>({});
+  const [fixSaving, setFixSaving] = useState(false);
+  const [fixError, setFixError] = useState("");
+  const [isBuildingTemplate, setIsBuildingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState("");
   const user = useAuthStore((s) => s.user);
   const myDepartments = user?.departments && user.departments.length > 0 ? user.departments : (user?.department ? [user.department] : []);
   // The template has no per-row Department column - every row in one import
@@ -36,10 +55,51 @@ export default function FacultyImportPage() {
   // which one up front, same rule the API enforces.
   const [importDepartment, setImportDepartment] = useState("");
 
-  function downloadTemplate() {
-    const headers = COLUMNS.map((c) => c.label);
-    const sample1 = COLUMNS.map((c) => c.sample);
-    downloadCSV(toCSV([headers, sample1]), "faculty_import_template.csv");
+  // A two-sheet .xlsx rather than a flat CSV: sheet one is the template to fill
+  // in (headers + the per-column guidance row), sheet two shows five completed
+  // rows, which is what the guidance can only describe. Only sheet one is ever
+  // read back on upload (see /api/college/parse-excel, which takes
+  // worksheets[0]), so the samples can't be mistaken for real records.
+  //
+  // ExcelJS is imported dynamically - it is a large dependency and only matters
+  // once someone asks for the template, so it stays out of the page's initial
+  // bundle. Same writeBuffer -> Blob -> click path the finance export uses.
+  async function downloadTemplate() {
+    setTemplateError("");
+    setIsBuildingTemplate(true);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      const headers = COLUMNS.map((c) => c.label);
+      // Roomy enough to read the longer headers without hand-resizing, since
+      // the header text is what tells the author what each column wants.
+      const widths = headers.map((h) => ({ width: Math.min(Math.max(h.length + 2, 12), 40) }));
+
+      const template = workbook.addWorksheet("Template");
+      template.addRow(headers);
+      template.addRow(COLUMNS.map((c) => c.sample));
+      template.getRow(1).font = { bold: true };
+      template.columns = widths;
+
+      const samples = workbook.addWorksheet("Sample Data");
+      samples.addRow(headers);
+      for (const row of IMPORT_SAMPLE_ROWS) samples.addRow(COLUMNS.map((c) => row[c.key] ?? ""));
+      samples.getRow(1).font = { bold: true };
+      samples.columns = widths;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "faculty_import_template.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setTemplateError("Couldn't build the Excel template. Please try again.");
+    } finally {
+      setIsBuildingTemplate(false);
+    }
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -109,6 +169,42 @@ export default function FacultyImportPage() {
     }
   }
 
+  function openFix(f: FailedRow) {
+    setFixTarget(f);
+    setFixForm({ ...f.data });
+    setFixError("");
+  }
+
+  // Retries one corrected row through the same import endpoint rather than the
+  // single-create API: the row is then held to exactly the rules that rejected
+  // it, with no second copy of the mapping to keep in step.
+  async function saveFix() {
+    if (!fixTarget) return;
+    setFixSaving(true);
+    setFixError("");
+    try {
+      const res = await fetch("/api/college/faculty/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: [fixForm], ...(importDepartment ? { department: importDepartment } : {}) }),
+      });
+      const json = await res.json() as ImportResult & { error?: string };
+      if (!res.ok) { setFixError(json.error ?? "Import failed"); return; }
+      if (json.created < 1) {
+        setFixError(json.failed[0]?.error ?? "Row still invalid - check the highlighted fields");
+        return;
+      }
+      toast({ variant: "success", title: `${fixForm.name || fixTarget.employeeId} imported` });
+      setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
+      setResult((prev) => (prev ? { ...prev, created: prev.created + 1 } : prev));
+      setFixTarget(null);
+    } catch {
+      setFixError("Network error - please try again");
+    } finally {
+      setFixSaving(false);
+    }
+  }
+
   async function handleImport() {
     if (rows.length === 0) return;
     if (myDepartments.length > 1 && !importDepartment) {
@@ -126,6 +222,9 @@ export default function FacultyImportPage() {
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
       setResult(json);
+      // Snapshot each skipped row's cells before `rows` is cleared below, so
+      // it can be corrected in place rather than by re-uploading the file.
+      setFailedRows(json.failed.map((f) => ({ ...f, data: rows[f.row - 2] ?? {}, status: "failed" as const })));
       if (json.created > 0) {
         toast({ variant: "success", title: `${json.created} faculty imported successfully` });
         setRows([]);
@@ -178,9 +277,10 @@ export default function FacultyImportPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
           </div>
-          <Button onClick={downloadTemplate} className="gap-2">
-            <Download className="h-4 w-4" />Download Template (CSV)
+          <Button onClick={downloadTemplate} loading={isBuildingTemplate} className="gap-2">
+            <Download className="h-4 w-4" />Download Template (Excel)
           </Button>
+          {templateError && <p className="text-sm text-destructive">{templateError}</p>}
         </CardContent>
       </Card>
 
@@ -308,18 +408,34 @@ export default function FacultyImportPage() {
                   <p className="text-sm text-muted-foreground">{result.failed.length} row{result.failed.length !== 1 ? "s" : ""} skipped</p>
                 )}
                 {result.warnings.length > 0 && (
-                  <p className="text-sm text-amber-700">{result.warnings.length} field{result.warnings.length !== 1 ? "s" : ""} ignored due to invalid values</p>
+                  <p className="text-sm text-amber-700">{result.warnings.length} note{result.warnings.length !== 1 ? "s" : ""} on imported rows</p>
                 )}
               </div>
             </div>
-            {result.failed.length > 0 && (
+            {failedRows.length > 0 && (
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Skipped rows</p>
-                <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
-                  {result.failed.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span className="text-muted-foreground">Row {f.row} · {f.employeeId}</span>
-                      <span className="text-red-600 text-xs">{f.error}</span>
+                <p className="text-xs text-muted-foreground">
+                  Nothing from these rows was imported. Click <Pencil className="h-3 w-3 inline" /> to correct one and import it on its own, without re-uploading the file.
+                </p>
+                <div className="rounded-lg border divide-y max-h-64 overflow-y-auto">
+                  {failedRows.map((f) => (
+                    <div key={f.row} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm ${f.status === "fixed" ? "opacity-50" : ""}`}>
+                      <div className="min-w-0">
+                        <span className="text-muted-foreground">Row {f.row} · {f.data.name || f.employeeId}</span>
+                        {f.status === "fixed"
+                          ? <span className="ml-2 text-green-600 text-xs">Fixed and imported</span>
+                          : <span className="block text-red-600 text-xs">{f.error}</span>}
+                      </div>
+                      {f.status === "failed" && (
+                        <button
+                          onClick={() => openFix(f)}
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          title="Edit and retry this row"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -327,7 +443,7 @@ export default function FacultyImportPage() {
             )}
             {result.warnings.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, with notes</p>
                 <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                   {result.warnings.map((w, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
@@ -346,6 +462,44 @@ export default function FacultyImportPage() {
           </CardContent>
         </Card>
       )}
+      {/* Correct one skipped row and import it on its own. Fields are rendered
+          from the template's own column list, with each column's stated
+          constraint as its hint, so this form and the template can never
+          describe different rules. */}
+      <Dialog open={!!fixTarget} onOpenChange={(o) => !o && setFixTarget(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fix Row {fixTarget?.row}</DialogTitle>
+            <DialogDescription>
+              Correct the field(s) that failed and save - this imports just this one faculty member.
+            </DialogDescription>
+          </DialogHeader>
+          {fixTarget && (
+            <p className="text-sm text-red-600 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+              {fixTarget.error}
+            </p>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {COLUMNS.map((c) => (
+              <div key={c.key} className="space-y-1">
+                <Label className="text-xs">{c.label}{c.required ? " *" : ""}</Label>
+                <Input
+                  value={fixForm[c.key] ?? ""}
+                  onChange={(e) => setFixForm((f) => ({ ...f, [c.key]: e.target.value }))}
+                  placeholder={c.sample}
+                />
+                <p className="text-[11px] text-muted-foreground">{c.sample}</p>
+              </div>
+            ))}
+          </div>
+          {fixError && <p className="text-sm text-destructive">{fixError}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFixTarget(null)}>Cancel</Button>
+            <Button onClick={() => void saveFix()} loading={fixSaving}>Save &amp; Import Row</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
