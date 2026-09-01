@@ -335,6 +335,11 @@ export async function POST(request: Request) {
         bloodGroup: checkOption(row.bloodGroup, BLOOD_GROUP_OPTIONS, "Blood Group"),
       };
 
+      // Computed above the gate, not inline in the payload literal below: that
+      // literal is built after the gate, so an unparseable value here was
+      // recorded too late to reject the row and silently became 0.
+      const vExperienceYears = checkNum(row.experienceYears, "Years of Experience");
+
       // Every constraint the template states has now been checked. Anything
       // that failed one rejects the row here - before the login below, so a
       // skipped row can't leave an orphaned Firebase Auth account behind.
@@ -382,7 +387,7 @@ export async function POST(request: Request) {
         qualification: row.qualification?.trim() ?? "",
         specialization: row.specialization?.trim() ?? "",
         employmentType,
-        experienceYears: checkNum(row.experienceYears, "Years of Experience") ?? 0,
+        experienceYears: vExperienceYears ?? 0,
         joiningDate,
         dateOfJoiningDepartment: dateOfJoiningDepartment || undefined,
         status: "ACTIVE",

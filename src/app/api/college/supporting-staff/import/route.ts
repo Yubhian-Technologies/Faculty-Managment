@@ -443,6 +443,22 @@ export async function POST(request: Request) {
         if (!department) department = hodScope.departmentName;
       }
 
+      // Computed here, ABOVE the gate, not inline in the payload literal below:
+      // that literal is built after the gate, so a constraint failing there was
+      // recorded too late to reject the row - an invalid Gender ("M") was
+      // dropped and the record imported with it blank.
+      const vPhone = checkPhone(row.phone, "Phone");
+      const vGender = checkOption(row.gender, GENDER_OPTIONS, "Gender");
+      const vEmergencyPhone = checkPhone(row.emergencyContactPhone, "Emergency Contact Phone");
+      const vReligion = checkOption(row.religion, RELIGION_OPTIONS, "Religion");
+      const vCaste = checkOption(row.caste, CASTE_OPTIONS, "Caste");
+      const vRatification = checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status");
+      const vMarital = checkOption(row.maritalStatus, MARITAL_STATUS_OPTIONS, "Marital Status");
+      const vBloodGroup = checkOption(row.bloodGroup, BLOOD_GROUP_OPTIONS, "Blood Group");
+      const vPermanentSame = checkYesNo(row.permanentSameAsTemporary, "Permanent Same as Temporary");
+      const vExperienceYears = checkNum(row.experienceYears, "Experience");
+      const vNumberOfChildren = checkNum(row.numberOfChildren, "Number of Children");
+
       // Every constraint the template states has now been checked. Anything
       // that failed one rejects the row here - before the login below, so a
       // skipped row can't leave an orphaned Firebase Auth account behind.
@@ -484,15 +500,15 @@ export async function POST(request: Request) {
         employeeId: empId,
         name: row.name.trim(),
         email: row.email?.trim() || undefined,
-        phone: checkPhone(row.phone, "Phone") ?? "",
+        phone: vPhone ?? "",
         staffCategory,
         designation,
         otherDesignationTitle: row.otherDesignationTitle?.trim() || undefined,
-        experienceYears: checkNum(row.experienceYears, "Experience") ?? 0,
+        experienceYears: vExperienceYears ?? 0,
         joiningDate,
         employmentType,
         status,
-        gender: checkOption(row.gender, GENDER_OPTIONS, "Gender"),
+        gender: vGender,
         dateOfBirth: dateOfBirth || undefined,
         legalName: row.legalName?.trim() || undefined,
         fatherName: row.fatherName?.trim() || undefined,
@@ -501,20 +517,20 @@ export async function POST(request: Request) {
         panNo: row.panNo?.trim().toUpperCase() || undefined,
         passportNumber: row.passportNumber?.trim() || undefined,
         emergencyContactName: row.emergencyContactName?.trim() || undefined,
-        emergencyContactPhone: checkPhone(row.emergencyContactPhone, "Emergency Contact Phone"),
-        religion: checkOption(row.religion, RELIGION_OPTIONS, "Religion"),
-        caste: checkOption(row.caste, CASTE_OPTIONS, "Caste"),
+        emergencyContactPhone: vEmergencyPhone,
+        religion: vReligion,
+        caste: vCaste,
         collegeEmail: row.collegeEmail?.trim().toLowerCase() || undefined,
-        ratificationStatus: checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status"),
+        ratificationStatus: vRatification,
         ratificationDate: ratificationDate || undefined,
-        maritalStatus: checkOption(row.maritalStatus, MARITAL_STATUS_OPTIONS, "Marital Status"),
+        maritalStatus: vMarital,
         spouseName: row.spouseName?.trim() || undefined,
-        numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
+        numberOfChildren: vNumberOfChildren,
         referral: row.referral?.trim() || undefined,
         nativePlace: row.nativePlace?.trim() || undefined,
-        bloodGroup: checkOption(row.bloodGroup, BLOOD_GROUP_OPTIONS, "Blood Group"),
+        bloodGroup: vBloodGroup,
         temporaryAddress: row.temporaryAddress?.trim() || undefined,
-        permanentSameAsTemporary: checkYesNo(row.permanentSameAsTemporary, "Permanent Same as Temporary"),
+        permanentSameAsTemporary: vPermanentSame,
         permanentAddress: row.permanentAddress?.trim() || undefined,
         supportingStaffProfile: buildSupportingStaffProfile(row, empId, dropped),
         createdAt: now,
