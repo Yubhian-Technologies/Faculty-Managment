@@ -5,6 +5,11 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import {
+  matchOption, parseYesNoStrict, normalizeDigits, isScientificNotation,
+  GENDER_OPTIONS, BLOOD_GROUP_OPTIONS, MARITAL_STATUS_OPTIONS,
+  RATIFICATION_STATUS_OPTIONS, RELIGION_OPTIONS, CASTE_OPTIONS,
+} from "@/lib/import/fieldConstraints";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import type { Designation, EmploymentType } from "@/types";
@@ -204,8 +209,14 @@ export async function POST(request: Request) {
       // A value was provided but couldn't be parsed - record it was silently
       // dropped instead of just proceeding, so a typo (e.g. a mistyped year)
       // doesn't disappear without a trace the way it used to.
-      const dropped = (empId: string, label: string, raw: string | undefined) => {
-        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored - invalid value ("${raw?.trim()}")` });
+      // A value that breaks its column's stated constraint rejects the whole
+      // row. Importing the record with that one field quietly missing left a
+      // half-correct faculty member on the list with nothing to show which
+      // cell had been discarded; the row is skipped instead and offered back
+      // for correction.
+      const rowErrors: string[] = [];
+      const dropped = (_empId: string, label: string, raw: string | undefined) => {
+        rowErrors.push(`${label}: invalid value ("${raw?.trim()}")`);
       };
 
       // Required field validation
@@ -259,6 +270,79 @@ export async function POST(request: Request) {
         return n;
       };
 
+      const docRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
+
+      // Personal/statutory details - same shared shape the Add/Edit forms use.
+      // Dates are run through the route's robust parseDate() and set directly;
+      // the rest go through buildPersonalDetailsUpdate (string fields, PAN
+      // uppercasing, number/boolean coercion).
+      const dob = parseDate(row.dateOfBirth);
+      if (row.dateOfBirth?.trim() && !dob) dropped(empId, "Date of Birth", row.dateOfBirth);
+      const ratDate = parseDate(row.ratificationDate);
+      if (row.ratificationDate?.trim() && !ratDate) dropped(empId, "Ratification Date", row.ratificationDate);
+      // Each cell is held to the option set its template column states. A
+      // value outside that set is dropped with a warning rather than stored -
+      // "yes" in a Ratified / Not Ratified column is a guess about intent, and
+      // storing it produced statuses the Add/Edit dropdowns can never show.
+      const checkOption = (raw: string | undefined, options: readonly string[], label: string) => {
+        if (!raw?.trim()) return undefined;
+        const matched = matchOption(raw, options);
+        if (!matched) dropped(empId, label, raw);
+        return matched;
+      };
+      const checkYesNo = (raw: string | undefined, label: string) => {
+        if (!raw?.trim()) return undefined;
+        const parsed = parseYesNoStrict(raw);
+        if (parsed === undefined) dropped(empId, label, raw);
+        return parsed;
+      };
+      // Excel turns a long number column into "9E+09" on export - expanded back
+      // to digits so the stored value is dialable, and flagged, since the sheet
+      // itself has already lost the original digits.
+      const checkPhone = (raw: string | undefined, label: string) => {
+        if (!raw?.trim()) return undefined;
+        if (isScientificNotation(raw)) {
+          warnings.push({
+            row: rowNum, employeeId: empId,
+            warning: `${label} was stored by Excel as a number ("${raw.trim()}") and has lost its original digits - imported as ${normalizeDigits(raw)}; format that column as Text and re-upload to correct it.`,
+          });
+        }
+        return normalizeDigits(raw);
+      };
+
+      const personalInput: PersonalDetailsInput = {
+        gender: checkOption(row.gender, GENDER_OPTIONS, "Gender"),
+        legalName: row.legalName?.trim() || undefined,
+        fatherName: row.fatherName?.trim() || undefined,
+        motherName: row.motherName?.trim() || undefined,
+        aadharNo: normalizeDigits(row.aadharNo),
+        panNo: row.panNo?.trim() || undefined,
+        passportNumber: row.passportNumber?.trim() || undefined,
+        emergencyContactName: row.emergencyContactName?.trim() || undefined,
+        emergencyContactPhone: checkPhone(row.emergencyContactPhone, "Emergency Contact Phone"),
+        religion: checkOption(row.religion, RELIGION_OPTIONS, "Religion"),
+        caste: checkOption(row.caste, CASTE_OPTIONS, "Caste"),
+        subCaste: row.subCaste?.trim() || undefined,
+        ratificationStatus: checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status"),
+        maritalStatus: checkOption(row.maritalStatus, MARITAL_STATUS_OPTIONS, "Marital Status"),
+        spouseName: row.spouseName?.trim() || undefined,
+        numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
+        referral: row.referral?.trim() || undefined,
+        nativePlace: row.nativePlace?.trim() || undefined,
+        temporaryAddress: row.temporaryAddress?.trim() || undefined,
+        permanentSameAsTemporary: checkYesNo(row.permanentSameAsTemporary, "Permanent Same as Temporary"),
+        permanentAddress: row.permanentAddress?.trim() || undefined,
+        bloodGroup: checkOption(row.bloodGroup, BLOOD_GROUP_OPTIONS, "Blood Group"),
+      };
+
+      // Every constraint the template states has now been checked. Anything
+      // that failed one rejects the row here - before the login below, so a
+      // skipped row can't leave an orphaned Firebase Auth account behind.
+      if (rowErrors.length > 0) {
+        failed.push({ row: rowNum, employeeId: empId, error: rowErrors.join("; ") });
+        continue;
+      }
+
       // Optional login creation - a CSV row with a Password fills in the
       // faculty member's login account (role: Panel Member) right here during
       // import, so there's no separate "Set Login" step needed afterward for
@@ -284,42 +368,6 @@ export async function POST(request: Request) {
         }
       }
 
-      const docRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
-
-      // Personal/statutory details - same shared shape the Add/Edit forms use.
-      // Dates are run through the route's robust parseDate() and set directly;
-      // the rest go through buildPersonalDetailsUpdate (string fields, PAN
-      // uppercasing, number/boolean coercion).
-      const dob = parseDate(row.dateOfBirth);
-      if (row.dateOfBirth?.trim() && !dob) dropped(empId, "Date of Birth", row.dateOfBirth);
-      const ratDate = parseDate(row.ratificationDate);
-      if (row.ratificationDate?.trim() && !ratDate) dropped(empId, "Ratification Date", row.ratificationDate);
-      const personalInput: PersonalDetailsInput = {
-        gender: row.gender?.trim() || undefined,
-        legalName: row.legalName?.trim() || undefined,
-        fatherName: row.fatherName?.trim() || undefined,
-        motherName: row.motherName?.trim() || undefined,
-        aadharNo: row.aadharNo?.trim() || undefined,
-        panNo: row.panNo?.trim() || undefined,
-        passportNumber: row.passportNumber?.trim() || undefined,
-        emergencyContactName: row.emergencyContactName?.trim() || undefined,
-        emergencyContactPhone: row.emergencyContactPhone?.trim() || undefined,
-        religion: row.religion?.trim() || undefined,
-        caste: row.caste?.trim() || undefined,
-        subCaste: row.subCaste?.trim() || undefined,
-        ratificationStatus: row.ratificationStatus?.trim() || undefined,
-        maritalStatus: row.maritalStatus?.trim() || undefined,
-        spouseName: row.spouseName?.trim() || undefined,
-        numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
-        referral: row.referral?.trim() || undefined,
-        nativePlace: row.nativePlace?.trim() || undefined,
-        temporaryAddress: row.temporaryAddress?.trim() || undefined,
-        permanentSameAsTemporary: row.permanentSameAsTemporary
-          ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes"
-          : undefined,
-        permanentAddress: row.permanentAddress?.trim() || undefined,
-        bloodGroup: row.bloodGroup?.trim() || undefined,
-      };
 
       const payload: Record<string, unknown> = {
         userUid,
@@ -329,7 +377,7 @@ export async function POST(request: Request) {
         name: row.name.trim(),
         apaarFacultyId: row.apaarFacultyId?.trim() || undefined,
         collegeEmail: loginEmail,
-        phone: row.phone?.trim() ?? "",
+        phone: checkPhone(row.phone, "Phone") ?? "",
         designation,
         qualification: row.qualification?.trim() ?? "",
         specialization: row.specialization?.trim() ?? "",

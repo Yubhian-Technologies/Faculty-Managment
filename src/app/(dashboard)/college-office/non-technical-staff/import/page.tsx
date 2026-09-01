@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
-import { toCSV, parseCSV, downloadCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { getSupportingStaffColumns, getSupportingStaffHints } from "@/lib/supportingStaff/csvColumns";
+import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { getSupportingStaffColumns, getSupportingStaffHints, getSupportingStaffSampleRows } from "@/lib/supportingStaff/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
 
 type ParsedRow = Record<string, string>;
@@ -20,6 +20,7 @@ type ImportResult = {
 
 const COLUMNS = getSupportingStaffColumns("non-technical");
 const HINTS = getSupportingStaffHints();
+const SAMPLE_ROWS = getSupportingStaffSampleRows("non-technical");
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -29,11 +30,54 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [isBuildingTemplate, setIsBuildingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState("");
 
-  function downloadTemplate() {
-    const headers = COLUMNS.map((c) => c.label);
-    const sample1 = COLUMNS.map((c) => c.sample);
-    downloadCSV(toCSV([headers, sample1]), "non_technical_staff_import_template.csv");
+  // A two-sheet .xlsx rather than a flat CSV: sheet one is the template to fill
+  // in (headers + the per-column guidance row), sheet two shows five completed
+  // rows, which is what the guidance can only describe. Only sheet one is ever
+  // read back on upload (see /api/college/parse-excel, which takes
+  // worksheets[0]), so the samples can't be mistaken for real records.
+  //
+  // ExcelJS is imported dynamically - it is a large dependency and only matters
+  // once someone asks for the template, so it stays out of the page's initial
+  // bundle.
+  async function downloadTemplate() {
+    setTemplateError("");
+    setIsBuildingTemplate(true);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      const headers = COLUMNS.map((c) => c.label);
+      // Roomy enough to read the longer headers without hand-resizing, since
+      // the header text is what tells the author what each column wants.
+      const widths = headers.map((h) => ({ width: Math.min(Math.max(h.length + 2, 12), 40) }));
+
+      const template = workbook.addWorksheet("Template");
+      template.addRow(headers);
+      template.addRow(COLUMNS.map((c) => c.sample));
+      template.getRow(1).font = { bold: true };
+      template.columns = widths;
+
+      const samples = workbook.addWorksheet("Sample Data");
+      samples.addRow(headers);
+      for (const row of SAMPLE_ROWS) samples.addRow(COLUMNS.map((c) => row[c.key] ?? ""));
+      samples.getRow(1).font = { bold: true };
+      samples.columns = widths;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "non_technical_staff_import_template.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setTemplateError("Couldn't build the Excel template. Please try again.");
+    } finally {
+      setIsBuildingTemplate(false);
+    }
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -143,9 +187,10 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
           </div>
-          <Button onClick={downloadTemplate} className="gap-2">
-            <Download className="h-4 w-4" />Download Template (CSV)
+          <Button onClick={downloadTemplate} loading={isBuildingTemplate} className="gap-2">
+            <Download className="h-4 w-4" />Download Template (Excel)
           </Button>
+          {templateError && <p className="text-sm text-destructive">{templateError}</p>}
         </CardContent>
       </Card>
 

@@ -374,6 +374,93 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   { key: "permanentAddress",  label: "Permanent Address",            required: false, sample: "Optional; text" },
 ];
 
+// Five filled-in rows for the template workbook's second sheet - what a
+// correctly-completed row looks like for every column, which the guidance row
+// on sheet one can only describe. Keyed by column key rather than written as a
+// positional array so adding or reordering a column can't silently shift the
+// data under the wrong headers.
+//
+// Login Password is deliberately blank in all five: filling it in creates a
+// real login on import, and a sample is exactly the sort of thing that gets
+// pasted in wholesale.
+export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
+  {
+    employeeId: "FAC001", name: "Dr. Anitha Reddy", apaarFacultyId: "APAAR100001",
+    collegeEmail: "anitha.reddy@college.edu", phone: "9876543210", password: "",
+    designation: "Professor", qualification: "Ph.D", specialization: "Machine Learning",
+    experienceYears: "18", employmentType: "Permanent", joiningDate: "2012-06-15",
+    dateOfJoiningDepartment: "2012-06-15", gender: "Female", dateOfBirth: "1978-03-22",
+    legalName: "Anitha Reddy", fatherName: "Ramachandra Reddy", motherName: "Lakshmi Reddy",
+    aadharNo: "123456789012", panNo: "ABCDE1234F", passportNumber: "",
+    emergencyContactName: "Ramachandra Reddy", emergencyContactPhone: "9876500001",
+    religion: "Hindu", caste: "OC", subCaste: "", ratificationStatus: "Ratified",
+    ratificationDate: "2013-08-01", maritalStatus: "Married", spouseName: "Suresh Reddy",
+    numberOfChildren: "2", referral: "", nativePlace: "Bhimavaram", bloodGroup: "O+",
+    temporaryAddress: "12-4-56, Gandhi Nagar, Bhimavaram", permanentSameAsTemporary: "Yes",
+    permanentAddress: "",
+  },
+  {
+    employeeId: "FAC002", name: "Mr. Suresh Kumar", apaarFacultyId: "APAAR100002",
+    collegeEmail: "suresh.kumar@college.edu", phone: "9876543211", password: "",
+    designation: "Assistant Professor", qualification: "M.Tech", specialization: "Computer Networks",
+    experienceYears: "7", employmentType: "Permanent", joiningDate: "2019-07-01",
+    dateOfJoiningDepartment: "2019-07-01", gender: "Male", dateOfBirth: "1990-11-05",
+    legalName: "Suresh Kumar", fatherName: "Venkata Rao", motherName: "Padma",
+    aadharNo: "234567890123", panNo: "BCDEF2345G", passportNumber: "P1234567",
+    emergencyContactName: "Padma", emergencyContactPhone: "9876500002",
+    religion: "Hindu", caste: "BC", subCaste: "BC-B", ratificationStatus: "Ratified",
+    ratificationDate: "2020-09-10", maritalStatus: "Married", spouseName: "Divya",
+    numberOfChildren: "1", referral: "", nativePlace: "Vijayawada", bloodGroup: "B+",
+    temporaryAddress: "45, Krishna Colony, Vijayawada", permanentSameAsTemporary: "No",
+    permanentAddress: "8-2-1, Gudivada",
+  },
+  {
+    employeeId: "FAC003", name: "Ms. Divya Nair", apaarFacultyId: "",
+    collegeEmail: "divya.nair@college.edu", phone: "9876543212", password: "",
+    designation: "Assistant Professor", qualification: "M.Tech", specialization: "Data Science",
+    experienceYears: "4", employmentType: "Contract", joiningDate: "2022-08-16",
+    dateOfJoiningDepartment: "2022-08-16", gender: "Female", dateOfBirth: "1995-01-30",
+    legalName: "Divya Nair", fatherName: "Mohan Nair", motherName: "Sujatha Nair",
+    aadharNo: "345678901234", panNo: "CDEFG3456H", passportNumber: "",
+    emergencyContactName: "Mohan Nair", emergencyContactPhone: "9876500003",
+    religion: "Hindu", caste: "OC", subCaste: "", ratificationStatus: "Not Ratified",
+    ratificationDate: "", maritalStatus: "Single", spouseName: "",
+    numberOfChildren: "0", referral: "Dr. Anitha Reddy", nativePlace: "Kochi", bloodGroup: "A+",
+    temporaryAddress: "Flat 302, Green Park, Bhimavaram", permanentSameAsTemporary: "No",
+    permanentAddress: "Nair House, Ernakulam",
+  },
+  {
+    employeeId: "FAC004", name: "Dr. Imran Shaik", apaarFacultyId: "APAAR100004",
+    collegeEmail: "imran.shaik@college.edu", phone: "9876543213", password: "",
+    designation: "Associate Professor", qualification: "Ph.D", specialization: "Embedded Systems",
+    experienceYears: "12", employmentType: "Permanent", joiningDate: "2016-01-04",
+    dateOfJoiningDepartment: "2018-06-01", gender: "Male", dateOfBirth: "1984-07-19",
+    legalName: "Imran Shaik", fatherName: "Abdul Shaik", motherName: "Fatima Bee",
+    aadharNo: "456789012345", panNo: "DEFGH4567I", passportNumber: "P7654321",
+    emergencyContactName: "Fatima Bee", emergencyContactPhone: "9876500004",
+    religion: "Muslim", caste: "BC", subCaste: "BC-E", ratificationStatus: "Ratified",
+    ratificationDate: "2017-03-20", maritalStatus: "Married", spouseName: "Ayesha",
+    numberOfChildren: "3", referral: "", nativePlace: "Guntur", bloodGroup: "AB+",
+    temporaryAddress: "23-1-9, Lakshmipuram, Guntur", permanentSameAsTemporary: "Yes",
+    permanentAddress: "",
+  },
+  {
+    employeeId: "FAC005", name: "Mrs. Grace Thomas", apaarFacultyId: "",
+    collegeEmail: "grace.thomas@college.edu", phone: "9876543214", password: "",
+    designation: "Lecturer", qualification: "M.Sc", specialization: "Applied Mathematics",
+    experienceYears: "3", employmentType: "Part-Time", joiningDate: "2023-06-12",
+    dateOfJoiningDepartment: "2023-06-12", gender: "Female", dateOfBirth: "1996-09-08",
+    legalName: "Grace Thomas", fatherName: "Thomas Mathew", motherName: "Mary Thomas",
+    aadharNo: "567890123456", panNo: "EFGHI5678J", passportNumber: "",
+    emergencyContactName: "Thomas Mathew", emergencyContactPhone: "9876500005",
+    religion: "Christian", caste: "OTHER", subCaste: "", ratificationStatus: "Not Ratified",
+    ratificationDate: "", maritalStatus: "Married", spouseName: "Jacob Varghese",
+    numberOfChildren: "0", referral: "", nativePlace: "Kottayam", bloodGroup: "O-",
+    temporaryAddress: "House 7, St. Mary's Street, Bhimavaram", permanentSameAsTemporary: "No",
+    permanentAddress: "Thomas Villa, Kottayam",
+  },
+];
+
 export const IMPORT_HINTS = [
   "Designation: any teaching title used by your college (e.g. Professor, Assoc. Prof., Asst. Prof., Lecturer, Visiting Faculty, Adjunct Faculty for Engineering/Pharmacy/Dental; Principal, HOD, PGT, TGT, PRT etc. for Degree/Polytechnic/School colleges) - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead",
   "Employment Type: Regular, Permanent, Contract, Visiting, Part-Time",

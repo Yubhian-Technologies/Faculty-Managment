@@ -380,7 +380,7 @@ export default function FacultyImportPage() {
                     </p>
                   )}
                   {result.warnings.length > 0 && (
-                    <p className="text-sm text-amber-700">{result.warnings.length} field{result.warnings.length !== 1 ? "s" : ""} ignored due to invalid values</p>
+                    <p className="text-sm text-amber-700">{result.warnings.length} note{result.warnings.length !== 1 ? "s" : ""} on imported rows</p>
                   )}
                 </div>
               </div>
@@ -417,7 +417,7 @@ export default function FacultyImportPage() {
               )}
               {result.warnings.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, with notes</p>
                   <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                     {result.warnings.map((w, i) => (
                       <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">

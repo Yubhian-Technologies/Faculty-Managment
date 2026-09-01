@@ -10,6 +10,11 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { resolveDepartmentByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { getHodTechnicalDesignations } from "@/lib/designations/config";
 import { NON_TECHNICAL_STAFF_DESIGNATION_LABELS } from "@/types";
+import {
+  matchOption, parseYesNoStrict, normalizeDigits, isScientificNotation,
+  GENDER_OPTIONS, BLOOD_GROUP_OPTIONS, MARITAL_STATUS_OPTIONS,
+  RATIFICATION_STATUS_OPTIONS, RELIGION_OPTIONS, CASTE_OPTIONS,
+} from "@/lib/import/fieldConstraints";
 import type {
   SupportingStaffCategory, SupportingStaffDesignation, EmploymentType, FacultyStatus, CollegeType,
   SupportingStaffProfileFields, StaffQualification, TrainingEntry, TrainingEntryType, AwardEntry, AwardCategory,
@@ -338,8 +343,41 @@ export async function POST(request: Request) {
       const row = body.records[i];
       const rowNum = i + 2;
 
-      const dropped = (empId: string, label: string, raw: string | undefined) => {
-        warnings.push({ row: rowNum, employeeId: empId, warning: `${label} ignored - invalid value ("${raw?.trim()}")` });
+      // A value that breaks its column's stated constraint rejects the whole
+      // row, rather than importing the record with that one field quietly
+      // missing - see the matching gate below.
+      const rowErrors: string[] = [];
+      const dropped = (_empId: string, label: string, raw: string | undefined) => {
+        rowErrors.push(`${label}: invalid value ("${raw?.trim()}")`);
+      };
+
+      // Each cell is held to the option set its template column states; a value
+      // outside it is dropped with a warning rather than stored, so an import
+      // can't produce a status the Add/Edit dropdowns could never show.
+      const checkOption = (raw: string | undefined, options: readonly string[], label: string) => {
+        if (!raw?.trim()) return undefined;
+        const matched = matchOption(raw, options);
+        if (!matched) dropped(empId, label, raw);
+        return matched;
+      };
+      const checkYesNo = (raw: string | undefined, label: string) => {
+        if (!raw?.trim()) return undefined;
+        const parsed = parseYesNoStrict(raw);
+        if (parsed === undefined) dropped(empId, label, raw);
+        return parsed;
+      };
+      // Excel turns a long number column into "9E+09" on export - expanded back
+      // to digits so the stored value is dialable, and flagged, since the sheet
+      // itself has already lost the original digits.
+      const checkPhone = (raw: string | undefined, label: string) => {
+        if (!raw?.trim()) return undefined;
+        if (isScientificNotation(raw)) {
+          warnings.push({
+            row: rowNum, employeeId: empId,
+            warning: `${label} was stored by Excel as a number ("${raw.trim()}") and has lost its original digits - imported as ${normalizeDigits(raw)}; format that column as Text and re-upload to correct it.`,
+          });
+        }
+        return normalizeDigits(raw);
       };
 
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
@@ -356,10 +394,21 @@ export async function POST(request: Request) {
       const designationKey = row.designation.trim().toLowerCase();
       const designation: SupportingStaffDesignation = NON_TECHNICAL_DESIGNATION_MAP[designationKey] ?? row.designation.trim();
 
+      // Blank still takes the documented default; an unrecognised value fails
+      // the row instead of quietly becoming Permanent/Active, which turned a
+      // typo into a real employment type.
       const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
+      if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
+        failed.push({ row: rowNum, employeeId: empId, error: `Employment Type "${row.employmentType?.trim()}" is not one of Permanent / Contract / Visiting / Part-Time` });
+        continue;
+      }
       const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
 
       const statusKey = (row.status ?? "").trim().toLowerCase();
+      if (statusKey && !STATUS_MAP[statusKey]) {
+        failed.push({ row: rowNum, employeeId: empId, error: `Status "${row.status?.trim()}" is not one of Active / On Leave / Resigned / Retired` });
+        continue;
+      }
       const status: FacultyStatus = STATUS_MAP[statusKey] ?? "ACTIVE";
 
       const joiningDate = parseDate(row.joiningDate);
@@ -392,6 +441,14 @@ export async function POST(request: Request) {
           department = "";
         }
         if (!department) department = hodScope.departmentName;
+      }
+
+      // Every constraint the template states has now been checked. Anything
+      // that failed one rejects the row here - before the login below, so a
+      // skipped row can't leave an orphaned Firebase Auth account behind.
+      if (rowErrors.length > 0) {
+        failed.push({ row: rowNum, employeeId: empId, error: rowErrors.join("; ") });
+        continue;
       }
 
       // Optional login creation - a CSV row with a Password fills in this
@@ -427,7 +484,7 @@ export async function POST(request: Request) {
         employeeId: empId,
         name: row.name.trim(),
         email: row.email?.trim() || undefined,
-        phone: row.phone?.trim() ?? "",
+        phone: checkPhone(row.phone, "Phone") ?? "",
         staffCategory,
         designation,
         otherDesignationTitle: row.otherDesignationTitle?.trim() || undefined,
@@ -435,29 +492,29 @@ export async function POST(request: Request) {
         joiningDate,
         employmentType,
         status,
-        gender: row.gender?.trim() || undefined,
+        gender: checkOption(row.gender, GENDER_OPTIONS, "Gender"),
         dateOfBirth: dateOfBirth || undefined,
         legalName: row.legalName?.trim() || undefined,
         fatherName: row.fatherName?.trim() || undefined,
         motherName: row.motherName?.trim() || undefined,
-        aadharNo: row.aadharNo?.trim() || undefined,
+        aadharNo: normalizeDigits(row.aadharNo),
         panNo: row.panNo?.trim().toUpperCase() || undefined,
         passportNumber: row.passportNumber?.trim() || undefined,
         emergencyContactName: row.emergencyContactName?.trim() || undefined,
-        emergencyContactPhone: row.emergencyContactPhone?.trim() || undefined,
-        religion: row.religion?.trim() || undefined,
-        caste: row.caste?.trim() || undefined,
+        emergencyContactPhone: checkPhone(row.emergencyContactPhone, "Emergency Contact Phone"),
+        religion: checkOption(row.religion, RELIGION_OPTIONS, "Religion"),
+        caste: checkOption(row.caste, CASTE_OPTIONS, "Caste"),
         collegeEmail: row.collegeEmail?.trim().toLowerCase() || undefined,
-        ratificationStatus: row.ratificationStatus?.toLowerCase().includes("not") ? "Not Ratified" : row.ratificationStatus?.trim() ? "Ratified" : undefined,
+        ratificationStatus: checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status"),
         ratificationDate: ratificationDate || undefined,
-        maritalStatus: row.maritalStatus?.trim().toLowerCase().startsWith("married") ? "Married" : row.maritalStatus?.trim() ? "Single" : undefined,
+        maritalStatus: checkOption(row.maritalStatus, MARITAL_STATUS_OPTIONS, "Marital Status"),
         spouseName: row.spouseName?.trim() || undefined,
         numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
         referral: row.referral?.trim() || undefined,
         nativePlace: row.nativePlace?.trim() || undefined,
-        bloodGroup: row.bloodGroup?.trim() || undefined,
+        bloodGroup: checkOption(row.bloodGroup, BLOOD_GROUP_OPTIONS, "Blood Group"),
         temporaryAddress: row.temporaryAddress?.trim() || undefined,
-        permanentSameAsTemporary: row.permanentSameAsTemporary ? row.permanentSameAsTemporary.trim().toLowerCase() === "yes" : undefined,
+        permanentSameAsTemporary: checkYesNo(row.permanentSameAsTemporary, "Permanent Same as Temporary"),
         permanentAddress: row.permanentAddress?.trim() || undefined,
         supportingStaffProfile: buildSupportingStaffProfile(row, empId, dropped),
         createdAt: now,
