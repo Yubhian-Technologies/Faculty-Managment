@@ -108,15 +108,49 @@ export function LeaveApprovalQueue() {
       .then((res) => res.json() as Promise<{ periods?: PeriodCoverageEntry[] }>)
       .then((data) => {
         setPeriodsById((prev) => ({ ...prev, [expandedId]: data.periods ?? [] }));
-        if (r!.periodSubstitutions?.length) {
+        // Pending coverage is seeded alongside committed, so a substitute the
+        // approver already named still shows as chosen when they come back to
+        // forward the request.
+        const onRecord = [...(r!.periodSubstitutions ?? []), ...(r!.pendingPeriodSubstitutions ?? [])];
+        if (onRecord.length) {
           const seeded: Record<string, string> = {};
-          for (const p of r!.periodSubstitutions) seeded[`${p.date}|${p.timetableSlotId}`] = p.substituteFacultyId;
+          for (const p of onRecord) seeded[`${p.date}|${p.timetableSlotId}`] = p.substituteFacultyId;
           setSubstitutionsById((prev) => ({ ...prev, [expandedId]: { ...seeded, ...(prev[expandedId] ?? {}) } }));
+          // One person covering every affected period is what Replacement
+          // means - reflect that back into its picker when it is the case.
+          const ids = new Set(onRecord.map((p) => p.substituteFacultyId));
+          if (ids.size === 1 && (r!.pendingPeriodSubstitutions?.length ?? 0) > 0) {
+            const only = [...ids][0];
+            setReplacementFacultyById((prev) => ({ ...prev, [expandedId]: prev[expandedId] ?? only }));
+          }
         }
       })
       .catch(() => setPeriodsById((prev) => ({ ...prev, [expandedId]: [] })))
       .finally(() => setLoadingPeriodsId((prev) => (prev === expandedId ? null : prev)));
   }, [expandedId, requests, periodsById]);
+
+  // Whether this HOD has named coverage that isn't already on the request -
+  // the same comparison PROPOSE_COVERAGE makes server-side (see the `changed`
+  // filter in applications/[id]/route.ts). Picks are seeded from the
+  // requester's own submission above, so "the HOD touched something" can't be
+  // inferred from the picks being non-empty; they have to be compared.
+  function hasNewCoverage(r: LeaveRequest): boolean {
+    const periods = periodsById[r.id] ?? [];
+    if (periods.length === 0) return false;
+    // Committed coverage AND coverage already sent and awaiting acceptance -
+    // both count as "on record", so re-opening the request after sending an
+    // adjustment request doesn't offer to send the same one again.
+    const onRecord = new Map(
+      [...(r.periodSubstitutions ?? []), ...(r.pendingPeriodSubstitutions ?? [])]
+        .map((p) => [`${p.date}|${p.timetableSlotId}`, p.substituteFacultyId])
+    );
+    if ((coverageModeById[r.id] ?? "ADJUSTMENT") === "REPLACEMENT") {
+      const replacement = replacementFacultyById[r.id];
+      if (!replacement) return false;
+      return periods.some((p) => onRecord.get(`${p.date}|${p.timetableSlotId}`) !== replacement);
+    }
+    return Object.entries(substitutionsById[r.id] ?? {}).some(([key, id]) => id && onRecord.get(key) !== id);
+  }
 
   async function act(r: LeaveRequest, action: "APPROVE" | "REJECT") {
     const isPendingHod = r.status === "PENDING_HOD";
@@ -127,7 +161,7 @@ export function LeaveApprovalQueue() {
     // reaching PENDING_PRINCIPAL still untagged - the Principal decides it
     // themselves, in the same Approve action.
     const needsPaidLeaveDecision = !!r.isOtherRequest && r.isPaidLeave === undefined && (isHodOtherDecision || isPrincipalOtherDecision);
-    if (action === "APPROVE" && needsPaidLeaveDecision && paidById[r.id] === undefined) {
+    if (action === "APPROVE" && needsPaidLeaveDecision && (paidById[r.id] ?? r.isPaidLeave) === undefined) {
       toast({ variant: "destructive", title: "Select whether this is paid or unpaid leave" });
       return;
     }
@@ -179,10 +213,31 @@ export function LeaveApprovalQueue() {
         const proposeRes = await fetch(`/api/leave/applications/${r.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "PROPOSE_COVERAGE", periodSubstitutions }),
+          body: JSON.stringify({
+            action: "PROPOSE_COVERAGE",
+            periodSubstitutions,
+            // Persisted now rather than only on APPROVE: the approver leaves
+            // this form until the substitute accepts, and would otherwise have
+            // to pick paid/unpaid again on return.
+            ...(typeof paidById[r.id] === "boolean" ? { isPaidLeave: paidById[r.id] } : {}),
+          }),
         });
-        const proposeData = (await proposeRes.json()) as { error?: string };
+        const proposeData = (await proposeRes.json()) as { error?: string; changed?: boolean };
         if (!proposeRes.ok) throw new Error(proposeData.error ?? "Failed to update coverage");
+        // Naming someone new is its own step: they have to accept before this
+        // can go to the Principal. Stop here rather than attempting the
+        // forward, which the server would reject anyway ("still awaiting
+        // acceptance") - that read as a failure when it was the flow working.
+        if (proposeData.changed) {
+          toast({
+            variant: "success",
+            title: "Adjustment request sent",
+            description: "Forward to the Principal once they accept - track it under Leave Approvals.",
+          });
+          setActingId(null);
+          void load();
+          return;
+        }
       }
 
       const res = await fetch(`/api/leave/applications/${r.id}`, {
@@ -191,7 +246,7 @@ export function LeaveApprovalQueue() {
         body: JSON.stringify({
           action,
           remarks: remarksById[r.id],
-          isPaidLeave: needsPaidLeaveDecision ? paidById[r.id] : undefined,
+          isPaidLeave: r.isOtherRequest ? (paidById[r.id] ?? r.isPaidLeave) : undefined,
           otherLeaveCategory: isPrincipalOtherDecision ? categoryById[r.id] : undefined,
         }),
       });
@@ -239,7 +294,6 @@ export function LeaveApprovalQueue() {
             const isPendingHod = r.status === "PENDING_HOD";
             const isHodOtherDecision = isPendingHod && isOtherRequest;
             const isPrincipalOtherDecision = r.status === "PENDING_PRINCIPAL" && isOtherRequest;
-            const needsPaidLeaveDecision = isOtherRequest && r.isPaidLeave === undefined && (isHodOtherDecision || isPrincipalOtherDecision);
             const isExpanded = expandedId === r.id;
             return (
               <Card key={r.id} className={cn("transition-colors", isExpanded && "ring-1 ring-primary/20")}>
@@ -291,11 +345,11 @@ export function LeaveApprovalQueue() {
                       <p className="text-sm">{r.reason || <span className="text-muted-foreground italic">No reason provided</span>}</p>
                     </div>
 
-                    {needsPaidLeaveDecision && (
+                    {isOtherRequest && (isHodOtherDecision || isPrincipalOtherDecision) && (
                       <div className="max-w-xs space-y-1.5">
                         <label className="text-xs text-muted-foreground">Paid or unpaid?</label>
                         <Select
-                          value={paidById[r.id] === undefined ? "" : String(paidById[r.id])}
+                          value={(paidById[r.id] ?? r.isPaidLeave) === undefined ? "" : String(paidById[r.id] ?? r.isPaidLeave)}
                           onValueChange={(v) => setPaidById((prev) => ({ ...prev, [r.id]: v === "true" }))}
                         >
                           <SelectTrigger>
@@ -472,7 +526,9 @@ export function LeaveApprovalQueue() {
                         <X className="h-4 w-4 mr-1" /> Reject
                       </Button>
                       <Button size="sm" disabled={actingId === r.id} onClick={() => act(r, "APPROVE")}>
-                        <Check className="h-4 w-4 mr-1" /> {isHodOtherDecision ? "Forward to Principal" : "Approve"}
+                        <Check className="h-4 w-4 mr-1" /> {hasNewCoverage(r)
+                          ? "Send Adjustment Request"
+                          : isHodOtherDecision ? "Forward to Principal" : "Approve"}
                       </Button>
                     </div>
                   </CardContent>
