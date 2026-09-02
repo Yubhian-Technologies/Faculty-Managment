@@ -354,7 +354,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       for (const p of changed) pendingByKey.set(`${p.date}|${p.timetableSlotId}`, p);
       const pendingPeriodSubstitutions = Array.from(pendingByKey.values());
 
-      await ref.update({ adjustmentRequests, pendingPeriodSubstitutions, updatedAt: now });
+      // The paid/unpaid decision rides along, when the approver has made one.
+      // Naming a substitute is now its own step, so the approver leaves the
+      // form and comes back once the substitute accepts - without this, that
+      // choice lived only in the page's state and had to be re-entered, since
+      // it was previously only ever written by APPROVE.
+      await ref.update({
+        adjustmentRequests,
+        pendingPeriodSubstitutions,
+        ...(typeof body.isPaidLeave === "boolean" ? { isPaidLeave: body.isPaidLeave } : {}),
+        updatedAt: now,
+      });
       await db.collection("colleges").doc(session.collegeId).collection("auditLogs").add({
         collegeId: session.collegeId, action: "LEAVE_COVERAGE_PROPOSED", performedBy: session.uid,
         performedByName: session.email || session.role, targetId: id, details: { changedCount: changed.length }, timestamp: now,
