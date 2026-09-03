@@ -127,10 +127,10 @@ export default function NewFacultyPage() {
   // which module (see onInvalid). Steps can be navigated freely - validation
   // is deferred entirely to submit time.
   const FIELD_LABELS: Record<string, string> = {
-    employeeId: "Employee ID", name: "Full Name", collegeEmail: "College Email",
-    password: "Login Password", phone: "Phone", designation: "Designation",
+    employeeId: "Employee ID", name: "Full Name (as per PAN)", collegeEmail: "College Email",
+    password: "Login Password", phone: "Mobile No", designation: "Designation",
     qualification: "Highest Qualification", experienceYears: "Total Years of Experience",
-    joiningDate: "Date of Joining Institution", employmentType: "Employment Type",
+    joiningDate: "Date of Joining Institution", employmentType: "Employee Category",
   };
 
   function goNext() {
@@ -253,9 +253,10 @@ export default function NewFacultyPage() {
                       {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="name">Full Name *</Label>
+                      <Label htmlFor="name">Full Name (as per PAN) *</Label>
                       <Input id="name" {...register("name")} placeholder="Dr. Priya Nair" />
                       {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                      <p className="text-xs text-muted-foreground">Enter the name exactly as it appears on the PAN card.</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="apaarFacultyId">APAAR Faculty ID</Label>
@@ -274,37 +275,37 @@ export default function NewFacultyPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {!isLinkMode && (
+                {!isLinkMode && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="collegeEmail">College Email *</Label>
                       <Input id="collegeEmail" type="email" {...register("collegeEmail")} placeholder="name@vishnu.edu.in" />
                       {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
                       <p className="text-xs text-muted-foreground">This is used as their login username.</p>
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Login Password *</Label>
+                      <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
+                      {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+                      <p className="text-xs text-muted-foreground">
+                        Share this with the faculty member so they can log in with their college email as a Panel Member.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="email">Personal Email</Label>
                     <Input id="email" type="email" {...register("email")} placeholder="faculty@example.com" />
                     {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
+                    <Label htmlFor="phone">Mobile No</Label>
                     <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
                     {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
                   </div>
                 </div>
-
-                {!isLinkMode && (
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Login Password *</Label>
-                    <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
-                    {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-                    <p className="text-xs text-muted-foreground">
-                      Share this with the faculty member so they can log in with their college email as a Panel Member.
-                    </p>
-                  </div>
-                )}
 
                 <div className="pt-2 pb-1 border-t">
                   <p className="text-sm font-medium text-muted-foreground">Role Details</p>
@@ -347,7 +348,7 @@ export default function NewFacultyPage() {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Employment Type *</Label>
+                    <Label>Employee Category *</Label>
                     <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v)}>
                       <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>

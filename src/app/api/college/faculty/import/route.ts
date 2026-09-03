@@ -65,11 +65,16 @@ type ImportRow = {
   gender?: string;
   dateOfBirth?: string;
   legalName?: string;
+  nameAsPerAadhar?: string;
   fatherName?: string;
   motherName?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
+  sscHallTicketNo?: string;
+  differentlyAbled?: string;
+  bankAccountNo?: string;
+  ifscCode?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   religion?: string;
@@ -88,12 +93,13 @@ type ImportRow = {
   permanentAddress?: string;
 };
 
-// Accepts the template's YYYY-MM-DD format, and falls back to DD-MM-YYYY /
-// DD/MM/YYYY (what Excel re-saves a date cell as under an Indian locale, even
-// when the column was originally filled in as YYYY-MM-DD) - otherwise a
-// malformed string silently becomes a JS "Invalid Date" object that isn't
-// caught by any `undefined` check and throws when Firestore serializes it,
-// failing the entire batch instead of just this row.
+// Accepts the template's DD-MM-YYYY format (DD/MM/YYYY too - what Excel
+// re-saves a date cell as under an Indian locale), and still falls back to
+// the older YYYY-MM-DD format so sheets built against a previous version of
+// the template keep importing - otherwise a malformed string silently
+// becomes a JS "Invalid Date" object that isn't caught by any `undefined`
+// check and throws when Firestore serializes it, failing the entire batch
+// instead of just this row.
 //
 // The final generic-parse fallback is dangerously lenient: V8 happily accepts
 // e.g. a typo'd 5-digit-year "20110-04-15" as a *valid* Date (year 20110)
@@ -288,7 +294,7 @@ export async function POST(request: Request) {
 
       // Parse dates
       const joiningDate = parseDate(row.joiningDate);
-      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid Date of Joining Institution - use YYYY-MM-DD" }); continue; }
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid Date of Joining Institution - use DD-MM-YYYY" }); continue; }
       const dateOfJoiningDepartment = parseDate(row.dateOfJoiningDepartment);
       if (row.dateOfJoiningDepartment?.trim() && !dateOfJoiningDepartment) dropped(empId, "Date of joining department", row.dateOfJoiningDepartment);
 
@@ -340,15 +346,29 @@ export async function POST(request: Request) {
         }
         return normalizeDigits(raw);
       };
+      // A well-formed IFSC has a fixed shape (4 letters, a literal 0, 6
+      // alphanumerics) - anything else is a typo in a code that routes real
+      // salary payments, so it's rejected rather than stored as-is.
+      const checkIfsc = (raw: string | undefined) => {
+        if (!raw?.trim()) return undefined;
+        const v = raw.trim().toUpperCase();
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(v)) { dropped(empId, "IFSC Code", raw); return undefined; }
+        return v;
+      };
 
       const personalInput: PersonalDetailsInput = {
         gender: checkOption(row.gender, GENDER_OPTIONS, "Gender"),
         legalName: row.legalName?.trim() || undefined,
+        nameAsPerAadhar: row.nameAsPerAadhar?.trim() || undefined,
         fatherName: row.fatherName?.trim() || undefined,
         motherName: row.motherName?.trim() || undefined,
         aadharNo: normalizeDigits(row.aadharNo),
         panNo: row.panNo?.trim() || undefined,
         passportNumber: row.passportNumber?.trim() || undefined,
+        sscHallTicketNo: row.sscHallTicketNo?.trim() || undefined,
+        differentlyAbled: checkYesNo(row.differentlyAbled, "Differently Abled"),
+        bankAccountNo: normalizeDigits(row.bankAccountNo),
+        ifscCode: checkIfsc(row.ifscCode),
         emergencyContactName: row.emergencyContactName?.trim() || undefined,
         emergencyContactPhone: checkPhone(row.emergencyContactPhone, "Emergency Contact Phone"),
         religion: checkOption(row.religion, RELIGION_OPTIONS, "Religion"),

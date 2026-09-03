@@ -512,7 +512,7 @@ export function FinancialFields({ value, onChange }: ModuleFieldsProps) {
     <div className="space-y-5">
       <div className="space-y-3 rounded-lg border p-3">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Financial Standing</p>
-        <NumInput label="Present Salary (₹)" value={value.presentSalary} onChange={(v) => set("presentSalary", v)} />
+        <NumInput label="Monthly Salary (₹)" value={value.presentSalary} onChange={(v) => set("presentSalary", v)} />
       </div>
       <div className="space-y-3 rounded-lg border p-3">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Budgetary Impact</p>

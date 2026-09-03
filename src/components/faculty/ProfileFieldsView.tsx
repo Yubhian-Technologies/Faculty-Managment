@@ -327,7 +327,7 @@ export function FinancialModule({ profile }: { profile: Partial<FacultyProfileFi
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">
         <SubLabel>Current Financial Standing</SubLabel>
         <div className="mt-2">
-          <Field label="Present Salary (₹)" value={p.presentSalary} />
+          <Field label="Monthly Salary (₹)" value={p.presentSalary} />
         </div>
       </div>
       <div className="rounded-lg border bg-muted/20 shadow-sm p-3">

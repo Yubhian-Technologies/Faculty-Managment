@@ -7,13 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { ImportFixField } from "@/components/import/ImportFixField";
 import { toast } from "@/hooks/useToast";
 import { useAuthStore } from "@/store/authStore";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { IMPORT_COLUMNS as COLUMNS, IMPORT_HINTS as HINTS, IMPORT_SAMPLE_ROWS } from "@/lib/faculty/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
@@ -35,6 +36,7 @@ type FailedRow = { row: number; employeeId: string; error: string; data: ParsedR
 
 export default function FacultyImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
+  const { collegeType } = useCollegeType();
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -282,7 +284,7 @@ export default function FacultyImportPage() {
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Download the CSV template, fill in your faculty data, and upload it below. All date fields must be in <strong>YYYY-MM-DD</strong> format.
+            Download the CSV template, fill in your faculty data, and upload it below. All date fields must be in <strong>DD-MM-YYYY</strong> format.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
@@ -494,16 +496,17 @@ export default function FacultyImportPage() {
           {fixTarget && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {COLUMNS.map((c) => (
-                <div key={c.key} className="space-y-1.5">
-                  <Label htmlFor={`fix-${c.key}`}>{c.label}{c.required && <span className="text-destructive ml-0.5">*</span>}</Label>
-                  <Input
-                    id={`fix-${c.key}`}
-                    type={c.key === "password" ? "password" : "text"}
-                    value={fixTarget.form[c.key] ?? ""}
-                    onChange={(e) => setFixField(c.key, e.target.value)}
-                    placeholder={c.sample || undefined}
-                  />
-                </div>
+                <ImportFixField
+                  key={c.key}
+                  fieldKey={c.key}
+                  label={c.label}
+                  required={c.required}
+                  value={fixTarget.form[c.key] ?? ""}
+                  placeholder={c.sample || undefined}
+                  onChange={(v) => setFixField(c.key, v)}
+                  collegeType={collegeType}
+                  designationKind="teaching"
+                />
               ))}
             </div>
           )}

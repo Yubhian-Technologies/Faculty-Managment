@@ -856,6 +856,7 @@ export interface FacultyMember {
   gender?: "Male" | "Female" | "Other";
   dateOfBirth?: Timestamp;
   legalName?: string; // name as per SSC certificates (CAPITAL LETTERS)
+  nameAsPerAadhar?: string; // name exactly as printed on the Aadhar card
   fatherName?: string; // father or husband name
   motherName?: string;
   religion?: Religion;
@@ -864,6 +865,11 @@ export interface FacultyMember {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
+  sscHallTicketNo?: string; // SSC (10th) Hall Ticket Number
+  differentlyAbled?: boolean;
+  differentlyAbledDetails?: string; // nature of disability, if applicable
+  bankAccountNo?: string; // salary account number
+  ifscCode?: string; // salary account's bank IFSC code
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   collegeEmail: string; // required — this is the faculty member's login username
@@ -909,6 +915,7 @@ export interface DegreeDetail {
   universityOrInstitute: string;
   percentageOrDivision: string;
   yearOfCompletion: number;
+  certificateNumber?: string; // certificate/registration number printed on the degree certificate
   certificateUrl?: string; // Google Drive public-view link for the degree/transcript certificate
 }
 

@@ -5,6 +5,7 @@ export interface PersonalDetailsInput {
   gender?: string;
   dateOfBirth?: string;        // yyyy-mm-dd
   legalName?: string;
+  nameAsPerAadhar?: string;
   fatherName?: string;
   motherName?: string;
   religion?: string;
@@ -13,6 +14,11 @@ export interface PersonalDetailsInput {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
+  sscHallTicketNo?: string;
+  differentlyAbled?: boolean;
+  differentlyAbledDetails?: string;
+  bankAccountNo?: string;
+  ifscCode?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   ratificationStatus?: string;
@@ -28,10 +34,14 @@ export interface PersonalDetailsInput {
   bloodGroup?: string;
 }
 
+// permanentAddress is deliberately NOT in this list - see the dedicated
+// handling in buildPersonalDetailsUpdate below, which overrides it with
+// temporaryAddress whenever permanentSameAsTemporary is true rather than
+// passing through whatever (if anything) the caller sent for it.
 const STRING_FIELDS = [
-  "gender", "legalName", "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "ratificationStatus",
-  "passportNumber", "emergencyContactName", "emergencyContactPhone",
-  "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
+  "gender", "legalName", "nameAsPerAadhar", "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "ratificationStatus",
+  "passportNumber", "sscHallTicketNo", "differentlyAbledDetails", "bankAccountNo", "emergencyContactName", "emergencyContactPhone",
+  "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "bloodGroup",
 ] as const;
 
 // The manual Add/Edit forms only ever write "Ratified" or "Not Ratified"
@@ -65,9 +75,23 @@ export function buildPersonalDetailsUpdate(body: PersonalDetailsInput): Record<s
     if (body[key] !== undefined) updates[key] = body[key];
   }
   if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
+  if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
   if (body.dateOfBirth) updates.dateOfBirth = new Date(body.dateOfBirth);
   if (body.ratificationDate) updates.ratificationDate = new Date(body.ratificationDate);
   if (body.numberOfChildren !== undefined) updates.numberOfChildren = body.numberOfChildren;
   if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
+  if (body.differentlyAbled !== undefined) updates.differentlyAbled = body.differentlyAbled;
+  // "Same as temporary" means exactly that - the permanent address is set to
+  // whatever temporary address came in on the same call, not left blank and
+  // not trusting a stray permanentAddress value the caller might also have
+  // sent. Only applies when temporaryAddress is actually part of this call
+  // (both a full manual-form save and a CSV import row always send both
+  // together); a partial update that touches only the flag leaves the stored
+  // address alone rather than guessing.
+  if (body.permanentSameAsTemporary === true && body.temporaryAddress !== undefined) {
+    updates.permanentAddress = body.temporaryAddress;
+  } else if (body.permanentAddress !== undefined) {
+    updates.permanentAddress = body.permanentAddress;
+  }
   return updates;
 }

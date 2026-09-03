@@ -79,6 +79,7 @@ export async function PATCH(
       status: FacultyStatus;
       gender: string;
       legalName: string;
+      nameAsPerAadhar: string;
       fatherName: string;
       motherName: string;
       religion: string;
@@ -87,6 +88,11 @@ export async function PATCH(
       aadharNo: string;
       panNo: string;
       passportNumber: string;
+      sscHallTicketNo: string;
+      differentlyAbled: boolean;
+      differentlyAbledDetails: string;
+      bankAccountNo: string;
+      ifscCode: string;
       emergencyContactName: string;
       emergencyContactPhone: string;
       ratificationStatus: string;
@@ -163,20 +169,26 @@ export async function PATCH(
       updates.employeeId = newEmployeeId;
     }
 
+    // permanentAddress is deliberately excluded here - see the dedicated
+    // handling below, which overrides it with temporaryAddress whenever
+    // permanentSameAsTemporary is true rather than trusting whatever (if
+    // anything) the caller sent for it directly.
     const stringFields = [
       "name", "email", "phone", "collegeEmail", "apaarFacultyId", "designation", "qualification",
-      "specialization", "employmentType", "status", "gender", "legalName",
+      "specialization", "employmentType", "status", "gender", "legalName", "nameAsPerAadhar",
       "fatherName", "motherName", "religion", "caste", "subCaste", "aadharNo", "passportNumber",
+      "sscHallTicketNo", "differentlyAbledDetails", "bankAccountNo",
       "emergencyContactName", "emergencyContactPhone", "ratificationStatus", "userUid",
-      "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "permanentAddress", "bloodGroup",
+      "maritalStatus", "spouseName", "referral", "nativePlace", "temporaryAddress", "bloodGroup",
     ] as const;
 
     for (const key of stringFields) {
       if (body[key] !== undefined) updates[key] = body[key];
     }
 
-    // PAN always uppercase
+    // PAN / IFSC always uppercase
     if (body.panNo !== undefined) updates.panNo = body.panNo.toUpperCase();
+    if (body.ifscCode !== undefined) updates.ifscCode = body.ifscCode.toUpperCase();
 
     // Numeric fields
     const numFields = [
@@ -191,6 +203,19 @@ export async function PATCH(
     if (body.hasPHD !== undefined) updates.hasPHD = body.hasPHD;
     if (body.aicteEligible !== undefined) updates.aicteEligible = body.aicteEligible;
     if (body.permanentSameAsTemporary !== undefined) updates.permanentSameAsTemporary = body.permanentSameAsTemporary;
+    if (body.differentlyAbled !== undefined) updates.differentlyAbled = body.differentlyAbled;
+
+    // "Same as temporary" means the permanent address IS the temporary
+    // address - copied automatically rather than left blank or trusting a
+    // stray permanentAddress value sent alongside. Only applies when
+    // temporaryAddress is part of this same call (the personal-module editor
+    // always sends the whole section together); otherwise a direct
+    // permanentAddress update still goes through untouched.
+    if (body.permanentSameAsTemporary === true && body.temporaryAddress !== undefined) {
+      updates.permanentAddress = body.temporaryAddress;
+    } else if (body.permanentAddress !== undefined) {
+      updates.permanentAddress = body.permanentAddress;
+    }
 
     // Academic profile (Modules 1-5) / Technical profile - mutually exclusive by designation
     if (body.academicProfile !== undefined) updates.academicProfile = body.academicProfile;

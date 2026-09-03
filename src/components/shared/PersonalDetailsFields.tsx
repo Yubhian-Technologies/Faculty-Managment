@@ -16,6 +16,7 @@ export interface PersonalDetailsValue {
   gender?: string;
   dateOfBirth?: string;        // yyyy-mm-dd, for <input type="date">
   legalName?: string;
+  nameAsPerAadhar?: string;
   fatherName?: string;
   motherName?: string;
   religion?: Religion | string; // string covers a typed-in value when "Other" is picked
@@ -24,6 +25,11 @@ export interface PersonalDetailsValue {
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
+  sscHallTicketNo?: string;
+  differentlyAbled?: boolean;
+  differentlyAbledDetails?: string;
+  bankAccountNo?: string;
+  ifscCode?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   ratificationStatus?: string;
@@ -81,14 +87,24 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Legal Name (as per SSC)</Label>
-        <Input
-          value={value.legalName ?? ""}
-          onChange={(e) => set("legalName", e.target.value.toUpperCase())}
-          placeholder="FULL NAME IN CAPITALS"
-          className="uppercase"
-        />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Legal Name (as per SSC)</Label>
+          <Input
+            value={value.legalName ?? ""}
+            onChange={(e) => set("legalName", e.target.value.toUpperCase())}
+            placeholder="FULL NAME IN CAPITALS"
+            className="uppercase"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>SSC Hall Ticket No</Label>
+          <Input
+            value={value.sscHallTicketNo ?? ""}
+            onChange={(e) => set("sscHallTicketNo", e.target.value)}
+            placeholder="10th class hall ticket number"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -165,6 +181,14 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           )}
         </div>
         <div className="space-y-2">
+          <Label>Name (as per Aadhar)</Label>
+          <Input
+            value={value.nameAsPerAadhar ?? ""}
+            onChange={(e) => set("nameAsPerAadhar", e.target.value)}
+            placeholder="Name exactly as on Aadhar card"
+          />
+        </div>
+        <div className="space-y-2">
           <Label>Aadhar No</Label>
           <Input
             value={value.aadharNo ?? ""}
@@ -196,6 +220,27 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           <Label>Referral (if any)</Label>
           <Input value={value.referral ?? ""} onChange={(e) => set("referral", e.target.value)} placeholder="Name of referring person/source" />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Differently Abled</Label>
+        <Select
+          value={value.differentlyAbled === undefined ? "" : value.differentlyAbled ? "Yes" : "No"}
+          onValueChange={(v) => onChange({ ...value, differentlyAbled: v === "Yes", differentlyAbledDetails: v === "Yes" ? value.differentlyAbledDetails : undefined })}
+        >
+          <SelectTrigger className="max-w-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Yes">Yes</SelectItem>
+            <SelectItem value="No">No</SelectItem>
+          </SelectContent>
+        </Select>
+        {value.differentlyAbled && (
+          <Input
+            value={value.differentlyAbledDetails ?? ""}
+            onChange={(e) => set("differentlyAbledDetails", e.target.value)}
+            placeholder="Nature of disability"
+          />
+        )}
       </div>
 
       <div className="pt-2 pb-1 border-t">
@@ -238,10 +283,6 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
             </div>
           </>
         )}
-        <div className="space-y-2">
-          <Label>Native Place</Label>
-          <Input value={value.nativePlace ?? ""} onChange={(e) => set("nativePlace", e.target.value)} />
-        </div>
       </div>
 
       <div className="space-y-2">
@@ -258,12 +299,37 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           Permanent address same as temporary
         </Label>
       </div>
-      {!value.permanentSameAsTemporary && (
+      {value.permanentSameAsTemporary ? (
+        <p className="text-xs text-muted-foreground">Permanent Address will be saved as the Temporary Address above - no need to enter it separately.</p>
+      ) : (
         <div className="space-y-2">
-          <Label>Permanent Address</Label>
+          <Label>Permanent Address <span className="text-muted-foreground font-normal">(required since it isn&rsquo;t the same as Temporary Address)</span></Label>
           <Textarea value={value.permanentAddress ?? ""} onChange={(e) => set("permanentAddress", e.target.value)} />
         </div>
       )}
+
+      <div className="pt-2 pb-1 border-t">
+        <p className="text-sm font-medium text-muted-foreground">Bank Account Details</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>A/C Number</Label>
+          <Input value={value.bankAccountNo ?? ""} onChange={(e) => set("bankAccountNo", e.target.value)} placeholder="Bank account number" />
+        </div>
+        <div className="space-y-2">
+          <Label>IFSC Code</Label>
+          <Input
+            value={value.ifscCode ?? ""}
+            onChange={(e) => set("ifscCode", e.target.value.toUpperCase())}
+            placeholder="ABCD0123456"
+            maxLength={11}
+            className="uppercase"
+          />
+          {!!value.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(value.ifscCode) && (
+            <p className="text-xs text-destructive">Doesn&rsquo;t look like a valid IFSC code</p>
+          )}
+        </div>
+      </div>
 
       <div className="pt-2 pb-1 border-t">
         <p className="text-sm font-medium text-muted-foreground">Emergency Contact</p>
@@ -300,6 +366,11 @@ export function PersonalDetailsFields({ value, onChange }: Props) {
           <Label>Ratification Date</Label>
           <Input type="date" value={value.ratificationDate ?? ""} onChange={(e) => set("ratificationDate", e.target.value)} />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Native Place</Label>
+        <Input value={value.nativePlace ?? ""} onChange={(e) => set("nativePlace", e.target.value)} />
       </div>
     </div>
   );
