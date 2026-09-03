@@ -546,6 +546,10 @@ export async function PATCH(request: Request) {
       courseScope?:
         | { catalogId: string; assignedYears: number[] }
         | { catalogId: string; clear: true };
+      // Sub-departments only: remove (or restore) one of the parent's courses
+      // from THIS child's list, without touching the parent's Course doc -
+      // which every sibling shares. See Department.excludedCourseCatalogIds.
+      courseExclusion?: { catalogId: string; excluded: boolean };
     };
 
     const { deptId, ...rawUpdates } = body;
@@ -609,7 +613,7 @@ export async function PATCH(request: Request) {
     // declared up front so both the flat secondaryDepartments cascade
     // (immediately below) and the courseScope branch (further down) can add
     // to it.
-    const { courseScope, ...updatesWithoutCourseScope } = updates;
+    const { courseScope, courseExclusion, ...updatesWithoutCourseScope } = updates;
     updates = updatesWithoutCourseScope;
     const courseScopePatch: Record<string, unknown> = {};
 
@@ -640,11 +644,27 @@ export async function PATCH(request: Request) {
     }
 
     if (courseScope) {
-      const courseSnap = await db.collection("colleges").doc(session.collegeId).collection("courses")
+      const coursesColl = db.collection("colleges").doc(session.collegeId).collection("courses");
+      let courseSnap = await coursesColl
         .where("departmentId", "==", deptId)
         .where("catalogId", "==", courseScope.catalogId)
         .limit(1)
         .get();
+      // A sub-department that hasn't customised this course owns no Course doc
+      // for it - it runs the parent's (see subDepartmentCourses.ts). Its own
+      // Years Taught is still its own to set, and resolveDepartmentCourseScope
+      // already prefers a child's entry over the parent's, so fall back to the
+      // parent's doc for the duration check rather than refusing the edit.
+      if (courseSnap.empty) {
+        const parentId = ((await deptRef.get()).data() as { parentDepartmentId?: string } | undefined)?.parentDepartmentId;
+        if (parentId) {
+          courseSnap = await coursesColl
+            .where("departmentId", "==", parentId)
+            .where("catalogId", "==", courseScope.catalogId)
+            .limit(1)
+            .get();
+        }
+      }
       if (courseSnap.empty) {
         return NextResponse.json({ error: "This department does not offer that course yet" }, { status: 400 });
       }
@@ -688,6 +708,51 @@ export async function PATCH(request: Request) {
         delete courseScopePatch[`courseScopes.${courseScope.catalogId}.secondaryDepartments`];
         courseScopePatch[`courseScopes.${courseScope.catalogId}`] = { assignedYears: years, secondaryDepartments: names };
       }
+    }
+
+    // Remove (or restore) one of the parent's courses on THIS sub-department
+    // only. The parent's Course doc is never touched - every sibling shares
+    // it, so deleting it to express "AIDS doesn't run the M.Tech" would take
+    // it away from AIML too.
+    if (courseExclusion) {
+      const deptSnap = await deptRef.get();
+      const deptData = deptSnap.data() as { name?: string; parentDepartmentId?: string } | undefined;
+      if (!deptData?.parentDepartmentId) {
+        return NextResponse.json(
+          { error: "Only a sub-department can remove an inherited course. Delete the course itself instead." },
+          { status: 400 }
+        );
+      }
+
+      if (courseExclusion.excluded) {
+        // Refuse while the child still has sections on that course - the same
+        // protection DELETE /api/college/courses/[id] gives, for the same
+        // reason: the sections would be left pointing at a course their own
+        // department no longer lists, invisible in every picker that reads it.
+        const coursesColl = db.collection("colleges").doc(session.collegeId).collection("courses");
+        const inheritedSnap = await coursesColl
+          .where("departmentId", "==", deptData.parentDepartmentId)
+          .where("catalogId", "==", courseExclusion.catalogId)
+          .get();
+        const courseIds = inheritedSnap.docs.map((d) => d.id);
+        if (courseIds.length > 0 && deptData.name) {
+          const sectionsSnap = await db.collection("colleges").doc(session.collegeId).collection("sections")
+            .where("department", "==", deptData.name)
+            .where("courseId", "in", courseIds.slice(0, 30))
+            .limit(1)
+            .get();
+          if (!sectionsSnap.empty) {
+            return NextResponse.json(
+              { error: "Cannot remove a course this sub-department still has sections for. Remove its sections first." },
+              { status: 409 }
+            );
+          }
+        }
+      }
+
+      courseScopePatch.excludedCourseCatalogIds = courseExclusion.excluded
+        ? FieldValue.arrayUnion(courseExclusion.catalogId)
+        : FieldValue.arrayRemove(courseExclusion.catalogId);
     }
 
     if (updates.managedDepartments !== undefined) {
