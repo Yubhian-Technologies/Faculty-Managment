@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Eye, UsersRound } from "lucide-react";
+import { ArrowLeft, Eye, Pencil, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -134,9 +134,14 @@ export default function PrincipalDepartmentFacultyPage() {
                   <p className="text-xs text-muted-foreground">{hod.email}{hod.phone ? ` · ${hod.phone}` : ""}</p>
                 </div>
               </div>
-              <Button size="sm" variant="outline" asChild>
-                <Link href={`/principal/staff/${hod.uid}`}><Eye className="h-3.5 w-3.5 mr-1" />View HOD</Link>
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/principal/staff/${hod.uid}`}><Eye className="h-3.5 w-3.5 mr-1" />View HOD</Link>
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/principal/staff/${hod.uid}/edit`}><Pencil className="h-3.5 w-3.5 mr-1" />Edit HOD</Link>
+                </Button>
+              </div>
             </>
           ) : (
             <p className="text-sm text-orange-500">No HOD assigned to this department yet</p>
