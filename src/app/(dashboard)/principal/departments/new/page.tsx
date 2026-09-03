@@ -117,7 +117,9 @@ export default function NewDepartmentPage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="dept-name">Department Name *</Label>
+              <Label htmlFor="dept-name">
+                Department Name * <span className="font-normal text-muted-foreground">(as per AICTE)</span>
+              </Label>
               <Input
                 id="dept-name"
                 {...register("name")}
