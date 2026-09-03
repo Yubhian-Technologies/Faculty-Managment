@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { createUserSchema } from "@/lib/validations";
 import { toast } from "@/hooks/useToast";
-import type { z } from "zod";
+import { z } from "zod";
 
 const createHodSchema = createUserSchema.pick({
   name: true,
@@ -25,6 +25,13 @@ const createHodSchema = createUserSchema.pick({
   employeeId: true,
   phone: true,
   password: true,
+}).extend({
+  // Overridden rather than changed on createUserSchema itself, which other
+  // user-creation forms still share: for an HOD the college email IS the
+  // login (the server rejects a missing one), and the personal address is
+  // optional contact detail - the reverse of the shared default.
+  collegeEmail: z.string().email("Enter a valid email address"),
+  email: z.string().email("Enter a valid email address").optional().or(z.literal("")),
 });
 type CreateHodFormData = z.infer<typeof createHodSchema>;
 
@@ -108,15 +115,19 @@ export function CreateHodDialog({ department, onCreated }: CreateHodDialogProps)
             <Input id="hod-name" {...register("name")} placeholder="Dr. Ramesh Kumar" />
             {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
           </div>
+          {/* College email is the HOD's login username and is what the server
+              actually requires (see /api/college/users POST); the personal
+              address is optional contact detail. They're ordered - and starred -
+              to match that, rather than the other way round. */}
           <div className="space-y-2">
-            <Label htmlFor="hod-email">Email *</Label>
-            <Input id="hod-email" type="email" autoComplete="off" {...register("email")} placeholder="hod@college.edu" />
-            {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+            <Label htmlFor="hod-college-email">College Email *</Label>
+            <Input id="hod-college-email" type="email" autoComplete="off" {...register("collegeEmail")} placeholder="hod@college.edu" />
+            {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="hod-college-email">College Email</Label>
-            <Input id="hod-college-email" type="email" autoComplete="off" {...register("collegeEmail")} placeholder="Optional" />
-            {errors.collegeEmail && <p className="text-sm text-destructive">{errors.collegeEmail.message}</p>}
+            <Label htmlFor="hod-email">Personal Email</Label>
+            <Input id="hod-email" type="email" autoComplete="off" {...register("email")} placeholder="Optional" />
+            {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="hod-employee-id">Employee ID</Label>
