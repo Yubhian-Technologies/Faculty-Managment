@@ -49,9 +49,14 @@ export async function resolveDepartmentRoster(
   if (names.length === 0) return [];
 
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const [facultySnap, hodSnap] = await Promise.all([
+  // A dual/multi-department HOD's primary `department` may not be in `names`
+  // even though one of their `departments` array entries is (see
+  // src/lib/departments/scope.ts) - query both fields and merge by uid so
+  // such an HOD still shows up in every one of their departments' rosters.
+  const [facultySnap, hodByPrimarySnap, hodByAdditionalSnap] = await Promise.all([
     collegeRef.collection("users").where("role", "==", "PANEL_MEMBER").where("department", "in", names).get(),
     collegeRef.collection("users").where("role", "==", "HOD").where("department", "in", names).get(),
+    collegeRef.collection("users").where("role", "==", "HOD").where("departments", "array-contains-any", names).get(),
   ]);
 
   const roster: ExportRosterMember[] = [];
@@ -59,7 +64,10 @@ export async function resolveDepartmentRoster(
     const u = d.data() as { name?: string; department?: string };
     roster.push({ uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "PANEL_MEMBER" });
   }
-  for (const d of hodSnap.docs) {
+  const seenHodUids = new Set<string>();
+  for (const d of [...hodByPrimarySnap.docs, ...hodByAdditionalSnap.docs]) {
+    if (seenHodUids.has(d.id)) continue;
+    seenHodUids.add(d.id);
     const u = d.data() as { name?: string; department?: string };
     roster.push({ uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "HOD" });
   }

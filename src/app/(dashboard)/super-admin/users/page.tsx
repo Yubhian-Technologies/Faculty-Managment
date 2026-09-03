@@ -213,14 +213,24 @@ export default function UsersPage() {
       key: "department",
       header: "Department",
       hideOnMobile: true,
-      render: (row) =>
-        !(row.collegeId as string) && !(row.locationId as string) ? (
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Globe className="h-3 w-3" />System-Wide
+      render: (row) => {
+        if (!(row.collegeId as string) && !(row.locationId as string)) {
+          return (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Globe className="h-3 w-3" />System-Wide
+            </span>
+          );
+        }
+        const depts = row.departments && row.departments.length > 0 ? row.departments : [row.department].filter(Boolean) as string[];
+        if (depts.length === 0) return <span>-</span>;
+        const [primary, ...rest] = depts;
+        return (
+          <span>
+            {primary}
+            {rest.length > 0 && <span className="text-muted-foreground"> · also {rest.join(", ")}</span>}
           </span>
-        ) : (
-          <span>{(row.department as string) || "-"}</span>
-        ),
+        );
+      },
     },
     {
       key: "isActive",

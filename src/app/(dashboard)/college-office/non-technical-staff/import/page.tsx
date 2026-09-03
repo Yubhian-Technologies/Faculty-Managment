@@ -1,20 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { ImportFixField } from "@/components/import/ImportFixField";
 import { toast } from "@/hooks/useToast";
+import { useCollegeType } from "@/hooks/useCollegeType";
 import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { getSupportingStaffColumns, getSupportingStaffHints, getSupportingStaffSampleRows } from "@/lib/supportingStaff/csvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
+import type { Department } from "@/types";
 
 type ParsedRow = Record<string, string>;
 type ImportResult = {
@@ -37,6 +38,7 @@ const SAMPLE_ROWS = getSupportingStaffSampleRows("non-technical");
 
 export default function CollegeOfficeNonTechnicalStaffImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
+  const { collegeType } = useCollegeType();
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -44,6 +46,18 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const [isBuildingTemplate, setIsBuildingTemplate] = useState(false);
   const [templateError, setTemplateError] = useState("");
+  // For the Fix Row dialog's Department picker only - mirrors the manual
+  // "Add Staff" form's own Department Select (college-office/non-technical-
+  // staff/new/page.tsx), which is the only one of the three Add forms that
+  // has one (Faculty has no Department column; HOD's Supporting Staff
+  // defaults it automatically with no picker).
+  const [departmentNames, setDepartmentNames] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/college/departments")
+      .then((r) => r.json() as Promise<{ departments: Department[] }>)
+      .then((d) => setDepartmentNames((d.departments ?? []).filter((dep) => dep.isActive).map((dep) => dep.name)))
+      .catch(() => { /* Department stays a free-text field if this fails */ });
+  }, []);
 
   // A two-sheet .xlsx rather than a flat CSV: sheet one is the template to fill
   // in (headers + the per-column guidance row), sheet two shows five completed
@@ -459,16 +473,18 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
           {fixTarget && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {COLUMNS.map((c) => (
-                <div key={c.key} className="space-y-1.5">
-                  <Label htmlFor={`fix-${c.key}`}>{c.label}{c.required && <span className="text-destructive ml-0.5">*</span>}</Label>
-                  <Input
-                    id={`fix-${c.key}`}
-                    type={c.key === "password" ? "password" : "text"}
-                    value={fixTarget.form[c.key] ?? ""}
-                    onChange={(e) => setFixField(c.key, e.target.value)}
-                    placeholder={c.sample || undefined}
-                  />
-                </div>
+                <ImportFixField
+                  key={c.key}
+                  fieldKey={c.key}
+                  label={c.label}
+                  required={c.required}
+                  value={fixTarget.form[c.key] ?? ""}
+                  placeholder={c.sample || undefined}
+                  onChange={(v) => setFixField(c.key, v)}
+                  collegeType={collegeType}
+                  designationKind="non-technical"
+                  departmentOptions={departmentNames}
+                />
               ))}
             </div>
           )}

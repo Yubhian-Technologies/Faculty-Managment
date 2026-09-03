@@ -64,7 +64,7 @@ const COURSES_BY_DOMAIN: Record<EducationDomain, string[]> = {
 
 export const EMPTY_DEGREE: DegreeDetail = {
   degree: "", branch: "", specialization: "", universityOrInstitute: "", percentageOrDivision: "",
-  yearOfCompletion: new Date().getFullYear(), certificateUrl: "",
+  yearOfCompletion: new Date().getFullYear(), certificateNumber: "", certificateUrl: "",
 };
 
 // A record fetched from Firestore may still have the pre-split shape
@@ -178,6 +178,7 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
           <TextInput label="Percentage / CGPA" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
         )}
         <NumInput label="Year of Completion" value={v.yearOfCompletion} onChange={(x) => onChange({ ...v, yearOfCompletion: x })} />
+        <TextInput label="Certificate Number" value={v.certificateNumber} onChange={(x) => onChange({ ...v, certificateNumber: x })} />
       </div>
       {isDoctoral && v.percentageOrDivision && (
         <p className="text-xs text-muted-foreground italic">Legacy note: Percentage/CGPA on file for this entry - {v.percentageOrDivision}</p>
@@ -282,7 +283,7 @@ export function QualificationsFields({
 }) {
   const empty: StaffQualification = {
     level: "", degree: "", branch: "", universityOrInstitute: "", percentageOrDivision: "",
-    yearOfCompletion: new Date().getFullYear(), certificateUrl: "",
+    yearOfCompletion: new Date().getFullYear(), certificateNumber: "", certificateUrl: "",
   };
   return (
     <RepeatingGroup
@@ -315,6 +316,7 @@ export function QualificationsFields({
             <TextInput label="University / Institute / Board" value={item.universityOrInstitute} onChange={(v) => update({ universityOrInstitute: v })} />
             <TextInput label="Percentage / CGPA" value={item.percentageOrDivision} onChange={(v) => update({ percentageOrDivision: v })} />
             <NumInput label="Year of Completion" value={item.yearOfCompletion} onChange={(v) => update({ yearOfCompletion: v })} />
+            <TextInput label="Certificate Number" value={item.certificateNumber} onChange={(v) => update({ certificateNumber: v })} />
             <div className="sm:col-span-2">
               <Label className="text-xs">Certificate</Label>
               <CertificateUploadField
@@ -343,6 +345,7 @@ export function QualificationsView({ items, title = "Educational Qualifications"
             <Field label="University / Institute / Board" value={item.universityOrInstitute} />
             <Field label="Percentage / CGPA" value={item.percentageOrDivision} />
             <Field label="Year of Completion" value={item.yearOfCompletion} />
+            <Field label="Certificate Number" value={item.certificateNumber} />
             {item.certificateUrl && (
               <div className="col-span-2 sm:col-span-3"><DocLink url={item.certificateUrl} label="View Certificate" /></div>
             )}
@@ -470,6 +473,7 @@ export function DegreeView({ label, degree: degreeInput, level }: { label: strin
       {!isDoctoral && <Field label="Percentage / CGPA" value={degree?.percentageOrDivision} />}
       {isDoctoral && degree?.percentageOrDivision && <Field label="Percentage / CGPA (legacy)" value={degree.percentageOrDivision} />}
       <Field label="Year of Completion" value={degree?.yearOfCompletion} />
+      <Field label="Certificate Number" value={degree?.certificateNumber} />
       {degree?.certificateUrl && (
         <div className="col-span-2 sm:col-span-4">
           <a

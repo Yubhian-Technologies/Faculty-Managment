@@ -23,6 +23,10 @@ interface RosterEntry {
   uid: string;
   name: string;
   department: string;
+  // Every department this HOD heads (HOD entries only) - lets a dual-department
+  // HOD stay visible when the per-department view below is scoped to their
+  // second department, not just their primary `department`.
+  departments?: string[];
   role: "PANEL_MEMBER" | "HOD" | "COLLEGE_STAFF";
   // Course id(s) this faculty has an explicit teaching assignment under —
   // only populated by the API for college-wide callers; used solely to
@@ -431,7 +435,13 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId) ?? null;
   const selectedCourse = courses.find((c) => c.id === selectedCourseId) ?? null;
 
-  const scopedRoster = selectedDepartment ? roster.filter((r) => r.department === selectedDepartment.name) : [];
+  const scopedRoster = selectedDepartment
+    ? roster.filter((r) =>
+        r.departments && r.departments.length > 0
+          ? r.departments.includes(selectedDepartment.name)
+          : r.department === selectedDepartment.name
+      )
+    : [];
   const hodEntry = scopedRoster.find((r) => r.role === "HOD") ?? null;
   // A faculty with an explicit teaching assignment must match the selected
   // course's id exactly (real signal, respected either way). One with NO

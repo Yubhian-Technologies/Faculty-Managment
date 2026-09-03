@@ -12,7 +12,8 @@ import {
 } from "@/lib/import/fieldConstraints";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import type { Designation, EmploymentType } from "@/types";
+import { getTeachingDesignations } from "@/lib/designations/config";
+import type { Designation, EmploymentType, CollegeType } from "@/types";
 
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
@@ -64,11 +65,16 @@ type ImportRow = {
   gender?: string;
   dateOfBirth?: string;
   legalName?: string;
+  nameAsPerAadhar?: string;
   fatherName?: string;
   motherName?: string;
   aadharNo?: string;
   panNo?: string;
   passportNumber?: string;
+  sscHallTicketNo?: string;
+  differentlyAbled?: string;
+  bankAccountNo?: string;
+  ifscCode?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   religion?: string;
@@ -87,12 +93,13 @@ type ImportRow = {
   permanentAddress?: string;
 };
 
-// Accepts the template's YYYY-MM-DD format, and falls back to DD-MM-YYYY /
-// DD/MM/YYYY (what Excel re-saves a date cell as under an Indian locale, even
-// when the column was originally filled in as YYYY-MM-DD) - otherwise a
-// malformed string silently becomes a JS "Invalid Date" object that isn't
-// caught by any `undefined` check and throws when Firestore serializes it,
-// failing the entire batch instead of just this row.
+// Accepts the template's DD-MM-YYYY format (DD/MM/YYYY too - what Excel
+// re-saves a date cell as under an Indian locale), and still falls back to
+// the older YYYY-MM-DD format so sheets built against a previous version of
+// the template keep importing - otherwise a malformed string silently
+// becomes a JS "Invalid Date" object that isn't caught by any `undefined`
+// check and throws when Firestore serializes it, failing the entire batch
+// instead of just this row.
 //
 // The final generic-parse fallback is dangerously lenient: V8 happily accepts
 // e.g. a typo'd 5-digit-year "20110-04-15" as a *valid* Date (year 20110)
@@ -177,16 +184,23 @@ export async function POST(request: Request) {
     // per-ID lookup - fine at hundreds of faculty across all colleges,
     // revisit (e.g. a global employeeId registry doc) if that grows to
     // thousands and imports start feeling slow.
-    const [collegeSnap, employeeIdSnap] = await Promise.all([
+    const [facultyEmailSnap, employeeIdSnap, collegeDocSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("facultyMembers").select("collegeEmail").get(),
       db.collectionGroup("facultyMembers").select("employeeId").get(),
+      db.collection("colleges").doc(collegeId).get(),
     ]);
     const existingIds = new Set(
       employeeIdSnap.docs.map((d) => (d.data() as { employeeId?: string }).employeeId?.toLowerCase()).filter((v): v is string => !!v)
     );
     const existingEmails = new Set(
-      collegeSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
+      facultyEmailSnap.docs.map((d) => (d.data() as { collegeEmail?: string }).collegeEmail?.toLowerCase()).filter((v): v is string => !!v)
     );
+
+    // The designation catalogue this college's Faculty template allows - the
+    // same per-college-type list the manual Add/Edit form's dropdown offers
+    // (src/lib/designations/config.ts), plus the always-available "Other".
+    const collegeType = (collegeDocSnap.data() as { type?: CollegeType } | undefined)?.type;
+    const allowedTeachingDesignations = getTeachingDesignations(collegeType);
 
     const now = new Date();
     const created: string[] = [];
@@ -237,27 +251,50 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Map designation - free text (see src/lib/designations/config.ts),
-      // since it varies by the college's type. DESIGNATION_MAP only
-      // normalizes common Engineering-style abbreviations ("Asst. Prof." ->
-      // "ASSISTANT_PROFESSOR", the legacy code every existing Engineering/
-      // Pharmacy/Dental record and the AICTE cadre-ratio report expect) -
-      // anything else (e.g. "PGT", "Controller of Examinations") is stored
-      // exactly as typed rather than being forced into that list or
-      // defaulted to a designation the row never actually specified.
-      const designationKey = row.designation.trim().toLowerCase();
-      const designation: Designation = DESIGNATION_MAP[designationKey] ?? row.designation.trim();
-
-      // Map employment type
-      const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
-      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
-      if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
-        warnings.push({ row: rowNum, employeeId: empId, warning: `Employment Type not recognized ("${row.employmentType?.trim()}") - defaulted to Permanent` });
+      // Map designation - held to the template's own stated catalogue for
+      // this college type (allowedTeachingDesignations), not free text.
+      // DESIGNATION_MAP normalizes common Engineering-style abbreviations
+      // ("Asst. Prof." -> "ASSISTANT_PROFESSOR") before checking membership,
+      // so a value only counts if it's either a recognized abbreviation for
+      // an allowed title, or already matches one of the allowed titles
+      // directly (case/punctuation-insensitive) - e.g. "PGT" for a School
+      // college. Anything else (including a Supporting Staff title like "Lab
+      // Assistant", which belongs on that import instead) rejects the row
+      // rather than being stored as whatever text was typed.
+      const designationRaw = row.designation.trim();
+      const designationKey = designationRaw.toLowerCase();
+      let designation: Designation;
+      if (designationKey === "other") {
+        designation = "OTHER";
+      } else {
+        const mappedAbbreviation = DESIGNATION_MAP[designationKey];
+        const matched = (mappedAbbreviation && allowedTeachingDesignations.includes(mappedAbbreviation))
+          ? mappedAbbreviation
+          : matchOption(designationRaw, allowedTeachingDesignations);
+        if (!matched) {
+          failed.push({
+            row: rowNum, employeeId: empId,
+            error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.join(" / ")} / Other)`,
+          });
+          continue;
+        }
+        designation = matched;
       }
+
+      // Map employment type - blank still takes the documented default; an
+      // unrecognised value fails the row instead of quietly becoming
+      // Permanent, which turned a typo into a real employment type (matches
+      // the Supporting Staff importer's behavior).
+      const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
+      if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
+        failed.push({ row: rowNum, employeeId: empId, error: `Employment Type "${row.employmentType?.trim()}" is not one of Regular / Permanent / Contract / Visiting / Part-Time` });
+        continue;
+      }
+      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
 
       // Parse dates
       const joiningDate = parseDate(row.joiningDate);
-      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid Date of Joining Institution - use YYYY-MM-DD" }); continue; }
+      if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid Date of Joining Institution - use DD-MM-YYYY" }); continue; }
       const dateOfJoiningDepartment = parseDate(row.dateOfJoiningDepartment);
       if (row.dateOfJoiningDepartment?.trim() && !dateOfJoiningDepartment) dropped(empId, "Date of joining department", row.dateOfJoiningDepartment);
 
@@ -309,15 +346,29 @@ export async function POST(request: Request) {
         }
         return normalizeDigits(raw);
       };
+      // A well-formed IFSC has a fixed shape (4 letters, a literal 0, 6
+      // alphanumerics) - anything else is a typo in a code that routes real
+      // salary payments, so it's rejected rather than stored as-is.
+      const checkIfsc = (raw: string | undefined) => {
+        if (!raw?.trim()) return undefined;
+        const v = raw.trim().toUpperCase();
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(v)) { dropped(empId, "IFSC Code", raw); return undefined; }
+        return v;
+      };
 
       const personalInput: PersonalDetailsInput = {
         gender: checkOption(row.gender, GENDER_OPTIONS, "Gender"),
         legalName: row.legalName?.trim() || undefined,
+        nameAsPerAadhar: row.nameAsPerAadhar?.trim() || undefined,
         fatherName: row.fatherName?.trim() || undefined,
         motherName: row.motherName?.trim() || undefined,
         aadharNo: normalizeDigits(row.aadharNo),
         panNo: row.panNo?.trim() || undefined,
         passportNumber: row.passportNumber?.trim() || undefined,
+        sscHallTicketNo: row.sscHallTicketNo?.trim() || undefined,
+        differentlyAbled: checkYesNo(row.differentlyAbled, "Differently Abled"),
+        bankAccountNo: normalizeDigits(row.bankAccountNo),
+        ifscCode: checkIfsc(row.ifscCode),
         emergencyContactName: row.emergencyContactName?.trim() || undefined,
         emergencyContactPhone: checkPhone(row.emergencyContactPhone, "Emergency Contact Phone"),
         religion: checkOption(row.religion, RELIGION_OPTIONS, "Religion"),

@@ -29,6 +29,7 @@ import { DOCUMENT_TYPE_GROUPS } from "@/lib/documentTypes";
 import { DESIGNATION_LABELS, ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
 import type { HiringBatch, Candidate, CandidateApplication, CandidateBioData, MeetingPlatform, FacultyMember, FMSUser } from "@/types";
 import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 
 // Joined view for this batch's roster: person fields come from Candidate,
 // batch-cycle fields (arrival, interview mode) come from CandidateApplication.
@@ -108,7 +109,8 @@ function RatingDots({ value, max = 5 }: { value: number; max?: number }) {
 export default function HODBatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const myUid = useAuthStore((s) => s.user?.uid ?? "");
-  const myDepartment = useAuthStore((s) => s.user?.department ?? "");
+  // Covers an HOD who heads more than one department (see useMyDepartments).
+  const myDepartments = useMyDepartments();
 
   const [batch, setBatch] = useState<HiringBatch | null>(null);
   const [candidates, setCandidates] = useState<BatchCandidateView[]>([]);
@@ -959,7 +961,7 @@ ${institution}`;
                           u.role === "PRINCIPAL" ||
                           u.role === "VICE_PRINCIPAL" ||
                           u.role === "COLLEGE_ADMIN" ||
-                          u.department === myDepartment ||
+                          (u.department ? myDepartments.includes(u.department) : false) ||
                           editPanel.includes(u.uid)
                       )
                       .map((u) => (
