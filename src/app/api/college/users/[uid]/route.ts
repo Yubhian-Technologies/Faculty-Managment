@@ -107,7 +107,7 @@ export async function PATCH(
 
     const { targetSnap, error, status } = await loadTargetInScope(db, session, uid);
     if (!targetSnap) return NextResponse.json({ error }, { status });
-    const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string; departments?: string[] };
+    const target = targetSnap.data() as { role: string; sectionId?: string; name?: string; department?: string; departments?: string[]; email?: string; collegeEmail?: string };
 
     // This generic account editor only ever offers ONE department field - safe
     // for an HOD who heads just one (mirrors it into `departments` below so the
@@ -127,6 +127,38 @@ export async function PATCH(
       const { getAdminAuth } = await import("@/lib/firebase/admin");
       const auth = await getAdminAuth();
       await auth.updateUser(uid, { password: body.newPassword });
+    }
+
+    // Sign-in authenticates against the Firebase Auth user, not this Firestore
+    // doc, so changing the address here alone left the account still logging in
+    // under its OLD email and rejecting the new one. The login username is the
+    // college email for real staff and the personal one for a Class Leader -
+    // the same split /api/college/users POST enforces when creating them.
+    // Resolved from what the doc will hold AFTER this patch, not just what was
+    // sent: the college email is the username when there is one, but plenty of
+    // accounts predate that rule and still sign in with their personal address,
+    // so it falls back rather than skipping the sync and stranding them.
+    const finalCollegeEmail = (body.collegeEmail ?? target.collegeEmail ?? "").trim();
+    const finalEmail = (body.email ?? target.email ?? "").trim();
+    const newLoginEmail = target.role === "CLASS_LEADER" ? finalEmail : (finalCollegeEmail || finalEmail);
+    if (newLoginEmail) {
+      const { getAdminAuth } = await import("@/lib/firebase/admin");
+      const auth = await getAdminAuth();
+      const current = await auth.getUser(uid).catch(() => null);
+      if (current && current.email !== newLoginEmail) {
+        try {
+          await auth.updateUser(uid, { email: newLoginEmail });
+        } catch (e) {
+          const code = (e as { code?: string }).code;
+          if (code === "auth/email-already-exists") {
+            return NextResponse.json({ error: "That email is already used by another account" }, { status: 409 });
+          }
+          if (code === "auth/invalid-email") {
+            return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });
+          }
+          throw e;
+        }
+      }
     }
 
     // Empty string clears the photo - everything else must be a real upload of ours.
