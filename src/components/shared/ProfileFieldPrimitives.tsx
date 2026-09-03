@@ -63,7 +63,7 @@ const COURSES_BY_DOMAIN: Record<EducationDomain, string[]> = {
 // repeating-list UI instead of maintaining two near-duplicate copies.
 
 export const EMPTY_DEGREE: DegreeDetail = {
-  degree: "", branch: "", specialization: "", universityOrInstitute: "", percentageOrDivision: "",
+  degree: "", branch: "", specialization: "", universityOrInstitute: "", location: "", percentageOrDivision: "",
   yearOfCompletion: new Date().getFullYear(), certificateNumber: "", certificateUrl: "",
 };
 
@@ -174,6 +174,7 @@ export function DegreeFields({ label, level, value, onChange }: { label: string;
           <TextInput label="Branch" value={v.branch} onChange={(x) => onChange({ ...v, branch: x })} placeholder="e.g. CSE" />
         )}
         <TextInput label="University / Institute" value={v.universityOrInstitute} onChange={(x) => onChange({ ...v, universityOrInstitute: x })} />
+        <TextInput label="Location" value={v.location} onChange={(x) => onChange({ ...v, location: x })} placeholder="e.g. Bhimavaram" />
         {!isDoctoral && (
           <TextInput label="Percentage / CGPA" value={v.percentageOrDivision} onChange={(x) => onChange({ ...v, percentageOrDivision: x })} />
         )}
@@ -282,7 +283,7 @@ export function QualificationsFields({
   title?: string;
 }) {
   const empty: StaffQualification = {
-    level: "", degree: "", branch: "", universityOrInstitute: "", percentageOrDivision: "",
+    level: "", degree: "", branch: "", universityOrInstitute: "", location: "", percentageOrDivision: "",
     yearOfCompletion: new Date().getFullYear(), certificateNumber: "", certificateUrl: "",
   };
   return (
@@ -314,6 +315,7 @@ export function QualificationsFields({
             </div>
             <TextInput label="Degree / Certificate Name" value={item.degree} onChange={(v) => update({ degree: v })} />
             <TextInput label="University / Institute / Board" value={item.universityOrInstitute} onChange={(v) => update({ universityOrInstitute: v })} />
+            <TextInput label="Location" value={item.location} onChange={(v) => update({ location: v })} placeholder="e.g. Bhimavaram" />
             <TextInput label="Percentage / CGPA" value={item.percentageOrDivision} onChange={(v) => update({ percentageOrDivision: v })} />
             <NumInput label="Year of Completion" value={item.yearOfCompletion} onChange={(v) => update({ yearOfCompletion: v })} />
             <TextInput label="Certificate Number" value={item.certificateNumber} onChange={(v) => update({ certificateNumber: v })} />
@@ -343,6 +345,7 @@ export function QualificationsView({ items, title = "Educational Qualifications"
             <Field label="Level" value={item.level} />
             <Field label="Degree / Certificate Name" value={item.degree} />
             <Field label="University / Institute / Board" value={item.universityOrInstitute} />
+            <Field label="Location" value={item.location} />
             <Field label="Percentage / CGPA" value={item.percentageOrDivision} />
             <Field label="Year of Completion" value={item.yearOfCompletion} />
             <Field label="Certificate Number" value={item.certificateNumber} />
@@ -470,6 +473,7 @@ export function DegreeView({ label, degree: degreeInput, level }: { label: strin
         <Field label="Branch" value={degree?.branch} />
       )}
       <Field label="University / Institute" value={degree?.universityOrInstitute} />
+      <Field label="Location" value={degree?.location} />
       {!isDoctoral && <Field label="Percentage / CGPA" value={degree?.percentageOrDivision} />}
       {isDoctoral && degree?.percentageOrDivision && <Field label="Percentage / CGPA (legacy)" value={degree.percentageOrDivision} />}
       <Field label="Year of Completion" value={degree?.yearOfCompletion} />

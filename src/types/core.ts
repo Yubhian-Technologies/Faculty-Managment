@@ -929,6 +929,7 @@ export interface DegreeDetail {
   branch: string;
   specialization?: string; // Doctoral only - replaces the Course/Branch fields for PhD entries
   universityOrInstitute: string;
+  location?: string; // city/town where the institute is located
   percentageOrDivision: string;
   yearOfCompletion: number;
   certificateNumber?: string; // certificate/registration number printed on the degree certificate
@@ -1362,6 +1363,12 @@ export interface StudentRecord {
   year: number;
   rollNumber: string;
   name: string;
+  // Admission category - "Regular" (first-year intake) or "Lateral" (admitted
+  // directly into a later year, e.g. via ECET/diploma lateral entry). A plain
+  // string like every other roster select field (gender, admissionType, ...)
+  // rather than a typed union - distinct from `status` below (this year's
+  // academic standing, e.g. REGULAR vs DETAINED) despite the similar name.
+  studentType?: string;
   status: StudentStatus;
   gender?: string;
   dateOfBirth?: string; // yyyy-mm-dd, kept as string (no statutory-date math needed)
@@ -1423,9 +1430,12 @@ export interface StudentRecord {
   admissionType?: string; // e.g. Direct, Management, Convenor
   entranceType?: string; // e.g. EAMCET, ECET
   entranceRank?: string;
+  jeeRank?: string;
+  jeePercentage?: string;
   seatType?: string; // e.g. Convenor, Management
   scholarship?: boolean;
-  category?: string; // caste-reservation category, e.g. OC/BC/SC/ST
+  caste?: Caste;
+  subCaste?: string;
   religion?: string;
   nationality?: string;
   motherTongue?: string;
