@@ -14,6 +14,11 @@ interface RosterEntry {
   uid: string;
   name: string;
   department: string;
+  // Every department this HOD heads (HOD entries only - see
+  // FMSUser.departments / src/lib/departments/scope.ts). Lets the frontend's
+  // per-department view keep a dual-department HOD visible under each of
+  // their departments instead of only the primary one.
+  departments?: string[];
   role: "PANEL_MEMBER" | "HOD" | "COLLEGE_STAFF";
   // Course id(s) (Course.id in the `courses` collection) this faculty has an
   // explicit teaching assignment under, derived from teachingAssignments and
@@ -207,9 +212,11 @@ export async function GET(request: Request) {
     if (session.role !== "HOD") {
       const hodsSnap = await collegeRef.collection("users").where("role", "==", "HOD").get();
       for (const d of hodsSnap.docs) {
-        const u = d.data() as { name?: string; department?: string; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
+        const u = d.data() as { name?: string; department?: string; departments?: string[]; faceEmbedding?: number[]; faceRegisteredAt?: FirebaseFirestore.Timestamp };
         roster.push({
-          uid: d.id, name: u.name ?? "", department: u.department ?? "", role: "HOD" as const,
+          uid: d.id, name: u.name ?? "", department: u.department ?? "",
+          departments: u.departments && u.departments.length > 0 ? u.departments : [u.department].filter(Boolean) as string[],
+          role: "HOD" as const,
           status: "NOT_MARKED", checkIn: null, checkOut: null, checkInVerified: false, checkOutVerified: false,
           permittedCheckInTime: null,
           registered: Array.isArray(u.faceEmbedding) && u.faceEmbedding.length > 0, remarks: null,

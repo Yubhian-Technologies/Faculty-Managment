@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuthStore } from "@/store/authStore";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { toast } from "@/hooks/useToast";
 import { ShieldCheck, KeyRound, UserCheck } from "lucide-react";
 import { ROLE_LABELS, MEETING_PLATFORM_LABELS } from "@/types";
@@ -32,6 +33,7 @@ interface FacultyRecord {
 export default function NewBatchPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const myDepartments = useMyDepartments();
   const searchParams = useSearchParams();
   const prefilledVacancyId = searchParams.get("vacancyId") ?? "";
 
@@ -106,13 +108,15 @@ export default function NewBatchPage() {
         );
         setDefaultMembers(defaults);
 
-        // Selectable: other HODs + PANEL_MEMBER, same department only (excluding self)
+        // Selectable: other HODs + PANEL_MEMBER, same department only (excluding
+        // self) - `myDepartments` covers an HOD who heads more than one
+        // department (see useMyDepartments).
         setStaffList(
           s.filter(
             (u) =>
               u.uid !== user?.uid &&
               (SELECTABLE_ROLES as readonly string[]).includes(u.role) &&
-              u.department === user?.department
+              myDepartments.includes(u.department ?? "")
           )
         );
 
@@ -130,7 +134,7 @@ export default function NewBatchPage() {
         });
       })
       .catch(() => toast({ variant: "destructive", title: "Failed to load data" }));
-  }, [user?.uid]);
+  }, [user?.uid, myDepartments]);
 
   // Uids that must always stay in selectedPanel
   const lockedUids = new Set([
