@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle, Pencil } from "lucide-react";
-import { toCSV, parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
-import { ROSTER_FIELDS, EDITABLE_ROSTER_FIELDS, rosterFormToPayload } from "@/lib/students/rosterFields";
+import { parseCSV, matchHeaders, getUnmatchedHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
+import { ROSTER_FIELDS, ROSTER_SAMPLE_ROWS, EDITABLE_ROSTER_FIELDS, rosterFormToPayload } from "@/lib/students/rosterFields";
 import { RosterFormFields } from "@/components/students/RosterFieldInputs";
 import { resolveDepartmentByNameOrCode, resolveCourseByNameOrCode } from "@/lib/departments/codeOrNameResolver";
 import { freshmanLandingDepartmentNames, type DepartmentWithId } from "@/lib/college/academicStructure";
@@ -62,13 +62,16 @@ const COLUMNS = ROSTER_FIELDS.map((f) => ({
 }));
 
 const HINTS = [
-  "Only the basic details you know at admission are needed - Name, Course, Department (branch) and Academic Year are required; everything else is optional.",
+  "Only the basic details you know at admission are needed - Name, Course, Department (branch) and Academic Year are required; everything else is optional. The Template sheet's row 2 states each column's own Required/Optional rule.",
+  "Name (as per SSC): enter the name exactly as it appears on the student's SSC (10th) certificate - this is the name used on statutory/academic paperwork.",
   "Section is NOT collected here - the department assigns it later (the sub-HOD divides students into sections). Every student is imported as \"unassigned\" until then. Roll No, if you already have a provisional one, is accepted but not checked for uniqueness until the department assigns the real one.",
-  "Department accepts either the full name (e.g. \"Information Technology\") or the short Code (e.g. \"IT\") - a \"Branch\" column in your sheet is read the same way.",
+  "Department accepts the full AICTE-standard department name (e.g. \"Computer Science and Engineering\", not \"CSE\") or the short Code, as added on your college - a \"Branch\" column in your sheet is read the same way.",
   "Course is the programme (e.g. \"Bachelor of Technology\" or its short Code \"BTECH\") and is required - it must be a course the row's Department actually offers, or the row is skipped. It is separate from Department: put the branch in Department, not here.",
   "A single file may mix multiple departments and years",
   "Gender: Male, Female, Other. Scholarship / Hosteller / Physically Handicapped: Yes or No.",
   "If Yes (Handicapped) accepts H (Hearing), V (Visual) or O (Other).",
+  "Caste: OC, EBC, EPC, BC, SC, ST or OTHER. Sub Caste (optional) is free text.",
+  "JEE Rank and JEE % are optional - fill them in only for students admitted through JEE.",
   "Photo is not part of this import - there's no bulk photo-upload path.",
 ];
 
@@ -100,6 +103,8 @@ export default function OfficeStudentImportPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
+  const [isBuildingTemplate, setIsBuildingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState("");
 
   // Loaded once for the "fix this row" dialog below: pre-resolving a failed
   // row's raw Department/Course/Secondary Department text (which may be a
@@ -203,17 +208,47 @@ export default function OfficeStudentImportPage() {
     }
   }
 
-  function downloadTemplate() {
-    const headers = columns.map((c) => c.label);
-    const sample1 = columns.map((c) => c.sample);
-    const csv = toCSV([headers, sample1]);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "student_roster_template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  // A two-sheet .xlsx rather than a flat CSV, matching the Faculty importer:
+  // sheet one is the template to fill in (headers + the per-column guidance
+  // row), sheet two shows five completed rows, which is what the guidance can
+  // only describe. Only sheet one is ever read back on upload (parseExcelFile
+  // reads the first worksheet), so the samples can't be mistaken for real
+  // records. ExcelJS is imported dynamically - it's a large dependency and
+  // only matters once someone asks for the template.
+  async function downloadTemplate() {
+    setTemplateError("");
+    setIsBuildingTemplate(true);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      const headers = columns.map((c) => c.label);
+      const widths = headers.map((h) => ({ width: Math.min(Math.max(h.length + 2, 12), 40) }));
+
+      const template = workbook.addWorksheet("Template");
+      template.addRow(headers);
+      template.addRow(columns.map((c) => c.sample));
+      template.getRow(1).font = { bold: true };
+      template.columns = widths;
+
+      const samples = workbook.addWorksheet("Sample Data");
+      samples.addRow(headers);
+      for (const row of ROSTER_SAMPLE_ROWS) samples.addRow(columns.map((c) => row[c.key] ?? ""));
+      samples.getRow(1).font = { bold: true };
+      samples.columns = widths;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "student_roster_template.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setTemplateError("Couldn't build the Excel template. Please try again.");
+    } finally {
+      setIsBuildingTemplate(false);
+    }
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -340,9 +375,10 @@ export default function OfficeStudentImportPage() {
               <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
             ))}
           </div>
-          <Button onClick={downloadTemplate} className="gap-2">
-            <Download className="h-4 w-4" />Download Template (CSV)
+          <Button onClick={downloadTemplate} loading={isBuildingTemplate} className="gap-2">
+            <Download className="h-4 w-4" />Download Template (Excel)
           </Button>
+          {templateError && <p className="text-sm text-destructive">{templateError}</p>}
         </CardContent>
       </Card>
 
