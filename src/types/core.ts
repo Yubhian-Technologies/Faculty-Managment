@@ -516,6 +516,22 @@ export interface Department {
   // does NOT cover hasSubDepartments or managedDepartments - see that
   // function's doc-comment for why.
   courseScopes?: Record<string, DepartmentCourseScope>;
+  // Sub-departments only: CourseCatalogItem.ids the parent offers that THIS
+  // sub-department does not. A sub-department shows its parent's courses by
+  // default (it owns no Course doc of its own until it customises one), which
+  // is right when every child runs the same programmes - but not when they
+  // diverge, e.g. an AI department whose AIML child runs both B.Tech and
+  // M.Tech while its AIDS child runs only the B.Tech. Removing a shared
+  // course from a child records it here rather than deleting the parent's
+  // Course doc, which is shared by every sibling.
+  //
+  // Deliberately keyed by catalogId, not courseId: it has to survive the
+  // parent deleting and re-adding its own Course doc for the same programme,
+  // exactly like courseScopes above. Resolve through
+  // resolveSubDepartmentCourses() (src/lib/departments/subDepartmentCourses.ts),
+  // never read directly - an exclusion is only one of the three things that
+  // decide whether a child shows a parent's course.
+  excludedCourseCatalogIds?: string[];
   // Grouped/managed branches: on a sub-department, the top-level departments
   // (e.g. IT, CSBS) whose students, sections and academics its Sub-HOD fully
   // manages. Distinct from `secondaryDepartments` (view-only cross-listing) -
