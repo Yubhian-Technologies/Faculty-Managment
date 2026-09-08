@@ -217,8 +217,9 @@ export function getHiringSupportingDesignations(type: CollegeType | undefined | 
 // storing "Professor" instead would silently drop every new hire out of that
 // count. DESIGNATION_LABELS (types/core.ts) is what displays them as words.
 export const FACULTY_DESIGNATIONS = [
-  "PROFESSOR", "ASSISTANT_PROFESSOR", "ASSOCIATE_PROFESSOR",
-  "VISITING_PROFESSOR", "ASSISTANT_PROFESSOR_OF_PRACTICE", "SR_WELLNESS_COUNSELLOR",
+  "PROFESSOR", "ASSISTANT_PROFESSOR", "ASSOCIATE_PROFESSOR", "ASSOCIATE_PROFESSOR_SR",
+  "VISITING_PROFESSOR", "ASSISTANT_PROFESSOR_OF_PRACTICE", "PROFESSOR_OF_PRACTICE",
+  "SR_WELLNESS_COUNSELLOR",
 ];
 
 // Faculty's Employee Category list - independent of the shared EmploymentType

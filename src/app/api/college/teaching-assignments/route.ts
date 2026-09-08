@@ -7,6 +7,7 @@ import { requiredFacultyCount } from "@/lib/college/facultyRatio";
 import { getHodDepartmentScope, canHodEditDepartment, canHodManageAssignment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { getActiveSubstitutionsForDates, currentWeekDateKeys } from "@/lib/leave/periodCoverage";
 import { resolveSectionCurrentSemester, resolveRequestedSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { resolveTimetableAcademicYear, matchesCurrentAcademicYear } from "@/lib/college/academicSession";
@@ -545,7 +546,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Subject not found" }, { status: 400 });
       }
 
-      const faculty = facultySnap.data() as { name?: string; department?: string };
+      const faculty = facultySnap.data() as { name?: string; legalName?: string; department?: string };
       const subject = subjectSnap.data() as { name?: string; code?: string; department?: string; hoursPerWeek?: number };
 
       // HOD may assign within their own department and any sub-department beneath
@@ -567,7 +568,7 @@ export async function POST(request: Request) {
       const ref = await collegeRef.collection("teachingAssignments").add({
         collegeId: session.collegeId,
         facultyId: body.facultyId,
-        facultyName: faculty.name ?? "",
+        facultyName: facultyDisplayName(faculty),
         subjectId: body.subjectId,
         subjectName: subject.name ?? "",
         subjectCode: subject.code ?? "",

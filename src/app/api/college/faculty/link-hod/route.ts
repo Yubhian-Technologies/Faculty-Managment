@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       department: string;
       employeeId: string;
       apaarFacultyId?: string;
-      name: string;
+      name?: string;
       phone?: string;
       designation: Designation;
       qualification: string;
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       experienceYears, joiningDate, employmentType, profilePhotoUrl,
     } = body;
 
-    if (!linkUid || !department || !employeeId || !name || !designation || !qualification || !employmentType || !joiningDate) {
+    if (!linkUid || !department || !employeeId || !designation || !qualification || !employmentType || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Same personal-detail requirements as the default create flow (POST
@@ -110,7 +110,9 @@ export async function POST(request: Request) {
       department,
       employeeId,
       ...(body.apaarFacultyId ? { apaarFacultyId: body.apaarFacultyId } : {}),
-      name: name.trim(),
+      // Name (as per PAN) - optional; Full Name (as per SSC), already
+      // required above (body.legalName), is the primary display name.
+      ...(name?.trim() ? { name: name.trim() } : {}),
       // The login's own email is the source of truth for collegeEmail - never
       // trust a client-submitted value for it here, since there is no new
       // Auth account being created for it to actually match.

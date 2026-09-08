@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/shared/Avatar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Department, Designation, FacultyMember, FacultyStatus, FMSUser } from "@/types";
 
@@ -108,9 +109,9 @@ export default function PrincipalDepartmentFacultyPage() {
       header: "Faculty Member",
       render: (row) => (
         <div className="flex items-center gap-3">
-          <Avatar name={row.name} photoUrl={row.profilePhotoUrl} size="sm" />
+          <Avatar name={facultyDisplayName(row)} photoUrl={row.profilePhotoUrl} size="sm" />
           <div>
-            <p className="font-medium leading-tight">{row.name}</p>
+            <p className="font-medium leading-tight">{facultyDisplayName(row)}</p>
             <p className="text-xs text-muted-foreground">ID: {row.employeeId}</p>
           </div>
         </div>

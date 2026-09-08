@@ -136,7 +136,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       employeeId: string;
       apaarFacultyId?: string;
-      name: string;
+      name?: string;
       email?: string;
       collegeEmail: string;
       password: string;
@@ -168,14 +168,23 @@ export async function POST(request: Request) {
       profilePhotoUrl,
     } = body;
 
-    if (!employeeId || !name || !collegeEmail || !password || !designation || !qualification || !employmentType || !joiningDate) {
+    if (!employeeId || !collegeEmail || !password || !designation || !qualification || !employmentType || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     // Matches the mandatory field set the bulk-import template and Add
-    // Faculty wizard's Personal Details step now both enforce.
+    // Faculty wizard's Personal Details step now both enforce. Name (as per
+    // PAN) is deliberately NOT required here - Full Name (as per SSC)
+    // (legalName) is the faculty member's primary/required identity name;
+    // Name as per PAN is optional statutory-matching detail (see finalName
+    // below, which falls back to legalName whenever it's left blank).
     if (!body.phone || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
       return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
     }
+    // The name used everywhere this record is displayed/copied from (login
+    // account, teaching assignments, sections, etc.) - Full Name (as per SSC)
+    // is the primary identity name now, so it takes precedence; Name (as per
+    // PAN) is only a fallback for the rare case legalName itself is blank.
+    const finalName = body.legalName.trim() || name?.trim() || "";
     // Uploaded before the record exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific id.
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
@@ -231,12 +240,16 @@ export async function POST(request: Request) {
     }
 
     // College email is the login username - create the Firebase Auth user with it,
-    // not the personal email (which is optional, contact-only).
-    const uid = await createFirebaseUser(collegeEmail, password, name);
+    // not the personal email (which is optional, contact-only). Uses
+    // finalName (legalName-preferred), not the raw optional `name`, so the
+    // Auth account's display name is never blank.
+    const uid = await createFirebaseUser(collegeEmail, password, finalName);
 
     const now = new Date();
 
-    // Write to users collection (login account)
+    // Write to users collection (login account) - name here is finalName too
+    // (legalName-preferred), since this is what nav/notifications/pickers
+    // read as "the" display name for this login.
     await db
       .collection("colleges")
       .doc(collegeId)
@@ -245,7 +258,7 @@ export async function POST(request: Request) {
       .set({
         uid,
         collegeId,
-        name,
+        name: finalName,
         email: collegeEmail,
         role: "PANEL_MEMBER",
         department,
@@ -267,7 +280,12 @@ export async function POST(request: Request) {
       department,
       employeeId,
       ...(body.apaarFacultyId ? { apaarFacultyId: body.apaarFacultyId } : {}),
-      name,
+      // `name` stores Name (as per PAN) verbatim - genuinely optional, left
+      // out entirely rather than written as undefined when not given (see
+      // memory note on Firestore's no-ignoreUndefinedProperties). Anything
+      // that needs "the" display name reads legalName first - see finalName
+      // above and facultyDisplayName() (src/lib/faculty/facultyDisplayName.ts).
+      ...(name?.trim() ? { name: name.trim() } : {}),
       collegeEmail,
       ...(body.email ? { email: body.email } : {}),
       phone: body.phone ?? "",

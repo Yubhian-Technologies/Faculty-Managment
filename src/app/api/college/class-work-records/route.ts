@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodManageFacultyDepartment } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { DAY_BY_JS_DAY } from "@/lib/timetable/currentPeriod";
 import { loadDepartmentCodes, formatSectionLabel } from "@/lib/attendance/sectionLabel";
@@ -138,7 +138,10 @@ export async function GET(request: Request) {
       }
       const facultyDept = (facSnap.docs[0].data() as { department?: string }).department ?? "";
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
-      if (!scope.departmentName || facultyDept !== scope.departmentName) {
+      // canHodManageFacultyDepartment covers every department this HOD owns
+      // (ownDepartmentNames - an HOD can head more than one at once - plus
+      // true sub-departments), not just the first (scope.departmentName).
+      if (!canHodManageFacultyDepartment(scope, facultyDept)) {
         return NextResponse.json({ error: "That faculty is not in your department" }, { status: 403 });
       }
       facultyId = requestedFacultyId;

@@ -14,46 +14,82 @@ import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel } from "@/lib/designations/config";
 import type { Designation, EmploymentType } from "@/types";
 
-// Abbreviations for FACULTY_DESIGNATIONS (src/lib/designations/config.ts) -
-// stores the same PROFESSOR/ASSOCIATE_PROFESSOR/ASSISTANT_PROFESSOR codes the
-// rest of the app (and AICTE cadre-ratio counting) already uses for those
-// three ranks; the new titles get their own codes, matched by their full
-// (case-insensitive) name since they have no common abbreviation.
+// Normalizes a designation/employment-category cell for matching: case,
+// punctuation (periods, parentheses, etc.) and spacing differences all
+// collapse to the same key, so "Asst. Prof.", "asst.prof", "ASST PROF" and
+// "Assistant Professor" all resolve identically - same approach as
+// normalizeHeaderExact in src/lib/utils/csv.ts, applied to cell values
+// instead of headers.
+function normalizeAbbrevKey(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+// Every accepted spelling/abbreviation for FACULTY_DESIGNATIONS
+// (src/lib/designations/config.ts), keyed by normalizeAbbrevKey() so case,
+// punctuation, spacing, and parenthetical qualifiers ("Assoc. Prof. (Sr)")
+// all resolve to the same entry - both the abbreviation and the full name
+// map to the same code, so this is the only lookup designation matching
+// needs (no separate fuzzy-match fallback). Stores the same
+// PROFESSOR/ASSOCIATE_PROFESSOR/ASSISTANT_PROFESSOR codes the rest of the
+// app (and AICTE cadre-ratio counting) already uses for those ranks -
+// DESIGNATION_LABELS (types/core.ts) is what displays them as words.
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
-  "prof.": "PROFESSOR",
+  "prof": "PROFESSOR",
+
   "associate professor": "ASSOCIATE_PROFESSOR",
-  "assoc. prof.": "ASSOCIATE_PROFESSOR",
-  "assoc.prof.": "ASSOCIATE_PROFESSOR",
+  "assoc professor": "ASSOCIATE_PROFESSOR",
+  "associate prof": "ASSOCIATE_PROFESSOR",
+  "assoc prof": "ASSOCIATE_PROFESSOR",
+
+  "associate professor sr": "ASSOCIATE_PROFESSOR_SR",
+  "assoc professor sr": "ASSOCIATE_PROFESSOR_SR",
+  "associate prof sr": "ASSOCIATE_PROFESSOR_SR",
+  "assoc prof sr": "ASSOCIATE_PROFESSOR_SR",
+  "senior associate professor": "ASSOCIATE_PROFESSOR_SR",
+  "sr associate professor": "ASSOCIATE_PROFESSOR_SR",
+  "associate professor senior": "ASSOCIATE_PROFESSOR_SR",
+
   "assistant professor": "ASSISTANT_PROFESSOR",
-  "asst. prof.": "ASSISTANT_PROFESSOR",
-  "asst.prof.": "ASSISTANT_PROFESSOR",
+  "asst professor": "ASSISTANT_PROFESSOR",
+  "assistant prof": "ASSISTANT_PROFESSOR",
   "asst prof": "ASSISTANT_PROFESSOR",
+
   "visiting professor": "VISITING_PROFESSOR",
+  "visiting prof": "VISITING_PROFESSOR",
+
   "assistant professor of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
-  "asst. prof. of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
+  "asst professor of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
+  "assistant prof of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
   "asst prof of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
-  "sr. wellness counsellor": "SR_WELLNESS_COUNSELLOR",
+
+  "professor of practice": "PROFESSOR_OF_PRACTICE",
+  "prof of practice": "PROFESSOR_OF_PRACTICE",
+
   "sr wellness counsellor": "SR_WELLNESS_COUNSELLOR",
   "senior wellness counsellor": "SR_WELLNESS_COUNSELLOR",
+  "sr wellness counselor": "SR_WELLNESS_COUNSELLOR",
+  "senior wellness counselor": "SR_WELLNESS_COUNSELLOR",
+
   "other": "OTHER",
 };
 
 // FACULTY_EMPLOYMENT_CATEGORIES values, stored verbatim (no code lookup
 // needed - unlike Designation, nothing else in the app matches on
-// employmentType's literal value). "Other" is accepted here too so an
-// imported row can hold it as-is; there's no companion "specify" column on
-// the template - the custom detail is filled in later from the Add/Edit form.
+// employmentType's literal value) - keyed by normalizeAbbrevKey() too, so
+// "Regular(Hyd)", "Regular (Hyd)" and "REGULAR HYD" all resolve the same
+// way. "Other" is accepted here too so an imported row can hold it as-is;
+// there's no companion "specify" column on the template - the custom detail
+// is filled in later from the Add/Edit form.
 const EMPLOYMENT_MAP: Record<string, EmploymentType> = Object.fromEntries(
-  FACULTY_EMPLOYMENT_CATEGORIES.map((c) => [c.toLowerCase(), c])
+  FACULTY_EMPLOYMENT_CATEGORIES.map((c) => [normalizeAbbrevKey(c), c])
 );
 EMPLOYMENT_MAP["other"] = "Other";
-EMPLOYMENT_MAP["regular (hyd)"] = "Regular(Hyd)";
 
 type ImportRow = {
   employeeId: string;
   legalName: string;
-  name: string;
+  name?: string;
   collegeEmail: string;
   password: string;
   phone: string;
@@ -223,7 +259,9 @@ export async function POST(request: Request) {
       // (src/lib/faculty/csvColumns.ts IMPORT_COLUMNS) is mandatory.
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
       if (!row.legalName?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name (as per SSC) is required" }); continue; }
-      if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name (as per PAN) is required" }); continue; }
+      // Name (as per PAN) is optional - Full Name (as per SSC) is the primary
+      // identity name; see finalName below, which falls back to legalName
+      // whenever this column is left blank.
       if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
       if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
       if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
@@ -249,22 +287,19 @@ export async function POST(request: Request) {
       }
 
       // Map designation - held to FACULTY_DESIGNATIONS, not free text.
-      // DESIGNATION_MAP normalizes common abbreviations ("Asst. Prof." ->
-      // "ASSISTANT_PROFESSOR") before checking membership, so a value only
-      // counts if it's either a recognized abbreviation for an allowed
-      // title, or already matches one of the allowed titles directly (case/
-      // punctuation-insensitive). Anything else rejects the row rather than
-      // being stored as whatever text was typed.
+      // DESIGNATION_MAP normalizes both full names and common abbreviations
+      // ("Asst. Prof." / "asst.prof" / "ASST PROF" all -> "ASSISTANT_PROFESSOR")
+      // to the same key, so a value only counts if it (however punctuated or
+      // cased) resolves to one of the allowed titles. Anything else rejects
+      // the row rather than being stored as whatever text was typed.
       const designationRaw = row.designation.trim();
-      const designationKey = designationRaw.toLowerCase();
+      const designationKey = normalizeAbbrevKey(designationRaw);
       let designation: Designation;
       if (designationKey === "other") {
         designation = "OTHER";
       } else {
-        const mappedAbbreviation = DESIGNATION_MAP[designationKey];
-        const matched = (mappedAbbreviation && allowedTeachingDesignations.includes(mappedAbbreviation))
-          ? mappedAbbreviation
-          : matchOption(designationRaw, allowedTeachingDesignations);
+        const mapped = DESIGNATION_MAP[designationKey];
+        const matched = mapped && allowedTeachingDesignations.includes(mapped) ? mapped : undefined;
         if (!matched) {
           failed.push({
             row: rowNum, employeeId: empId,
@@ -280,7 +315,7 @@ export async function POST(request: Request) {
       // see EMPLOYMENT_MAP's own comment above); an unrecognised value fails
       // the row rather than quietly becoming a default, which would turn a
       // typo into a real employment category.
-      const empTypeKey = row.employmentType.trim().toLowerCase();
+      const empTypeKey = normalizeAbbrevKey(row.employmentType);
       if (!EMPLOYMENT_MAP[empTypeKey]) {
         failed.push({ row: rowNum, employeeId: empId, error: `Employee Category "${row.employmentType.trim()}" is not one of ${FACULTY_EMPLOYMENT_CATEGORIES.join(" / ")} / Other` });
         continue;
@@ -340,6 +375,12 @@ export async function POST(request: Request) {
         continue;
       }
 
+      // The name used everywhere this record is displayed/copied from (login
+      // account, teaching assignments, sections, etc.) - Full Name (as per
+      // SSC) is the primary identity name now, so it takes precedence; Name
+      // (as per PAN) is only a fallback for the rare case legalName is blank.
+      const finalName = row.legalName.trim() || row.name?.trim() || "";
+
       // Login creation - mandatory now that Login Password is a required
       // column, so every imported row gets a login account (role: Panel
       // Member) immediately, no separate "Set Login" step needed afterward.
@@ -351,7 +392,7 @@ export async function POST(request: Request) {
       const loginEmail = loginEmailKey;
       let userUid: string;
       try {
-        userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
+        userUid = await createFirebaseUser(loginEmail, passwordRaw, finalName);
       } catch (err) {
         const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
           ? "an account with this email already exists"
@@ -365,7 +406,11 @@ export async function POST(request: Request) {
         collegeId,
         department: hodDept,
         employeeId: empId,
-        name: row.name.trim(),
+        // Stores Name (as per PAN) verbatim - genuinely optional, left out
+        // entirely rather than written as undefined when not given. Anything
+        // that needs "the" display name reads legalName first - see
+        // finalName above and facultyDisplayName().
+        ...(row.name?.trim() ? { name: row.name.trim() } : {}),
         collegeEmail: loginEmail,
         phone: checkPhone(row.phone, "Phone") ?? "",
         designation,
@@ -391,7 +436,7 @@ export async function POST(request: Request) {
         batch.set(userRef, {
           uid: userUid,
           collegeId,
-          name: row.name.trim(),
+          name: finalName,
           email: loginEmail,
           role: "PANEL_MEMBER",
           department: hodDept,
@@ -405,7 +450,7 @@ export async function POST(request: Request) {
           role: "PANEL_MEMBER",
           collegeId,
           email: loginEmail,
-          name: row.name.trim(),
+          name: finalName,
         });
       }
 

@@ -11,6 +11,7 @@ import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components
 import { getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
+import { toDateInputValue } from "@/lib/utils";
 import type { StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
@@ -43,7 +44,7 @@ export default function HodFacultyModuleEditPage() {
         setName((m.name as string) ?? "");
         setRecord({
           gender: (m.gender as string) ?? "",
-          dateOfBirth: (m.dateOfBirth as string) ?? undefined,
+          dateOfBirth: toDateInputValue(m.dateOfBirth as never) || undefined,
           legalName: (m.legalName as string) ?? "",
           nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
@@ -62,7 +63,7 @@ export default function HodFacultyModuleEditPage() {
           emergencyContactName: (m.emergencyContactName as string) ?? "",
           emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
-          ratificationDate: (m.ratificationDate as string) ?? undefined,
+          ratificationDate: toDateInputValue(m.ratificationDate as never) || undefined,
           maritalStatus: (m.maritalStatus as string) ?? "",
           spouseName: (m.spouseName as string) ?? "",
           numberOfChildren: m.numberOfChildren as number | undefined,

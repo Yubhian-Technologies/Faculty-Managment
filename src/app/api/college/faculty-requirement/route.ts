@@ -118,7 +118,10 @@ export async function GET(request: Request) {
     for (const doc of facultySnap.docs) {
       const desig = (doc.data() as { designation?: string }).designation ?? "";
       if (desig === "PROFESSOR") profCurrent++;
-      else if (desig === "ASSOCIATE_PROFESSOR") assocCurrent++;
+      // ASSOCIATE_PROFESSOR_SR (Associate Professor (Sr) - a seniority/pay
+      // grade, not a different rank) counts in the same cadre bucket as
+      // ASSOCIATE_PROFESSOR.
+      else if (desig === "ASSOCIATE_PROFESSOR" || desig === "ASSOCIATE_PROFESSOR_SR") assocCurrent++;
       else if (desig === "ASSISTANT_PROFESSOR" || desig === "LECTURER") asstCurrent++;
       // VISITING_FACULTY, ADJUNCT_FACULTY, LAB_ASSISTANT excluded from cadre ratio
     }

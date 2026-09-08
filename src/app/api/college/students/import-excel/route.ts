@@ -667,8 +667,14 @@ export async function POST(request: Request) {
           // department or one of its sub-departments) if that resolves it
           // uniquely, then to the row's Secondary Department if that does;
           // otherwise this needs a human to say which.
+          // canHodEditDepartment (own department(s) - an HOD can head more
+          // than one at once - plus sub-departments/managed branches), same
+          // check line 431 above already uses for the explicit-Department
+          // path; this implicit (no Department column) path had drifted to a
+          // narrower, ownDepartmentNames[0]-only check that dropped a
+          // multi-department HOD's other department(s).
           let narrowed = hodScope
-            ? candidates.filter((c) => c.department === hodScope.departmentName || hodScope.childDepartmentNames.includes(c.department))
+            ? candidates.filter((c) => canHodEditDepartment(hodScope, c.department))
             : candidates;
           if (narrowed.length > 1 && requestedSecondaryDept) {
             const bySecondary = narrowed.filter(isSecondaryMatch);
@@ -682,7 +688,7 @@ export async function POST(request: Request) {
           }
         }
       }
-      if (hodScope && !(section.department === hodScope.departmentName || hodScope.childDepartmentNames.includes(section.department))) {
+      if (hodScope && !canHodEditDepartment(hodScope, section.department)) {
         failed.push({ row: rowNum, rollNumber: row.rollNumber, error: `Section ${row.section} is not in your department` });
         continue;
       }

@@ -53,6 +53,12 @@ interface Props {
   // FACULTY_REQUIRED_PERSONAL_FIELDS instead, since Name (as per Aadhar) is
   // optional there but stays mandatory for Supporting/Non-Technical Staff.
   requiredFields?: (keyof PersonalDetailsValue)[];
+  // Fields to skip rendering entirely - Faculty's Add/Edit surfaces move
+  // Full Name (as per SSC) up into their "core" identity step (to lead the
+  // template's own field order) and pass ["legalName"] here so it isn't
+  // shown a second time on this "personal" step. Supporting/Non-Technical
+  // Staff don't pass this, so legalName stays exactly where it always was.
+  hiddenFields?: (keyof PersonalDetailsValue)[];
 }
 
 // The full mandatory set - Supporting/Non-Technical Staff's requirement.
@@ -83,12 +89,15 @@ export function getMissingRequiredPersonalFields(
     .map((key) => PERSONAL_FIELD_LABELS[key] ?? key);
 }
 
-export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS }: Props) {
+export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_REQUIRED_PERSONAL_FIELDS, hiddenFields = [] }: Props) {
   function set<K extends keyof PersonalDetailsValue>(key: K, v: PersonalDetailsValue[K]) {
     onChange({ ...value, [key]: v });
   }
   function mark(key: keyof PersonalDetailsValue): string {
     return requiredFields.includes(key) ? " *" : "";
+  }
+  function hidden(key: keyof PersonalDetailsValue): boolean {
+    return hiddenFields.includes(key);
   }
 
   const subCasteOptions = SUB_CASTES_BY_CASTE[value.caste as Caste] ?? [];
@@ -124,15 +133,17 @@ export function PersonalDetailsFields({ value, onChange, requiredFields = STAFF_
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Full Name (as per SSC){mark("legalName")}</Label>
-          <Input
-            value={value.legalName ?? ""}
-            onChange={(e) => set("legalName", e.target.value.toUpperCase())}
-            placeholder="FULL NAME IN CAPITALS"
-            className="uppercase"
-          />
-        </div>
+        {!hidden("legalName") && (
+          <div className="space-y-2">
+            <Label>Full Name (as per SSC){mark("legalName")}</Label>
+            <Input
+              value={value.legalName ?? ""}
+              onChange={(e) => set("legalName", e.target.value.toUpperCase())}
+              placeholder="FULL NAME IN CAPITALS"
+              className="uppercase"
+            />
+          </div>
+        )}
         <div className="space-y-2">
           <Label>SSC Hall Ticket No</Label>
           <Input

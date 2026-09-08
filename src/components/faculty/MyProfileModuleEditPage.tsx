@@ -15,6 +15,7 @@ import { getMissingRequiredPersonalFields, STAFF_REQUIRED_PERSONAL_FIELDS, type 
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
+import { toDateInputValue } from "@/lib/utils";
 
 interface Props {
   basePath: string;       // e.g. "/hod/profile"
@@ -53,7 +54,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPerso
         const m = d.faculty ?? {};
         setRecord({
           gender: (m.gender as string) ?? "",
-          dateOfBirth: (m.dateOfBirth as string) ?? undefined,
+          dateOfBirth: toDateInputValue(m.dateOfBirth as never) || undefined,
           legalName: (m.legalName as string) ?? "",
           nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
@@ -72,7 +73,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPerso
           emergencyContactName: (m.emergencyContactName as string) ?? "",
           emergencyContactPhone: (m.emergencyContactPhone as string) ?? "",
           ratificationStatus: (m.ratificationStatus as string) ?? "",
-          ratificationDate: (m.ratificationDate as string) ?? undefined,
+          ratificationDate: toDateInputValue(m.ratificationDate as never) || undefined,
           maritalStatus: (m.maritalStatus as string) ?? "",
           spouseName: (m.spouseName as string) ?? "",
           numberOfChildren: m.numberOfChildren as number | undefined,

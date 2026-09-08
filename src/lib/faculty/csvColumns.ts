@@ -339,18 +339,20 @@ export const TEACHING_SUMMARY_COLUMN: FacultyCsvColumn = {
 export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   { key: "employeeId",   label: "Employee ID",   required: true,  sample: "Required; any text; unique", aliases: ["Emp ID", "Employee Code", "Employee No", "Staff ID"] },
   { key: "legalName",    label: "Full Name (as per SSC)", required: true, sample: "Required; text", aliases: ["Legal Name (as per SSC)"] },
-  // Should match the name on the faculty member's PAN card - it's the name
-  // used across statutory/financial paperwork (PAN, bank, payroll), so a
-  // mismatch here is what causes downstream document rejections.
+  // Optional - matches the name on the faculty member's PAN card, for
+  // statutory/financial paperwork only. Full Name (as per SSC) above is the
+  // primary/required identity name used everywhere the app displays this
+  // faculty member; when this column is left blank, that's what's used
+  // instead (see finalName in the import route).
   // "Full Name" (bare) and "Full Name (as per PAN)" are deliberately NOT
   // aliased here - both would be genuinely ambiguous now that there are two
   // other name-shaped columns (Full Name as per SSC, Name as per Aadhar);
   // leave a header that vague unmatched rather than guess which one it means.
-  { key: "name",         label: "Name (as per PAN)", required: true,  sample: "Required; full name exactly as on PAN card", aliases: ["Faculty Name", "Name", "Employee Name"] },
+  { key: "name",         label: "Name (as per PAN)", required: false, sample: "Optional; full name exactly as on PAN card", aliases: ["Faculty Name", "Name", "Employee Name"] },
   { key: "collegeEmail", label: "College Email", required: true,  sample: "Required; must contain @", aliases: ["Email", "Email ID"] },
   { key: "password",     label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password"] },
   { key: "phone",        label: "Mobile No",     required: true, sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
-  { key: "designation",  label: "Designation",   required: true,  sample: "Required: Professor / Assistant Professor / Associate Professor / Visiting Professor / Assistant Professor of Practice / Sr. Wellness Counsellor / Other" },
+  { key: "designation",  label: "Designation",   required: true,  sample: "Required: Professor / Assistant Professor / Associate Professor / Associate Professor (Sr) / Visiting Professor / Assistant Professor of Practice / Professor of Practice / Sr. Wellness Counsellor / Other - common abbreviations (Prof., Asst. Prof., Assoc. Prof., Assoc. Prof. (Sr)) are accepted too" },
   // Names the same options the Add/Edit Faculty dropdown offers, so a sheet
   // uses the spellings the form produces rather than inventing "PhD"/"Mtech".
   // Still accepts anything else, deliberately: the dropdown's own "Others"
@@ -431,14 +433,14 @@ export const IMPORT_SAMPLE_ROWS: Record<string, string>[] = [
 ];
 
 export const IMPORT_HINTS = [
-  "Full Name (as per SSC): enter the name exactly as it appears on the faculty member's SSC (10th class) certificate, in CAPITAL LETTERS",
-  "Name (as per PAN): enter the name exactly as it appears on the faculty member's PAN card - this is the name used on statutory/financial paperwork and as their display name across the app",
-  "Designation: Professor / Assistant Professor / Associate Professor / Visiting Professor / Assistant Professor of Practice / Sr. Wellness Counsellor / Other - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead",
+  "Full Name (as per SSC): enter the name exactly as it appears on the faculty member's SSC (10th class) certificate, in CAPITAL LETTERS - this is the PRIMARY identity name used as their display name everywhere across the app (lists, PDFs, notifications, teaching assignments, etc.).",
+  "Name (as per PAN): optional - only needed for statutory/financial paperwork matching. When left blank, Full Name (as per SSC) is used instead everywhere this faculty member's name is shown.",
+  "Designation: Professor / Assistant Professor / Associate Professor / Associate Professor (Sr) / Visiting Professor / Assistant Professor of Practice / Professor of Practice / Sr. Wellness Counsellor / Other - Supporting Staff (Lab Assistant, Programmer, Office Assistant, etc.) is added from the Supporting Staff module instead. Common short forms are recognized too, case-insensitively (e.g. Prof., Asst. Prof., Assoc. Prof., Assoc.Prof.(Sr)) - however it's punctuated or capitalized, it still maps to the full title.",
   "Employee Category: Regular / Visiting / Contract / Professor of Practice / Regular(Hyd) / Other",
   "Designation or Employee Category as \"Other\" is accepted as-is on import - there's no separate column for the custom title/category text; fill that in afterward from the Edit Faculty page.",
   "Dates must be in DD-MM-YYYY format (e.g. 15-06-2020)",
   "Department is auto-assigned from your HOD profile",
   "Login Password is mandatory: it creates the faculty member's login account (as a Panel Member) automatically during import, using their College Email as the login ID - must be at least 8 characters. Use a real, unique password per person - never reuse the sample column's placeholder values.",
-  "Every column above is required except Name (as per Aadhar) - a row missing a required one, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",
+  "Every column above is required except Name (as per PAN) and Name (as per Aadhar) - a row missing a required one, or with an invalid value, is rejected and reported back so it can be corrected and re-imported.",
   "Personal details beyond what's above (father/mother name, religion, bank details, addresses, etc.) and the Academic Profile aren't part of this template - fill those in afterward from the Edit Faculty page.",
 ];

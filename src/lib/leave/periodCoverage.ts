@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { isTeachingDesignation } from "@/lib/designations/config";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
+import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { notify } from "@/lib/notify";
 import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { resolveSectionCurrentSemester, matchesCurrentSemester as slotMatchesCurrentSemester } from "@/lib/college/semester";
@@ -235,7 +236,7 @@ export async function buildPeriodCoverage(
     const onLeaveUids = new Set(approvedLeaves.filter((r) => isDateWithinLeave(r, period.date)).map((r) => r.uid));
     const candidates = eligibleFaculty
       .filter((f) => !busyFacultyIds.has(f.id) && !(f.userUid && onLeaveUids.has(f.userUid)))
-      .map((f) => ({ facultyId: f.id, facultyName: f.name, facultyDepartment: f.department ?? "" }))
+      .map((f) => ({ facultyId: f.id, facultyName: facultyDisplayName(f), facultyDepartment: f.department ?? "" }))
       // Own department first - the usual choice stays at the top of a list
       // that now spans the college - then by name within each group.
       .sort((a, b) => {

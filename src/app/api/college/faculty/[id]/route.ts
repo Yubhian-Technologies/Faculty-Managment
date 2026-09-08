@@ -149,9 +149,11 @@ export async function PATCH(
     // These fields are mandatory on both the import template and Add Faculty
     // wizard - Edit must not be able to blank one out via a partial PATCH
     // that explicitly sends an empty string for it (a field simply left out
-    // of the body is untouched, which is fine).
+    // of the body is untouched, which is fine). `name` (Name as per PAN) is
+    // deliberately NOT in this list - it's optional; legalName (Full Name as
+    // per SSC) is the required primary identity name.
     const REQUIRED_IF_PRESENT = [
-      "name", "collegeEmail", "phone", "designation", "qualification", "employmentType",
+      "collegeEmail", "phone", "designation", "qualification", "employmentType",
       "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
     ] as const;
     for (const key of REQUIRED_IF_PRESENT) {
@@ -255,17 +257,31 @@ export async function PATCH(
 
     await ref.update(updates);
 
+    // The record's display name (facultyDisplayName() logic, inlined here
+    // since this route works with plain Firestore data, not a typed
+    // FacultyMember) - Full Name (as per SSC) preferred, Name (as per PAN)
+    // only as a fallback. Recomputed from the POST-update values (whichever
+    // of legalName/name this PATCH actually changed, falling back to what
+    // was already on the doc for the other) so a rename via either field is
+    // detected and propagated correctly.
+    const before = snap.data() as { name?: string; legalName?: string; userUid?: string };
+    const effectiveLegalName = body.legalName !== undefined ? body.legalName : before.legalName;
+    const effectiveName = body.name !== undefined ? body.name : before.name;
+    const newDisplayName = effectiveLegalName?.trim() || effectiveName?.trim() || "";
+    const oldDisplayName = before.legalName?.trim() || before.name?.trim() || "";
+    const displayNameChanged = (body.legalName !== undefined || body.name !== undefined) && newDisplayName !== oldDisplayName;
+
     // Best-effort: if this faculty record has a linked system login, keep their
     // name/photo in sync there too - the login doc (colleges/{id}/users) is what
     // panel-member pickers, notifications, and the nav/avatar read from, so edits
     // made here on the faculty details page must propagate or those surfaces show
     // stale data from account creation time.
-    if (body.profilePhotoUrl !== undefined || body.name !== undefined) {
-      const linkedUid = (snap.data() as { userUid?: string }).userUid;
+    if (body.profilePhotoUrl !== undefined || displayNameChanged) {
+      const linkedUid = before.userUid;
       if (linkedUid) {
         const loginSync: Record<string, string> = {};
         if (body.profilePhotoUrl !== undefined) loginSync.profilePhotoUrl = body.profilePhotoUrl;
-        if (body.name !== undefined) loginSync.name = body.name;
+        if (displayNameChanged) loginSync.name = newDisplayName;
         try {
           await db.collection("colleges").doc(session.collegeId).collection("users").doc(linkedUid)
             .set(loginSync, { merge: true });
@@ -281,9 +297,9 @@ export async function PATCH(
     // the old name forever. Historical Tier-2 records (attendance, marks,
     // payroll, etc.) are deliberately NOT touched - those are point-in-time
     // snapshots, not live state.
-    if (body.name !== undefined && body.name !== (snap.data() as { name?: string }).name) {
+    if (displayNameChanged) {
       try {
-        const newName = body.name;
+        const newName = newDisplayName;
         const collegeRef = db.collection("colleges").doc(session.collegeId);
         const now = new Date();
 
@@ -305,7 +321,7 @@ export async function PATCH(
         // FacultyMember doc id itself (see getFacultyIdCandidates's own
         // doc-comment); match both so a section set up under either form
         // still gets its facultyInchargeName kept in sync.
-        const linkedUid = (snap.data() as { userUid?: string }).userUid;
+        const linkedUid = before.userUid;
         const inchargeCandidates = linkedUid && linkedUid !== id ? [linkedUid, id] : [id];
         const sectionsSnap = await collegeRef.collection("sections").where("facultyInchargeUid", "in", inchargeCandidates).get();
         for (let i = 0; i < sectionsSnap.docs.length; i += 400) {
