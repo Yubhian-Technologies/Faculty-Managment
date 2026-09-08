@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
+import { getMissingRequiredPersonalFields } from "@/components/shared/PersonalDetailsFields";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
 import { getSupportingStaffProfileModules } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
@@ -28,10 +29,11 @@ const schema = z.object({
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().min(1, "College email is required").email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  phone: z.string().optional(),
+  phone: z.string().min(1, "Mobile No is required"),
   designation: z.string().min(1, "Designation is required"),
   otherDesignationTitle: z.string().optional(),
-  experienceYears: z.number().min(0, "Cannot be negative"),
+  qualification: z.string().min(1, "Highest Qualification is required"),
+  experienceYears: z.number().min(0, "Cannot be negative").optional(),
   joiningDate: z.string().min(1, "Joining date is required"),
   employmentType: z.string().min(1, "Employment type is required"),
 });
@@ -87,9 +89,9 @@ export default function NewHodSupportingStaffPage() {
   // All required fields live on the "core" step; deferred to submit time so
   // steps can be navigated freely (see onInvalid).
   const FIELD_LABELS: Record<string, string> = {
-    employeeId: "Employee ID", name: "Full Name", collegeEmail: "College Email",
-    password: "Login Password", designation: "Designation",
-    experienceYears: "Total Years of Experience", joiningDate: "Joining Date",
+    employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
+    password: "Login Password", phone: "Mobile No", designation: "Designation",
+    qualification: "Highest Qualification", joiningDate: "Joining Date",
     employmentType: "Employment Type",
   };
 
@@ -109,6 +111,16 @@ export default function NewHodSupportingStaffPage() {
   }
 
   const onSubmit = async (data: FormData) => {
+    // Personal Details isn't zod-validated (SupportingStaffModuleEditor's
+    // "personal" step is plain React state) - checked here instead, same
+    // pattern as Add Faculty's equivalent check.
+    const missingPersonal = getMissingRequiredPersonalFields(record);
+    if (missingPersonal.length > 0) {
+      setErroredSteps(new Set<WizardStepKey>(["personal"]));
+      setStepIndex(steps.findIndex((s) => s.key === "personal"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch("/api/college/supporting-staff", {
@@ -198,7 +210,7 @@ export default function NewHodSupportingStaffPage() {
                       {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="name">Full Name *</Label>
+                      <Label htmlFor="name">Name (as per PAN) *</Label>
                       <Input id="name" {...register("name")} placeholder="Suresh Babu" />
                       {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                     </div>
@@ -218,8 +230,9 @@ export default function NewHodSupportingStaffPage() {
                     {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
+                    <Label htmlFor="phone">Mobile No *</Label>
                     <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
+                    {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
                   </div>
                 </div>
 
@@ -253,7 +266,12 @@ export default function NewHodSupportingStaffPage() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="experienceYears">Total Years of Experience *</Label>
+                    <Label htmlFor="qualification">Highest Qualification *</Label>
+                    <Input id="qualification" {...register("qualification")} placeholder="e.g. Diploma, B.Com, ITI" />
+                    {errors.qualification && <p className="text-sm text-destructive">{errors.qualification.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="experienceYears">Total Years of Experience</Label>
                     <Input id="experienceYears" type="number" min={0} placeholder="e.g. 10" {...register("experienceYears", { valueAsNumber: true })} />
                     <p className="text-xs text-muted-foreground">
                       Their whole career, including previous institutions - not just years served here.

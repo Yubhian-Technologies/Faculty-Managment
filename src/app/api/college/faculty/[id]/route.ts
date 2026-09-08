@@ -146,6 +146,20 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }
 
+    // These fields are mandatory on both the import template and Add Faculty
+    // wizard - Edit must not be able to blank one out via a partial PATCH
+    // that explicitly sends an empty string for it (a field simply left out
+    // of the body is untouched, which is fine).
+    const REQUIRED_IF_PRESENT = [
+      "name", "collegeEmail", "phone", "designation", "qualification", "employmentType",
+      "gender", "legalName", "aadharNo", "panNo", "ratificationStatus",
+    ] as const;
+    for (const key of REQUIRED_IF_PRESENT) {
+      if (body[key] !== undefined && !body[key].trim()) {
+        return NextResponse.json({ error: `${key} cannot be blanked out - it is a required field` }, { status: 400 });
+      }
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
     // Employee ID must stay unique across every college, not just this one -
@@ -261,6 +275,50 @@ export async function PATCH(
       }
     }
 
+    // A faculty's display name is copied into teachingAssignments/timetableSlots/
+    // Section at assignment/incharge-set time and never re-read afterward - a
+    // rename here must be cascaded into every one of those copies or they show
+    // the old name forever. Historical Tier-2 records (attendance, marks,
+    // payroll, etc.) are deliberately NOT touched - those are point-in-time
+    // snapshots, not live state.
+    if (body.name !== undefined && body.name !== (snap.data() as { name?: string }).name) {
+      try {
+        const newName = body.name;
+        const collegeRef = db.collection("colleges").doc(session.collegeId);
+        const now = new Date();
+
+        const [assignmentsSnap, slotsSnap] = await Promise.all([
+          collegeRef.collection("teachingAssignments").where("facultyId", "==", id).get(),
+          collegeRef.collection("timetableSlots").where("facultyId", "==", id).get(),
+        ]);
+        for (const [snapshot, field] of [[assignmentsSnap, "facultyName"], [slotsSnap, "facultyName"]] as const) {
+          for (let i = 0; i < snapshot.docs.length; i += 400) {
+            const chunk = snapshot.docs.slice(i, i + 400);
+            const chunkBatch = db.batch();
+            for (const doc of chunk) chunkBatch.update(doc.ref, { [field]: newName, updatedAt: now });
+            await chunkBatch.commit();
+          }
+        }
+
+        // Section.facultyInchargeUid holds either this faculty's linked login
+        // uid (the form new writes use) or - on some older records - the
+        // FacultyMember doc id itself (see getFacultyIdCandidates's own
+        // doc-comment); match both so a section set up under either form
+        // still gets its facultyInchargeName kept in sync.
+        const linkedUid = (snap.data() as { userUid?: string }).userUid;
+        const inchargeCandidates = linkedUid && linkedUid !== id ? [linkedUid, id] : [id];
+        const sectionsSnap = await collegeRef.collection("sections").where("facultyInchargeUid", "in", inchargeCandidates).get();
+        for (let i = 0; i < sectionsSnap.docs.length; i += 400) {
+          const chunk = sectionsSnap.docs.slice(i, i + 400);
+          const chunkBatch = db.batch();
+          for (const doc of chunk) chunkBatch.update(doc.ref, { facultyInchargeName: newName, updatedAt: now });
+          await chunkBatch.commit();
+        }
+      } catch (cascadeErr) {
+        console.error("[college/faculty/[id] PATCH] facultyName cascade failed:", cascadeErr);
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
@@ -297,6 +355,26 @@ export async function DELETE(
       if (!canHodManageFacultyDepartment(scope, facultyData.department ?? "")) {
         return NextResponse.json({ error: "That faculty member is outside your department scope" }, { status: 403 });
       }
+    }
+
+    // Refuse to hard-delete a faculty member who still has live teaching
+    // assignments/timetable slots - deleting the doc out from under them would
+    // orphan those references (facultyId pointing at nothing). Use the
+    // RESIGNED/RETIRED status instead, which keeps the record (and every
+    // assignment that names it) intact.
+    const collegeRef = db.collection("colleges").doc(session.collegeId);
+    const [assignmentSnap, slotSnap] = await Promise.all([
+      collegeRef.collection("teachingAssignments").where("facultyId", "==", id).limit(1).get(),
+      collegeRef.collection("timetableSlots").where("facultyId", "==", id).limit(1).get(),
+    ]);
+    if (!assignmentSnap.empty || !slotSnap.empty) {
+      return NextResponse.json(
+        {
+          error:
+            "This faculty member still has active teaching assignments or timetable slots. Remove/reassign those first, or set their status to Resigned/Retired instead of deleting the record.",
+        },
+        { status: 409 }
+      );
     }
 
     await ref.delete();

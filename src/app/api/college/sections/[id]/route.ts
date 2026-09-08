@@ -244,11 +244,25 @@ export async function PATCH(
       const targetDept = targetDeptSnap.data() as {
         name?: string; parentDepartmentId?: string; assignedYears?: number[];
         secondaryDepartments?: string[]; courseScopes?: Record<string, DepartmentCourseScope>;
+        hasSubDepartments?: boolean; parentRunsOwnSections?: boolean;
       };
       const targetDeptName = targetDept.name ?? "";
 
       if (hodScope && !canHodEditDepartmentId(hodScope, body.departmentId)) {
         return NextResponse.json({ error: "You can only move sections within your own department or its sub-departments" }, { status: 403 });
+      }
+
+      // Same rule as section creation (sections/route.ts POST) - a department
+      // flagged "never enrolls students directly" (Department.
+      // parentRunsOwnSections === false) must never end up owning a section,
+      // whether by creating one there or by reassigning an existing one onto it.
+      if (targetDept.hasSubDepartments && targetDept.parentRunsOwnSections === false) {
+        return NextResponse.json(
+          {
+            error: `"${targetDeptName}" doesn't run its own sections - it only organizes its sub-departments. Choose one of its sub-departments instead.`,
+          },
+          { status: 400 }
+        );
       }
 
       if (course && course.departmentId !== body.departmentId && course.departmentId !== targetDept.parentDepartmentId) {

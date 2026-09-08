@@ -13,8 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
-import { DesignationOptions } from "@/components/faculty/DesignationOptions";
-import { PersonalDetailsFields, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
+import { PersonalDetailsFields, getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import {
   QualificationFields, ExperienceFields, ResearchFields, GrantsFields,
   MentorshipFields, FinancialFields, OthersFields,
@@ -23,9 +22,9 @@ import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments"
 import { PHONE_REGEX } from "@/lib/validations";
 import { AvatarUploadField } from "@/components/shared/AvatarUploadField";
 import { PROFILE_MODULES } from "@/lib/faculty/profileModules";
+import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel } from "@/lib/designations/config";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
-import { EMPLOYMENT_TYPE_LABELS } from "@/types";
 import type { FacultyProfileFields } from "@/types";
 
 // collegeEmail/password are validated for FORMAT here but not required at the
@@ -41,11 +40,11 @@ const schema = z.object({
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   collegeEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
   password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
-  phone: z.string().regex(PHONE_REGEX, "Doesn't look like a valid phone number").optional().or(z.literal("")),
+  phone: z.string().min(1, "Mobile No is required").regex(PHONE_REGEX, "Doesn't look like a valid phone number"),
   designation: z.string().min(1, "Designation is required"),
   qualification: z.string().min(1, "Qualification is required"),
   specialization: z.string().optional(),
-  experienceYears: z.number().min(0, "Cannot be negative"),
+  experienceYears: z.number().min(0, "Cannot be negative").optional(),
   joiningDate: z.string().min(1, "Joining date is required"),
   dateOfJoiningDepartment: z.string().optional(),
   employmentType: z.string().min(1, "Employment type is required"),
@@ -95,7 +94,7 @@ export default function NewFacultyPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      experienceYears: 0, designation: "", employmentType: "PERMANENT", password: "", aicteEligible: false,
+      experienceYears: 0, designation: "", employmentType: "Regular", password: "", aicteEligible: false,
       ...(isLinkMode ? { name: linkName } : {}),
     },
   });
@@ -103,6 +102,8 @@ export default function NewFacultyPage() {
 
   const designation = watch("designation");
   const employmentType = watch("employmentType");
+  const isOtherDesignation = !!designation && !FACULTY_DESIGNATIONS.includes(designation);
+  const isOtherEmploymentType = !!employmentType && !FACULTY_EMPLOYMENT_CATEGORIES.includes(employmentType);
   const aicteEligible = watch("aicteEligible");
   const name = watch("name");
 
@@ -127,7 +128,7 @@ export default function NewFacultyPage() {
   // which module (see onInvalid). Steps can be navigated freely - validation
   // is deferred entirely to submit time.
   const FIELD_LABELS: Record<string, string> = {
-    employeeId: "Employee ID", name: "Full Name (as per PAN)", collegeEmail: "College Email",
+    employeeId: "Employee ID", name: "Name (as per PAN)", collegeEmail: "College Email",
     password: "Login Password", phone: "Mobile No", designation: "Designation",
     qualification: "Highest Qualification", experienceYears: "Total Years of Experience",
     joiningDate: "Date of Joining Institution", employmentType: "Employee Category",
@@ -159,6 +160,16 @@ export default function NewFacultyPage() {
       setStepIndex(steps.findIndex((s) => s.key === "core"));
       const missing = [!data.collegeEmail?.trim() && "College Email", !data.password?.trim() && "Login Password"].filter(Boolean).join(", ");
       toast({ variant: "destructive", title: "Some required fields are missing", description: `Identity & Employment: ${missing}` });
+      return;
+    }
+    // Personal Details isn't zod-validated (PersonalDetailsFields is plain
+    // React state) - checked here instead, same pattern as the College
+    // Email/Password check above, since these fields are now mandatory too.
+    const missingPersonal = getMissingRequiredPersonalFields(personalDetails, FACULTY_REQUIRED_PERSONAL_FIELDS);
+    if (missingPersonal.length > 0) {
+      setErroredSteps(new Set<WizardStepKey>(["personal"]));
+      setStepIndex(steps.findIndex((s) => s.key === "personal"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
       return;
     }
     setSubmitting(true);
@@ -253,7 +264,7 @@ export default function NewFacultyPage() {
                       {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="name">Full Name (as per PAN) *</Label>
+                      <Label htmlFor="name">Name (as per PAN) *</Label>
                       <Input id="name" {...register("name")} placeholder="Dr. Priya Nair" />
                       {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                       <p className="text-xs text-muted-foreground">Enter the name exactly as it appears on the PAN card.</p>
@@ -301,7 +312,7 @@ export default function NewFacultyPage() {
                     {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Mobile No</Label>
+                    <Label htmlFor="phone">Mobile No *</Label>
                     <Input id="phone" type="tel" autoComplete="off" {...register("phone")} placeholder="+91 98765 43210" />
                     {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
                   </div>
@@ -314,10 +325,23 @@ export default function NewFacultyPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Designation *</Label>
-                    <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
+                    <Select
+                      value={isOtherDesignation ? "OTHER" : designation}
+                      onValueChange={(v) => setValue("designation", v === "OTHER" ? "OTHER" : v)}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
-                      <SelectContent><DesignationOptions collegeType={collegeType} kind="teaching" /></SelectContent>
+                      <SelectContent>
+                        {FACULTY_DESIGNATIONS.map((d) => <SelectItem key={d} value={d}>{designationLabel(d)}</SelectItem>)}
+                        <SelectItem value="OTHER">Other</SelectItem>
+                      </SelectContent>
                     </Select>
+                    {isOtherDesignation && (
+                      <Input
+                        value={designation === "OTHER" ? "" : designation}
+                        onChange={(e) => setValue("designation", e.target.value || "OTHER")}
+                        placeholder="Please specify"
+                      />
+                    )}
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   <div className="space-y-2">
@@ -333,7 +357,7 @@ export default function NewFacultyPage() {
                     <Input id="specialization" {...register("specialization")} placeholder="e.g. Machine Learning, VLSI" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="experienceYears">Total Years of Experience *</Label>
+                    <Label htmlFor="experienceYears">Total Years of Experience</Label>
                     <Input id="experienceYears" type="number" min={0} placeholder="e.g. 10" {...register("experienceYears", { valueAsNumber: true })} />
                     <p className="text-xs text-muted-foreground">
                       Their whole career, including previous institutions - not just years served here.
@@ -349,12 +373,23 @@ export default function NewFacultyPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Employee Category *</Label>
-                    <Select value={employmentType} onValueChange={(v) => setValue("employmentType", v)}>
+                    <Select
+                      value={isOtherEmploymentType ? "OTHER" : employmentType}
+                      onValueChange={(v) => setValue("employmentType", v === "OTHER" ? "OTHER" : v)}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        {FACULTY_EMPLOYMENT_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        <SelectItem value="OTHER">Other</SelectItem>
                       </SelectContent>
                     </Select>
+                    {isOtherEmploymentType && (
+                      <Input
+                        value={employmentType === "OTHER" ? "" : employmentType}
+                        onChange={(e) => setValue("employmentType", e.target.value || "OTHER")}
+                        placeholder="Please specify"
+                      />
+                    )}
                     {errors.employmentType && <p className="text-sm text-destructive">{errors.employmentType.message}</p>}
                   </div>
                   <div className="space-y-2">
@@ -380,7 +415,7 @@ export default function NewFacultyPage() {
               </>
             )}
 
-            {step.key === "personal" && <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} />}
+            {step.key === "personal" && <PersonalDetailsFields value={personalDetails} onChange={setPersonalDetails} requiredFields={FACULTY_REQUIRED_PERSONAL_FIELDS} />}
             {step.key === "qualification" && <QualificationFields value={academicProfile} onChange={setAcademicProfile} collegeType={collegeType} />}
             {step.key === "experience" && <ExperienceFields value={academicProfile} onChange={setAcademicProfile} />}
             {step.key === "research" && <ResearchFields value={academicProfile} onChange={setAcademicProfile} />}

@@ -97,7 +97,7 @@ export function Sidebar({ hiddenModules, hiddenItems }: SidebarProps) {
         <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-9 w-9 rounded-md object-contain shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold truncate">Vishnu People</p>
-          <p className="text-xs text-muted-foreground truncate">{ROLE_LABELS[user.role]}</p>
+          <p className="text-xs text-muted-foreground truncate">{ROLE_LABELS[user.realRole ?? user.role]}</p>
         </div>
       </div>
 

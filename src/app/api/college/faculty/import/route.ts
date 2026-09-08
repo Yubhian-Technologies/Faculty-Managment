@@ -4,17 +4,21 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
-import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
+import { ChunkedBatch, ChunkedBatchError } from "@/lib/firestore/chunkedBatch";
 import {
-  matchOption, parseYesNoStrict, normalizeDigits, isScientificNotation,
-  GENDER_OPTIONS, BLOOD_GROUP_OPTIONS, MARITAL_STATUS_OPTIONS,
-  RATIFICATION_STATUS_OPTIONS, RELIGION_OPTIONS, CASTE_OPTIONS,
+  matchOption, normalizeDigits, isScientificNotation,
+  GENDER_OPTIONS, RATIFICATION_STATUS_OPTIONS,
 } from "@/lib/import/fieldConstraints";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
-import { getTeachingDesignations } from "@/lib/designations/config";
-import type { Designation, EmploymentType, CollegeType } from "@/types";
+import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel } from "@/lib/designations/config";
+import type { Designation, EmploymentType } from "@/types";
 
+// Abbreviations for FACULTY_DESIGNATIONS (src/lib/designations/config.ts) -
+// stores the same PROFESSOR/ASSOCIATE_PROFESSOR/ASSISTANT_PROFESSOR codes the
+// rest of the app (and AICTE cadre-ratio counting) already uses for those
+// three ranks; the new titles get their own codes, matched by their full
+// (case-insensitive) name since they have no common abbreviation.
 const DESIGNATION_MAP: Record<string, Designation> = {
   "professor": "PROFESSOR",
   "prof.": "PROFESSOR",
@@ -25,72 +29,44 @@ const DESIGNATION_MAP: Record<string, Designation> = {
   "asst. prof.": "ASSISTANT_PROFESSOR",
   "asst.prof.": "ASSISTANT_PROFESSOR",
   "asst prof": "ASSISTANT_PROFESSOR",
-  "lecturer": "LECTURER",
-  "visiting faculty": "VISITING_FACULTY",
-  "adjunct faculty": "ADJUNCT_FACULTY",
-  "lab assistant": "LAB_ASSISTANT",
-  "programmer": "PROGRAMMER",
-  "system administrator": "SYSTEM_ADMINISTRATOR",
-  "sysadmin": "SYSTEM_ADMINISTRATOR",
-  "network engineer": "NETWORK_ENGINEER",
+  "visiting professor": "VISITING_PROFESSOR",
+  "assistant professor of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
+  "asst. prof. of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
+  "asst prof of practice": "ASSISTANT_PROFESSOR_OF_PRACTICE",
+  "sr. wellness counsellor": "SR_WELLNESS_COUNSELLOR",
+  "sr wellness counsellor": "SR_WELLNESS_COUNSELLOR",
+  "senior wellness counsellor": "SR_WELLNESS_COUNSELLOR",
   "other": "OTHER",
 };
 
-const EMPLOYMENT_MAP: Record<string, EmploymentType> = {
-  "regular": "PERMANENT",
-  "permanent": "PERMANENT",
-  "contract": "CONTRACT",
-  "visiting": "VISITING",
-  "part-time": "PART_TIME",
-  "part time": "PART_TIME",
-  "regular(phy)": "PERMANENT",
-  "dummy": "CONTRACT",
-};
+// FACULTY_EMPLOYMENT_CATEGORIES values, stored verbatim (no code lookup
+// needed - unlike Designation, nothing else in the app matches on
+// employmentType's literal value). "Other" is accepted here too so an
+// imported row can hold it as-is; there's no companion "specify" column on
+// the template - the custom detail is filled in later from the Add/Edit form.
+const EMPLOYMENT_MAP: Record<string, EmploymentType> = Object.fromEntries(
+  FACULTY_EMPLOYMENT_CATEGORIES.map((c) => [c.toLowerCase(), c])
+);
+EMPLOYMENT_MAP["other"] = "Other";
+EMPLOYMENT_MAP["regular (hyd)"] = "Regular(Hyd)";
 
 type ImportRow = {
   employeeId: string;
+  legalName: string;
   name: string;
-  apaarFacultyId?: string;
   collegeEmail: string;
-  phone?: string;
-  password?: string;
+  password: string;
+  phone: string;
   designation: string;
   qualification: string;
-  specialization?: string;
-  experienceYears?: string;
   employmentType: string;
   joiningDate: string;
-  dateOfJoiningDepartment?: string;
-  // Personal / statutory details
-  gender?: string;
-  dateOfBirth?: string;
-  legalName?: string;
+  gender: string;
+  dateOfBirth: string;
   nameAsPerAadhar?: string;
-  fatherName?: string;
-  motherName?: string;
-  aadharNo?: string;
-  panNo?: string;
-  passportNumber?: string;
-  sscHallTicketNo?: string;
-  differentlyAbled?: string;
-  bankAccountNo?: string;
-  ifscCode?: string;
-  emergencyContactName?: string;
-  emergencyContactPhone?: string;
-  religion?: string;
-  caste?: string;
-  subCaste?: string;
-  ratificationStatus?: string;
-  ratificationDate?: string;
-  maritalStatus?: string;
-  spouseName?: string;
-  numberOfChildren?: string;
-  referral?: string;
-  nativePlace?: string;
-  bloodGroup?: string;
-  temporaryAddress?: string;
-  permanentSameAsTemporary?: string;
-  permanentAddress?: string;
+  aadharNo: string;
+  panNo: string;
+  ratificationStatus: string;
 };
 
 // Accepts the template's DD-MM-YYYY format (DD/MM/YYYY too - what Excel
@@ -184,10 +160,9 @@ export async function POST(request: Request) {
     // per-ID lookup - fine at hundreds of faculty across all colleges,
     // revisit (e.g. a global employeeId registry doc) if that grows to
     // thousands and imports start feeling slow.
-    const [facultyEmailSnap, employeeIdSnap, collegeDocSnap] = await Promise.all([
+    const [facultyEmailSnap, employeeIdSnap] = await Promise.all([
       db.collection("colleges").doc(collegeId).collection("facultyMembers").select("collegeEmail").get(),
       db.collectionGroup("facultyMembers").select("employeeId").get(),
-      db.collection("colleges").doc(collegeId).get(),
     ]);
     const existingIds = new Set(
       employeeIdSnap.docs.map((d) => (d.data() as { employeeId?: string }).employeeId?.toLowerCase()).filter((v): v is string => !!v)
@@ -197,22 +172,33 @@ export async function POST(request: Request) {
     );
 
     // The designation catalogue this college's Faculty template allows - the
-    // same per-college-type list the manual Add/Edit form's dropdown offers
-    // (src/lib/designations/config.ts), plus the always-available "Other".
-    const collegeType = (collegeDocSnap.data() as { type?: CollegeType } | undefined)?.type;
-    const allowedTeachingDesignations = getTeachingDesignations(collegeType);
+    // same fixed list the manual Add form's dropdown offers
+    // (FACULTY_DESIGNATIONS, src/lib/designations/config.ts), plus the
+    // always-available "Other".
+    const allowedTeachingDesignations = FACULTY_DESIGNATIONS;
 
     const now = new Date();
+    // Rows that passed validation and were queued for write, alongside which
+    // ChunkedBatch chunk their writes landed in - kept separate from `created`
+    // (the actually-confirmed list returned to the caller) so a chunk that
+    // fails to commit can be reclassified as failed instead of being reported
+    // as created when it never durably landed.
+    const queuedRows: { row: number; employeeId: string; chunkIndex: number }[] = [];
     const created: string[] = [];
     const failed: { row: number; employeeId: string; error: string }[] = [];
     const warnings: { row: number; employeeId: string; warning: string }[] = [];
     // Firebase Auth accounts created mid-loop for rows with a Password
     // column - tracked separately because they're created one row at a time
-    // (outside Firestore's batch/transaction model), so if the batch commit
-    // below fails for any reason, these must be torn back down by hand or
-    // they're stranded: visible to nothing in the app, yet permanently
-    // blocking any retry with the same email ("email already exists").
-    const createdAuthUids: string[] = [];
+    // (outside Firestore's batch/transaction model). Grouped by which
+    // ChunkedBatch chunk each row's Firestore writes landed in: a large
+    // import spans multiple independently-committed chunks (not one atomic
+    // write), so if a later chunk's commit fails, only the Auth accounts
+    // belonging to the chunks that actually failed get torn down - accounts
+    // tied to an earlier, already-committed chunk must NOT be deleted, or
+    // those rows are left with a Firestore login doc pointing at a
+    // just-deleted Auth account (a locked-out login the UI can't detect or
+    // repair, with re-import blocked by the now-existing employeeId/email).
+    const authUidsByChunk: string[][] = [[]];
 
     const batch = new ChunkedBatch(db);
 
@@ -233,12 +219,23 @@ export async function POST(request: Request) {
         rowErrors.push(`${label}: invalid value ("${raw?.trim()}")`);
       };
 
-      // Required field validation
+      // Required field validation - every column in the trimmed-down template
+      // (src/lib/faculty/csvColumns.ts IMPORT_COLUMNS) is mandatory.
       if (!row.employeeId?.trim()) { failed.push({ row: rowNum, employeeId: "-", error: "Employee ID is required" }); continue; }
-      if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name is required" }); continue; }
+      if (!row.legalName?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Full Name (as per SSC) is required" }); continue; }
+      if (!row.name?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Name (as per PAN) is required" }); continue; }
       if (!row.collegeEmail?.trim() || !row.collegeEmail.includes("@")) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Valid College Email is required" }); continue; }
-      if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
+      if (!row.password?.trim() || row.password.trim().length < 8) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Login Password is required and must be at least 8 characters" }); continue; }
+      if (!row.phone?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Mobile No is required" }); continue; }
       if (!row.designation?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Designation is required" }); continue; }
+      if (!row.qualification?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Highest Qualification is required" }); continue; }
+      if (!row.employmentType?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Employee Category is required" }); continue; }
+      if (!row.joiningDate?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Joining Institution is required" }); continue; }
+      if (!row.gender?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Gender is required" }); continue; }
+      if (!row.dateOfBirth?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Date of Birth is required" }); continue; }
+      if (!row.aadharNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Aadhar No is required" }); continue; }
+      if (!row.panNo?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "PAN No is required" }); continue; }
+      if (!row.ratificationStatus?.trim()) { failed.push({ row: rowNum, employeeId: row.employeeId, error: "Ratification Status is required" }); continue; }
 
       const empId = row.employeeId.trim();
       if (existingIds.has(empId.toLowerCase())) {
@@ -251,16 +248,13 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Map designation - held to the template's own stated catalogue for
-      // this college type (allowedTeachingDesignations), not free text.
-      // DESIGNATION_MAP normalizes common Engineering-style abbreviations
-      // ("Asst. Prof." -> "ASSISTANT_PROFESSOR") before checking membership,
-      // so a value only counts if it's either a recognized abbreviation for
-      // an allowed title, or already matches one of the allowed titles
-      // directly (case/punctuation-insensitive) - e.g. "PGT" for a School
-      // college. Anything else (including a Supporting Staff title like "Lab
-      // Assistant", which belongs on that import instead) rejects the row
-      // rather than being stored as whatever text was typed.
+      // Map designation - held to FACULTY_DESIGNATIONS, not free text.
+      // DESIGNATION_MAP normalizes common abbreviations ("Asst. Prof." ->
+      // "ASSISTANT_PROFESSOR") before checking membership, so a value only
+      // counts if it's either a recognized abbreviation for an allowed
+      // title, or already matches one of the allowed titles directly (case/
+      // punctuation-insensitive). Anything else rejects the row rather than
+      // being stored as whatever text was typed.
       const designationRaw = row.designation.trim();
       const designationKey = designationRaw.toLowerCase();
       let designation: Designation;
@@ -274,49 +268,37 @@ export async function POST(request: Request) {
         if (!matched) {
           failed.push({
             row: rowNum, employeeId: empId,
-            error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.join(" / ")} / Other)`,
+            error: `Designation "${designationRaw}" is not one of the titles your college allows (${allowedTeachingDesignations.map((d) => designationLabel(d)).join(" / ")} / Other)`,
           });
           continue;
         }
         designation = matched;
       }
 
-      // Map employment type - blank still takes the documented default; an
-      // unrecognised value fails the row instead of quietly becoming
-      // Permanent, which turned a typo into a real employment type (matches
-      // the Supporting Staff importer's behavior).
-      const empTypeKey = (row.employmentType ?? "").trim().toLowerCase();
-      if (empTypeKey && !EMPLOYMENT_MAP[empTypeKey]) {
-        failed.push({ row: rowNum, employeeId: empId, error: `Employment Type "${row.employmentType?.trim()}" is not one of Regular / Permanent / Contract / Visiting / Part-Time` });
+      // Map employment type - held to FACULTY_EMPLOYMENT_CATEGORIES
+      // (+ "Other", no companion "specify" column needed on the template -
+      // see EMPLOYMENT_MAP's own comment above); an unrecognised value fails
+      // the row rather than quietly becoming a default, which would turn a
+      // typo into a real employment category.
+      const empTypeKey = row.employmentType.trim().toLowerCase();
+      if (!EMPLOYMENT_MAP[empTypeKey]) {
+        failed.push({ row: rowNum, employeeId: empId, error: `Employee Category "${row.employmentType.trim()}" is not one of ${FACULTY_EMPLOYMENT_CATEGORIES.join(" / ")} / Other` });
         continue;
       }
-      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey] ?? "PERMANENT";
+      const employmentType: EmploymentType = EMPLOYMENT_MAP[empTypeKey];
 
       // Parse dates
       const joiningDate = parseDate(row.joiningDate);
       if (!joiningDate) { failed.push({ row: rowNum, employeeId: empId, error: "Invalid Date of Joining Institution - use DD-MM-YYYY" }); continue; }
-      const dateOfJoiningDepartment = parseDate(row.dateOfJoiningDepartment);
-      if (row.dateOfJoiningDepartment?.trim() && !dateOfJoiningDepartment) dropped(empId, "Date of joining department", row.dateOfJoiningDepartment);
-
-      // Parses a numeric field, warning (rather than silently zeroing/dropping
-      // it) when a non-empty value fails to parse.
-      const checkNum = (raw: string | undefined, label: string): number | undefined => {
-        if (!raw?.trim()) return undefined;
-        const n = parseFloat(raw);
-        if (!Number.isFinite(n)) { dropped(empId, label, raw); return undefined; }
-        return n;
-      };
 
       const docRef = db.collection("colleges").doc(collegeId).collection("facultyMembers").doc();
 
       // Personal/statutory details - same shared shape the Add/Edit forms use.
-      // Dates are run through the route's robust parseDate() and set directly;
-      // the rest go through buildPersonalDetailsUpdate (string fields, PAN
-      // uppercasing, number/boolean coercion).
+      // dateOfBirth is run through the route's robust parseDate() and set
+      // directly; the rest go through buildPersonalDetailsUpdate (string
+      // fields, PAN uppercasing).
       const dob = parseDate(row.dateOfBirth);
-      if (row.dateOfBirth?.trim() && !dob) dropped(empId, "Date of Birth", row.dateOfBirth);
-      const ratDate = parseDate(row.ratificationDate);
-      if (row.ratificationDate?.trim() && !ratDate) dropped(empId, "Ratification Date", row.ratificationDate);
+      if (!dob) dropped(empId, "Date of Birth", row.dateOfBirth);
       // Each cell is held to the option set its template column states. A
       // value outside that set is dropped with a warning rather than stored -
       // "yes" in a Ratified / Not Ratified column is a guess about intent, and
@@ -326,12 +308,6 @@ export async function POST(request: Request) {
         const matched = matchOption(raw, options);
         if (!matched) dropped(empId, label, raw);
         return matched;
-      };
-      const checkYesNo = (raw: string | undefined, label: string) => {
-        if (!raw?.trim()) return undefined;
-        const parsed = parseYesNoStrict(raw);
-        if (parsed === undefined) dropped(empId, label, raw);
-        return parsed;
       };
       // Excel turns a long number column into "9E+09" on export - expanded back
       // to digits so the stored value is dialable, and flagged, since the sheet
@@ -346,50 +322,15 @@ export async function POST(request: Request) {
         }
         return normalizeDigits(raw);
       };
-      // A well-formed IFSC has a fixed shape (4 letters, a literal 0, 6
-      // alphanumerics) - anything else is a typo in a code that routes real
-      // salary payments, so it's rejected rather than stored as-is.
-      const checkIfsc = (raw: string | undefined) => {
-        if (!raw?.trim()) return undefined;
-        const v = raw.trim().toUpperCase();
-        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(v)) { dropped(empId, "IFSC Code", raw); return undefined; }
-        return v;
-      };
 
       const personalInput: PersonalDetailsInput = {
         gender: checkOption(row.gender, GENDER_OPTIONS, "Gender"),
-        legalName: row.legalName?.trim() || undefined,
+        legalName: row.legalName.trim(),
         nameAsPerAadhar: row.nameAsPerAadhar?.trim() || undefined,
-        fatherName: row.fatherName?.trim() || undefined,
-        motherName: row.motherName?.trim() || undefined,
         aadharNo: normalizeDigits(row.aadharNo),
-        panNo: row.panNo?.trim() || undefined,
-        passportNumber: row.passportNumber?.trim() || undefined,
-        sscHallTicketNo: row.sscHallTicketNo?.trim() || undefined,
-        differentlyAbled: checkYesNo(row.differentlyAbled, "Differently Abled"),
-        bankAccountNo: normalizeDigits(row.bankAccountNo),
-        ifscCode: checkIfsc(row.ifscCode),
-        emergencyContactName: row.emergencyContactName?.trim() || undefined,
-        emergencyContactPhone: checkPhone(row.emergencyContactPhone, "Emergency Contact Phone"),
-        religion: checkOption(row.religion, RELIGION_OPTIONS, "Religion"),
-        caste: checkOption(row.caste, CASTE_OPTIONS, "Caste"),
-        subCaste: row.subCaste?.trim() || undefined,
+        panNo: row.panNo.trim(),
         ratificationStatus: checkOption(row.ratificationStatus, RATIFICATION_STATUS_OPTIONS, "Ratification Status"),
-        maritalStatus: checkOption(row.maritalStatus, MARITAL_STATUS_OPTIONS, "Marital Status"),
-        spouseName: row.spouseName?.trim() || undefined,
-        numberOfChildren: checkNum(row.numberOfChildren, "Number of Children"),
-        referral: row.referral?.trim() || undefined,
-        nativePlace: row.nativePlace?.trim() || undefined,
-        temporaryAddress: row.temporaryAddress?.trim() || undefined,
-        permanentSameAsTemporary: checkYesNo(row.permanentSameAsTemporary, "Permanent Same as Temporary"),
-        permanentAddress: row.permanentAddress?.trim() || undefined,
-        bloodGroup: checkOption(row.bloodGroup, BLOOD_GROUP_OPTIONS, "Blood Group"),
       };
-
-      // Computed above the gate, not inline in the payload literal below: that
-      // literal is built after the gate, so an unparseable value here was
-      // recorded too late to reject the row and silently became 0.
-      const vExperienceYears = checkNum(row.experienceYears, "Years of Experience");
 
       // Every constraint the template states has now been checked. Anything
       // that failed one rejects the row here - before the login below, so a
@@ -399,31 +340,25 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Optional login creation - a CSV row with a Password fills in the
-      // faculty member's login account (role: Panel Member) right here during
-      // import, so there's no separate "Set Login" step needed afterward for
-      // rows that came in this way. Rows left blank still fall back to the
-      // per-faculty "Set Login" button on the Faculty list (its userUid check
-      // there is what keeps that button hidden once this has run).
-      let userUid: string | undefined;
-      const passwordRaw = row.password?.trim();
+      // Login creation - mandatory now that Login Password is a required
+      // column, so every imported row gets a login account (role: Panel
+      // Member) immediately, no separate "Set Login" step needed afterward.
+      // A failure here (e.g. the email is already registered to some other
+      // Auth account) rejects the whole row for correction, same as every
+      // other constraint above - it can't leave a faculty record behind with
+      // no way to log in.
+      const passwordRaw = row.password.trim();
       const loginEmail = loginEmailKey;
-      if (passwordRaw) {
-        if (passwordRaw.length < 8) {
-          warnings.push({ row: rowNum, employeeId: empId, warning: "Password ignored - must be at least 8 characters (faculty record was still created without a login)" });
-        } else {
-          try {
-            userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
-            createdAuthUids.push(userUid);
-          } catch (err) {
-            const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
-              ? "an account with this email already exists"
-              : err instanceof Error ? err.message : "unknown error";
-            warnings.push({ row: rowNum, employeeId: empId, warning: `Login not created - ${message} (faculty record was still created)` });
-          }
-        }
+      let userUid: string;
+      try {
+        userUid = await createFirebaseUser(loginEmail, passwordRaw, row.name.trim());
+      } catch (err) {
+        const message = err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists"
+          ? "an account with this email already exists"
+          : err instanceof Error ? err.message : "unknown error";
+        failed.push({ row: rowNum, employeeId: empId, error: `Login not created - ${message}` });
+        continue;
       }
-
 
       const payload: Record<string, unknown> = {
         userUid,
@@ -431,20 +366,15 @@ export async function POST(request: Request) {
         department: hodDept,
         employeeId: empId,
         name: row.name.trim(),
-        apaarFacultyId: row.apaarFacultyId?.trim() || undefined,
         collegeEmail: loginEmail,
         phone: checkPhone(row.phone, "Phone") ?? "",
         designation,
-        qualification: row.qualification?.trim() ?? "",
-        specialization: row.specialization?.trim() ?? "",
+        qualification: row.qualification.trim(),
         employmentType,
-        experienceYears: vExperienceYears ?? 0,
         joiningDate,
-        dateOfJoiningDepartment: dateOfJoiningDepartment || undefined,
         status: "ACTIVE",
         ...buildPersonalDetailsUpdate(personalInput),
         ...(dob ? { dateOfBirth: dob } : {}),
-        ...(ratDate ? { ratificationDate: ratDate } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -479,29 +409,67 @@ export async function POST(request: Request) {
         });
       }
 
+      // Record which chunk this row's writes just landed in (after all of
+      // this row's batch.set() calls, so a rotation that happened mid-row is
+      // reflected) - used below to roll back only the Auth accounts and
+      // report only the rows belonging to a chunk that actually fails to
+      // commit, instead of treating the whole request as all-or-nothing.
+      const chunkIndex = batch.getCurrentChunkIndex();
+      while (authUidsByChunk.length <= chunkIndex) authUidsByChunk.push([]);
+      if (userUid) authUidsByChunk[chunkIndex].push(userUid);
+      queuedRows.push({ row: rowNum, employeeId: empId, chunkIndex });
+
       existingIds.add(empId.toLowerCase()); // prevent duplicates within the same batch
       existingEmails.add(loginEmailKey);
-      created.push(empId);
     }
 
+    let failedChunkIndexes: number[] = [];
     try {
       await batch.commit();
     } catch (commitErr) {
-      // Firestore rejected the whole batch - every Auth account created for
-      // a row above is now stranded (nothing in Firestore references it), so
-      // tear them back down before surfacing the error, or every retry with
-      // the same email(s) fails with "already exists" for accounts the user
-      // can't see or manage anywhere in the app.
-      if (createdAuthUids.length > 0) {
+      if (!(commitErr instanceof ChunkedBatchError)) {
+        // Unexpected error shape (never actually reached commit()'s own
+        // per-chunk accounting) - can't tell which chunks are safe, so roll
+        // every Auth account back, same as the previous all-or-nothing
+        // behavior, and surface a hard failure.
+        if (authUidsByChunk.flat().length > 0) {
+          const { getAdminAuth } = await import("@/lib/firebase/admin");
+          const auth = await getAdminAuth();
+          await Promise.all(authUidsByChunk.flat().map((uid) =>
+            auth.deleteUser(uid).catch((cleanupErr) =>
+              console.error(`[faculty/import POST] Failed to roll back orphaned Auth user ${uid}:`, cleanupErr)
+            )
+          ));
+        }
+        throw commitErr;
+      }
+      // Only the chunk(s) that actually failed to commit are rolled back -
+      // rows in an earlier, already-committed chunk keep their real Firestore
+      // docs (and working logins) and must not be touched.
+      failedChunkIndexes = commitErr.failedChunkIndexes;
+      const uidsToRollBack = failedChunkIndexes.flatMap((i) => authUidsByChunk[i] ?? []);
+      if (uidsToRollBack.length > 0) {
         const { getAdminAuth } = await import("@/lib/firebase/admin");
         const auth = await getAdminAuth();
-        await Promise.all(createdAuthUids.map((uid) =>
+        await Promise.all(uidsToRollBack.map((uid) =>
           auth.deleteUser(uid).catch((cleanupErr) =>
             console.error(`[faculty/import POST] Failed to roll back orphaned Auth user ${uid}:`, cleanupErr)
           )
         ));
       }
-      throw commitErr;
+    }
+
+    // Reconcile queued rows against which chunk actually committed - a row
+    // whose writes landed in a failed chunk never durably saved, so it's
+    // reported as failed (safe to retry) rather than created; every other
+    // queued row's chunk committed, so it's confirmed created.
+    const failedChunkSet = new Set(failedChunkIndexes);
+    for (const q of queuedRows) {
+      if (failedChunkSet.has(q.chunkIndex)) {
+        failed.push({ row: q.row, employeeId: q.employeeId, error: "Save failed for this batch of rows - retry this row" });
+      } else {
+        created.push(q.employeeId);
+      }
     }
 
     return NextResponse.json({ created: created.length, failed, warnings }, { status: 201 });

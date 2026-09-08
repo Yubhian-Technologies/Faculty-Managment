@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { CreateHodDialog } from "@/components/college/CreateHodDialog";
 import { YearsTaughtAndSecondaryFields } from "@/components/college/YearsTaughtAndSecondaryFields";
 import { departmentSchema, type DepartmentFormData } from "@/lib/validations";
@@ -34,6 +35,14 @@ export default function EditDepartmentPage() {
   const [secondaryDepartments, setSecondaryDepartments] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Set when the server rejects turning "parent runs its own sections" off
+  // because this department already has real Section docs directly under it
+  // (HAS_EXISTING_SECTIONS - see college/departments PATCH). Holds the exact
+  // payload that was rejected so confirming can resubmit it unchanged, just
+  // with the acknowledgement flag added.
+  const [existingSectionsWarning, setExistingSectionsWarning] = useState<
+    { message: string; payload: Record<string, unknown> } | null
+  >(null);
 
   const {
     register,
@@ -116,6 +125,26 @@ export default function EditDepartmentPage() {
     }
   }
 
+  // Shared by the normal submit and the warning dialog's "confirm and save
+  // anyway" - `extra` carries `confirmExistingSections: true` on the retry so
+  // the server skips the HAS_EXISTING_SECTIONS check it already showed.
+  async function submitPatch(payload: Record<string, unknown>, extra?: Record<string, unknown>) {
+    const res = await fetch("/api/college/departments", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(extra ? { ...payload, ...extra } : payload),
+    });
+    if (!res.ok) {
+      const json = await res.json() as { error?: string; code?: string };
+      if (json.code === "HAS_EXISTING_SECTIONS") {
+        setExistingSectionsWarning({ message: json.error ?? "This department already has sections.", payload });
+        return false;
+      }
+      throw new Error(json.error ?? "Failed");
+    }
+    return true;
+  }
+
   const onSubmit = async (data: DepartmentFormData) => {
     if (!department) return;
     setIsSubmitting(true);
@@ -131,15 +160,8 @@ export default function EditDepartmentPage() {
         ...(hasSubDepartments ? { parentRunsOwnSections } : {}),
         secondaryDepartments,
       };
-      const res = await fetch("/api/college/departments", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const json = await res.json() as { error?: string };
-        throw new Error(json.error ?? "Failed");
-      }
+      const saved = await submitPatch(payload);
+      if (!saved) return; // warning dialog now showing - wait for the Principal's decision
       toast({ variant: "success", title: "Department updated" });
       router.push("/principal/departments");
     } catch (err) {
@@ -148,6 +170,21 @@ export default function EditDepartmentPage() {
       setIsSubmitting(false);
     }
   };
+
+  async function confirmExistingSectionsAndSave() {
+    if (!existingSectionsWarning) return;
+    setIsSubmitting(true);
+    try {
+      await submitPatch(existingSectionsWarning.payload, { confirmExistingSections: true });
+      toast({ variant: "success", title: "Department updated" });
+      setExistingSectionsWarning(null);
+      router.push("/principal/departments");
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -310,6 +347,25 @@ export default function EditDepartmentPage() {
           </form>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!existingSectionsWarning}
+        onOpenChange={(open) => {
+          if (open) return;
+          // "Keep it on" / closing without confirming abandons the change -
+          // reset the checkbox back to checked so the form doesn't silently
+          // show "off" for a toggle that was never actually saved.
+          setExistingSectionsWarning(null);
+          setParentRunsOwnSections(true);
+        }}
+        title="This department already has its own sections"
+        description={existingSectionsWarning?.message}
+        confirmLabel="Turn off anyway"
+        cancelLabel="Keep it on"
+        variant="destructive"
+        loading={isSubmitting}
+        onConfirm={confirmExistingSectionsAndSave}
+      />
     </div>
   );
 }

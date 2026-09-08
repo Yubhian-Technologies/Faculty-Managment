@@ -171,6 +171,11 @@ export async function POST(request: Request) {
     if (!employeeId || !name || !collegeEmail || !password || !designation || !qualification || !employmentType || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    // Matches the mandatory field set the bulk-import template and Add
+    // Faculty wizard's Personal Details step now both enforce.
+    if (!body.phone || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
+      return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
+    }
     // Uploaded before the record exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific id.
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {

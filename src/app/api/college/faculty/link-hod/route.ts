@@ -51,6 +51,12 @@ export async function POST(request: Request) {
     if (!linkUid || !department || !employeeId || !name || !designation || !qualification || !employmentType || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    // Same personal-detail requirements as the default create flow (POST
+    // /api/college/faculty) - link mode only skips collegeEmail/password
+    // since it reuses an existing login, not the personal-detail fields.
+    if (!body.phone || !body.legalName || !body.gender || !body.dateOfBirth || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
+      return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
+    }
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
       return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
     }

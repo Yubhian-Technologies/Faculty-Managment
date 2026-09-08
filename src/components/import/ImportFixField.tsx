@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  getTeachingDesignations, getHodTechnicalDesignations, getNonTechnicalDesignations, designationLabel,
+  getHodTechnicalDesignations, getNonTechnicalDesignations, designationLabel,
+  FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES,
 } from "@/lib/designations/config";
 import {
   matchOption,
@@ -38,13 +39,15 @@ function fixFieldOptions(
 ): string[] | undefined {
   switch (fieldKey) {
     case "designation": {
-      const codes = designationKind === "teaching" ? getTeachingDesignations(collegeType)
+      const codes = designationKind === "teaching" ? FACULTY_DESIGNATIONS
         : designationKind === "supporting" ? getHodTechnicalDesignations(collegeType)
         : getNonTechnicalDesignations(collegeType);
       return [...codes.map((c) => designationLabel(c)), "Other"];
     }
     case "employmentType":
-      return Object.values(EMPLOYMENT_TYPE_LABELS);
+      return designationKind === "teaching"
+        ? [...FACULTY_EMPLOYMENT_CATEGORIES, "Other"]
+        : Object.values(EMPLOYMENT_TYPE_LABELS);
     case "status":
       return STATUS_KEYS.map((s) => FACULTY_STATUS_LABELS[s]);
     case "gender":

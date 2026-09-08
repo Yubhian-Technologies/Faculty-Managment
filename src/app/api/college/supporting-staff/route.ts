@@ -80,6 +80,7 @@ export async function POST(request: Request) {
       staffCategory: SupportingStaffCategory;
       designation: SupportingStaffDesignation;
       otherDesignationTitle?: string;
+      qualification: string;
       experienceYears: number;
       joiningDate: string;
       employmentType: EmploymentType;
@@ -89,12 +90,17 @@ export async function POST(request: Request) {
     } & PersonalDetailsInput;
 
     const {
-      employeeId, name, collegeEmail, password, staffCategory, designation,
+      employeeId, name, collegeEmail, password, staffCategory, designation, qualification,
       experienceYears, joiningDate, employmentType, profilePhotoUrl,
     } = body;
 
-    if (!employeeId || !name || !collegeEmail || !password || !staffCategory || !designation || !employmentType || !joiningDate) {
+    if (!employeeId || !name || !collegeEmail || !password || !staffCategory || !designation || !qualification || !employmentType || !joiningDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    // Matches the mandatory field set the bulk-import template and Add
+    // Staff wizard's Personal Details step now both enforce.
+    if (!body.phone || !body.legalName || !body.gender || !body.dateOfBirth || !body.nameAsPerAadhar || !body.aadharNo || !body.panNo || !body.ratificationStatus) {
+      return NextResponse.json({ error: "Missing required personal details - Mobile No, Full Name (as per SSC), Gender, Date of Birth, Name (as per Aadhar), Aadhar No, PAN No, and Ratification Status are all required" }, { status: 400 });
     }
     if (!canRolePostCategory(session.role, staffCategory)) {
       return NextResponse.json(
@@ -192,6 +198,7 @@ export async function POST(request: Request) {
       staffCategory,
       designation,
       ...(body.otherDesignationTitle ? { otherDesignationTitle: body.otherDesignationTitle } : {}),
+      qualification,
       experienceYears: Number(experienceYears),
       joiningDate: new Date(joiningDate),
       employmentType,

@@ -796,6 +796,13 @@ export const DESIGNATION_LABELS: Record<string, string> = {
   LECTURER: "Lecturer",
   VISITING_FACULTY: "Visiting Faculty",
   ADJUNCT_FACULTY: "Adjunct Faculty",
+  // Faculty's own current title list (FACULTY_DESIGNATIONS,
+  // src/lib/designations/config.ts) - LECTURER/VISITING_FACULTY/
+  // ADJUNCT_FACULTY above stay mapped for any pre-existing record still
+  // holding one of those older titles.
+  VISITING_PROFESSOR: "Visiting Professor",
+  ASSISTANT_PROFESSOR_OF_PRACTICE: "Assistant Professor of Practice",
+  SR_WELLNESS_COUNSELLOR: "Sr. Wellness Counsellor",
   // Technical designations moved to Supporting Staff - kept here too so any
   // FacultyMember record not yet moved by the migration script still
   // displays as a word instead of the raw code.
@@ -806,9 +813,18 @@ export const DESIGNATION_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-export type EmploymentType = "PERMANENT" | "CONTRACT" | "VISITING" | "PART_TIME";
+// Widened to plain string (matching Designation's own pattern above) so
+// Faculty's Employee Category can use its own independent category list
+// (FACULTY_EMPLOYMENT_CATEGORIES, src/lib/designations/config.ts) - including
+// a free-text "Other" - without those values needing to fit the fixed
+// PERMANENT/CONTRACT/VISITING/PART_TIME codes below, which Supporting/
+// Non-Technical Staff and Salary Structures still use unchanged
+// (EMPLOYMENT_TYPE_LABELS keeps displaying those four as words; a value
+// outside it, like Faculty's new categories, just displays as-is wherever
+// the lookup already falls back to the raw value).
+export type EmploymentType = string;
 
-export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
   PERMANENT: "Permanent",
   CONTRACT: "Contract",
   VISITING: "Visiting",

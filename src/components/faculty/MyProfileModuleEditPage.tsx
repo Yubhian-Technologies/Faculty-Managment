@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/authStore";
 import { getUserById } from "@/lib/firestore/users";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
+import { getMissingRequiredPersonalFields, STAFF_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import { PROFILE_MODULES, SELF_EDIT_DISABLED_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
@@ -18,6 +19,13 @@ import { toast } from "@/hooks/useToast";
 interface Props {
   basePath: string;       // e.g. "/hod/profile"
   patchEndpoint: string;  // "/api/college/users/me" | "/api/college/faculty/me"
+  // This page is reused by many roles beyond Faculty (Webmaster, IQAC
+  // Coordinator, College Staff, etc. - see each role's profile/[module]/edit
+  // page.tsx) - defaults to the full Staff-shaped requirement (every
+  // existing caller's current behavior); only a genuinely Faculty-shaped
+  // caller (Panel, whose patchEndpoint is /api/college/faculty/me) opts into
+  // FACULTY_REQUIRED_PERSONAL_FIELDS instead.
+  requiredPersonalFields?: (keyof PersonalDetailsValue)[];
 }
 
 // Shared self-profile per-module edit page for HOD and Panel (both source
@@ -25,7 +33,7 @@ interface Props {
 // thin users/{uid} doc for roles with no FacultyMember record - see that
 // route's comments). Principal/VP have their own edit page since their View
 // side already bypasses this endpoint entirely (see principal/profile).
-export function MyProfileModuleEditPage({ basePath, patchEndpoint }: Props) {
+export function MyProfileModuleEditPage({ basePath, patchEndpoint, requiredPersonalFields = STAFF_REQUIRED_PERSONAL_FIELDS }: Props) {
   const router = useRouter();
   const params = useParams<{ module: string }>();
   const moduleKey = params.module as ProfileModuleKey;
@@ -86,6 +94,13 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint }: Props) {
   }
 
   async function handleSave() {
+    if (moduleKey === "personal") {
+      const missing = getMissingRequiredPersonalFields(record, requiredPersonalFields);
+      if (missing.length > 0) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
+        return;
+      }
+    }
     setSaving(true);
     try {
       const body: Record<string, unknown> =
@@ -173,6 +188,7 @@ export function MyProfileModuleEditPage({ basePath, patchEndpoint }: Props) {
               facultyId={user?.uid ?? ""}
               includeTeachingAssignment={false}
               collegeType={collegeType}
+              requiredPersonalFields={requiredPersonalFields}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`${basePath}/${moduleKey}`)}>Cancel</Button>

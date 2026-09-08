@@ -90,6 +90,9 @@ export interface SupportingStaffMember {
   staffCategory: SupportingStaffCategory;
   designation: SupportingStaffDesignation;
   otherDesignationTitle?: string; // when designation === "OTHER"
+  // Flat mandatory field, distinct from supportingStaffProfile.qualifications
+  // (the deeper qualifications-list module) - mirrors FacultyMember.qualification.
+  qualification?: string;
   experienceYears: number;
   joiningDate: Timestamp;
   employmentType: EmploymentType; // reused from core.ts
@@ -103,6 +106,7 @@ export interface SupportingStaffMember {
   gender?: "Male" | "Female" | "Other";
   dateOfBirth?: Timestamp;
   legalName?: string;
+  nameAsPerAadhar?: string;
   fatherName?: string;
   motherName?: string;
   religion?: Religion;

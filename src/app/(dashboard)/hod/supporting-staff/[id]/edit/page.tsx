@@ -24,6 +24,7 @@ interface StaffForm {
   collegeEmail: string;
   designation: SupportingStaffDesignation;
   otherDesignationTitle: string;
+  qualification: string;
   experienceYears: number;
   employmentType: EmploymentType;
   status: FacultyStatus;
@@ -31,7 +32,7 @@ interface StaffForm {
 }
 
 const EMPTY_FORM: StaffForm = {
-  name: "", phone: "", collegeEmail: "", designation: "", otherDesignationTitle: "",
+  name: "", phone: "", collegeEmail: "", designation: "", otherDesignationTitle: "", qualification: "",
   experienceYears: 0, employmentType: "PERMANENT", status: "ACTIVE", joiningDate: "",
 };
 
@@ -71,6 +72,7 @@ export default function EditHodSupportingStaffPage() {
           collegeEmail: (m.collegeEmail as string) ?? "",
           designation: (m.designation as SupportingStaffDesignation) ?? "",
           otherDesignationTitle: (m.otherDesignationTitle as string) ?? "",
+          qualification: (m.qualification as string) ?? "",
           experienceYears: (m.experienceYears as number) ?? 0,
           employmentType: (m.employmentType as EmploymentType) ?? "PERMANENT",
           status: (m.status as FacultyStatus) ?? "ACTIVE",
@@ -94,6 +96,14 @@ export default function EditHodSupportingStaffPage() {
     }
     if (!form.collegeEmail.trim()) {
       toast({ variant: "destructive", title: "College email is required" });
+      return;
+    }
+    if (!form.phone.trim()) {
+      toast({ variant: "destructive", title: "Mobile No is required" });
+      return;
+    }
+    if (!form.qualification.trim()) {
+      toast({ variant: "destructive", title: "Highest Qualification is required" });
       return;
     }
     setSaving(true);
@@ -160,11 +170,11 @@ export default function EditHodSupportingStaffPage() {
                   <Input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-001" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Full Name *</Label>
+                  <Label>Name (as per PAN) *</Label>
                   <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Phone</Label>
+                  <Label>Mobile No *</Label>
                   <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+91 98765 43210" />
                 </div>
               </div>
@@ -208,6 +218,10 @@ export default function EditHodSupportingStaffPage() {
               </div>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Highest Qualification *</Label>
+                <Input value={form.qualification} onChange={(e) => set({ qualification: e.target.value })} placeholder="e.g. Diploma, B.Com, ITI" />
+              </div>
               <div className="space-y-2">
                 <Label>Total Years of Experience</Label>
                 <Input type="number" min={0} value={form.experienceYears} onChange={(e) => set({ experienceYears: e.target.value === "" ? 0 : Number(e.target.value) })} />

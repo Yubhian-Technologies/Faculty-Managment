@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FacultyProfileModuleEditor, type FacultyEditRecord } from "@/components/faculty/FacultyProfileModuleEditor";
+import { getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS } from "@/components/shared/PersonalDetailsFields";
 import { PROFILE_MODULES, type ProfileModuleKey } from "@/lib/faculty/profileModules";
 import { syncTeachingAssignments } from "@/lib/teaching/syncTeachingAssignments";
 import type { StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
@@ -108,6 +109,13 @@ export default function HodFacultyModuleEditPage() {
   }
 
   async function handleSave() {
+    if (moduleKey === "personal") {
+      const missing = getMissingRequiredPersonalFields(record, FACULTY_REQUIRED_PERSONAL_FIELDS);
+      if (missing.length > 0) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
+        return;
+      }
+    }
     setSaving(true);
     try {
       if (moduleKey === "teaching-load") {
@@ -181,6 +189,7 @@ export default function HodFacultyModuleEditPage() {
               teachingRows={teachingRows}
               onTeachingRowsChange={setTeachingRows}
               collegeType={collegeType}
+              requiredPersonalFields={FACULTY_REQUIRED_PERSONAL_FIELDS}
             />
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => router.push(`/hod/faculty/${facultyId}/${moduleKey}`)}>Cancel</Button>

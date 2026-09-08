@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SupportingStaffModuleEditor, type SupportingStaffEditRecord } from "@/components/supportingStaff/SupportingStaffModuleEditor";
+import { getMissingRequiredPersonalFields } from "@/components/shared/PersonalDetailsFields";
 import { SUPPORTING_STAFF_MODULES, type SupportingStaffModuleKey } from "@/lib/supportingStaff/profileModules";
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
@@ -40,6 +41,7 @@ export default function HodSupportingStaffModuleEditPage() {
           gender: (m.gender as string) ?? "",
           dateOfBirth: (m.dateOfBirth as string) ?? undefined,
           legalName: (m.legalName as string) ?? "",
+          nameAsPerAadhar: (m.nameAsPerAadhar as string) ?? "",
           fatherName: (m.fatherName as string) ?? "",
           motherName: (m.motherName as string) ?? "",
           religion: m.religion as never,
@@ -73,12 +75,20 @@ export default function HodSupportingStaffModuleEditPage() {
   }
 
   async function handleSave() {
+    if (moduleKey === "personal") {
+      const missing = getMissingRequiredPersonalFields(record);
+      if (missing.length > 0) {
+        toast({ variant: "destructive", title: "Some required fields are missing", description: missing.join(", ") });
+        return;
+      }
+    }
     setSaving(true);
     try {
       const body: Record<string, unknown> =
         moduleKey === "personal"
           ? {
               gender: record.gender, dateOfBirth: record.dateOfBirth, legalName: record.legalName,
+              nameAsPerAadhar: record.nameAsPerAadhar,
               fatherName: record.fatherName, motherName: record.motherName, religion: record.religion,
               caste: record.caste, subCaste: record.subCaste, aadharNo: record.aadharNo, panNo: record.panNo,
               passportNumber: record.passportNumber, emergencyContactName: record.emergencyContactName,
