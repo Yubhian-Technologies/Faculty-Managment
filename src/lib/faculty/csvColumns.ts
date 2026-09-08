@@ -1,3 +1,5 @@
+import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
+
 // Faculty CSV column definitions.
 //
 // IMPORT_COLUMNS/IMPORT_HINTS (below COLUMNS/HINTS) are the only columns the
@@ -344,7 +346,12 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   { key: "password",     label: "Login Password (min 8 characters, optional)", required: false, sample: "Optional; minimum 8 characters", aliases: ["Password"] },
   { key: "phone",        label: "Mobile No",     required: false, sample: "Optional; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",  label: "Designation",   required: true,  sample: "Choose one designation according to staff type. Technical: Professor / Associate Professor / Assistant Professor / Lecturer / Visiting Faculty / Adjunct Faculty / Lab Assistant / Programmer / System Administrator / Network Engineer / Other. Supporting: Office Staff / Accountant / Clerk / Attender / Office Assistant / Other. Non-Technical Staff: use the non-technical designation configured in the application / Other." },
-  { key: "qualification", label: "Highest Qualification", required: true, sample: "Required; free text", aliases: ["Qualification"] },
+  // Names the same options the Add/Edit Faculty dropdown offers, so a sheet
+  // uses the spellings the form produces rather than inventing "PhD"/"Mtech".
+  // Still accepts anything else, deliberately: the dropdown's own "Others"
+  // stores whatever was typed, so a closed set here would reject qualifications
+  // the app itself can create.
+  { key: "qualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
   { key: "specialization", label: "Specialization", required: false, sample: "Optional; free text" },
   // Header reworded to say TOTAL: it means the whole career, not service at
   // this institution, which "Years of Experience" beside a Date of Joining
