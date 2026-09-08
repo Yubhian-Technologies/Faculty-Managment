@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import { buildPersonalDetailsUpdate, type PersonalDetailsInput } from "@/lib/firestore/personalDetails";
@@ -27,7 +27,10 @@ const PRINCIPAL_BASE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "COLLEGE_ADMI
 // Leader logins from hod/sections/[id]/edit - the College Office pages that
 // used to be the only place this happened were removed; this is where
 // section management actually lives now.
-const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "CLASS_LEADER"];
+// DEPARTMENT_OFFICE is the HOD's own office head for their department - see
+// UserRole. Only a real HOD may create one (an office head is fenced out of it
+// below), and only one per department.
+const HOD_ROLES: UserRole[] = ["PANEL_MEMBER", "HOD", "CLASS_LEADER", "DEPARTMENT_OFFICE"];
 // College Office may only create Class Leader logins - one per Section, bound
 // via `sectionId` below. (The College Office section pages that used to call
 // this were removed; sections are managed from the HOD and Principal views.)
@@ -211,6 +214,18 @@ export async function POST(request: Request) {
       }
     }
 
+    // Appointing leadership stays with the actual HOD. A Department Office
+    // head's session reads "HOD" everywhere (see api/auth/session), which is
+    // exactly what gives them equal operational authority - so this is one of
+    // the few places that has to look past that at the real role, or the
+    // appointee could appoint (and thereby replace) themselves.
+    if (role === "DEPARTMENT_OFFICE" && isDepartmentOffice(session)) {
+      return NextResponse.json(
+        { error: "Only the Head of Department can appoint a Department Office head" },
+        { status: 403 }
+      );
+    }
+
     // Enforce one holder per role per college for Office/Placement Dept/Library/Exam Cell
     if (COLLEGE_SINGLETON_ROLES.includes(role)) {
       const existingSnap = await db
@@ -242,6 +257,35 @@ export async function POST(request: Request) {
     // Class Leader: department/sectionName always come from the Section itself
     if (role === "CLASS_LEADER" && sectionData) {
       resolvedDepartment = sectionData.department ?? "";
+    }
+
+    // One Department Office head per DEPARTMENT (not per college, unlike
+    // COLLEGE_SINGLETON_ROLES above) - checked here rather than beside those
+    // because it needs the department resolved first. An HOD may also only
+    // appoint one within their own scope, same rule every other HOD-created
+    // login follows.
+    if (role === "DEPARTMENT_OFFICE") {
+      if (!resolvedDepartment) {
+        return NextResponse.json({ error: "A department is required for a Department Office head" }, { status: 400 });
+      }
+      if (session.role === "HOD") {
+        const scope = await getHodDepartmentScope(db, collegeId, session.uid);
+        if (!canHodEditDepartment(scope, resolvedDepartment)) {
+          return NextResponse.json({ error: "That department is not yours to appoint for" }, { status: 403 });
+        }
+      }
+      const existingSnap = await db
+        .collection("colleges").doc(collegeId).collection("users")
+        .where("role", "==", "DEPARTMENT_OFFICE")
+        .where("department", "==", resolvedDepartment)
+        .limit(1).get();
+      if (!existingSnap.empty) {
+        const holder = existingSnap.docs[0].data() as { name?: string };
+        return NextResponse.json(
+          { error: `${resolvedDepartment} already has a Department Office head (${holder.name ?? "another user"}). Remove them first.` },
+          { status: 409 }
+        );
+      }
     }
 
     // Class Leader logins aren't tied to one fixed student's identity - the

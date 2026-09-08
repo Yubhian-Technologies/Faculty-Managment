@@ -51,6 +51,16 @@ export async function POST(request: Request) {
     // shows up as its own entry in staff lists.
     if (role === "COLLEGE_ADMIN") role = "PRINCIPAL";
 
+    // A department's own office head carries the same authority as that
+    // department's HOD, so it normalizes the same way for exactly the same
+    // reason: ~420 role==="HOD" checks across 154 files keep working untouched
+    // and can never drift out of step. Their department scope comes from the
+    // user doc's own `department`/`departments` (getHodDepartmentScope reads
+    // those, not the role), so they're scoped to their own department only.
+    // `realRole` below stays "DEPARTMENT_OFFICE" and is what fences them out of
+    // appointing another office head or removing a Sub-HOD.
+    if (role === "DEPARTMENT_OFFICE") role = "HOD";
+
     // `realRole` preserves the true underlying role for the rare feature that
     // must tell College Admin apart from Principal despite the normalization
     // above (see SessionPayload.realRole / FMSUser.realRole). Can't just
@@ -107,6 +117,10 @@ export async function POST(request: Request) {
           if (profile.role === "COLLEGE_ADMIN") {
             realRole = "COLLEGE_ADMIN";
             profile.role = "PRINCIPAL";
+          }
+          if (profile.role === "DEPARTMENT_OFFICE") {
+            realRole = "DEPARTMENT_OFFICE";
+            profile.role = "HOD";
           }
         }
       } catch { /* non-fatal */ }

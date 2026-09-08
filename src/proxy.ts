@@ -64,6 +64,9 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   // see src/app/api/auth/session/route.ts and src/hooks/useAuth.ts).
   COLLEGE_ADMIN: ["/principal", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
   HOD: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
+  // Normalized to HOD before the cookie is written (api/auth/session), so
+  // this is only reached by a session issued before that existed - same paths.
+  DEPARTMENT_OFFICE: ["/hod", "/coordinator", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
   COLLEGE_OFFICE: ["/college-office", PANEL_INTERVIEWS_PATH, EVALUATION_PATH, CANDIDATE_PROFILE_PATH, LEAVE_ADJUSTMENTS_PATH],
   COLLEGE_STAFF: ["/college-staff", LEAVE_ADJUSTMENTS_PATH],
   DEAN: ["/dean", LEAVE_ADJUSTMENTS_PATH],
