@@ -95,6 +95,43 @@ export default function HODFacultyPage() {
       .catch(() => {});
   }, []);
 
+  // Which sub-department's Sub-HOD is being removed - null when no dialog is
+  // open. Same meaning as the Principal's Remove HOD on the department faculty
+  // page: it clears the assignment, it doesn't touch the person's account.
+  const [removingSubHod, setRemovingSubHod] = useState<Department | null>(null);
+  const [isRemovingSubHod, setIsRemovingSubHod] = useState(false);
+
+  async function handleRemoveSubHod() {
+    if (!removingSubHod) return;
+    setIsRemovingSubHod(true);
+    try {
+      const res = await fetch("/api/college/departments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        // hodUid/hodName are both on the HOD-permitted field list for a
+        // sub-department they own (see the route's HOD allowlist), so this is
+        // the same call the Sub-Departments settings page already makes.
+        body: JSON.stringify({ deptId: removingSubHod.id, hodUid: "", hodName: "" }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to remove Sub-HOD");
+      toast({
+        variant: "success",
+        title: `${removingSubHod.hodName ?? "They"} is no longer Sub-HOD of ${removingSubHod.name}`,
+        description: "Their account is unchanged — assign a new Sub-HOD from Sub-Departments.",
+      });
+      const removedId = removingSubHod.id;
+      setRemovingSubHod(null);
+      setDepartments((prev) =>
+        prev.map((d) => (d.id === removedId ? { ...d, hodUid: undefined, hodName: undefined } : d))
+      );
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove Sub-HOD" });
+    } finally {
+      setIsRemovingSubHod(false);
+    }
+  }
+
   const subDepartments = useMemo(() => {
     const ownIds = new Set(departments.filter((d) => myDepartments.includes(d.name)).map((d) => d.id));
     if (ownIds.size === 0) return [];
@@ -406,7 +443,7 @@ export default function HODFacultyPage() {
                     ? `/hod/faculty/${facultyId}`
                     : `/hod/faculty/new?linkUid=${encodeURIComponent(d.hodUid)}&department=${encodeURIComponent(d.name)}&name=${encodeURIComponent(d.hodName ?? "")}`;
                 const body = (
-                  <div className={`flex items-center gap-2 text-sm border rounded-lg px-3 py-2 h-full ${href ? "transition-colors hover:bg-muted/50 hover:border-primary/40 cursor-pointer" : ""}`}>
+                  <>
                     <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
                       <p className="font-medium truncate">{d.name}</p>
@@ -418,9 +455,32 @@ export default function HODFacultyPage() {
                         )
                         : <p className="text-muted-foreground text-xs italic">No Sub-HOD assigned</p>}
                     </div>
+                  </>
+                );
+                // The border moved out to this wrapper so Remove can sit
+                // OUTSIDE the Link - nested inside it, every click would
+                // navigate to the profile instead of opening the dialog.
+                return (
+                  <div
+                    key={d.id}
+                    className={`flex items-center gap-2 text-sm border rounded-lg px-3 py-2 h-full ${href ? "transition-colors hover:bg-muted/50 hover:border-primary/40" : ""}`}
+                  >
+                    {href
+                      ? <Link href={href} className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">{body}</Link>
+                      : <div className="flex items-center gap-2 min-w-0 flex-1">{body}</div>}
+                    {d.hodUid && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                        title={`Remove ${d.hodName ?? "this Sub-HOD"} as Sub-HOD of ${d.name}`}
+                        onClick={() => setRemovingSubHod(d)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 );
-                return href ? <Link key={d.id} href={href}>{body}</Link> : <div key={d.id}>{body}</div>;
               })}
             </div>
           </CardContent>
@@ -450,6 +510,18 @@ export default function HODFacultyPage() {
         variant="destructive"
         onConfirm={() => void handleDelete()}
         loading={isDeleting}
+      />
+
+      {/* ── Remove Sub-HOD Confirm ── */}
+      <ConfirmDialog
+        open={!!removingSubHod}
+        onOpenChange={(open) => { if (!open) setRemovingSubHod(null); }}
+        title={`Remove ${removingSubHod?.hodName ?? "this Sub-HOD"} as Sub-HOD?`}
+        description={`${removingSubHod?.name ?? "This sub-department"} will have no Sub-HOD until you assign one from Sub-Departments. ${removingSubHod?.hodName ?? "They"} keeps their account and login — only the assignment is removed.`}
+        confirmLabel="Remove Sub-HOD"
+        variant="destructive"
+        onConfirm={() => void handleRemoveSubHod()}
+        loading={isRemovingSubHod}
       />
     </div>
   );

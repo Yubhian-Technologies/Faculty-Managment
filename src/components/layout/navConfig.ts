@@ -176,6 +176,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
   { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"] },
   { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
+  // Hidden from a Department Office head, whose `role` also reads "HOD": they
+  // hold the same authority everywhere else, but appointing their own successor
+  // stays with the actual HOD. The API enforces that too - this only keeps a
+  // dead link out of their sidebar. See NavItem.hideForRealRoles.
+  { label: "Department Office", href: "/hod/settings/department-office", iconName: "UserCog", roles: ["HOD"], hideForRealRoles: ["DEPARTMENT_OFFICE"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"] },
   { label: "Teaching Assignments", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"] },
   { label: "Assignment Requests", href: "/hod/assignment-requests", iconName: "Send", roles: ["HOD"] },
@@ -556,6 +561,17 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"] },
     // { label: "Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
     // { label: "Payslips", href: "/hod/payslips", iconName: "Wallet", roles: ["HOD"] },
+  ],
+  // A Department Office login's session role is normalized to "HOD" (see
+  // api/auth/session), so it never actually reads this entry - it gets the HOD
+  // one above. Present because the map is Record<UserRole, …> and every role
+  // needs a key; kept identical so it can't drift into a different answer if
+  // some future caller reads it by the un-normalized role.
+  DEPARTMENT_OFFICE: [
+    { label: "Home", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
+    { label: "Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"] },
+    { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"] },
+    { label: "Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"] },
   ],
   COLLEGE_OFFICE: [
     { label: "Home", href: "/college-office", iconName: "LayoutDashboard", roles: ["COLLEGE_OFFICE"] },

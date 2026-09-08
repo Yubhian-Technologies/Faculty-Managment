@@ -21,6 +21,15 @@ export type UserRole =
   // Principal via /principal/staff/new, alongside the non-technical/office roles.
   | "COLLEGE_ADMIN"
   | "HOD"
+  // A department's own office head, appointed by its HOD. Carries the SAME
+  // authority as that HOD over that department, so it is normalized to "HOD"
+  // for auth purposes in src/app/api/auth/session/route.ts and
+  // src/hooks/useAuth.ts - exactly the COLLEGE_ADMIN -> PRINCIPAL pattern
+  // above, and for the same reason: it keeps the role out of the ~420
+  // file-by-file role==="HOD" checks, which can never drift out of step as a
+  // result. `realRole` still reports the truth, which is what fences off the
+  // few things they may NOT do (appoint another one, remove a Sub-HOD).
+  | "DEPARTMENT_OFFICE"
   | "COLLEGE_OFFICE"
   | "COLLEGE_STAFF"
   | "DEAN"
@@ -50,6 +59,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   VICE_PRINCIPAL: "Vice Principal",
   COLLEGE_ADMIN: "College Admin",
   HOD: "Head of Department",
+  DEPARTMENT_OFFICE: "Department Office",
   COLLEGE_OFFICE: "College Office",
   COLLEGE_STAFF: "College Staff",
   DEAN: "Dean",
@@ -80,6 +90,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   VICE_PRINCIPAL: "/vice-principal",
   COLLEGE_ADMIN: "/principal",
   HOD: "/hod",
+  DEPARTMENT_OFFICE: "/hod",
   COLLEGE_OFFICE: "/college-office",
   COLLEGE_STAFF: "/college-staff",
   DEAN: "/dean",
@@ -120,6 +131,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   VICE_PRINCIPAL: 3,
   COLLEGE_ADMIN: 3,
   HOD: 4,
+  DEPARTMENT_OFFICE: 4,
   COLLEGE_OFFICE: 4,
   COLLEGE_STAFF: 4,
   DEAN: 4,
@@ -166,6 +178,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   VICE_PRINCIPAL: "COLLEGE",
   COLLEGE_ADMIN: "COLLEGE",
   HOD: "COLLEGE",
+  DEPARTMENT_OFFICE: "COLLEGE",
   COLLEGE_OFFICE: "COLLEGE",
   COLLEGE_STAFF: "COLLEGE",
   DEAN: "COLLEGE",
@@ -1515,6 +1528,9 @@ export type NotificationType =
   | "LEAVE_PENDING_APPROVAL"
   | "LEAVE_APPROVED"
   | "LEAVE_REJECTED"
+  | "LEAVE_OD_PROOF_PENDING_VERIFICATION"
+  | "LEAVE_OD_PROOF_VERIFIED"
+  | "LEAVE_OD_PROOF_REJECTED"
   | "ATTENDANCE_MANUALLY_MARKED"
   // Permission & On-Duty
   | "PERMISSION_APPROVED"
