@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
 import { TeachingAssignmentsEditor, type StagedTeachingRow } from "@/components/faculty/TeachingAssignmentsEditor";
 import { PersonalDetailsFields, getMissingRequiredPersonalFields, FACULTY_REQUIRED_PERSONAL_FIELDS, type PersonalDetailsValue } from "@/components/shared/PersonalDetailsFields";
 import {
@@ -26,6 +27,10 @@ import { FACULTY_DESIGNATIONS, FACULTY_EMPLOYMENT_CATEGORIES, designationLabel }
 import { useCollegeType } from "@/hooks/useCollegeType";
 import { toast } from "@/hooks/useToast";
 import type { FacultyProfileFields } from "@/types";
+
+// Sentinel for the "Others" row - never stored, it just switches the field to
+// free text (Radix Select cannot hold an empty-string item value).
+const OTHER_QUALIFICATION = "__OTHER__";
 
 // collegeEmail/password are validated for FORMAT here but not required at the
 // zod level - they're only actually required when creating a brand new login
@@ -104,6 +109,12 @@ export default function NewFacultyPage() {
   const employmentType = watch("employmentType");
   const isOtherDesignation = !!designation && !FACULTY_DESIGNATIONS.includes(designation);
   const isOtherEmploymentType = !!employmentType && !FACULTY_EMPLOYMENT_CATEGORIES.includes(employmentType);
+  const qualification = watch("qualification");
+  // "Others" is a mode, not a stored value - it reveals a free-text box whose
+  // contents become `qualification`. Needs its own state because once the user
+  // types "MBA" the field no longer matches any option, which is
+  // indistinguishable from a pre-filled value that simply isn't on the list.
+  const [qualIsOther, setQualIsOther] = useState(false);
   const aicteEligible = watch("aicteEligible");
   const name = watch("name");
 
@@ -345,8 +356,31 @@ export default function NewFacultyPage() {
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="qualification">Highest Qualification *</Label>
-                    <Input id="qualification" {...register("qualification")} placeholder="e.g. Ph.D, M.Tech, M.Sc" />
+                    <Label>Highest Qualification *</Label>
+                    <Select
+                      value={qualIsOther ? OTHER_QUALIFICATION : (HIGHEST_QUALIFICATION_OPTIONS as readonly string[]).includes(qualification) ? qualification : ""}
+                      onValueChange={(v) => {
+                        const other = v === OTHER_QUALIFICATION;
+                        setQualIsOther(other);
+                        // Picking "Others" clears the field so the text box
+                        // below starts empty and its value lands in this same
+                        // `qualification` string - there's no separate "other"
+                        // column on FacultyMember, and the whole app (import,
+                        // export, resume PDF, profile views) reads just this one.
+                        setValue("qualification", other ? "" : v);
+                      }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select qualification" /></SelectTrigger>
+                      <SelectContent>
+                        {HIGHEST_QUALIFICATION_OPTIONS.map((q) => (
+                          <SelectItem key={q} value={q}>{q}</SelectItem>
+                        ))}
+                        <SelectItem value={OTHER_QUALIFICATION}>Others</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {qualIsOther && (
+                      <Input {...register("qualification")} placeholder="e.g. MBA, M.Phil, M.A" />
+                    )}
                     {errors.qualification && <p className="text-sm text-destructive">{errors.qualification.message}</p>}
                   </div>
                 </div>

@@ -87,7 +87,7 @@ export default function PrincipalStaffPage() {
   }
 
   // Group by role for a scannable layout — order roughly follows seniority/function.
-  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "COLLEGE_ADMIN", "HOD", "COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "WEBMASTER", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "COLLEGE_ADMIN", "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "WEBMASTER", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
   // Must match the roles PRINCIPAL/VICE_PRINCIPAL can edit in /api/college/users/[uid] (loadTargetInScope).
   const EDITABLE_ROLES: UserRole[] = ["HOD", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "PANEL_MEMBER"];
   const grouped = ROLE_ORDER
@@ -140,7 +140,7 @@ export default function PrincipalStaffPage() {
                         <tr>
                           <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
                           <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Contact</th>
-                          {g.role === "HOD" && <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Department</th>}
+                          {(g.role === "HOD" || g.role === "DEPARTMENT_OFFICE") && <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Department</th>}
                           {g.role === "COLLEGE_STAFF" && <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Designation</th>}
                           <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
                           <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Action</th>
@@ -154,7 +154,10 @@ export default function PrincipalStaffPage() {
                               <div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" />{u.email}</div>
                               {u.phone && <div className="flex items-center gap-1.5 mt-0.5"><Phone className="h-3.5 w-3.5" />{u.phone}</div>}
                             </td>
-                            {g.role === "HOD" && (
+                            {/* A Department Office head is defined by which
+                                department they run, same as an HOD - so the
+                                column is shown for both. */}
+                            {(g.role === "HOD" || g.role === "DEPARTMENT_OFFICE") && (
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-1.5">
                                   {u.department || "-"}

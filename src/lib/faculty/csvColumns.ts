@@ -1,3 +1,5 @@
+import { HIGHEST_QUALIFICATION_OPTIONS } from "@/lib/import/fieldConstraints";
+
 // Faculty CSV column definitions.
 //
 // IMPORT_COLUMNS/IMPORT_HINTS (below COLUMNS/HINTS) are the only columns the
@@ -349,7 +351,12 @@ export const IMPORT_COLUMNS: FacultyCsvColumn[] = [
   { key: "password",     label: "Login Password (min 8 characters)", required: true, sample: "Required; minimum 8 characters", aliases: ["Password"] },
   { key: "phone",        label: "Mobile No",     required: true, sample: "Required; phone/text", aliases: ["Phone", "Mobile", "Mobile Number", "Phone Number", "Contact Number"] },
   { key: "designation",  label: "Designation",   required: true,  sample: "Required: Professor / Assistant Professor / Associate Professor / Visiting Professor / Assistant Professor of Practice / Sr. Wellness Counsellor / Other" },
-  { key: "qualification", label: "Highest Qualification", required: true, sample: "Required; free text", aliases: ["Qualification"] },
+  // Names the same options the Add/Edit Faculty dropdown offers, so a sheet
+  // uses the spellings the form produces rather than inventing "PhD"/"Mtech".
+  // Still accepts anything else, deliberately: the dropdown's own "Others"
+  // stores whatever was typed, so a closed set here would reject qualifications
+  // the app itself can create.
+  { key: "qualification", label: "Highest Qualification", required: true, sample: `Required; ${HIGHEST_QUALIFICATION_OPTIONS.join(" / ")} / other`, aliases: ["Qualification"] },
   { key: "employmentType", label: "Employee Category", required: true, sample: "Required: Regular / Visiting / Contract / Professor of Practice / Regular(Hyd) / Other", aliases: ["Employment Type", "Employment", "Type of Employment"] },
   { key: "joiningDate",  label: "Date of Joining Institution (DD-MM-YYYY)", required: true, sample: "Required; DD-MM-YYYY", aliases: ["Joining Date", "Date of Joining", "DOJ"] },
   { key: "gender",            label: "Gender",                       required: true, sample: "Required: Male / Female / Other" },

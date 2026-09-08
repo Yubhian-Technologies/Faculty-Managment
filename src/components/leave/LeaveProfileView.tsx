@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
+import { evaluateODProof } from "@/lib/leave/odProof";
 import { LEAVE_REQUEST_STATUS_LABELS, EFFECTIVE_CATEGORY_LABELS, LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, LeaveRequestStatus, LeaveTypeCode, PeriodSubstitution } from "@/types/leave";
 
@@ -240,6 +241,13 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
 
         {unlimitedBalances.map((b) => {
           const count = approvedCountForCode(b.code);
+          // Only on the OD card, and only on one's own profile - an approver
+          // browsing someone else's history has nothing to upload. SH is the
+          // other unlimited type and carries no proof obligation at all
+          // (evaluateODProof returns NOT_APPLICABLE for it).
+          const odProofsDue = !uid && b.code === "OD"
+            ? requests.filter((r) => evaluateODProof(r).canUpload).length
+            : 0;
           return (
             <Link key={b.code} href={`${historyBaseHref}/${b.code.toLowerCase()}`}>
               <Card className="h-full hover:border-primary transition-colors">
@@ -248,6 +256,16 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
                     <p className="text-sm text-muted-foreground">{b.label}</p>
                     <CountBadge count={count} title={`${count} approved this year`} />
                   </div>
+                  {/* Without this the only place an outstanding proof shows up
+                      is inside the OD history list, so someone who never opens
+                      it would lose pay having never been told they owed
+                      anything. Derived from `requests`, already loaded above -
+                      no extra fetch. */}
+                  {odProofsDue > 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
+                      {odProofsDue} proof{odProofsDue === 1 ? "" : "s"} of duty to upload
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
                     View history <ChevronRight className="h-3.5 w-3.5" />
                   </p>
@@ -351,6 +369,7 @@ export function LeaveHistoryRow({
   onCancel,
   cancelling,
   onAdjustCoverage,
+  isOwnHistory,
 }: {
   request: LeaveRequest;
   categoryLabel?: string;
@@ -367,9 +386,18 @@ export function LeaveHistoryRow({
   // ADJUST_COVERAGE branch, which rejects anything still pending/decided
   // otherwise).
   onAdjustCoverage?: (request: LeaveRequest) => void;
+  // True only when this is the signed-in user's own history. Stated explicitly
+  // rather than inferred from onCancel being set: the two happen to coincide
+  // today, but uploading proof of duty is a separate obligation from
+  // cancelling, and the server only accepts SUBMIT_OD_PROOF from the requester.
+  isOwnHistory?: boolean;
 }) {
   const canCancel = !!onCancel && isCancellable(request);
   const canAdjustCoverage = !!onAdjustCoverage && request.status === "APPROVED";
+  // On Duty proof (see lib/leave/odProof.ts). Returns NOT_APPLICABLE for every
+  // other type and for any OD approved before the feature existed, so the whole
+  // block below simply doesn't render for them.
+  const odProof = evaluateODProof(request);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       <div className="min-w-0">
@@ -432,6 +460,11 @@ export function LeaveHistoryRow({
             <span className="font-medium text-foreground/80">Cancellation reason:</span> {request.cancelReason}
           </p>
         )}
+        {odProof.state === "REJECTED_REUPLOAD" && request.odProofRejectionReason && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            <span className="font-medium text-foreground/80">Proof rejected:</span> {request.odProofRejectionReason}
+          </p>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {request.isPaidLeave !== undefined && (
@@ -446,6 +479,22 @@ export function LeaveHistoryRow({
           </>
         )}
         <Badge variant={STATUS_VARIANT[request.status]}>{LEAVE_REQUEST_STATUS_LABELS[request.status]}</Badge>
+        {/* NOT_DUE stays silent - the OD period hasn't ended, so there's
+            nothing owed yet and a badge would only be noise. */}
+        {odProof.state === "AWAITING_UPLOAD" && (
+          <Badge variant="pending">Proof due by {formatDate(odProof.proofDueBy!)}</Badge>
+        )}
+        {odProof.state === "PENDING_VERIFICATION" && <Badge variant="pending">Proof awaiting verification</Badge>}
+        {odProof.state === "VERIFIED" && <Badge variant="approved">Proof verified</Badge>}
+        {odProof.state === "REJECTED_REUPLOAD" && <Badge variant="rejected">Proof rejected</Badge>}
+        {odProof.state === "OVERDUE" && <Badge variant="rejected">Proof overdue — Loss of Pay</Badge>}
+        {isOwnHistory && odProof.canUpload && (
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
+            <Link href={`/leave/od-proof/${request.id}`}>
+              {request.odProofStatus === "REJECTED" ? "Re-upload proof" : "Upload proof"}
+            </Link>
+          </Button>
+        )}
         {!!onCancel && request.status === "PENDING_ACCEPTANCE" && request.adjustmentRequests?.some((a) => a.status === "DECLINED") && (
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" asChild>
             <Link href={`/leave/revise/${request.id}`}>Pick someone else</Link>

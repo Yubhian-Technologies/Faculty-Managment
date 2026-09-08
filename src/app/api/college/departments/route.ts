@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
+import { requireCollegeMember, isDepartmentOffice } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import {
@@ -611,6 +611,17 @@ export async function PATCH(request: Request) {
       const targetDept = targetSnap.data() as { parentDepartmentId?: string } | undefined;
       if (!targetDept?.parentDepartmentId || !scope.ownDepartmentIds.includes(targetDept.parentDepartmentId)) {
         return NextResponse.json({ error: "You can only manage your own sub-departments" }, { status: 403 });
+      }
+      // A Department Office head's session reads "HOD" everywhere, which is
+      // what gives them equal authority over everything operational. Who HOLDS
+      // authority is the exception: appointing or removing a Sub-HOD stays with
+      // the actual HOD, otherwise an appointee could dismantle the leadership
+      // of the department they were appointed into.
+      if (isDepartmentOffice(session) && ("hodUid" in rawUpdates || "hodName" in rawUpdates)) {
+        return NextResponse.json(
+          { error: "Only the Head of Department can assign or remove a Sub-HOD" },
+          { status: 403 }
+        );
       }
       const restricted: typeof rawUpdates = {};
       if ("hodUid" in rawUpdates) restricted.hodUid = rawUpdates.hodUid;
