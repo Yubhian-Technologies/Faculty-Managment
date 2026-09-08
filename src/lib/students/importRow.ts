@@ -8,6 +8,7 @@ import type { Section, StudentStatus } from "@/types";
 export interface StudentImportRow {
   rollNumber: string;
   name: string;
+  studentType?: string;
   status?: string;
   gender?: string;
   dateOfBirth?: string;
@@ -35,9 +36,12 @@ export interface StudentImportRow {
   admissionType?: string;
   entranceType?: string;
   entranceRank?: string;
+  jeeRank?: string;
+  jeePercentage?: string;
   seatType?: string;
   scholarship?: string;
-  category?: string;
+  caste?: string;
+  subCaste?: string;
   religion?: string;
   nationality?: string;
   motherTongue?: string;
@@ -118,6 +122,7 @@ export function buildStudentDoc(
     ...(section.courseId ? { courseId: section.courseId } : {}),
     rollNumber: row.rollNumber.trim(),
     name: row.name.trim(),
+    ...(row.studentType?.trim() ? { studentType: row.studentType.trim() } : {}),
     status: parseStudentStatus(row.status),
     ...(row.gender?.trim() ? { gender: row.gender.trim() } : {}),
     ...(row.dateOfBirth?.trim() ? { dateOfBirth: row.dateOfBirth.trim() } : {}),
@@ -132,9 +137,12 @@ export function buildStudentDoc(
     ...(row.admissionType?.trim() ? { admissionType: row.admissionType.trim() } : {}),
     ...(row.entranceType?.trim() ? { entranceType: row.entranceType.trim() } : {}),
     ...(row.entranceRank?.trim() ? { entranceRank: row.entranceRank.trim() } : {}),
+    ...(row.jeeRank?.trim() ? { jeeRank: row.jeeRank.trim() } : {}),
+    ...(row.jeePercentage?.trim() ? { jeePercentage: row.jeePercentage.trim() } : {}),
     ...(row.seatType?.trim() ? { seatType: row.seatType.trim() } : {}),
     ...(parseYesNo(row.scholarship) !== undefined ? { scholarship: parseYesNo(row.scholarship) } : {}),
-    ...(row.category?.trim() ? { category: row.category.trim() } : {}),
+    ...(row.caste?.trim() ? { caste: row.caste.trim() } : {}),
+    ...(row.subCaste?.trim() ? { subCaste: row.subCaste.trim() } : {}),
     ...(row.religion?.trim() ? { religion: row.religion.trim() } : {}),
     ...(row.nationality?.trim() ? { nationality: row.nationality.trim() } : {}),
     ...(row.motherTongue?.trim() ? { motherTongue: row.motherTongue.trim() } : {}),

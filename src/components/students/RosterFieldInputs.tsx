@@ -11,7 +11,8 @@ import {
 } from "@/lib/students/rosterFields";
 import { resolveDepartmentCourseScope, resolveCatalogId, freshmanLandingDepartmentNames } from "@/lib/college/academicStructure";
 import { managerEffectiveYears } from "@/lib/departments/hodScope";
-import type { Department, StudentRecord, Course } from "@/types";
+import { CASTE_LABELS, SUB_CASTES_BY_CASTE } from "@/types";
+import type { Department, StudentRecord, Course, Caste } from "@/types";
 
 // Renders the roster fields for the Office students page - the Add/Edit form
 // body and the read-only detail view - straight from the shared spec, so both
@@ -470,6 +471,80 @@ function FieldInput({ field, values, onChange, departments, courseNames, courses
             {options.map((y) => <SelectItem key={y} value={String(y)}>{ordinalYear(y)}</SelectItem>)}
           </SelectContent>
         </Select>
+      </div>
+    );
+  }
+
+  if (field.key === "caste") {
+    // Same Caste picker as Faculty's own (PersonalDetailsFields.tsx): a fixed
+    // dropdown over CASTE_LABELS, with a free-text fallback for a value that
+    // isn't one of those codes (either "OTHER" chosen deliberately, or a
+    // legacy/imported value that predates this dropdown). Picking a new
+    // Caste clears Sub Caste below, since its own options depend on this one.
+    const isKnown = value !== "" && value in CASTE_LABELS;
+    const isOther = value !== "" && !isKnown;
+    return (
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <Select
+          value={isOther ? "OTHER" : (value || NONE)}
+          onValueChange={(v) => {
+            onChange(field.key, v === NONE ? "" : v);
+            onChange("subCaste", "");
+          }}
+        >
+          <SelectTrigger><SelectValue placeholder="Select caste" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>Not specified</SelectItem>
+            {Object.entries(CASTE_LABELS).map(([v, lbl]) => <SelectItem key={v} value={v}>{lbl}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {isOther && (
+          <Input
+            value={value === "OTHER" ? "" : value}
+            onChange={(e) => onChange(field.key, e.target.value || "OTHER")}
+            placeholder="Please specify"
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (field.key === "subCaste") {
+    // Narrowed to the chosen Caste's real sub-list (same SUB_CASTES_BY_CASTE
+    // Faculty uses) once a caste with a fixed list is picked; a caste with no
+    // fixed list (e.g. OTHER, or none chosen yet) falls back to plain text.
+    const subCasteOptions = SUB_CASTES_BY_CASTE[values.caste as Caste] ?? [];
+    if (subCasteOptions.length === 0) {
+      return (
+        <div className="space-y-2">
+          <Label htmlFor={id}>{field.label}</Label>
+          <Input id={id} value={value} onChange={(e) => onChange(field.key, e.target.value)} placeholder="e.g. BC-B" />
+        </div>
+      );
+    }
+    const isOther = value !== "" && !subCasteOptions.includes(value);
+    return (
+      <div className="space-y-2">
+        <Label>{field.label}</Label>
+        <Select
+          value={isOther ? "OTHER" : (value || NONE)}
+          onValueChange={(v) => onChange(field.key, v === NONE ? "" : v)}
+        >
+          <SelectTrigger><SelectValue placeholder="Select sub caste" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>Not specified</SelectItem>
+            {subCasteOptions.map((sc) => <SelectItem key={sc} value={sc}>{sc}</SelectItem>)}
+            <SelectItem value="OTHER">Other</SelectItem>
+          </SelectContent>
+        </Select>
+        {isOther && (
+          <Input
+            value={value === "OTHER" ? "" : value}
+            onChange={(e) => onChange(field.key, e.target.value || "OTHER")}
+            placeholder="Please specify"
+          />
+        )}
       </div>
     );
   }

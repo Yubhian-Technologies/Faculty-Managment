@@ -89,6 +89,7 @@ export async function GET(request: Request) {
       const course = (searchParams.get("course") ?? "").trim();
       const yearParam = searchParams.get("year");
       const year = yearParam ? Number(yearParam) : null;
+      const studentType = (searchParams.get("studentType") ?? "").trim();
 
       let departments: string[] = [];
       if (pickedDepartment) {
@@ -98,14 +99,14 @@ export async function GET(request: Request) {
       }
 
       if (searchParams.get("idsOnly") === "1") {
-        const ids = await fetchMatchingStudentIds(studentsColl, { departments, course, year, search });
+        const ids = await fetchMatchingStudentIds(studentsColl, { departments, course, year, search, studentType });
         return NextResponse.json({ ids, total: ids.length });
       }
 
       const page = Math.max(1, Number(searchParams.get("page")) || 1);
       const pageSizeRaw = Number(searchParams.get("pageSize"));
       const pageSize = PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : 20;
-      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, course, year });
+      const { students, total } = await fetchStudentsPage(studentsColl, { page, pageSize, search, departments, course, year, studentType });
       return NextResponse.json({ students, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
     }
 
